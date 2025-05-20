@@ -456,7 +456,6 @@ template<class StepImpl>
 auto ClusterProvider<StepImpl>::fetchVertices(
     std::vector<Step*> const& looseEnds) -> std::vector<Step*> {
   if (_opts.isKilled()) {
-    clear();
     THROW_ARANGO_EXCEPTION(TRI_ERROR_QUERY_KILLED);
   }
   std::vector<Step*> result{};
@@ -486,7 +485,6 @@ template<class StepImpl>
 auto ClusterProvider<StepImpl>::fetchEdges(
     std::vector<Step*> const& fetchedVertices) -> Result {
   if (_opts.isKilled()) {
-    clear();
     THROW_ARANGO_EXCEPTION(TRI_ERROR_QUERY_KILLED);
   }
 
@@ -521,7 +519,6 @@ auto ClusterProvider<StepImpl>::expand(
     Step const& step, size_t previous,
     std::function<void(Step)> const& callback) -> void {
   if (_opts.isKilled()) {
-    clear();
     THROW_ARANGO_EXCEPTION(TRI_ERROR_QUERY_KILLED);
   }
 
