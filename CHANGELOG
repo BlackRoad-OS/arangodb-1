@@ -1,10 +1,13 @@
 3.12.5.5 (XXXX-XX-XX)
 ---------------------
 
+* Rebuilt included rclone v1.65.2 with go1.23.12 and non-vulnerable
+  dependencies.
+
 * Upgraded OpenSSL to 3.5.4.
 
-* Fix BTS-2231: Fix a divide-by-zero crash in case a smart edge collection is
-  used in a collect query with a custom index.
+* Fix BTS-2231: Fix a divide-by-zero crash in case a smart edge collection is used in a
+  collect query with a custom index.
 
 
 3.12.5.4 (2025-09-22)
