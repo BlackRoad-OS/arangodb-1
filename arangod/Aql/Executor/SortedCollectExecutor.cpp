@@ -121,7 +121,7 @@ void SortedCollectExecutor::CollectGroup::reset(InputAqlItemRow const& input) {
     }
     size_t afterOpenArray = _buffer.size();
     infos.getResourceUsageScope().increase(afterOpenArray - beforeOpenArray);
-    
+
   } else {
     // We still need an open array...
     _builder.openArray();
@@ -314,6 +314,9 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     }
 
     AqlValue val(std::move(_buffer));  // _buffer still usable after
+    if (val.memoryUsage() == 0) {
+      infos.getResourceUsageScope().decrease(after);
+    }
     AqlValueGuard guard{val, true};
     TRI_ASSERT(_buffer.size() == 0);
     _builder.clear();  // necessary

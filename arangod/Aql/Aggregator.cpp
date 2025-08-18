@@ -1044,11 +1044,14 @@ struct AggregatorList : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     AqlValueMaterializer materializer(_vpackOptions);
     VPackSlice s = materializer.slice(cmpValue);
+    auto before = builder.buffer()->byteSize();
     if (!builder.isOpenArray()) {
       builder.openArray();
     }
     getResourceUsageScope().increase(s.byteSize());
     builder.add(s);
+    getResourceUsageScope().decrease(s.byteSize());
+    getResourceUsageScope().increase(builder.buffer()->byteSize() - before);
   }
 
   AqlValue get() const override final {
@@ -1060,8 +1063,19 @@ struct AggregatorList : public Aggregator {
     // if preceding is `unbounded`. But closing the array here breaks the
     // velocypack slice.
     auto builderCopy = builder;
+    auto before = builderCopy.buffer()->byteSize();
     builderCopy.close();
-    return AqlValue(std::move(*builderCopy.steal()));
+    auto after = builderCopy.buffer()->byteSize();
+    if (after >= before) {
+      getResourceUsageScope().increase(after - before);
+    } else {
+      getResourceUsageScope().decrease(before - after);
+    }
+    AqlValue a{std::move(*builderCopy.steal())};
+    if (a.memoryUsage() == 0) {
+      getResourceUsageScope().decrease(after);
+    }
+    return a;
   }
 
   mutable arangodb::velocypack::Builder builder;
