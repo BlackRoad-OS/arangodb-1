@@ -10,8 +10,7 @@ class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
   SupervisedBuffer() = default;
 
   explicit SupervisedBuffer(ResourceMonitor& monitor)
-      : _usageScope(std::make_unique<ResourceUsageScope>(monitor)),
-        _usageScopeRaw(_usageScope.get()) {}
+      : _usageScope(std::make_unique<ResourceUsageScope>(monitor)) {}
 
  private:
   void grow(ValueLength length) override {
@@ -42,7 +41,6 @@ class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
   }
 
   std::unique_ptr<ResourceUsageScope> _usageScope;
-  ResourceUsageScope* _usageScopeRaw{nullptr};
 };
 
 }  // namespace arangodb::velocypack
