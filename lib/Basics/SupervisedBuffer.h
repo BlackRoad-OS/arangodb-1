@@ -2,7 +2,7 @@
 
 #include "velocypack/Buffer.h"
 #include "Basics/ResourceUsage.h"
-// Julia
+
 namespace arangodb::velocypack {
 
 class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
