@@ -1,12 +1,11 @@
 #pragma once
 
 #include "velocypack/Buffer.h"
-#include "Basics/ResourceMonitor.h"
 #include "Basics/ResourceUsage.h"
+// Julia
+namespace arangodb::velocypack {
 
-namespace arangodb {
-
-class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
+class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
  public:
   SupervisedBuffer() = default;
 
@@ -14,7 +13,7 @@ class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
       : _usageScope(std::make_unique<ResourceUsageScope>(monitor)),
         _usageScopeRaw(_usageScope.get()) {}
 
- protected:
+ private:
   void grow(ValueLength length) override {
     auto currentCapacity = this->capacity();
     velocypack::Buffer<uint8_t>::grow(length);
@@ -32,9 +31,18 @@ class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
     return ptr;
   }
 
- private:
+  void clear() noexcept override {
+    auto before = this->capacity();
+    Buffer<uint8_t>::clear();
+    auto after = this->capacity();
+    // if before > after, means that it has released usage from the heap
+    if (_usageScope && before > after) {
+      _usageScope->decrease(before - after);
+    }
+  }
+
   std::unique_ptr<ResourceUsageScope> _usageScope;
   ResourceUsageScope* _usageScopeRaw{nullptr};
 };
 
-}  // namespace arangodb
+}  // namespace arangodb::velocypack
