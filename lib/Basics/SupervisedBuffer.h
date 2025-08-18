@@ -23,7 +23,7 @@ class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
     }
   }
 
-  uint8_t* steal() override {
+  uint8_t* steal() override noexcept {
     uint8_t* ptr = velocypack::Buffer<uint8_t>::steal();
     if (_usageScope) {  // assume it exists without checking?
       _usageScope->steal();
@@ -31,7 +31,7 @@ class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
     return ptr;
   }
 
-  void clear() override {
+  void clear() override noexcept {
     auto before = this->capacity();
     Buffer<uint8_t>::clear();
     auto after = this->capacity();
