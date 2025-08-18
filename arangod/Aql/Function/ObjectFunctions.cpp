@@ -31,6 +31,7 @@
 #include "Basics/VelocyPackHelper.h"
 #include "Basics/fpconv.h"
 #include "Basics/StaticStrings.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Containers/FlatHashMap.h"
 #include "Containers/FlatHashSet.h"
 #include "Transaction/Context.h"
@@ -223,6 +224,10 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
         }
         auto before = builder.buffer()->byteSize();
         increaseMemoryUsage(it.valueByteSize());
+        // might inside build a new builder
+        // get rid of middle man
+        // pass the supervised buffer to it by ref
+        // new builder here
         builder = velocypack::Collection::merge(builder.slice(), it,
                                                 /*mergeObjects*/ recursive,
                                                 /*nullMeansRemove*/ false);
@@ -242,7 +247,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
     AqlValue res{builder.slice(), builder.size()};
     if (usageScope && res.memoryUsage() > 0) {
-      //TRI_ASSERT(usageScope->tracked() == oldCapacity + oldByteSize);
+      // TRI_ASSERT(usageScope->tracked() == oldCapacity + oldByteSize);
       TRI_ASSERT(usageScope->tracked() == builder.buffer()->byteSize());
       LOG_DEVEL << "At the end of MERGE: current: " << usageScope->current();
       LOG_DEVEL << "Stolen memory usage: " << usageScope->tracked();
