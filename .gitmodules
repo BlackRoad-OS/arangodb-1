@@ -38,3 +38,5 @@
 [submodule "3rdParty/lz4"]
 	path = 3rdParty/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "3rdParty/velocypack"]
+	branch = feature/supervised-buffer
