@@ -1,4 +1,4 @@
-#include "Basics/ResourceMonitor.h"
+#include "Basics/ResourceUsage.cpp.h"
 #include "SupervisedBuffer.h"
 #include "velocypack/Builder.h"
 
