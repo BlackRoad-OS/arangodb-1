@@ -136,25 +136,11 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   ResourceUsageScope* usageScope =
       execCtx ? &execCtx->getResourceUsageScope() : nullptr;
 
-  auto increaseMemoryUsage = [&](uint64_t byte) {
-    if (usageScope) {
-      //  LOG_DEVEL << "Memory increased by: " << byte;
-      usageScope->increase(byte);
-      //   LOG_DEVEL << "Current: " << usageScope->current()
-      //   << " Limit: " << usageScope->memoryLimit()
-      //   << " Peak: " << usageScope->peak();
-    }
-  };
-
-  auto decreaseMemoryUsage = [&](uint64_t byte) {
-    if (usageScope) {
-      // LOG_DEVEL << "Memory decreased by: " << byte;
-      usageScope->decrease(byte);
-      // LOG_DEVEL << "Current: " << usageScope->current()
-      // << " Limit: " << usageScope->memoryLimit()
-      // << " Peak: " << usageScope->peak();
-    }
-  };
+  // if there's no usage scope, fall back to the normal buffer that's not
+  // supervised
+  velocypack::SupervisedBuffer supervisedBuffer =
+      scope ? velocypack::SupervisedBuffer(scope->resourceMonitor())
+            : velocypack::SupervisedBuffer();
 
   size_t const n = parameters.size();
 
@@ -170,7 +156,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(&vopts);
   VPackSlice initialSlice = materializer.slice(initial);
 
-  VPackBuilder builder;
+  VPackBuilder builder{supervisedBuffer};
 
   if (initial.isArray() && n == 1) {
     // special case: a single array parameter
@@ -199,55 +185,73 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       {
         VPackObjectBuilder ob(&builder);
         for (auto const& [k, v] : attributes) {
-          increaseMemoryUsage(builder.buffer()->byteSize() - before);
-          before = builder.buffer()->byteSize();
-          auto estimate = k.length() * sizeof(char) + v.valueByteSize();
-          increaseMemoryUsage(estimate);
           builder.add(k, v);
-          decreaseMemoryUsage(estimate);
         }
       }
-      increaseMemoryUsage(builder.buffer()->byteSize() - before);
 
     } else {
       // slow path for recursive merge
       builder.openObject();
       builder.close();
       // merge in all other arguments
-      LOG_DEVEL << "Single array with recursion was called";
-      increaseMemoryUsage(builder.buffer()->byteSize());
       for (VPackSlice it : VPackArrayIterator(initialSlice)) {
         if (!it.isObject()) {
           aql::functions::registerInvalidArgumentWarning(expressionContext,
                                                          funcName);
           return AqlValue(AqlValueHintNull());
         }
-        auto before = builder.buffer()->byteSize();
-        increaseMemoryUsage(it.valueByteSize());
-        // might inside build a new builder
-        // get rid of middle man
-        // pass the supervised buffer to it by ref
-        // new builder here
-        builder = velocypack::Collection::merge(builder.slice(), it,
-                                                /*mergeObjects*/ recursive,
-                                                /*nullMeansRemove*/ false);
-        auto after = builder.buffer()->byteSize();
-        if (before + it.valueByteSize() >= after) {
-          auto overEstimate = before + it.valueByteSize() - after;
-          decreaseMemoryUsage(overEstimate);
-        } else {
-          auto underEstimate = after - (before + it.valueByteSize());
-          increaseMemoryUsage(underEstimate);
-        }
+
+        velocypack::Collection::merge(builder, builder.slice(), it,
+                                      /*mergeObjects*/ recursive,
+                                      /*nullMeansRemove*/ false);
       }
+
+      // size_t oldCapacity = builder.buffer()->byteSize();
+      // size_t oldByteSize = builder.size();
+
+      AqlValue res{builder.slice(), builder.size()};
+      if (usageScope && res.memoryUsage() > 0) {
+        // TRI_ASSERT(usageScope->tracked() == oldCapacity + oldByteSize);
+        TRI_ASSERT(usageScope->tracked() == builder.buffer()->byteSize());
+        LOG_DEVEL << "At the end of MERGE: current: " << usageScope->current();
+        LOG_DEVEL << "Stolen memory usage: " << usageScope->tracked();
+        usageScope->steal();
+      }
+      return res;
     }
 
-    // size_t oldCapacity = builder.buffer()->byteSize();
-    // size_t oldByteSize = builder.size();
+    if (!initial.isObject()) {
+      aql::functions::registerInvalidArgumentWarning(expressionContext,
+                                                     funcName);
+      return AqlValue(AqlValueHintNull());
+    }
 
+    // merge in all other arguments
+
+    for (size_t i = 1; i < n; ++i) {
+      AqlValue const& param =
+          aql::functions::extractFunctionParameterValue(parameters, i);
+
+      if (!param.isObject()) {
+        aql::functions::registerInvalidArgumentWarning(expressionContext,
+                                                       funcName);
+        return AqlValue(AqlValueHintNull());
+      }
+
+      AqlValueMaterializer materializer(&vopts);
+      VPackSlice slice = materializer.slice(param);
+
+      velocypack::Collection::merge(initialSlice, slice,
+                                    /*mergeObjects*/ recursive,
+                                    /*nullMeansRemove*/ false);
+      initialSlice = builder.slice();
+    }
+    if (n == 1) {
+      // only one parameter. now add original document
+      builder.add(initialSlice);
+    }
     AqlValue res{builder.slice(), builder.size()};
     if (usageScope && res.memoryUsage() > 0) {
-      // TRI_ASSERT(usageScope->tracked() == oldCapacity + oldByteSize);
       TRI_ASSERT(usageScope->tracked() == builder.buffer()->byteSize());
       LOG_DEVEL << "At the end of MERGE: current: " << usageScope->current();
       LOG_DEVEL << "Stolen memory usage: " << usageScope->tracked();
@@ -255,55 +259,6 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     }
     return res;
   }
-
-  if (!initial.isObject()) {
-    aql::functions::registerInvalidArgumentWarning(expressionContext, funcName);
-    return AqlValue(AqlValueHintNull());
-  }
-
-  // merge in all other arguments
-  LOG_DEVEL << "Object was called";
-  increaseMemoryUsage(initialSlice.valueByteSize());
-  for (size_t i = 1; i < n; ++i) {
-    AqlValue const& param =
-        aql::functions::extractFunctionParameterValue(parameters, i);
-
-    if (!param.isObject()) {
-      aql::functions::registerInvalidArgumentWarning(expressionContext,
-                                                     funcName);
-      return AqlValue(AqlValueHintNull());
-    }
-
-    AqlValueMaterializer materializer(&vopts);
-    VPackSlice slice = materializer.slice(param);
-    auto before = initialSlice.valueByteSize();
-    increaseMemoryUsage(slice.valueByteSize());
-    builder = velocypack::Collection::merge(initialSlice, slice,
-                                            /*mergeObjects*/ recursive,
-                                            /*nullMeansRemove*/ false);
-    initialSlice = builder.slice();
-    auto after = initialSlice.valueByteSize();
-    if (before + slice.valueByteSize() >= after) {
-      auto overEstimate = before + slice.valueByteSize() - after;
-      decreaseMemoryUsage(overEstimate);
-    } else {
-      auto underEstimate = after - (before + slice.valueByteSize());
-      increaseMemoryUsage(underEstimate);
-    }
-  }
-  if (n == 1) {
-    // only one parameter. now add original document
-    builder.add(initialSlice);
-  }
-  AqlValue res{builder.slice(), builder.size()};
-  if (usageScope && res.memoryUsage() > 0) {
-    TRI_ASSERT(usageScope->tracked() == builder.buffer()->byteSize());
-    LOG_DEVEL << "At the end of MERGE: current: " << usageScope->current();
-    LOG_DEVEL << "Stolen memory usage: " << usageScope->tracked();
-    usageScope->steal();
-  }
-  return res;
-}
 
 }  // namespace
 
