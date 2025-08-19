@@ -12,6 +12,14 @@ class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
   explicit SupervisedBuffer(ResourceMonitor& monitor)
       : _usageScope(std::make_unique<ResourceUsageScope>(monitor)) {}
 
+  uint8_t* steal() override noexcept {
+    uint8_t* ptr = velocypack::Buffer<uint8_t>::steal();
+    if (_usageScope) {  // assume it exists without checking?
+      _usageScope->steal();
+    }
+    return ptr;
+  }
+
  private:
   void grow(ValueLength length) override {
     auto currentCapacity = this->capacity();
@@ -20,14 +28,6 @@ class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
     if (_usageScope && newCapacity > currentCapacity) {
       _usageScope->increase(newCapacity - currentCapacity);
     }
-  }
-
-  uint8_t* steal() override noexcept {
-    uint8_t* ptr = velocypack::Buffer<uint8_t>::steal();
-    if (_usageScope) {  // assume it exists without checking?
-      _usageScope->steal();
-    }
-    return ptr;
   }
 
   void clear() override noexcept {
