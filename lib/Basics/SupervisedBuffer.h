@@ -5,7 +5,7 @@
 
 namespace arangodb::velocypack {
 
-class SupervisedBuffer : private arangodb::velocypack::Buffer<uint8_t> {
+class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
  public:
   SupervisedBuffer() = default;
 
