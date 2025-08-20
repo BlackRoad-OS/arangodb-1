@@ -28,8 +28,10 @@
 #include "Aql/RegisterId.h"
 #include "Aql/RegIdFlatSet.h"
 #include "Basics/Endian.h"
+#include "Basics/ResourceUsage.h"
 #include "IResearch/Misc.h"
 
+#include <velocypack/Builder.h>
 #include <velocypack/Slice.h>
 #include <velocypack/velocypack-common.h>
 #include <string_view>
@@ -63,6 +65,24 @@ class Methods;
 
 }  // namespace transaction
 namespace aql {
+
+static inline AqlValue buildSupervisedAqlValue(
+    velocypack::Builder const& builder, ResourceUsageScope& usageScope) {
+  // static or inline?
+  usageScope.increase(builder.size());
+
+  AqlValue res(builder.slice(), builder.size());
+
+  long diff =
+      static_cast<long>(builder.size()) - static_cast<long>(res.memoryUsage());
+  if (diff > 0) {
+    usageScope.decrease(diff);
+  } else if (diff < 0) {
+    usageScope.increase(-diff);
+  }
+
+  return res;
+}
 
 class SharedAqlItemBlockPtr;
 struct Range;

@@ -55,6 +55,11 @@ namespace arangodb::aql {
 
 namespace {
 
+// put it in a more generic place to be used elsewhere
+// cpp tests around this function, trying to create aql value from small number,
+// empty builder check if resource usage matches, makes sense to count twice
+// here bc of intermediate
+
 /// @brief extract attribute names from the arguments
 void extractKeys(containers::FlatHashSet<std::string>& names,
                  ExpressionContext* expressionContext,
@@ -153,7 +158,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   velocypack::SupervisedBuffer supervisedBuffer =
       usageScope ? velocypack::SupervisedBuffer(usageScope->resourceMonitor())
                  : velocypack::SupervisedBuffer();
-  VPackBuilder builder{supervisedBuffer};
+  VPackBuilder builder(supervisedBuffer);
 
   if (initial.isArray() && n == 1) {
     // special case: a single array parameter
@@ -195,24 +200,19 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
           return AqlValue(AqlValueHintNull());
         }
 
-        // might inside build a new builder
-        // get rid of middle man
-        // pass the supervised buffer to it by ref
-        // new builder here
-        builder = velocypack::Collection::merge(builder, builder.slice(), it,
-                                                /*mergeObjects*/ recursive,
-                                                /*nullMeansRemove*/ false);
+        velocypack::Collection::merge(builder, builder.slice(), it,
+                                      /*mergeObjects*/ recursive,
+                                      /*nullMeansRemove*/ false);
       }
     }
 
     // size_t oldCapacity = builder.buffer()->byteSize();
     // size_t oldByteSize = builder.size();
-
-    AqlValue res{builder.slice(), builder.size()};
-    if (usageScope && res.memoryUsage() > 0) {
-      supervisedBuffer.steal();
+    if (usageScope) {
+      usageScope->increase(builder.size());
     }
-    return res;
+
+    return buildSupervisedAqlValue(builder, *usageScope);
   }
 
   if (!initial.isObject()) {
@@ -233,20 +233,16 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
     AqlValueMaterializer materializer(&vopts);
     VPackSlice slice = materializer.slice(param);
-    builder = velocypack::Collection::merge(builder, initialSlice, slice,
-                                            /*mergeObjects*/ recursive,
-                                            /*nullMeansRemove*/ false);
+    velocypack::Collection::merge(builder, initialSlice, slice,
+                                  /*mergeObjects*/ recursive,
+                                  /*nullMeansRemove*/ false);
     initialSlice = builder.slice();
   }
   if (n == 1) {
     // only one parameter. now add original document
     builder.add(initialSlice);
   }
-  AqlValue res{builder.slice(), builder.size()};
-  if (usageScope && res.memoryUsage() > 0) {
-    supervisedBuffer.steal();
-  }
-  return res;
+  return buildSupervisedAqlValue(builder, *usageScope);
 }
 
 }  // namespace

@@ -94,6 +94,7 @@ set(ARANGODB_TESTS_SOURCES
   Agency/StoreTestAPI.cpp
   Agency/SupervisionTest.cpp
   Agency/TransactionBuilderTests.cpp
+  Aql/AqlBuildSupervisedAqlValueTest.cpp
   Aql/AqlCallListTest.cpp
   Aql/AqlHelper.cpp
   Aql/AqlItemBlockInputRangeTest.cpp
