@@ -2247,6 +2247,13 @@ function processQuery(query, explain, planIndex) {
     return '';
   };
 
+  const asyncPrefetch = function(node) {
+    if (node.isAsyncPrefetchEnabled) {
+      return annotation(' /* async prefetch */');
+    }
+    return '';
+  }
+
   const constNess = function () {
     if (isConst) {
       return '   ' + annotation('/* const assignment */');
@@ -2283,7 +2290,7 @@ function processQuery(query, explain, planIndex) {
       line += pad('Par'.length) + value(node.isAsyncPrefetchEnabled ? '✓' : ' ') + '   ' +
         pad(1 + maxEstimateLen - String(node.estimatedNrItems).length) + value(node.estimatedNrItems) + '   ';
     }
-    line += indent(level, node.type === 'SingletonNode') + label(node) + callstackSplit(node);
+    line += indent(level, node.type === 'SingletonNode') + label(node) + callstackSplit(node) + asyncPrefetch(node);
 
     stringBuilder.appendLine(line);
     postHandle(node);
