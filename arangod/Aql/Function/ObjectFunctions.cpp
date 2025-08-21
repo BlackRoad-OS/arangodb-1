@@ -242,6 +242,9 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     // only one parameter. now add original document
     builder.add(initialSlice);
   }
+  if (usageScope) {
+    usageScope->increase(builder.size());
+  }
   return buildSupervisedAqlValue(builder, *usageScope);
 }
 
