@@ -56,13 +56,13 @@ class ExecutorExpressionContext final : public QueryExpressionContext {
                             bool& mustDestroy) const override;
 
   void adjustInputRow(InputAqlItemRow const& inputRow) noexcept;
-  ResourceUsageScope& getResourceUsageScope() const { return *_usageScope; }
+  ResourceMonitor& resourceMonitor() const { return _resourceMonitor; }
 
  private:
   /// @brief temporary storage for expression data context
   std::reference_wrapper<InputAqlItemRow const> _inputRow;
   std::vector<std::pair<VariableId, RegisterId>> const& _varsToRegister;
-  std::unique_ptr<ResourceUsageScope> _usageScope;
+  ResourceMonitor& _resourceMonitor;
 };
 
 }  // namespace aql

@@ -138,8 +138,8 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   // scope guard here to free builder capacity in the usage scope, steal in the
   // end
   auto* execCtx = dynamic_cast<ExecutorExpressionContext*>(expressionContext);
-  ResourceUsageScope* usageScope =
-      execCtx ? &execCtx->getResourceUsageScope() : nullptr;
+  ResourceMonitor* resourceMonitor =
+      execCtx ? &execCtx->resourceMonitor() : nullptr;
 
   size_t const n = parameters.size();
 
@@ -155,9 +155,14 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(&vopts);
   VPackSlice initialSlice = materializer.slice(initial);
 
-  velocypack::SupervisedBuffer supervisedBuffer =
-      usageScope ? velocypack::SupervisedBuffer(usageScope->resourceMonitor())
-                 : velocypack::SupervisedBuffer();
+  velocypack::SupervisedBuffer supervisedBuffer;
+  std::shared_ptr<ResourceUsageScope> usageScope = nullptr;
+  if (resourceMonitor) {
+    usageScope = std::make_shared<ResourceUsageScope>{*resourceMonitor, 0};
+    supervisedBuffer = velocypack::SupervisedBuffer(*resourceMonitor);
+  } else {
+    supervisedBuffer = velocypack::SupervisedBuffer();
+  }
   VPackBuilder builder(supervisedBuffer);
 
   if (initial.isArray() && n == 1) {
@@ -208,11 +213,12 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
     // size_t oldCapacity = builder.buffer()->byteSize();
     // size_t oldByteSize = builder.size();
+
     if (usageScope) {
       usageScope->increase(builder.size());
+      return buildSupervisedAqlValue(builder, *usageScope);
     }
-
-    return buildSupervisedAqlValue(builder, *usageScope);
+    return AqlValue{builder.slice(), builder.size()};
   }
 
   if (!initial.isObject()) {
@@ -244,8 +250,9 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   }
   if (usageScope) {
     usageScope->increase(builder.size());
+    return buildSupervisedAqlValue(builder, *usageScope);
   }
-  return buildSupervisedAqlValue(builder, *usageScope);
+  return AqlValue{builder.slice(), builder.size()};
 }
 
 }  // namespace
