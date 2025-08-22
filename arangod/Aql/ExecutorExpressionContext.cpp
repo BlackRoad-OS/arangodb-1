@@ -49,7 +49,7 @@ ExecutorExpressionContext::ExecutorExpressionContext(
     : QueryExpressionContext(trx, context, cache),
       _inputRow(inputRow),
       _varsToRegister(varsToRegister),
-      _usageScope(std::make_unique<ResourceUsageScope>(resourceMonitor, 0)) {}
+      _resourceMonitor(resourceMonitor) {}
 
 void ExecutorExpressionContext::adjustInputRow(
     InputAqlItemRow const& inputRow) noexcept {
