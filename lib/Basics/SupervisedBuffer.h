@@ -1,19 +1,20 @@
 #pragma once
 
+#include <memory>
 #include "velocypack/Buffer.h"
-#include "Basics/ResourceUsage.h"
+#include "ResourceUsage.h"
 
 namespace arangodb::velocypack {
 
-class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
+class SupervisedBuffer : private Buffer<uint8_t> {
  public:
   SupervisedBuffer() = default;
 
-  explicit SupervisedBuffer(ResourceMonitor& monitor)
-      : _usageScope(std::make_unique<ResourceUsageScope>(monitor)) {}
+  explicit SupervisedBuffer(arangodb::ResourceMonitor& monitor)
+      : _usageScope(std::make_unique<arangodb::ResourceUsageScope>(monitor)) {}
 
-  uint8_t* steal() override noexcept {
-    uint8_t* ptr = velocypack::Buffer<uint8_t>::steal();
+  uint8_t* steal() noexcept override {
+    uint8_t* ptr = Buffer<uint8_t>::steal();
     if (_usageScope) {  // assume it exists without checking?
       _usageScope->steal();
     }
@@ -23,14 +24,14 @@ class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
  private:
   void grow(ValueLength length) override {
     auto currentCapacity = this->capacity();
-    velocypack::Buffer<uint8_t>::grow(length);
+    Buffer<uint8_t>::grow(length);
     auto newCapacity = this->capacity();
     if (_usageScope && newCapacity > currentCapacity) {
       _usageScope->increase(newCapacity - currentCapacity);
     }
   }
 
-  void clear() override noexcept {
+  void clear() noexcept override {
     auto before = this->capacity();
     Buffer<uint8_t>::clear();
     auto after = this->capacity();
@@ -40,7 +41,7 @@ class SupervisedBuffer : public arangodb::velocypack::Buffer<uint8_t> {
     }
   }
 
-  std::unique_ptr<ResourceUsageScope> _usageScope;
+  std::unique_ptr<arangodb::ResourceUsageScope> _usageScope;
 };
 
 }  // namespace arangodb::velocypack
