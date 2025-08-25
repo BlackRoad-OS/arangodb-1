@@ -66,24 +66,6 @@ class Methods;
 }  // namespace transaction
 namespace aql {
 
-static inline AqlValue buildSupervisedAqlValue(
-    velocypack::Builder const& builder, ResourceUsageScope& usageScope) {
-  // static or inline?
-  usageScope.increase(builder.size());
-
-  AqlValue res(builder.slice(), builder.size());
-
-  long diff =
-      static_cast<long>(builder.size()) - static_cast<long>(res.memoryUsage());
-  if (diff > 0) {
-    usageScope.decrease(diff);
-  } else if (diff < 0) {
-    usageScope.increase(-diff);
-  }
-
-  return res;
-}
-
 class SharedAqlItemBlockPtr;
 struct Range;
 class AqlItemBlock;
@@ -512,6 +494,13 @@ struct AqlValue final {
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
 };
+
+static inline AqlValue buildSupervisedAqlValue(
+    velocypack::Builder const& builder, ResourceMonitor& monitor) {
+  AqlValue res(builder.slice(), builder.size());
+  monitor.increase(res.memoryUsage());
+  return res;
+}
 
 static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
 static_assert(std::is_trivially_move_constructible_v<AqlValue>);

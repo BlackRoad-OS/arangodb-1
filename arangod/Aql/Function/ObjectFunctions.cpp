@@ -156,9 +156,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   VPackSlice initialSlice = materializer.slice(initial);
 
   velocypack::SupervisedBuffer supervisedBuffer;
-  std::shared_ptr<ResourceUsageScope> usageScope = nullptr;
   if (resourceMonitor) {
-    usageScope = std::make_shared<ResourceUsageScope>{*resourceMonitor, 0};
     supervisedBuffer = velocypack::SupervisedBuffer(*resourceMonitor);
   } else {
     supervisedBuffer = velocypack::SupervisedBuffer();
@@ -211,13 +209,10 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       }
     }
 
-    // size_t oldCapacity = builder.buffer()->byteSize();
-    // size_t oldByteSize = builder.size();
-
-    if (usageScope) {
-      usageScope->increase(builder.size());
-      return buildSupervisedAqlValue(builder, *usageScope);
+    if (resourceMonitor) {
+      return buildSupervisedAqlValue(builder, *resourceMonitor);
     }
+    // No resourceMonitor: return AqlValue without accounting.
     return AqlValue{builder.slice(), builder.size()};
   }
 
@@ -248,9 +243,9 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     // only one parameter. now add original document
     builder.add(initialSlice);
   }
-  if (usageScope) {
-    usageScope->increase(builder.size());
-    return buildSupervisedAqlValue(builder, *usageScope);
+
+  if (resourceMonitor) {
+    return buildSupervisedAqlValue(builder, *resourceMonitor);
   }
   return AqlValue{builder.slice(), builder.size()};
 }
