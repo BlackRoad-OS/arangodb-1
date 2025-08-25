@@ -498,7 +498,7 @@ struct AqlValue final {
 static inline AqlValue buildSupervisedAqlValue(
     velocypack::Builder const& builder, ResourceMonitor& monitor) {
   AqlValue res(builder.slice(), builder.size());
-  monitor.increase(res.memoryUsage());
+  monitor.increaseMemoryUsage(res.memoryUsage());
   return res;
 }
 
