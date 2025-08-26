@@ -65,8 +65,6 @@ class Methods;
 
 }  // namespace transaction
 namespace aql {
-AqlValue buildSupervisedAqlValue(velocypack::Builder const& builder,
-                                 ResourceMonitor& monitor);
 
 class SharedAqlItemBlockPtr;
 struct Range;

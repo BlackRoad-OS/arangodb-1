@@ -46,20 +46,6 @@
 
 namespace arangodb::aql {
 
-AqlValue buildSupervisedAqlValue(velocypack::Builder const& builder,
-                                 ResourceMonitor& monitor) {
-  std::size_t builderSize = builder.size();
-  monitor.increaseMemoryUsage(builderSize);
-  AqlValue res(builder.slice(), builder.size());
-  std::size_t valueSize = res.memoryUsage();
-  if (valueSize > builderSize) {
-    monitor.increaseMemoryUsage(valueSize - builderSize);
-  } else if (builderSize > valueSize) {
-    monitor.decreaseMemoryUsage(builderSize - valueSize);
-  }
-  return res;
-}
-
 void AqlValue::setPointer(uint8_t const* pointer) noexcept {
   setType(AqlValueType::VPACK_SLICE_POINTER);
   _data.slicePointerMeta.pointer = pointer;

@@ -224,10 +224,6 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       }
     }
 
-    if (resourceMonitor) {
-      return buildSupervisedAqlValue(*builder, *resourceMonitor);
-    }
-    // No resourceMonitor: return AqlValue without accounting.
     return AqlValue{builder->slice(), builder->size()};
   }
 
@@ -273,9 +269,6 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     builder->add(initialSlice);
   }
 
-  if (resourceMonitor) {
-    return buildSupervisedAqlValue(*builder, *resourceMonitor);
-  }
   return AqlValue{builder->slice(), builder->size()};
 }
 
