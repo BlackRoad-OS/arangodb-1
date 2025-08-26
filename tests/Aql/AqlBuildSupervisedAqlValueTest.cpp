@@ -10,8 +10,8 @@ using arangodb::ResourceMonitor;
 using arangodb::ResourceUsageScope;
 using arangodb::aql::AqlValue;
 using arangodb::aql::buildSupervisedAqlValue;
-using arangodb::basics::SupervisedBuffer;
 using arangodb::velocypack::Builder;
+using arangodb::velocypack::SupervisedBuffer;
 using arangodb::velocypack::Value;
 
 TEST(BuildSupervisedAqlValueTest,
@@ -65,7 +65,7 @@ TEST(BuildSupervisedAqlValueTest,
     AqlValue largeValue;
     {
       SupervisedBuffer supervisedBuffer(monitor);
-      Builder builder(supervisedBuffer);
+      Builder builder(supervisedBuffer.buffer());
       builder.openArray();
       builder.add(Value(std::string(1024, 'a')));
       builder.close();
@@ -86,7 +86,7 @@ TEST(BuildSupervisedAqlValueTest,
     AqlValue smallValue;
     {
       SupervisedBuffer supervisedBuffer(monitor);
-      Builder builder(supervisedBuffer);
+      Builder builder(supervisedBuffer.buffer());
       builder.openArray();
       builder.add(Value(1));
       builder.close();
@@ -109,7 +109,7 @@ TEST(BuildSupervisedAqlValueTest,
     AqlValue largeValue;
     {
       SupervisedBuffer supervisedBuffer(monitor);
-      Builder builder(supervisedBuffer);
+      Builder builder(supervisedBuffer.buffer());
       builder.openArray();
       builder.add(Value(std::string(2048, 'a')));
       builder.close();
@@ -129,7 +129,7 @@ TEST(BuildSupervisedAqlValueTest,
     AqlValue smallValue;
     {
       SupervisedBuffer supervisedBuffer(monitor);
-      Builder builder(supervisedBuffer);
+      Builder builder(supervisedBuffer.buffer());
       builder.openArray();
       builder.add(Value(42));
       builder.close();
@@ -204,7 +204,7 @@ TEST(BuildSupervisedAqlValueTest, ReuseSupervisedBufferAccountsMemory) {
 
   {
     SupervisedBuffer supervisedBuffer(monitor);
-    Builder builder(supervisedBuffer);
+    Builder builder(supervisedBuffer.buffer());
     builder.openArray();
     builder.add(Value(std::string(1024, 'a')));
     builder.close();
@@ -215,7 +215,7 @@ TEST(BuildSupervisedAqlValueTest, ReuseSupervisedBufferAccountsMemory) {
 
   {
     SupervisedBuffer supervisedBuffer(monitor);
-    Builder builder(supervisedBuffer);
+    Builder builder(supervisedBuffer.buffer());
     builder.openArray();
     builder.add(Value(std::string(2048, 'b')));
     builder.close();

@@ -65,6 +65,8 @@ class Methods;
 
 }  // namespace transaction
 namespace aql {
+AqlValue buildSupervisedAqlValue(velocypack::Builder const& builder,
+                                 ResourceMonitor& monitor);
 
 class SharedAqlItemBlockPtr;
 struct Range;
@@ -494,13 +496,6 @@ struct AqlValue final {
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
 };
-
-static inline AqlValue buildSupervisedAqlValue(
-    velocypack::Builder const& builder, ResourceMonitor& monitor) {
-  AqlValue res(builder.slice(), builder.size());
-  monitor.increaseMemoryUsage(res.memoryUsage());
-  return res;
-}
 
 static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
 static_assert(std::is_trivially_move_constructible_v<AqlValue>);

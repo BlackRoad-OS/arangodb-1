@@ -1003,8 +1003,6 @@ void AqlItemBlock::setValue(size_t index, RegisterId varNr,
 void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
                             AqlValue const& value, bool countMemory) {
   TRI_ASSERT(_data[getAddress(index, column)].isEmpty());
-  //LOG_DEVEL << "setValue was called: AqlValue: " << value.slice().toJson();
-  LOG_DEVEL << "setValue was called";
 
   // First update the reference count, if this fails, the value is empty
   if (value.requiresDestruction()) {
@@ -1014,11 +1012,8 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
       // we just inserted the item
       size_t memoryUsage = value.memoryUsage();
       if (countMemory) {
-        LOG_DEVEL << "countMemory: " << memoryUsage;
         increaseMemoryUsage(memoryUsage);
       } else {
-        LOG_DEVEL << "not countMemory: " << memoryUsage
-                  << " current: " << resourceMonitor().current();
         _memoryUsage += memoryUsage;
       }
       valueInfo.setMemoryUsage(memoryUsage);

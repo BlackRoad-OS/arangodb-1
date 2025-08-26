@@ -111,9 +111,6 @@ void SortedCollectExecutor::CollectGroup::reset(InputAqlItemRow const& input) {
     _builder.openArray();
     for (auto& it : infos.getGroupRegisters()) {
       AqlValue val = input.getValue(it.second).clone();
-      LOG_DEVEL << "COLLECT value is increased: " << val.slice().toJson()
-                << " (" << val.memoryUsage()
-                << ") current: " << infos.getResourceUsageScope().current();
       infos.getResourceUsageScope().increase(val.memoryUsage());
       this->groupValues[i] = val;
       // this->groupValues[i] = input.getValue(it.second).clone();
@@ -184,9 +181,6 @@ void SortedCollectExecutor::CollectGroup::addLine(
       //     .toVelocyPack(infos.getVPackOptions(), _builder,
       //                   /*allowUnindexed*/ false);
       auto val = input.getValue(infos.getExpressionRegister());
-      LOG_DEVEL << "INTO group value is increased: " << val.slice().toJson()
-                << " (" << val.slice().byteSize()
-                << ") current: " << infos.getResourceUsageScope().current();
       infos.getResourceUsageScope().increase(val.slice().byteSize());
       val.toVelocyPack(infos.getVPackOptions(), _builder,
                        /*allowUnindexed*/ false);
@@ -198,18 +192,10 @@ void SortedCollectExecutor::CollectGroup::addLine(
       for (auto const& pair : infos.getInputVariables()) {
         infos.getResourceUsageScope().increase(_builder.buffer()->byteSize() -
                                                before);
-        // LOG_DEVEL << "INTO group key is increased: " << pair.first << " (" <<
-        // pair.first.size() * sizeof(char) << ")";
         auto val = input.getValue(pair.second);
         auto estimate = pair.first.size() * sizeof(char) + val.memoryUsage();
         infos.getResourceUsageScope().increase(estimate);
         _builder.add(VPackValue(pair.first));
-        // input.getValue(pair.second)
-        //     .toVelocyPack(infos.getVPackOptions(), _builder,
-        //                   /*allowUnindexed*/ false);
-
-        // LOG_DEVEL << "INTO group value is increased: " <<
-        // val.slice().toJson() << " (" << val.memoryUsage() << ")";
         val.toVelocyPack(infos.getVPackOptions(), _builder,
                          /*allowUnindexed*/ false);
         infos.getResourceUsageScope().decrease(estimate);
@@ -282,7 +268,7 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   for (auto& it : infos.getGroupRegisters()) {
     AqlValue val = this->groupValues[i];
     AqlValueGuard guard{val, true};
-    //output.moveValueInto(it.first, _lastInputRow, &guard);
+    // output.moveValueInto(it.first, _lastInputRow, &guard);
     output.moveValueInto(it.first, _lastInputRow, &guard, false);
     // ownership of value is transferred into res
     this->groupValues[i].erase();
@@ -294,7 +280,8 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   for (auto& it : this->aggregators) {
     AqlValue val = it->stealValue();
     AqlValueGuard guard{val, true};
-    // output.moveValueInto(infos.getAggregatedRegisters()[j].first, _lastInputRow,
+    // output.moveValueInto(infos.getAggregatedRegisters()[j].first,
+    // _lastInputRow,
     //                      &guard);
     output.moveValueInto(infos.getAggregatedRegisters()[j].first, _lastInputRow,
                          &guard, false);
@@ -321,12 +308,11 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     TRI_ASSERT(_buffer.size() == 0);
     _builder.clear();  // necessary
 
-    //output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
-    output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard, false);
+    // output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
+    output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard,
+                         false);
   }
 
-  LOG_DEVEL << "writeToOutput: tracked: "
-            << infos.getResourceUsageScope().tracked();
   infos.getResourceUsageScope().steal();
   output.advanceRow();
 }

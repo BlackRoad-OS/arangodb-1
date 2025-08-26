@@ -228,7 +228,6 @@ void CalculationExecutor<CalculationType::Condition>::doEvaluation(
 
   AstNode const* ast = _infos.getExpression().node();
   bool countMemory = shouldCountMemory(ast);
-  LOG_DEVEL << "CalculationExecutor: countMemory: " << countMemory;
 
   output.moveValueInto(_infos.getOutputRegisterId(), input, &guard,
                        countMemory);
