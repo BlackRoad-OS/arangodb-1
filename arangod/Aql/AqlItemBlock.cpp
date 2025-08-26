@@ -36,8 +36,6 @@
 #include "Transaction/Context.h"
 #include "Transaction/Methods.h"
 
-#include "Logger/LogMacros.h"
-
 #include <absl/strings/str_cat.h>
 #include <velocypack/Iterator.h>
 #include <velocypack/Slice.h>
@@ -995,13 +993,13 @@ AqlValue const& AqlItemBlock::getValueReference(
 }
 
 void AqlItemBlock::setValue(size_t index, RegisterId varNr,
-                            AqlValue const& value, bool countMemory) {
+                            AqlValue const& value) {
   TRI_ASSERT(varNr.isRegularRegister());
-  setValue(index, varNr.value(), value, countMemory);
+  setValue(index, varNr.value(), value);
 }
 
 void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
-                            AqlValue const& value, bool countMemory) {
+                            AqlValue const& value) {
   TRI_ASSERT(_data[getAddress(index, column)].isEmpty());
 
   // First update the reference count, if this fails, the value is empty
@@ -1011,11 +1009,7 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
     if (++valueInfo.refCount == 1) {
       // we just inserted the item
       size_t memoryUsage = value.memoryUsage();
-      if (countMemory) {
-        increaseMemoryUsage(memoryUsage);
-      } else {
-        _memoryUsage += memoryUsage;
-      }
+      increaseMemoryUsage(memoryUsage);
       valueInfo.setMemoryUsage(memoryUsage);
     }
   }

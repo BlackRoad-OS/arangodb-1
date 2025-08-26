@@ -36,34 +36,9 @@
 #include "Basics/ScopeGuard.h"
 #include "Cluster/ServerState.h"
 
-#include "Aql/Function.h"
-
 #ifdef USE_V8
 #include "V8/v8-globals.h"
 #endif
-
-static bool shouldCountMemory(AstNode const* node) {
-  if (node == nullptr) {
-    return true;
-  }
-  if (node->type == NODE_TYPE_ARRAY && node->numMembers() == 1) {
-    return shouldCountMemory(node->getMember(0));
-  }
-  if (node->type != NODE_TYPE_FCALL) {
-    return true;
-  }
-
-  auto func = static_cast<arangodb::aql::Function const*>(node->getData());
-  auto const& name = func->name;
-  if (name == "MERGE" || name == "MERGE_RECURSIVE") {
-    return false;
-  }
-
-  if (node->numMembers() == 1) {
-    return shouldCountMemory(node->getMember(0));
-  }
-  return true;
-}
 
 namespace arangodb::aql {
 
@@ -88,28 +63,20 @@ CalculationExecutor<calculationType>::CalculationExecutor(
 template<CalculationType calculationType>
 CalculationExecutor<calculationType>::~CalculationExecutor() = default;
 
-RegisterId CalculationExecutorInfos::getOutputRegisterId() const
-
-    noexcept {
+RegisterId CalculationExecutorInfos::getOutputRegisterId() const noexcept {
   return _outputRegisterId;
 }
 
-QueryContext& CalculationExecutorInfos::getQuery() const
-
-    noexcept {
+QueryContext& CalculationExecutorInfos::getQuery() const noexcept {
   return _query;
 }
 
-Expression& CalculationExecutorInfos::getExpression() const
-
-    noexcept {
+Expression& CalculationExecutorInfos::getExpression() const noexcept {
   return _expression;
 }
 
 std::vector<std::pair<VariableId, RegisterId>> const&
-CalculationExecutorInfos::getVarToRegs() const
-
-    noexcept {
+CalculationExecutorInfos::getVarToRegs() const noexcept {
   return _expVarToRegs;
 }
 
@@ -180,9 +147,7 @@ void CalculationExecutor<calculationType>::exitContext() noexcept {
 
 template<CalculationType calculationType>
 bool CalculationExecutor<calculationType>::shouldExitContextBetweenBlocks()
-    const
-
-    noexcept {
+    const noexcept {
   static bool const isRunningInCluster =
       ServerState::instance()->isRunningInCluster();
   bool const stream = _infos.getQuery().queryOptions().stream;
@@ -214,9 +179,9 @@ template<>
 void CalculationExecutor<CalculationType::Condition>::doEvaluation(
     InputAqlItemRow& input, OutputAqlItemRow& output) {
   // execute the expression
-  ExecutorExpressionContext ctx(
-      _trx, _infos.getQuery(), _aqlFunctionsInternalCache, input,
-      _infos.getVarToRegs(), _infos.getQuery().resourceMonitor());
+  ExecutorExpressionContext ctx(_trx, _infos.getQuery(),
+                                _aqlFunctionsInternalCache, input,
+                                _infos.getVarToRegs());
 
   bool mustDestroy;  // will get filled by execution
   AqlValue a = _infos.getExpression().execute(&ctx, mustDestroy);
@@ -226,11 +191,7 @@ void CalculationExecutor<CalculationType::Condition>::doEvaluation(
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  AstNode const* ast = _infos.getExpression().node();
-  bool countMemory = shouldCountMemory(ast);
-
-  output.moveValueInto(_infos.getOutputRegisterId(), input, &guard,
-                       countMemory);
+  output.moveValueInto(_infos.getOutputRegisterId(), input, &guard);
 }
 
 #ifdef USE_V8
@@ -253,9 +214,9 @@ void CalculationExecutor<CalculationType::V8Condition>::doEvaluation(
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::HandleScope scope(isolate);  // do not delete this!
   // execute the expression
-  ExecutorExpressionContext ctx(
-      _trx, _infos.getQuery(), _aqlFunctionsInternalCache, input,
-      _infos.getVarToRegs(), _infos.getQuery().resourceMonitor());
+  ExecutorExpressionContext ctx(_trx, _infos.getQuery(),
+                                _aqlFunctionsInternalCache, input,
+                                _infos.getVarToRegs());
 
   bool mustDestroy;  // will get filled by execution
   AqlValue a = _infos.getExpression().execute(&ctx, mustDestroy);
@@ -265,10 +226,7 @@ void CalculationExecutor<CalculationType::V8Condition>::doEvaluation(
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  AstNode const* ast = _infos.getExpression().node();
-  bool countMemory = shouldCountMemory(ast);
-  output.moveValueInto(_infos.getOutputRegisterId(), input, &guard,
-                       countMemory);
+  output.moveValueInto(_infos.getOutputRegisterId(), input, &guard);
 
   if (input.blockHasMoreDataRowsAfterThis()) {
     // We will be called again before the fetcher needs to get a new block.
@@ -281,19 +239,14 @@ void CalculationExecutor<CalculationType::V8Condition>::doEvaluation(
 #endif
 
 template class CalculationExecutor<CalculationType::Condition>;
-
 template class ExecutionBlockImpl<
     CalculationExecutor<CalculationType::Reference>>;
-
 #ifdef USE_V8
 template class CalculationExecutor<CalculationType::V8Condition>;
 template class ExecutionBlockImpl<
     CalculationExecutor<CalculationType::V8Condition>>;
 #endif
-
 template class CalculationExecutor<CalculationType::Reference>;
-
 template class ExecutionBlockImpl<
     CalculationExecutor<CalculationType::Condition>>;
-
 }  // namespace arangodb::aql
