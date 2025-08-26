@@ -6,16 +6,12 @@
 
 namespace arangodb::velocypack {
 
-class SupervisedBuffer : private Buffer<uint8_t> {
+class SupervisedBuffer : public Buffer<uint8_t> {
  public:
   SupervisedBuffer() = delete;
 
   explicit SupervisedBuffer(arangodb::ResourceMonitor& monitor)
       : _usageScope(monitor) {}
-
-  // expose the base because the inheritance is private
-  Buffer<uint8_t>& buffer() { return *this; }
-  Buffer<uint8_t> const& buffer() const { return *this; }
 
   uint8_t* steal() noexcept override {
     uint8_t* ptr = Buffer<uint8_t>::steal();
