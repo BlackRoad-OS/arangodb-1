@@ -187,7 +187,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
       // then we output the object
       {
-        VPackObjectBuilder ob(&builder);
+        VPackObjectBuilder ob(builder.get());
         for (auto const& [k, v] : attributes) {
           builder->add(k, v);
         }
@@ -219,13 +219,13 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
                                       /*mergeObjects*/ recursive,
                                       /*nullMeansRemove*/ false);
         builder->clear();
-        builder->add(outBuilder.slice());
+        builder->add(outBuilder->slice());
         outBuilder->clear();
       }
     }
 
     if (resourceMonitor) {
-      return buildSupervisedAqlValue(builder, *resourceMonitor);
+      return buildSupervisedAqlValue(*builder, *resourceMonitor);
     }
     // No resourceMonitor: return AqlValue without accounting.
     return AqlValue{builder->slice(), builder->size()};
@@ -274,7 +274,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   }
 
   if (resourceMonitor) {
-    return buildSupervisedAqlValue(builder, *resourceMonitor);
+    return buildSupervisedAqlValue(*builder, *resourceMonitor);
   }
   return AqlValue{builder->slice(), builder->size()};
 }
