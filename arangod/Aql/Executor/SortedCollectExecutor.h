@@ -60,8 +60,7 @@ class SortedCollectExecutorInfos {
       std::vector<std::string> aggregateTypes,
       std::vector<std::pair<std::string, RegisterId>>&& inputVariables,
       std::vector<std::pair<RegisterId, RegisterId>>&& aggregateRegisters,
-      velocypack::Options const*,
-      std::unique_ptr<ResourceUsageScope> usageScope);
+      velocypack::Options const*, ResourceMonitor& resourceMonitor);
 
   SortedCollectExecutorInfos() = delete;
   SortedCollectExecutorInfos(SortedCollectExecutorInfos&&) = default;
@@ -92,7 +91,8 @@ class SortedCollectExecutorInfos {
     return _inputVariables;
   }
 
-  ResourceUsageScope& getResourceUsageScope() const { return *_usageScope; }
+  ResourceMonitor& resourceMonitor() const { return _resourceMonitor; }
+  ResourceUsageScope& resourceUsageScope() const { return *_usageScope; }
 
  private:
   /// @brief aggregate types
@@ -124,6 +124,7 @@ class SortedCollectExecutorInfos {
 
   /// @brief the transaction for this query
   velocypack::Options const* _vpackOptions;
+  ResourceMonitor& _resourceMonitor;
   std::unique_ptr<ResourceUsageScope> _usageScope;
 };
 
@@ -143,7 +144,7 @@ class SortedCollectExecutor {
     size_t groupLength;
     Infos& infos;
     InputAqlItemRow _lastInputRow;
-    arangodb::velocypack::Buffer<uint8_t> _buffer;
+    std::shared_ptr<arangodb::velocypack::Buffer<uint8_t>> _buffer;
     arangodb::velocypack::Builder _builder;
 
     CollectGroup() = delete;

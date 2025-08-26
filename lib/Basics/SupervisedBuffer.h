@@ -3,6 +3,7 @@
 #include <memory>
 #include <velocypack/Buffer.h>
 #include "ResourceUsage.h"
+#include "Logger/LogMacros.h"
 
 namespace arangodb::velocypack {
 
@@ -26,6 +27,7 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     auto newCapacity = this->capacity();
     if (newCapacity > currentCapacity) {
       _usageScope.increase(newCapacity - currentCapacity);
+      LOG_DEVEL << "SupervisedBuffer::grow: " << newCapacity - currentCapacity;
     }
   }
 

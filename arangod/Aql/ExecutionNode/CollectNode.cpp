@@ -360,7 +360,8 @@ std::unique_ptr<ExecutionBlock> CollectNode::createBlock(
           std::move(groupRegisters), collectRegister, expressionRegister,
           _expressionVariable, std::move(aggregateTypes),
           std::move(inputVariables), std::move(aggregateRegisters),
-          &_plan->getAst()->query().vpackOptions(), std::move(usageScope));
+          &_plan->getAst()->query().vpackOptions(),
+          engine.getQuery().resourceMonitor());
 
       return std::make_unique<ExecutionBlockImpl<SortedCollectExecutor>>(
           &engine, this, std::move(registerInfos), std::move(executorInfos));

@@ -214,9 +214,9 @@ void CalculationExecutor<CalculationType::V8Condition>::doEvaluation(
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::HandleScope scope(isolate);  // do not delete this!
   // execute the expression
-  ExecutorExpressionContext ctx(_trx, _infos.getQuery(),
-                                _aqlFunctionsInternalCache, input,
-                                _infos.getVarToRegs());
+  ExecutorExpressionContext ctx(
+      _trx, _infos.getQuery(), _aqlFunctionsInternalCache, input,
+      _infos.getVarToRegs(), _infos.getQuery().resourceMonitor());
 
   bool mustDestroy;  // will get filled by execution
   AqlValue a = _infos.getExpression().execute(&ctx, mustDestroy);

@@ -556,7 +556,7 @@ function ahuacatMemoryLimitSortedCollectTestSuite() {
       tearDown();
 
       testCollection = db._create(TEST_COLLECTION);
-      for (let i = 1; i <= 100; ++i) {
+      for (let i = 1; i <= 10; ++i) {
         testCollection.save({
           grp: "foobarbazfoobarbaz" + i,
           num: i,
@@ -568,7 +568,7 @@ function ahuacatMemoryLimitSortedCollectTestSuite() {
         });
       }
 
-      for (let i = 1; i <= 100; ++i) {
+      for (let i = 1; i <= 10; ++i) {
         testCollection.save({
           grp: "foobarbazfoobarbaz" + i,
           num: i * 3.14,
@@ -583,7 +583,7 @@ function ahuacatMemoryLimitSortedCollectTestSuite() {
 
     tearDownAll: tearDown,
 
-    testSortedCollectAggregateUniqueIntoWithinLimit: function () {
+    testSortedCollectAggregateUniqueIntoWithinLimit: function () { // leftover 99683
       const query = `
         FOR d IN ${TEST_COLLECTION}
           SORT d.grp

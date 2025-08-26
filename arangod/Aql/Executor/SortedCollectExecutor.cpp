@@ -39,6 +39,7 @@
 #include <velocypack/Buffer.h>
 
 #include <utility>
+#include <Basics/SupervisedBuffer.h>
 
 // Set this to true to activate devel logging
 #define INTERNAL_LOG_SC LOG_DEVEL_IF(false)
@@ -50,12 +51,14 @@ SortedCollectExecutor::CollectGroup::CollectGroup(Infos& infos)
     : groupLength(0),
       infos(infos),
       _lastInputRow(InputAqlItemRow{CreateInvalidInputRowHint{}}),
+      _buffer(std::make_shared<velocypack::SupervisedBuffer>(
+          infos.resourceMonitor())),
       _builder(_buffer) {
   for (auto const& aggName : infos.getAggregateTypes()) {
     // aggregators.emplace_back(
     //     Aggregator::fromTypeString(infos.getVPackOptions(), aggName));
     aggregators.emplace_back(Aggregator::fromTypeString(
-        infos.getVPackOptions(), aggName, infos.getResourceUsageScope()));
+        infos.getVPackOptions(), aggName, infos.resourceUsageScope()));
   }
   TRI_ASSERT(infos.getAggregatedRegisters().size() == aggregators.size());
 }
@@ -107,17 +110,17 @@ void SortedCollectExecutor::CollectGroup::reset(InputAqlItemRow const& input) {
   if (input.isInitialized()) {
     // construct the new group
     size_t i = 0;
-    size_t beforeOpenArray = _buffer.size();
     _builder.openArray();
     for (auto& it : infos.getGroupRegisters()) {
       AqlValue val = input.getValue(it.second).clone();
-      infos.getResourceUsageScope().increase(val.memoryUsage());
+      if (std::dynamic_pointer_cast<velocypack::SupervisedBuffer>(_builder.buffer())) {
+        LOG_DEVEL << "SortedCollectExecutor: Using SupervisedBuffer";
+      }
+      infos.resourceUsageScope().increase(val.memoryUsage());
       this->groupValues[i] = val;
       // this->groupValues[i] = input.getValue(it.second).clone();
       ++i;
     }
-    size_t afterOpenArray = _buffer.size();
-    infos.getResourceUsageScope().increase(afterOpenArray - beforeOpenArray);
 
   } else {
     // We still need an open array...
@@ -131,8 +134,7 @@ SortedCollectExecutorInfos::SortedCollectExecutorInfos(
     Variable const* expressionVariable, std::vector<std::string> aggregateTypes,
     std::vector<std::pair<std::string, RegisterId>>&& inputVariables,
     std::vector<std::pair<RegisterId, RegisterId>>&& aggregateRegisters,
-    velocypack::Options const* opts,
-    std::unique_ptr<ResourceUsageScope> usageScope)
+    velocypack::Options const* opts, ResourceMonitor& resourceMonitor)
     : _aggregateTypes(std::move(aggregateTypes)),
       _aggregateRegisters(std::move(aggregateRegisters)),
       _groupRegisters(std::move(groupRegisters)),
@@ -141,7 +143,8 @@ SortedCollectExecutorInfos::SortedCollectExecutorInfos(
       _inputVariables(std::move(inputVariables)),
       _expressionVariable(expressionVariable),
       _vpackOptions(opts),
-      _usageScope(std::move(usageScope)) {}
+      _resourceMonitor(resourceMonitor),
+      _usageScope(std::make_unique<ResourceUsageScope>(resourceMonitor, 0)) {}
 
 SortedCollectExecutor::SortedCollectExecutor(Fetcher&, Infos& infos)
     : _infos(infos), _currentGroup(infos) {
@@ -177,33 +180,21 @@ void SortedCollectExecutor::CollectGroup::addLine(
   if (infos.getCollectRegister().value() != RegisterId::maxRegisterId) {
     if (infos.getExpressionVariable() != nullptr) {
       // compute the expression
-      // input.getValue(infos.getExpressionRegister())
-      //     .toVelocyPack(infos.getVPackOptions(), _builder,
-      //                   /*allowUnindexed*/ false);
-      auto val = input.getValue(infos.getExpressionRegister());
-      infos.getResourceUsageScope().increase(val.slice().byteSize());
-      val.toVelocyPack(infos.getVPackOptions(), _builder,
-                       /*allowUnindexed*/ false);
+      input.getValue(infos.getExpressionRegister())
+          .toVelocyPack(infos.getVPackOptions(), _builder,
+                        /*allowUnindexed*/ false);
     } else {
       // copy variables / keep variables into result register
 
-      auto before = _builder.buffer()->byteSize();
       _builder.openObject();
       for (auto const& pair : infos.getInputVariables()) {
-        infos.getResourceUsageScope().increase(_builder.buffer()->byteSize() -
-                                               before);
         auto val = input.getValue(pair.second);
-        auto estimate = pair.first.size() * sizeof(char) + val.memoryUsage();
-        infos.getResourceUsageScope().increase(estimate);
+
         _builder.add(VPackValue(pair.first));
         val.toVelocyPack(infos.getVPackOptions(), _builder,
                          /*allowUnindexed*/ false);
-        infos.getResourceUsageScope().decrease(estimate);
-        before = _builder.buffer()->byteSize();
       }
       _builder.close();
-      infos.getResourceUsageScope().increase(_builder.buffer()->byteSize() -
-                                             before);
     }
   }
   TRI_IF_FAILURE("CollectGroup::addValues") {
@@ -268,8 +259,7 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   for (auto& it : infos.getGroupRegisters()) {
     AqlValue val = this->groupValues[i];
     AqlValueGuard guard{val, true};
-    // output.moveValueInto(it.first, _lastInputRow, &guard);
-    output.moveValueInto(it.first, _lastInputRow, &guard, false);
+    output.moveValueInto(it.first, _lastInputRow, &guard);
     // ownership of value is transferred into res
     this->groupValues[i].erase();
     ++i;
@@ -280,40 +270,24 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   for (auto& it : this->aggregators) {
     AqlValue val = it->stealValue();
     AqlValueGuard guard{val, true};
-    // output.moveValueInto(infos.getAggregatedRegisters()[j].first,
-    // _lastInputRow,
-    //                      &guard);
     output.moveValueInto(infos.getAggregatedRegisters()[j].first, _lastInputRow,
-                         &guard, false);
+                         &guard);
     ++j;
   }
 
   // set the group values
   if (infos.getCollectRegister().value() != RegisterId::maxRegisterId) {
     TRI_ASSERT(_builder.isOpenArray());
-    size_t before = _buffer.size();
     _builder.close();
-    size_t after = _buffer.size();
-    if (after >= before) {
-      infos.getResourceUsageScope().increase(after - before);
-    } else {
-      infos.getResourceUsageScope().decrease(before - after);
-    }
 
-    AqlValue val(std::move(_buffer));  // _buffer still usable after
-    if (val.memoryUsage() == 0) {
-      infos.getResourceUsageScope().decrease(after);
-    }
+    AqlValue val(std::move(*_buffer));  // _buffer still usable after
     AqlValueGuard guard{val, true};
-    TRI_ASSERT(_buffer.size() == 0);
+    TRI_ASSERT(_buffer->size() == 0);
     _builder.clear();  // necessary
 
-    // output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
-    output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard,
-                         false);
+    output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
   }
 
-  infos.getResourceUsageScope().steal();
   output.advanceRow();
 }
 

@@ -155,14 +155,14 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(&vopts);
   VPackSlice initialSlice = materializer.slice(initial);
 
-  std::unique_ptr<velocypack::SupervisedBuffer> supervisedBuffer;
-  std::unique_ptr<VPackBuilder> builder;
+  std::shared_ptr<velocypack::SupervisedBuffer> supervisedBuffer;
+  VPackBuilder builder;
   if (resourceMonitor) {
     supervisedBuffer =
-        std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-    builder = std::make_unique<VPackBuilder>(supervisedBuffer);
+        std::make_shared<velocypack::SupervisedBuffer>(*resourceMonitor);
+    builder = VPackBuilder(supervisedBuffer);
   } else {
-    builder = std::make_unique<VPackBuilder>();
+    builder = VPackBuilder();
   }
 
   if (initial.isArray() && n == 1) {
@@ -187,25 +187,25 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
       // then we output the object
       {
-        VPackObjectBuilder ob(builder.get());
+        VPackObjectBuilder ob(&builder);
         for (auto const& [k, v] : attributes) {
-          builder->add(k, v);
+          builder.add(k, v);
         }
       }
 
     } else {
       // slow path for recursive merge
-      builder->openObject();
-      builder->close();
+      builder.openObject();
+      builder.close();
 
-      std::unique_ptr<velocypack::SupervisedBuffer> outBuf;
-      std::unique_ptr<VPackBuilder> outBuilder;
+      std::shared_ptr<velocypack::SupervisedBuffer> outBuf;
+      VPackBuilder outBuilder;
       if (resourceMonitor) {
         outBuf =
-            std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-        outBuilder = std::make_unique<VPackBuilder>(outBuf);
+            std::make_shared<velocypack::SupervisedBuffer>(*resourceMonitor);
+        outBuilder = VPackBuilder(outBuf);
       } else {
-        outBuilder = std::make_unique<VPackBuilder>();
+        outBuilder = VPackBuilder();
       }
 
       for (VPackSlice it : VPackArrayIterator(initialSlice)) {
@@ -214,17 +214,17 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
                                                          funcName);
           return AqlValue(AqlValueHintNull());
         }
-        outBuilder->clear();
-        velocypack::Collection::merge(*outBuilder, builder->slice(), it,
+        outBuilder.clear();
+        velocypack::Collection::merge(outBuilder, builder.slice(), it,
                                       /*mergeObjects*/ recursive,
                                       /*nullMeansRemove*/ false);
-        builder->clear();
-        builder->add(outBuilder->slice());
-        outBuilder->clear();
+        builder.clear();
+        builder.add(outBuilder.slice());
+        outBuilder.clear();
       }
     }
 
-    return AqlValue{builder->slice(), builder->size()};
+    return AqlValue{builder.slice(), builder.size()};
   }
 
   if (!initial.isObject()) {
@@ -232,13 +232,13 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  std::unique_ptr<velocypack::SupervisedBuffer> outBuf;
-  std::unique_ptr<VPackBuilder> outBuilder;
+  std::shared_ptr<velocypack::SupervisedBuffer> outBuf;
+  VPackBuilder outBuilder;
   if (resourceMonitor) {
-    outBuf = std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-    outBuilder = std::make_unique<VPackBuilder>(outBuf);
+    outBuf = std::make_shared<velocypack::SupervisedBuffer>(*resourceMonitor);
+    outBuilder = VPackBuilder(outBuf);
   } else {
-    outBuilder = std::make_unique<VPackBuilder>();
+    outBuilder = VPackBuilder();
   }
   // merge in all other arguments
   for (size_t i = 1; i < n; ++i) {
@@ -253,23 +253,23 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
     AqlValueMaterializer materializer(&vopts);
     VPackSlice slice = materializer.slice(param);
-    outBuilder->clear();
+    outBuilder.clear();
 
-    velocypack::Collection::merge(*outBuilder, initialSlice, slice,
+    velocypack::Collection::merge(outBuilder, initialSlice, slice,
                                   /*mergeObjects*/ recursive,
                                   /*nullMeansRemove*/ false);
-    builder->clear();
-    builder->add(outBuilder->slice());
-    outBuilder->clear();
+    builder.clear();
+    builder.add(outBuilder.slice());
+    outBuilder.clear();
 
-    initialSlice = builder->slice();
+    initialSlice = builder.slice();
   }
   if (n == 1) {
     // only one parameter. now add original document
-    builder->add(initialSlice);
+    builder.add(initialSlice);
   }
 
-  return AqlValue{builder->slice(), builder->size()};
+  return AqlValue{builder.slice(), builder.size()};
 }
 
 }  // namespace
