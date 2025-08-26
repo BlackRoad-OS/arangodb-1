@@ -155,10 +155,11 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(&vopts);
   VPackSlice initialSlice = materializer.slice(initial);
 
-  std::unique_ptr<SupervisedBuffer> supervisedBuffer;
+  std::unique_ptr<velocypack::SupervisedBuffer> supervisedBuffer;
   std::unique_ptr<VPackBuilder> builder;
   if (resourceMonitor) {
-    supervisedBuffer = std::make_unique<SupervisedBuffer>(*resourceMonitor);
+    supervisedBuffer =
+        std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
     builder = std::make_unique<VPackBuilder>(supervisedBuffer->buffer());
   } else {
     builder = std::make_unique<VPackBuilder>();
@@ -197,10 +198,11 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       builder->openObject();
       builder->close();
 
-      std::unique_ptr<SupervisedBuffer> outBuf;
+      std::unique_ptr<velocypack::SupervisedBuffer> outBuf;
       std::unique_ptr<VPackBuilder> outBuilder;
       if (resourceMonitor) {
-        outBuf = std::make_unique<SupervisedBuffer>(*resourceMonitor);
+        outBuf =
+            std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
         outBuilder = std::make_unique<VPackBuilder>(outBuf->buffer());
       } else {
         outBuilder = std::make_unique<VPackBuilder>();
@@ -234,10 +236,10 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  std::unique_ptr<SupervisedBuffer> outBuf;
+  std::unique_ptr<velocypack::SupervisedBuffer> outBuf;
   std::unique_ptr<VPackBuilder> outBuilder;
   if (resourceMonitor) {
-    outBuf = std::make_unique<SupervisedBuffer>(*resourceMonitor);
+    outBuf = std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
     outBuilder = std::make_unique<VPackBuilder>(outBuf->buffer());
   } else {
     outBuilder = std::make_unique<VPackBuilder>();
