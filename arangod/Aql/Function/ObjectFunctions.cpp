@@ -160,7 +160,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   if (resourceMonitor) {
     supervisedBuffer =
         std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-    builder = std::make_unique<VPackBuilder>(supervisedBuffer->buffer());
+    builder = std::make_unique<VPackBuilder>(supervisedBuffer);
   } else {
     builder = std::make_unique<VPackBuilder>();
   }
@@ -203,7 +203,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       if (resourceMonitor) {
         outBuf =
             std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-        outBuilder = std::make_unique<VPackBuilder>(outBuf->buffer());
+        outBuilder = std::make_unique<VPackBuilder>(outBuf);
       } else {
         outBuilder = std::make_unique<VPackBuilder>();
       }
@@ -240,7 +240,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   std::unique_ptr<VPackBuilder> outBuilder;
   if (resourceMonitor) {
     outBuf = std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-    outBuilder = std::make_unique<VPackBuilder>(outBuf->buffer());
+    outBuilder = std::make_unique<VPackBuilder>(outBuf);
   } else {
     outBuilder = std::make_unique<VPackBuilder>();
   }
