@@ -46,6 +46,7 @@
 #include <velocypack/Sink.h>
 #include <velocypack/Slice.h>
 
+#include <optional>
 #include <vector>
 #include <Aql/ExecutorExpressionContext.h>
 
@@ -54,11 +55,6 @@ using namespace arangodb;
 namespace arangodb::aql {
 
 namespace {
-
-// put it in a more generic place to be used elsewhere
-// cpp tests around this function, trying to create aql value from small number,
-// empty builder check if resource usage matches, makes sense to count twice
-// here bc of intermediate
 
 /// @brief extract attribute names from the arguments
 void extractKeys(containers::FlatHashSet<std::string>& names,
@@ -155,14 +151,14 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(&vopts);
   VPackSlice initialSlice = materializer.slice(initial);
 
-  std::unique_ptr<velocypack::SupervisedBuffer> supervisedBuffer;
-  std::unique_ptr<VPackBuilder> builder;
+  std::optional<velocypack::SupervisedBuffer> supervisedBuffer;
+  velocypack::Builder builder;
+
   if (resourceMonitor) {
-    supervisedBuffer =
-        std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-    builder = std::make_unique<VPackBuilder>(supervisedBuffer);
+    sb.emplace(*resourceMonitor);
+    builder = velocypack::Builder(*supervisedBuffer);
   } else {
-    builder = std::make_unique<VPackBuilder>();
+    builder = velocypack::Builder();
   }
 
   if (initial.isArray() && n == 1) {
@@ -198,14 +194,13 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       builder->openObject();
       builder->close();
 
-      std::unique_ptr<velocypack::SupervisedBuffer> outBuf;
-      std::unique_ptr<VPackBuilder> outBuilder;
+      std::optional<velocypack::SupervisedBuffer> outBuf;
+      velocypack::Builder outBuilder;
       if (resourceMonitor) {
-        outBuf =
-            std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-        outBuilder = std::make_unique<VPackBuilder>(outBuf);
+        outSb.emplace(*resourceMonitor);
+        outBuilder = velocypack::Builder(*outBuf);
       } else {
-        outBuilder = std::make_unique<VPackBuilder>();
+        outBuilder = velocypack::Builder();
       }
 
       for (VPackSlice it : VPackArrayIterator(initialSlice)) {

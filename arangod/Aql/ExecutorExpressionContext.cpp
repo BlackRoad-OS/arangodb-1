@@ -33,14 +33,6 @@
 
 using namespace arangodb::aql;
 
-// ExecutorExpressionContext::ExecutorExpressionContext(
-//     arangodb::transaction::Methods& trx, QueryContext& context,
-//     AqlFunctionsInternalCache& cache, InputAqlItemRow const& inputRow,
-//     std::vector<std::pair<VariableId, RegisterId>> const& varsToRegister)
-//     : QueryExpressionContext(trx, context, cache),
-//       _inputRow(inputRow),
-//       _varsToRegister(varsToRegister) {}
-
 ExecutorExpressionContext::ExecutorExpressionContext(
     transaction::Methods& trx, QueryContext& context,
     AqlFunctionsInternalCache& cache, InputAqlItemRow const& inputRow,

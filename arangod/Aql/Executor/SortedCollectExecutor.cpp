@@ -52,8 +52,6 @@ SortedCollectExecutor::CollectGroup::CollectGroup(Infos& infos)
       _lastInputRow(InputAqlItemRow{CreateInvalidInputRowHint{}}),
       _builder(_buffer) {
   for (auto const& aggName : infos.getAggregateTypes()) {
-    // aggregators.emplace_back(
-    //     Aggregator::fromTypeString(infos.getVPackOptions(), aggName));
     aggregators.emplace_back(Aggregator::fromTypeString(
         infos.getVPackOptions(), aggName, infos.getResourceUsageScope()));
   }
@@ -113,7 +111,6 @@ void SortedCollectExecutor::CollectGroup::reset(InputAqlItemRow const& input) {
       AqlValue val = input.getValue(it.second).clone();
       infos.getResourceUsageScope().increase(val.memoryUsage());
       this->groupValues[i] = val;
-      // this->groupValues[i] = input.getValue(it.second).clone();
       ++i;
     }
     size_t afterOpenArray = _buffer.size();
@@ -177,9 +174,6 @@ void SortedCollectExecutor::CollectGroup::addLine(
   if (infos.getCollectRegister().value() != RegisterId::maxRegisterId) {
     if (infos.getExpressionVariable() != nullptr) {
       // compute the expression
-      // input.getValue(infos.getExpressionRegister())
-      //     .toVelocyPack(infos.getVPackOptions(), _builder,
-      //                   /*allowUnindexed*/ false);
       auto val = input.getValue(infos.getExpressionRegister());
       infos.getResourceUsageScope().increase(val.slice().byteSize());
       val.toVelocyPack(infos.getVPackOptions(), _builder,
@@ -268,8 +262,7 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   for (auto& it : infos.getGroupRegisters()) {
     AqlValue val = this->groupValues[i];
     AqlValueGuard guard{val, true};
-    // output.moveValueInto(it.first, _lastInputRow, &guard);
-    output.moveValueInto(it.first, _lastInputRow, &guard, false);
+    output.moveValueInto(it.first, _lastInputRow, &guard);
     // ownership of value is transferred into res
     this->groupValues[i].erase();
     ++i;
@@ -280,11 +273,8 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   for (auto& it : this->aggregators) {
     AqlValue val = it->stealValue();
     AqlValueGuard guard{val, true};
-    // output.moveValueInto(infos.getAggregatedRegisters()[j].first,
-    // _lastInputRow,
-    //                      &guard);
     output.moveValueInto(infos.getAggregatedRegisters()[j].first, _lastInputRow,
-                         &guard, false);
+                         &guard);
     ++j;
   }
 
@@ -308,9 +298,7 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     TRI_ASSERT(_buffer.size() == 0);
     _builder.clear();  // necessary
 
-    // output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
-    output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard,
-                         false);
+    output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
   }
 
   infos.getResourceUsageScope().steal();

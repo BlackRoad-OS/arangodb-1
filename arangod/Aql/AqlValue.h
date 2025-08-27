@@ -31,7 +31,6 @@
 #include "Basics/ResourceUsage.h"
 #include "IResearch/Misc.h"
 
-#include <velocypack/Builder.h>
 #include <velocypack/Slice.h>
 #include <velocypack/velocypack-common.h>
 #include <string_view>

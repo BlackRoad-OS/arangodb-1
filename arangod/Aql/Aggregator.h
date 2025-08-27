@@ -46,8 +46,7 @@ struct Aggregator {
 
   struct Factory {
     virtual ~Factory() = default;
-    // virtual std::unique_ptr<Aggregator> operator()(
-    //     velocypack::Options const*) const = 0;
+
     virtual std::unique_ptr<Aggregator> operator()(
         velocypack::Options const*, ResourceUsageScope& scope) const = 0;
     virtual void createInPlace(void*, velocypack::Options const*,
@@ -55,8 +54,6 @@ struct Aggregator {
     virtual std::size_t getAggregatorSize() const = 0;
   };
 
-  // explicit Aggregator(velocypack::Options const* opts) : _vpackOptions(opts)
-  // {}
   Aggregator(velocypack::Options const* opts, ResourceUsageScope& scope)
       : _vpackOptions(opts), _usageScope(scope) {}
   virtual ~Aggregator() = default;
@@ -73,10 +70,6 @@ struct Aggregator {
   static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options const*,
                                                     std::string_view type,
                                                     ResourceUsageScope& scope);
-
-  // static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options
-  // const*,
-  //                                                 std::string_view type);
 
   /// @brief creates an aggregator from a velocypack slice
   static std::unique_ptr<Aggregator> fromVPack(velocypack::Options const*,
@@ -117,9 +110,6 @@ struct Aggregator {
   /// can be optimized away (note current: COUNT/LENGTH don't, all others do)
   static bool requiresInput(std::string_view type);
 
-  // void setUsageScope(ResourceUsageScope& scope) {
-  //   _usageScope = scope;
-  // }
   ResourceUsageScope& getResourceUsageScope() const { return _usageScope; }
 
  protected:
