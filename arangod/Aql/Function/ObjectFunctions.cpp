@@ -153,9 +153,8 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
   std::optional<velocypack::SupervisedBuffer> supervisedBuffer;
   velocypack::Builder builder;
-
-  if (resourceMonitor) {
-    sb.emplace(*resourceMonitor);
+  if (resourceMonitor != nullptr) {
+    supervisedBuffer = velocypack::SupervisedBuffer(*resourceMonitor);
     builder = velocypack::Builder(*supervisedBuffer);
   } else {
     builder = velocypack::Builder();
@@ -183,21 +182,21 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
       // then we output the object
       {
-        VPackObjectBuilder ob(builder.get());
+        VPackObjectBuilder ob(&builder);
         for (auto const& [k, v] : attributes) {
-          builder->add(k, v);
+          builder.add(k, v);
         }
       }
 
     } else {
       // slow path for recursive merge
-      builder->openObject();
-      builder->close();
+      builder.openObject();
+      builder.close();
 
       std::optional<velocypack::SupervisedBuffer> outBuf;
       velocypack::Builder outBuilder;
-      if (resourceMonitor) {
-        outSb.emplace(*resourceMonitor);
+      if (resourceMonitor != nullptr) {
+        outBuf = velocypack::SupervisedBuffer(*resourceMonitor);
         outBuilder = velocypack::Builder(*outBuf);
       } else {
         outBuilder = velocypack::Builder();
@@ -209,17 +208,17 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
                                                          funcName);
           return AqlValue(AqlValueHintNull());
         }
-        outBuilder->clear();
-        velocypack::Collection::merge(*outBuilder, builder->slice(), it,
+        outBuilder.clear();
+        velocypack::Collection::merge(outBuilder, builder.slice(), it,
                                       /*mergeObjects*/ recursive,
                                       /*nullMeansRemove*/ false);
-        builder->clear();
-        builder->add(outBuilder->slice());
-        outBuilder->clear();
+        builder.clear();
+        builder.add(outBuilder.slice());
+        outBuilder.clear();
       }
     }
 
-    return AqlValue{builder->slice(), builder->size()};
+    return AqlValue{builder.slice(), builder.size()};
   }
 
   if (!initial.isObject()) {
@@ -227,13 +226,13 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  std::unique_ptr<velocypack::SupervisedBuffer> outBuf;
-  std::unique_ptr<VPackBuilder> outBuilder;
-  if (resourceMonitor) {
-    outBuf = std::make_unique<velocypack::SupervisedBuffer>(*resourceMonitor);
-    outBuilder = std::make_unique<VPackBuilder>(outBuf);
+  std::optional<velocypack::SupervisedBuffer> outBuf;
+  velocypack::Builder outBuilder;
+  if (resourceMonitor != nullptr) {
+    outBuf = velocypack::SupervisedBuffer(*resourceMonitor);
+    outBuilder = velocypack::Builder(*outBuf);
   } else {
-    outBuilder = std::make_unique<VPackBuilder>();
+    outBuilder = velocypack::Builder();
   }
   // merge in all other arguments
   for (size_t i = 1; i < n; ++i) {
@@ -248,23 +247,23 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 
     AqlValueMaterializer materializer(&vopts);
     VPackSlice slice = materializer.slice(param);
-    outBuilder->clear();
+    outBuilder.clear();
 
-    velocypack::Collection::merge(*outBuilder, initialSlice, slice,
+    velocypack::Collection::merge(outBuilder2, initialSlice, slice,
                                   /*mergeObjects*/ recursive,
                                   /*nullMeansRemove*/ false);
-    builder->clear();
-    builder->add(outBuilder->slice());
-    outBuilder->clear();
+    builder.clear();
+    builder.add(outBuilder.slice());
+    outBuilder.clear();
 
-    initialSlice = builder->slice();
+    initialSlice = builder.slice();
   }
   if (n == 1) {
     // only one parameter. now add original document
-    builder->add(initialSlice);
+    builder.add(initialSlice);
   }
 
-  return AqlValue{builder->slice(), builder->size()};
+  return AqlValue{builder.slice(), builder.size()};
 }
 
 }  // namespace
