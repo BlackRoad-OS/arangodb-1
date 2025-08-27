@@ -1,5 +1,5 @@
 /*jshint globalstrict:false, strict:false, maxlen: 500 */
-/*global assertTrue, assertEqual, arango, print */
+/*global db, assertTrue, assertEqual, arango, print */
 
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
@@ -107,7 +107,6 @@ function httpRequestsFuzzerTestSuite() {
       
     });
     db._useDatabase("_system");
-    print(wordListForRoute)
   };
   return {
     setUpAll: function () {
