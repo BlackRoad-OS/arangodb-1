@@ -654,6 +654,7 @@ struct AggregatorUnique : public Aggregator {
         VPackSlice(reinterpret_cast<uint8_t const*>(pos)).byteSize());
     builder.add(VPackSlice(reinterpret_cast<uint8_t const*>(pos)));
     auto after = builder.buffer()->size();
+    LOG_DEVEL << "AggregatorUnique: reduce: before decrease";
     getResourceUsageScope().decrease(
         VPackSlice(reinterpret_cast<uint8_t const*>(pos)).byteSize());
     getResourceUsageScope().increase(after - before);
@@ -674,10 +675,12 @@ struct AggregatorUnique : public Aggregator {
     if (after >= before) {
       getResourceUsageScope().increase(after - before);
     } else {
+      LOG_DEVEL << "AggregatorUnique: get: before decrease";
       getResourceUsageScope().decrease(before - after);
     }
     AqlValue a{builder.slice()};
     if (a.memoryUsage() == 0) {
+      LOG_DEVEL << "AggregatorUnique: reduce: a == 0: before decrease";
       getResourceUsageScope().decrease(builder.buffer()->size());
     }
     return a;

@@ -39,6 +39,7 @@
 #include "Aql/types.h"
 
 #include <velocypack/Builder.h>
+#include <Basics/SupervisedBuffer.h>
 
 #include <memory>
 #include <string>

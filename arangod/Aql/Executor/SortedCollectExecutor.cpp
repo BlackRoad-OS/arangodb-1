@@ -113,9 +113,6 @@ void SortedCollectExecutor::CollectGroup::reset(InputAqlItemRow const& input) {
     _builder.openArray();
     for (auto& it : infos.getGroupRegisters()) {
       AqlValue val = input.getValue(it.second).clone();
-      if (std::dynamic_pointer_cast<velocypack::SupervisedBuffer>(_builder.buffer())) {
-        LOG_DEVEL << "SortedCollectExecutor: Using SupervisedBuffer";
-      }
       infos.resourceUsageScope().increase(val.memoryUsage());
       this->groupValues[i] = val;
       // this->groupValues[i] = input.getValue(it.second).clone();
@@ -281,9 +278,21 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     _builder.close();
 
     AqlValue val(std::move(*_buffer));  // _buffer still usable after
+    //AqlValue val(_builder.slice(), _builder.size());  // _buffer still usable after
     AqlValueGuard guard{val, true};
-    TRI_ASSERT(_buffer->size() == 0);
+
+    if (dynamic_pointer_cast<velocypack::SupervisedBuffer>(_builder.buffer())) {
+      LOG_DEVEL << "Before: SupervisedBuffer is in use";
+    } else {
+      LOG_DEVEL << "Before: SupervisedBuffer is NOT in use";
+    }
     _builder.clear();  // necessary
+    TRI_ASSERT(_buffer->size() == 0);
+    if (dynamic_pointer_cast<velocypack::SupervisedBuffer>(_builder.buffer())) {
+      LOG_DEVEL << "After: SupervisedBuffer is in use";
+    } else {
+      LOG_DEVEL << "After: SupervisedBuffer is NOT in use";
+    }
 
     output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
   }

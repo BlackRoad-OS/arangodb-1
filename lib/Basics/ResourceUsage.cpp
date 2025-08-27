@@ -236,6 +236,7 @@ void ResourceUsageScope::increase(std::uint64_t value) {
 }
 
 void ResourceUsageScope::decrease(std::uint64_t value) noexcept {
+  LOG_DEVEL << "decrease: tracked: " << _value << " value: " << value;
   if (value > 0) {
     TRI_ASSERT(_value >= value);
     _resourceMonitor.decreaseMemoryUsage(value);

@@ -556,7 +556,7 @@ function ahuacatMemoryLimitSortedCollectTestSuite() {
       tearDown();
 
       testCollection = db._create(TEST_COLLECTION);
-      for (let i = 1; i <= 10; ++i) {
+      for (let i = 1; i <= 100; ++i) {
         testCollection.save({
           grp: "foobarbazfoobarbaz" + i,
           num: i,
@@ -568,7 +568,7 @@ function ahuacatMemoryLimitSortedCollectTestSuite() {
         });
       }
 
-      for (let i = 1; i <= 10; ++i) {
+      for (let i = 1; i <= 100; ++i) {
         testCollection.save({
           grp: "foobarbazfoobarbaz" + i,
           num: i * 3.14,
@@ -817,7 +817,7 @@ function ahuacatMemoryLimitSortedCollectTestSuite() {
 // jsunity.run(ahuacatlMemoryLimitReadOnlyQueriesTestSuite);
 // jsunity.run(ahuacatlMemoryLimitGraphQueriesTestSuite);
 // jsunity.run(ahuacatlMemoryLimitSkipTestSuite);
-// jsunity.run(ahuacatMemoryLimitMergeTestSuite);
+//jsunity.run(ahuacatMemoryLimitMergeTestSuite);
 jsunity.run(ahuacatMemoryLimitSortedCollectTestSuite);
 
 return jsunity.done();
