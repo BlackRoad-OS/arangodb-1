@@ -29,6 +29,7 @@ const internal = require('internal');
 const fs = require('fs');
 const IM = global.instanceManager;
 const ct = require('@arangodb/testutils/client-tools');
+const a = require("@arangodb/analyzers");
 
 const wordListForRoute = [
   "/_db", "/_admin", "/_api", "/_system", "/_cursor", "/version", "/status",
@@ -94,6 +95,20 @@ const messages = [
 /// @brief Http Request Fuzzer suite
 ////////////////////////////////////////////////////////////////////////////////
 function httpRequestsFuzzerTestSuite() {
+  function gatherResources () {
+    db._databases().forEach (database => {
+      db._useDatabase(database);
+      db._collections().forEach(col => {
+        wordListForRoute.push(`_db/${database}/collection/${col.name()}`);
+      });
+      db._analyzers.toArray().forEach(an => {
+        wordListForRoute.push(`_api/analyzers/${an.name}`);
+      });
+      
+    });
+    db._useDatabase("_system");
+    print(wordListForRoute)
+  };
   return {
     setUpAll: function () {
       let moreargv = [];
@@ -105,8 +120,9 @@ function httpRequestsFuzzerTestSuite() {
       }
 
       IM.rememberConnection();
+      gatherResources();
     },
-    tearDown: function () {
+    tearDownAll: function () {
       let moreargv = [];
       let logFile = fs.join(fs.getTempPath(), `rta_out_clean.log`);
       let rc = ct.run.rtaMakedata(IM.options, IM, 2, messages[1], logFile, moreargv);
@@ -114,7 +130,9 @@ function httpRequestsFuzzerTestSuite() {
         let rx = new RegExp(/\\n/g);
         print("http_fuzz: failed to clear testdatas:\n" + fs.read(logFile).replace(rx, '\n'));
       }
+    },
 
+    tearDown: function () {
       IM.gatherNetstat();
       IM.printNetstat();
     },
