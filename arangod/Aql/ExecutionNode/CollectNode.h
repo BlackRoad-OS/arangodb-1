@@ -108,7 +108,7 @@ class CollectNode : public ExecutionNode {
 
   void calcAggregateTypes(
       std::vector<std::unique_ptr<Aggregator>>& aggregateTypes,
-      ResourceUsageScope& scope) const;
+      ResourceMonitor& monitor) const;
 
   std::vector<std::pair<std::string, RegisterId>> calcInputVariableNames()
       const;

@@ -301,7 +301,6 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
   }
 
-  infos.getResourceUsageScope().steal();
   output.advanceRow();
 }
 

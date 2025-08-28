@@ -500,19 +500,19 @@ HashedCollectExecutor::makeAggregateValues() const {
   }
   void* p = ::operator new(size);
   new (p) ValueAggregators(_aggregatorFactories, _infos.getVPackOptions(),
-                           _infos.getResourceUsageScope());
+                           _infos.getResourceMonitor());
   return std::unique_ptr<ValueAggregators>(static_cast<ValueAggregators*>(p));
 }
 
 HashedCollectExecutor::ValueAggregators::ValueAggregators(
     std::vector<Aggregator::Factory const*> factories,
-    velocypack::Options const* opts, ResourceUsageScope& scope)
+    velocypack::Options const* opts, ResourceMonitor& monitor)
     : _size(factories.size()) {
   TRI_ASSERT(!factories.empty());
   auto* aggregatorPointers = reinterpret_cast<Aggregator**>(this + 1);
   void* aggregators = aggregatorPointers + _size;
   for (auto factory : factories) {
-    factory->createInPlace(aggregators, opts, scope);
+    factory->createInPlace(aggregators, opts, monitor);
     *aggregatorPointers = static_cast<Aggregator*>(aggregators);
     ++aggregatorPointers;
     aggregators =
