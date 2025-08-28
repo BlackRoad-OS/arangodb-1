@@ -1,22 +1,21 @@
 #include "gtest/gtest.h"
 
+#include "Basics/Exceptions.h"
+#include "Basics/GlobalResourceMonitor.h"
 #include "Basics/ResourceUsage.h"
 #include "Basics/SupervisedBuffer.h"
 
 #include <velocypack/Builder.h>
 #include <velocypack/Value.h>
-#include <velocypack/Slice.h>
 
-using arangodb::basics::Exception;
+using namespace arangodb;
+using namespace arangodb::velocypack;
 
 using arangodb::ResourceMonitor;
 
-using arangodb::velocypack::Builder;
-using arangodb::velocypack::SupervisedBuffer;
-using arangodb::velocypack::Value;
-
 TEST(SupervisedBufferTest, CapacityAccounting_GrowAndClear) {
-  ResourceMonitor monitor(nullptr);
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
   std::size_t initial = monitor.current();
 
   {
@@ -31,7 +30,7 @@ TEST(SupervisedBufferTest, CapacityAccounting_GrowAndClear) {
 
     ASSERT_GT(monitor.current(), initial);
 
-    supervisedBuffer.clear();
+    builder.clear();
     ASSERT_EQ(monitor.current(), initial);
   }
 
@@ -39,8 +38,9 @@ TEST(SupervisedBufferTest, CapacityAccounting_GrowAndClear) {
 }
 
 TEST(SupervisedBufferTest, EnforcesLimit_OnGrowth) {
-  ResourceMonitor monitor(nullptr);
-  monitor.setMemoryLimit(1024);  // 1 kB limit
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  monitor.memoryLimit(1024);  // 1 kB limit
 
   SupervisedBuffer supervisedBuffer(monitor);
   Builder builder(supervisedBuffer);
@@ -53,11 +53,27 @@ TEST(SupervisedBufferTest, EnforcesLimit_OnGrowth) {
     builder.add(Value(std::string(4096, 'b')));
     builder.close();
     FAIL() << "Expected arangodb::basics::Exception due to memory limit";
-  } catch (Exception const& ex) {
+  } catch (basics::Exception const& ex) {
     ASSERT_EQ(TRI_ERROR_RESOURCE_LIMIT, ex.code());
   }
 
-  supervisedBuffer.clear();
+  builder.clear();
 
   ASSERT_LE(monitor.current(), monitor.memoryLimit());
+}
+
+TEST(SupervisedBufferTest, MemoryLimitExpectThrow) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  monitor.memoryLimit(1024);
+  EXPECT_THROW(
+      {
+        SupervisedBuffer supervisedBuffer(monitor);
+        Builder builder(supervisedBuffer);
+        builder.openArray();
+        builder.add(Value(std::string(2000, 'a')));
+        builder.close();
+      },
+      std::exception);
+  monitor.clear();
 }

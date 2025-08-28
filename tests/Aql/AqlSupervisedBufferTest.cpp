@@ -1,21 +1,20 @@
+#include "gtest/gtest.h"
+
 #include "Aql/AqlValue.h"
+#include "Basics/Exceptions.h"
 #include "Basics/GlobalResourceMonitor.h"
 #include "Basics/ResourceUsage.h"
 #include "Basics/SupervisedBuffer.h"
-#include "gtest/gtest.h"
-#include <string>
 #include <velocypack/Builder.h>
+#include <string>
 
-using arangodb::aql;
-using arangodb::GlobalResourceMonitor;
-using arangodb::ResourceMonitor;
-using arangodb::ResourceUsageScope;
-using arangodb::velocypack;
+using namespace arangodb;
+using namespace arangodb::aql;
+using namespace arangodb::velocypack;
 
-TEST(BuildSupervisedAqlValueTest,
-     AccountsMemoryLargeAndSmallValuesNormalBuffer) {
-  auto& global = arangodb::GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor monitor{global};
+TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
 
   {
     ResourceUsageScope usageScope(monitor);
@@ -27,7 +26,7 @@ TEST(BuildSupervisedAqlValueTest,
       builder.close();
 
       ASSERT_EQ(monitor.current(), 0);
-      largeValue = buildSupervisedAqlValue(builder, monitor);
+      largeValue = AqlValue{builder.slice(), builder.size()};
 
       ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
     }
@@ -45,7 +44,7 @@ TEST(BuildSupervisedAqlValueTest,
       builder.add(Value(1));
       builder.close();
       ASSERT_EQ(monitor.current(), 0);
-      smallValue = buildSupervisedAqlValue(builder, monitor);
+      smallValue = AqlValue{builder.slice(), builder.size()};
       ASSERT_EQ(monitor.current(), smallValue.memoryUsage());
     }
     // is the same as comparing to smallValue.memoryUsage
@@ -55,10 +54,9 @@ TEST(BuildSupervisedAqlValueTest,
   }
 }
 
-TEST(BuildSupervisedAqlValueTest,
-     AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
-  auto& global = arangodb::GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor monitor{global};
+TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
 
   {
     ResourceUsageScope usageScope(monitor);
@@ -71,7 +69,7 @@ TEST(BuildSupervisedAqlValueTest,
       builder.close();
 
       ASSERT_GT(monitor.current(), 0);
-      largeValue = buildSupervisedAqlValue(builder, monitor);
+      largeValue = AqlValue{builder.slice(), builder.size()};
       // While builder exists, monitor >= aql value usage (buffer + aql value)
       ASSERT_GE(monitor.current(), largeValue.memoryUsage());
     }
@@ -91,7 +89,7 @@ TEST(BuildSupervisedAqlValueTest,
       builder.add(Value(1));
       builder.close();
       ASSERT_GT(monitor.current(), 0);
-      smallValue = buildSupervisedAqlValue(builder, monitor);
+      smallValue = AqlValue{builder.slice(), builder.size()};
       ASSERT_GE(monitor.current(), smallValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), smallValue.memoryUsage());
@@ -100,10 +98,10 @@ TEST(BuildSupervisedAqlValueTest,
   }
 }
 
-TEST(BuildSupervisedAqlValueTest,
+TEST(SupervisedBuferTest,
      ManuallyIncreaseAccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
-  auto& global = arangodb::GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor monitor{global};
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
 
   {
     ResourceUsageScope usageScope(monitor);
@@ -124,7 +122,7 @@ TEST(BuildSupervisedAqlValueTest,
       ASSERT_EQ(monitor.current(), monitorBefore + sizeBefore);
 
       sizeBeforeLocal = sizeBefore;
-      largeValue = buildSupervisedAqlValue(builder, monitor);
+      largeValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = largeValue.memoryUsage();
       ASSERT_GE(monitor.current(), sizeBefore + largeValue.memoryUsage());
     }
@@ -152,7 +150,7 @@ TEST(BuildSupervisedAqlValueTest,
       ASSERT_EQ(monitor.current(), monitorBefore + sizeBefore);
 
       sizeBeforeLocal = sizeBefore;
-      smallValue = buildSupervisedAqlValue(builder, monitor);
+      smallValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = smallValue.memoryUsage();
       ASSERT_GE(monitor.current(), sizeBefore + smallValue.memoryUsage());
     }
@@ -162,10 +160,10 @@ TEST(BuildSupervisedAqlValueTest,
   }
 }
 
-TEST(BuildSupervisedAqlValueTest,
+TEST(SupervisedBuferTest,
      ManuallyIncreaseAccountsMemoryLargeAndSmallValuesNormalBuffer) {
-  auto& global = arangodb::GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor monitor{global};
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
 
   {
     ResourceUsageScope usageScope(monitor);
@@ -185,7 +183,7 @@ TEST(BuildSupervisedAqlValueTest,
       ASSERT_EQ(monitor.current(), monitorBefore + sizeBefore);
 
       sizeBeforeLocal = sizeBefore;
-      largeValue = buildSupervisedAqlValue(builder, monitor);
+      largeValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = largeValue.memoryUsage();
       ASSERT_EQ(monitor.current(), sizeBefore + largeValue.memoryUsage());
     }
@@ -212,7 +210,7 @@ TEST(BuildSupervisedAqlValueTest,
       ASSERT_EQ(monitor.current(), preMonitor + sizeBefore);
 
       sizeBeforeLocal = sizeBefore;
-      smallValue = buildSupervisedAqlValue(builder, monitor);
+      smallValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = smallValue.memoryUsage();
       ASSERT_EQ(monitor.current(), sizeBefore + smallValue.memoryUsage());
     }
@@ -222,9 +220,9 @@ TEST(BuildSupervisedAqlValueTest,
   }
 }
 
-TEST(BuildSupervisedAqlValueTest, ReuseSupervisedBufferAccountsMemory) {
-  auto& global = arangodb::GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor monitor{global};
+TEST(SupervisedBuferTest, ReuseSupervisedBufferAccountsMemory) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
 
   AqlValue firstValue;
   AqlValue secondValue;
@@ -235,7 +233,7 @@ TEST(BuildSupervisedAqlValueTest, ReuseSupervisedBufferAccountsMemory) {
     builder.openArray();
     builder.add(Value(std::string(1024, 'a')));
     builder.close();
-    firstValue = buildSupervisedAqlValue(builder, monitor);
+    firstValue = AqlValue{builder.slice(), builder.size()};
     ASSERT_GE(monitor.current(), firstValue.memoryUsage());
   }
   ASSERT_EQ(monitor.current(), firstValue.memoryUsage());
@@ -246,7 +244,7 @@ TEST(BuildSupervisedAqlValueTest, ReuseSupervisedBufferAccountsMemory) {
     builder.openArray();
     builder.add(Value(std::string(2048, 'b')));
     builder.close();
-    secondValue = buildSupervisedAqlValue(builder, monitor);
+    secondValue = AqlValue{builder.slice(), builder.size()};
     ASSERT_GE(monitor.current(),
               firstValue.memoryUsage() + secondValue.memoryUsage());
   }
@@ -258,9 +256,9 @@ TEST(BuildSupervisedAqlValueTest, ReuseSupervisedBufferAccountsMemory) {
   ASSERT_EQ(monitor.current(), 0);
 }
 
-TEST(SupervisedBufferTest, SupervisedBuilderGrowthAndRecycle) {
-  auto& global = arangodb::GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor monitor{global};
+TEST(SupervisedBuferTest, SupervisedBuilderGrowthAndRecycle) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
 
   {
     ResourceUsageScope usageScope(monitor);
@@ -273,7 +271,7 @@ TEST(SupervisedBufferTest, SupervisedBuilderGrowthAndRecycle) {
     builder.add(Value(2));
     builder.add(Value(3));
     builder.close();
-    AqlValue smallValue = buildSupervisedAqlValue(builder, monitor);
+    AqlValue smallValue = AqlValue{builder.slice(), builder.size()};
     std::size_t memory1 = monitor.current();
     ASSERT_GE(memory1, builder.size());
 
@@ -284,21 +282,59 @@ TEST(SupervisedBufferTest, SupervisedBuilderGrowthAndRecycle) {
       builder.add(Value(std::string(1024, 'a')));
     }
     builder.close();
-    AqlValue largeValue = buildSupervisedAqlValue(builder, monitor);
+    AqlValue largeValue = AqlValue{builder.slice(), builder.size()};
     std::size_t memory2 = monitor.current();
     ASSERT_GT(memory2, memory1);
     ASSERT_GE(memory2, builder.size());
 
     // recycle the buffer, the memory should remain high even though
-    // builder.size() becomes 0 because of capacity.=
+    // builder.size() becomes 0 because of capacity.
     builder.clear();
-    AqlValue clearedValue = buildSupervisedAqlValue(builder, monitor);
+    AqlValue clearedValue = AqlValue{builder.slice(), builder.size()};
     std::size_t memory3 = monitor.current();
     ASSERT_EQ(memory3, memory2);
 
     clearedValue.destroy();
     largeValue.destroy();
     smallValue.destroy();
+  }
+  ASSERT_EQ(monitor.current(), 0);
+}
+
+TEST(SupervisedBuferTest, DetailedBufferResizeAndRecycle) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
+
+  {
+    ResourceUsageScope usageScope(monitor);
+    SupervisedBuffer supervisedBuffer(monitor);
+    Builder builder(supervisedBuffer);
+
+    builder.openArray();
+    for (int i = 0; i < 5; ++i) {
+      builder.add(Value(i));
+    }
+    builder.close();
+    std::size_t memory1 = monitor.current();
+    ASSERT_GE(memory1, builder.size());
+    builder.clear();
+    builder.openArray();
+    for (int i = 0; i < 100; ++i) {
+      builder.add(Value(std::string(256, 'a')));
+    }
+    builder.close();
+    std::size_t memory2 = monitor.current();
+    ASSERT_GE(memory2, builder.size());
+    ASSERT_GT(memory2, memory1);
+
+    ASSERT_GE(monitor.current(), builder.size());
+
+    builder.clear();
+    builder.openArray();
+    builder.close();
+    std::size_t memory3 = monitor.current();
+    ASSERT_GE(memory3, builder.size());
+    ASSERT_EQ(memory3, memory2);
   }
   ASSERT_EQ(monitor.current(), 0);
 }
