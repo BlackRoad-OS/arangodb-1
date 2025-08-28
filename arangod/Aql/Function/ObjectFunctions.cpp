@@ -154,7 +154,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   std::optional<velocypack::SupervisedBuffer> supervisedBuffer;
   velocypack::Builder builder;
   if (resourceMonitor != nullptr) {
-    supervisedBuffer = velocypack::SupervisedBuffer(*resourceMonitor);
+    supervisedBuffer.emplace(*resourceMonitor);
     builder = velocypack::Builder(*supervisedBuffer);
   } else {
     builder = velocypack::Builder();
@@ -196,7 +196,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       std::optional<velocypack::SupervisedBuffer> outBuf;
       velocypack::Builder outBuilder;
       if (resourceMonitor != nullptr) {
-        outBuf = velocypack::SupervisedBuffer(*resourceMonitor);
+        outBuf.emplace(*resourceMonitor);
         outBuilder = velocypack::Builder(*outBuf);
       } else {
         outBuilder = velocypack::Builder();
@@ -229,7 +229,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
   std::optional<velocypack::SupervisedBuffer> outBuf;
   velocypack::Builder outBuilder;
   if (resourceMonitor != nullptr) {
-    outBuf = velocypack::SupervisedBuffer(*resourceMonitor);
+    outBuf.emplace(*resourceMonitor);
     outBuilder = velocypack::Builder(*outBuf);
   } else {
     outBuilder = velocypack::Builder();
@@ -249,13 +249,12 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     VPackSlice slice = materializer.slice(param);
     outBuilder.clear();
 
-    velocypack::Collection::merge(outBuilder2, initialSlice, slice,
+    velocypack::Collection::merge(outBuilder, initialSlice, slice,
                                   /*mergeObjects*/ recursive,
                                   /*nullMeansRemove*/ false);
     builder.clear();
     builder.add(outBuilder.slice());
     outBuilder.clear();
-
     initialSlice = builder.slice();
   }
   if (n == 1) {
