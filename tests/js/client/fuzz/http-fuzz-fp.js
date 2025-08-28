@@ -99,13 +99,22 @@ function httpRequestsFuzzerTestSuite() {
     db._databases().forEach (database => {
       db._useDatabase(database);
       db._collections().forEach(col => {
-        wordListForRoute.push(`_db/${database}/collection/${col.name()}`);
+        wordListForRoute.push(`_db/${database}/_api/collection/${col.name()}`);
+        col.indexes().forEach(idx => {
+          print(idx)
+          wordListForRoute.push(`_db/${database}/_api/index/${encodeURIComponent(idx.id)}1`);
+        });
       });
       db._analyzers.toArray().forEach(an => {
-        wordListForRoute.push(`_api/analyzers/${an.name}`);
+        wordListForRoute.push(`_db/${database}/_api/analyzer/${an.name}`);
+      });
+      db._views().forEach(view => {
+        wordListForRoute.push(`_db/${database}/_api/view/${view.name()}`);
+        wordListForRoute.push(`_db/${database}/_api/view/${view.name()}/properties`);
       });
       
     });
+    print(wordListForRoute);
     db._useDatabase("_system");
   };
   return {
