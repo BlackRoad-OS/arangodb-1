@@ -101,7 +101,6 @@ function httpRequestsFuzzerTestSuite() {
       db._collections().forEach(col => {
         wordListForRoute.push(`_db/${database}/_api/collection/${col.name()}`);
         col.indexes().forEach(idx => {
-          print(idx)
           wordListForRoute.push(`_db/${database}/_api/index/${encodeURIComponent(idx.id)}1`);
         });
       });
