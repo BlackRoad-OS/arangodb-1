@@ -122,7 +122,7 @@ class WindowNode : public ExecutionNode {
 
   void calcAggregateTypes(
       std::vector<std::unique_ptr<Aggregator>>& aggregateTypes,
-      ResourceUsageScope& scope) const;
+      ResourceMonitor& monitor) const;
 
   /// @brief creates corresponding ExecutionBlock
   std::unique_ptr<ExecutionBlock> createBlock(

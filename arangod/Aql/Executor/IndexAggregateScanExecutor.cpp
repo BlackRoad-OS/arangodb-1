@@ -293,7 +293,7 @@ IndexAggregateScanExecutor::IndexAggregateScanExecutor(Fetcher& fetcher,
     for (auto const& agg : _infos.aggregations) {
       auto const& factory = Aggregator::factoryFromTypeString(agg.type);
       auto instance =
-          factory.operator()(&_infos.query->vpackOptions(), *infos.usageScope);
+          factory.operator()(&_infos.query->vpackOptions(), *infos.resourceMonitor);
 
       _aggregatorInstances.emplace_back(std::move(instance))->reset();
     }

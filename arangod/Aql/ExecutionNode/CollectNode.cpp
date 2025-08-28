@@ -229,10 +229,10 @@ void CollectNode::calcAggregateRegisters(
 
 void CollectNode::calcAggregateTypes(
     std::vector<std::unique_ptr<Aggregator>>& aggregateTypes,
-    ResourceUsageScope& scope) const {
+    ResourceMonitor& monitor) const {
   for (auto const& p : _aggregateVariables) {
     aggregateTypes.emplace_back(Aggregator::fromTypeString(
-        &_plan->getAst()->query().vpackOptions(), p.type, scope));
+        &_plan->getAst()->query().vpackOptions(), p.type, monitor));
   }
 }
 
@@ -338,11 +338,9 @@ std::unique_ptr<ExecutionBlock> CollectNode::createBlock(
           createRegisterInfos(std::move(readableInputRegisters),
                               std::move(writeableOutputRegisters));
 
-      auto usageScope = std::make_unique<ResourceUsageScope>(
-          engine.getQuery().resourceMonitor(), 0);
       // calculate the aggregate type // TODO refactor nicely
       std::vector<std::unique_ptr<Aggregator>> aggregateValues;
-      calcAggregateTypes(aggregateValues, *usageScope);
+      calcAggregateTypes(aggregateValues, engine.getQuery().resourceMonitor());
 
       // calculate the input variable names
       auto inputVariables = calcInputVariableNames();

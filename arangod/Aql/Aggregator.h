@@ -49,16 +49,18 @@ struct Aggregator {
     // virtual std::unique_ptr<Aggregator> operator()(
     //     velocypack::Options const*) const = 0;
     virtual std::unique_ptr<Aggregator> operator()(
-        velocypack::Options const*, ResourceUsageScope& scope) const = 0;
+        velocypack::Options const*, ResourceMonitor&) const = 0;
     virtual void createInPlace(void*, velocypack::Options const*,
-                               ResourceUsageScope&) const = 0;
+                               ResourceMonitor&) const = 0;
     virtual std::size_t getAggregatorSize() const = 0;
   };
 
   // explicit Aggregator(velocypack::Options const* opts) : _vpackOptions(opts)
   // {}
-  Aggregator(velocypack::Options const* opts, ResourceUsageScope& scope)
-      : _vpackOptions(opts), _usageScope(scope) {}
+  Aggregator(velocypack::Options const* opts, ResourceMonitor& monitor)
+      : _vpackOptions(opts),
+        _resourceMonitor(monitor),
+        _usageScope(std::make_unique<ResourceUsageScope>(monitor, 0)) {}
   virtual ~Aggregator() = default;
   virtual void reset() = 0;
   virtual void reduce(AqlValue const&) = 0;
@@ -72,7 +74,7 @@ struct Aggregator {
   /// @brief creates an aggregator from a name string
   static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options const*,
                                                     std::string_view type,
-                                                    ResourceUsageScope& scope);
+                                                    ResourceMonitor& monitor);
 
   // static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options
   // const*,
@@ -82,7 +84,7 @@ struct Aggregator {
   static std::unique_ptr<Aggregator> fromVPack(velocypack::Options const*,
                                                arangodb::velocypack::Slice,
                                                std::string_view nameAttribute,
-                                               ResourceUsageScope& scope);
+                                               ResourceMonitor& monitor);
 
   /// @brief return a pointer to an aggregator factory for an aggregator type
   /// throws if the aggregator cannot be found
@@ -120,11 +122,13 @@ struct Aggregator {
   // void setUsageScope(ResourceUsageScope& scope) {
   //   _usageScope = scope;
   // }
-  ResourceUsageScope& getResourceUsageScope() const { return _usageScope; }
+  ResourceMonitor& resourceMonitor() { return _resourceMonitor; }
+  ResourceUsageScope& resourceUsageScope() const { return *_usageScope; }
 
  protected:
   velocypack::Options const* _vpackOptions;
-  ResourceUsageScope& _usageScope;
+  ResourceMonitor& _resourceMonitor;
+  std::unique_ptr<ResourceUsageScope> _usageScope;
 };
 
 }  // namespace aql
