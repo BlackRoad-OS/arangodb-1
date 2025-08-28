@@ -292,8 +292,13 @@ IndexAggregateScanExecutor::IndexAggregateScanExecutor(Fetcher& fetcher,
     _aggregatorInstances.reserve(_infos.aggregations.size());
     for (auto const& agg : _infos.aggregations) {
       auto const& factory = Aggregator::factoryFromTypeString(agg.type);
+<<<<<<< HEAD
       auto instance = factory.operator()(&_infos.query->vpackOptions(),
                                          *infos.resourceMonitor);
+=======
+      auto instance = factory.operator()(&_infos.query->vpackOptions(),
+                                         *infos.resourceMonitor);
+>>>>>>> 05a72dd9d8d (chore: Refactor Aggregator instantiation so it takes ResourceMonitor& instead of ResourceUsageScope&)
 
       _aggregatorInstances.emplace_back(std::move(instance))->reset();
     }

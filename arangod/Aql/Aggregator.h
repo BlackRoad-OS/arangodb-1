@@ -48,8 +48,13 @@ struct Aggregator {
     virtual ~Factory() = default;
     // virtual std::unique_ptr<Aggregator> operator()(
     //     velocypack::Options const*) const = 0;
+<<<<<<< HEAD
     virtual std::unique_ptr<Aggregator> operator()(velocypack::Options const*,
                                                    ResourceMonitor&) const = 0;
+=======
+    virtual std::unique_ptr<Aggregator> operator()(velocypack::Options const*,
+                                                   ResourceMonitor&) const = 0;
+>>>>>>> 05a72dd9d8d (chore: Refactor Aggregator instantiation so it takes ResourceMonitor& instead of ResourceUsageScope&)
     virtual void createInPlace(void*, velocypack::Options const*,
                                ResourceMonitor&) const = 0;
     virtual std::size_t getAggregatorSize() const = 0;
@@ -75,10 +80,6 @@ struct Aggregator {
   static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options const*,
                                                     std::string_view type,
                                                     ResourceMonitor& monitor);
-
-  // static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options
-  // const*,
-  //                                                 std::string_view type);
 
   /// @brief creates an aggregator from a velocypack slice
   static std::unique_ptr<Aggregator> fromVPack(velocypack::Options const*,
