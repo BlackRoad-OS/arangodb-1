@@ -37,6 +37,7 @@
 #include "Logger/LogMacros.h"
 
 #include "Basics/SupervisedBuffer.h"
+#include "Basics/ResourceUsage.h"
 #include <velocypack/Buffer.h>
 
 #include <utility>
@@ -54,6 +55,8 @@ SortedCollectExecutor::CollectGroup::CollectGroup(Infos& infos)
       _buffer(std::make_shared<velocypack::SupervisedBuffer>(
           infos.resourceMonitor())),
       _builder(_buffer) {
+  _groupScope =
+      std::make_unique<ResourceUsageScope>(infos.resourceMonitor(), 0);
   for (auto const& aggName : infos.getAggregateTypes()) {
     aggregators.emplace_back(Aggregator::fromTypeString(
         infos.getVPackOptions(), aggName, infos.resourceMonitor()));
@@ -65,6 +68,7 @@ SortedCollectExecutor::CollectGroup::~CollectGroup() {
   for (auto& it : groupValues) {
     it.destroy();
   }
+  _groupScope.reset();
 }
 
 void SortedCollectExecutor::CollectGroup::initialize(size_t capacity) {
@@ -108,10 +112,12 @@ void SortedCollectExecutor::CollectGroup::reset(InputAqlItemRow const& input) {
   if (input.isInitialized()) {
     // construct the new group
     size_t i = 0;
+    _groupScope =
+        std::make_unique<ResourceUsageScope>(infos.resourceMonitor(), 0);
     _builder.openArray();
     for (auto& it : infos.getGroupRegisters()) {
       AqlValue val = input.getValue(it.second).clone();
-      infos.getResourceUsageScope().increase(val.memoryUsage());
+      _groupScope->increase(val.memoryUsage());
       this->groupValues[i] = val;
       ++i;
     }
@@ -137,8 +143,7 @@ SortedCollectExecutorInfos::SortedCollectExecutorInfos(
       _inputVariables(std::move(inputVariables)),
       _expressionVariable(expressionVariable),
       _vpackOptions(opts),
-      _resourceMonitor(resourceMonitor),
-      _usageScope(std::make_unique<ResourceUsageScope>(resourceMonitor, 0)) {}
+      _resourceMonitor(resourceMonitor) {}
 
 SortedCollectExecutor::SortedCollectExecutor(Fetcher&, Infos& infos)
     : _infos(infos), _currentGroup(infos) {

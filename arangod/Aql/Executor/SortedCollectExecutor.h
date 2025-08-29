@@ -38,9 +38,9 @@
 #include "Aql/Stats.h"
 #include "Aql/types.h"
 
-#include <velocypack/Builder.h>
 #include "Basics/ResourceUsage.h"
 #include "Basics/SupervisedBuffer.h"
+#include <velocypack/Builder.h>
 
 #include <memory>
 #include <string>
@@ -93,8 +93,6 @@ class SortedCollectExecutorInfos {
     return _inputVariables;
   }
 
-  ResourceUsageScope& getResourceUsageScope() const { return *_usageScope; }
-
   arangodb::ResourceMonitor& resourceMonitor() const {
     return _resourceMonitor;
   }
@@ -135,8 +133,6 @@ class SortedCollectExecutorInfos {
 
   /// @brief the transaction for this query
   velocypack::Options const* _vpackOptions;
-  /// @brief to track resource usage
-  std::unique_ptr<ResourceUsageScope> _usageScope;
 };
 
 typedef std::vector<std::unique_ptr<Aggregator>> AggregateValuesType;
@@ -157,6 +153,8 @@ class SortedCollectExecutor {
     InputAqlItemRow _lastInputRow;
     std::shared_ptr<arangodb::velocypack::SupervisedBuffer> _buffer;
     arangodb::velocypack::Builder _builder;
+
+    std::unique_ptr<ResourceUsageScope> _groupScope;
 
     CollectGroup() = delete;
     CollectGroup(CollectGroup&&) = default;
