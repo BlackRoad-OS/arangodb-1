@@ -53,7 +53,7 @@ SortedCollectExecutor::CollectGroup::CollectGroup(Infos& infos)
       _builder(_buffer) {
   for (auto const& aggName : infos.getAggregateTypes()) {
     aggregators.emplace_back(Aggregator::fromTypeString(
-        infos.getVPackOptions(), aggName, infos.getResourceUsageScope()));
+        infos.getVPackOptions(), aggName, infos.resourceMonitor()));
   }
   TRI_ASSERT(infos.getAggregatedRegisters().size() == aggregators.size());
 }
@@ -290,13 +290,11 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
       infos.getResourceUsageScope().decrease(before - after);
     }
 
-    AqlValue val(std::move(_buffer));  // _buffer still usable after
-    if (val.memoryUsage() == 0) {
-      infos.getResourceUsageScope().decrease(after);
-    }
+    AqlValue val(std::move(*_buffer));  // _buffer still usable after
     AqlValueGuard guard{val, true};
-    TRI_ASSERT(_buffer.size() == 0);
+
     _builder.clear();  // necessary
+    TRI_ASSERT(_buffer->size() == 0);
 
     output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
   }

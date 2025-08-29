@@ -25,6 +25,7 @@
 
 #include "Aql/AqlValue.h"
 #include "Basics/ResourceUsage.h"
+#include "Basics/SupervisedBuffer.h"
 
 #include <functional>
 #include <memory>
@@ -120,9 +121,6 @@ struct Aggregator {
   /// can be optimized away (note current: COUNT/LENGTH don't, all others do)
   static bool requiresInput(std::string_view type);
 
-  // void setUsageScope(ResourceUsageScope& scope) {
-  //   _usageScope = scope;
-  // }
   ResourceMonitor& resourceMonitor() { return _resourceMonitor; }
   ResourceUsageScope& resourceUsageScope() const { return *_usageScope; }
 

@@ -621,7 +621,10 @@ struct AggregatorUnique : public Aggregator {
       : Aggregator(opts, monitor),
         allocator(1024),
         seen(512, basics::VelocyPackHelper::VPackHash(),
-             basics::VelocyPackHelper::VPackEqual(_vpackOptions)) {}
+             basics::VelocyPackHelper::VPackEqual(_vpackOptions)),
+        builder(
+            velocypack::Builder(std::make_shared<velocypack::SupervisedBuffer>(
+                resourceMonitor()))) {}
 
   ~AggregatorUnique() { reset(); }
 
@@ -645,22 +648,14 @@ struct AggregatorUnique : public Aggregator {
     char* pos = allocator.store(s.startAs<char>(), s.byteSize());
     seen.emplace(reinterpret_cast<uint8_t const*>(pos));
 
-    auto before = builder.buffer()->size();
     if (builder.isClosed()) {
       builder.openArray();
     }
-
-    resourceUsageScope().increase(
-        VPackSlice(reinterpret_cast<uint8_t const*>(pos)).byteSize());
+    LOG_DEVEL << "Before: UNIQUE add: " << s.toJson()
+              << " current: " << resourceUsageScope().current();
     builder.add(VPackSlice(reinterpret_cast<uint8_t const*>(pos)));
-    auto after = builder.buffer()->size();
-    LOG_DEVEL << "AggregatorUnique: reduce: before decrease";
-    resourceUsageScope().decrease(
-        VPackSlice(reinterpret_cast<uint8_t const*>(pos)).byteSize());
-    resourceUsageScope().increase(after - before);
-    LOG_DEVEL << "UNIQUE value was added: " << s.toJson() << " ("
-              << after - before
-              << ") current: " << resourceUsageScope().current();
+    LOG_DEVEL << "After: UNIQUE add: "
+              << " current: " << resourceUsageScope().current();
   }
 
   AqlValue get() const override final {
@@ -668,22 +663,10 @@ struct AggregatorUnique : public Aggregator {
     if (builder.isClosed()) {
       builder.openArray();
     }
-    auto before = builder.buffer()->size();
+
     // always close the Builder
     builder.close();
-    auto after = builder.buffer()->size();
-    if (after >= before) {
-      resourceUsageScope().increase(after - before);
-    } else {
-      LOG_DEVEL << "AggregatorUnique: get: before decrease";
-      resourceUsageScope().decrease(before - after);
-    }
-    AqlValue a{builder.slice()};
-    if (a.memoryUsage() == 0) {
-      LOG_DEVEL << "AggregatorUnique: reduce: a == 0: before decrease";
-      resourceUsageScope().decrease(builder.buffer()->size());
-    }
-    return a;
+    return AqlValue(builder.slice());
   }
 
   MemoryBlockAllocator allocator;
@@ -721,8 +704,6 @@ struct AggregatorUniqueStep2 final : public AggregatorUnique {
       if (builder.isClosed()) {
         builder.openArray();
       }
-      resourceUsageScope().increase(
-          VPackSlice(reinterpret_cast<uint8_t const*>(pos)).byteSize());
       builder.add(VPackSlice(reinterpret_cast<uint8_t const*>(pos)));
     }
   }
@@ -732,7 +713,10 @@ struct AggregatorUniqueStep2 final : public AggregatorUnique {
 struct AggregatorSortedUnique : public Aggregator {
   explicit AggregatorSortedUnique(velocypack::Options const* opts,
                                   ResourceMonitor& monitor)
-      : Aggregator(opts, monitor), allocator(1024), seen(_vpackOptions) {}
+      : Aggregator(opts, monitor),
+        allocator(1024),
+        seen(_vpackOptions),
+        builder(std::make_shared<velocypack::SupervisedBuffer>(monitor)) {}
 
   ~AggregatorSortedUnique() { reset(); }
 
@@ -752,9 +736,7 @@ struct AggregatorSortedUnique : public Aggregator {
       // already saw the same value
       return;
     }
-    LOG_DEVEL << "Unique value was added: " << s.toJson() << " ("
-              << s.byteSize() << ")";
-    resourceUsageScope().increase(s.byteSize());
+
     char* pos = allocator.store(s.startAs<char>(), s.byteSize());
     seen.emplace(reinterpret_cast<uint8_t const*>(pos));
   }
@@ -796,7 +778,6 @@ struct AggregatorSortedUniqueStep2 final : public AggregatorSortedUnique {
         continue;
       }
 
-      resourceUsageScope().increase(it.byteSize());
       char* pos = allocator.store(it.startAs<char>(), it.byteSize());
       seen.emplace(reinterpret_cast<uint8_t const*>(pos));
     }
@@ -1006,7 +987,8 @@ struct AggregatorBitXOr : public AggregatorBitFunction<BitFunctionXOr> {
 struct AggregatorMergeLists : public Aggregator {
   explicit AggregatorMergeLists(velocypack::Options const* opts,
                                 ResourceMonitor& monitor)
-      : Aggregator(opts, monitor) {}
+      : Aggregator(opts, monitor),
+        builder(std::make_shared<velocypack::SupervisedBuffer>(monitor)) {}
 
   ~AggregatorMergeLists() { reset(); }
 
@@ -1019,7 +1001,6 @@ struct AggregatorMergeLists : public Aggregator {
     if (!builder.isOpenArray()) {
       builder.openArray();
     }
-    resourceUsageScope().increase(s.byteSize());
     builder.add(VPackArrayIterator(s));
   }
 
@@ -1037,7 +1018,8 @@ struct AggregatorMergeLists : public Aggregator {
 struct AggregatorList : public Aggregator {
   explicit AggregatorList(velocypack::Options const* opts,
                           ResourceMonitor& monitor)
-      : Aggregator(opts, monitor) {}
+      : Aggregator(opts, monitor),
+        builder(std::make_shared<velocypack::SupervisedBuffer>(monitor)) {}
 
   ~AggregatorList() { reset(); }
 
@@ -1047,14 +1029,10 @@ struct AggregatorList : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     AqlValueMaterializer materializer(_vpackOptions);
     VPackSlice s = materializer.slice(cmpValue);
-    auto before = builder.buffer()->byteSize();
     if (!builder.isOpenArray()) {
       builder.openArray();
     }
-    resourceUsageScope().increase(s.byteSize());
     builder.add(s);
-    resourceUsageScope().decrease(s.byteSize());
-    resourceUsageScope().increase(builder.buffer()->byteSize() - before);
   }
 
   AqlValue get() const override final {
@@ -1066,18 +1044,7 @@ struct AggregatorList : public Aggregator {
     // if preceding is `unbounded`. But closing the array here breaks the
     // velocypack slice.
     auto builderCopy = builder;
-    auto before = builderCopy.buffer()->byteSize();
-    builderCopy.close();
-    auto after = builderCopy.buffer()->byteSize();
-    if (after >= before) {
-      resourceUsageScope().increase(after - before);
-    } else {
-      resourceUsageScope().decrease(before - after);
-    }
     AqlValue a{std::move(*builderCopy.steal())};
-    if (a.memoryUsage() == 0) {
-      resourceUsageScope().decrease(after);
-    }
     return a;
   }
 
