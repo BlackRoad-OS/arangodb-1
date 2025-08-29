@@ -28,7 +28,6 @@
 #include "Aql/RegisterId.h"
 #include "Aql/RegIdFlatSet.h"
 #include "Basics/Endian.h"
-#include "Basics/ResourceUsage.h"
 #include "IResearch/Misc.h"
 
 #include <velocypack/Slice.h>
