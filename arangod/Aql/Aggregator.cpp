@@ -324,7 +324,9 @@ struct AggregatorAverage : public Aggregator {
 struct AggregatorAverageStep1 final : public AggregatorAverage {
   explicit AggregatorAverageStep1(velocypack::Options const* opts,
                                   ResourceMonitor& monitor)
-      : AggregatorAverage(opts, monitor) {}
+      : AggregatorAverage(opts, monitor),
+        _buffer(std::make_shared<velocypack::SupervisedBuffer>(monitor)),
+        builder(_buffer) {}
 
   // special version that will produce an array with sum and count separately
   AqlValue get() const override {
@@ -343,6 +345,9 @@ struct AggregatorAverageStep1 final : public AggregatorAverage {
     return AqlValue(builder.slice());
   }
 
+  // supervised buffer for vpack builder. this ensures memory accounting is
+  // automatic
+  std::shared_ptr<velocypack::SupervisedBuffer> _buffer;
   mutable arangodb::velocypack::Builder builder;
 };
 
@@ -454,7 +459,9 @@ struct AggregatorVariance : public AggregatorVarianceBase {
 struct AggregatorVarianceBaseStep1 final : public AggregatorVarianceBase {
   AggregatorVarianceBaseStep1(velocypack::Options const* opts, bool population,
                               ResourceMonitor& monitor)
-      : AggregatorVarianceBase(opts, population, monitor) {}
+      : AggregatorVarianceBase(opts, population, monitor),
+        _buffer(std::make_shared<velocypack::SupervisedBuffer>(monitor)),
+        builder(_buffer) {}
 
   AqlValue get() const override {
     builder.clear();
@@ -476,6 +483,7 @@ struct AggregatorVarianceBaseStep1 final : public AggregatorVarianceBase {
     return AqlValue(builder.slice());
   }
 
+  std::shared_ptr<velocypack::SupervisedBuffer> _buffer;
   mutable arangodb::velocypack::Builder builder;
 };
 
@@ -645,17 +653,15 @@ struct AggregatorUnique : public Aggregator {
       return;
     }
 
+    resourceUsageScope().increase(s.byteSize());
+
     char* pos = allocator.store(s.startAs<char>(), s.byteSize());
     seen.emplace(reinterpret_cast<uint8_t const*>(pos));
 
     if (builder.isClosed()) {
       builder.openArray();
     }
-    LOG_DEVEL << "Before: UNIQUE add: " << s.toJson()
-              << " current: " << resourceUsageScope().current();
     builder.add(VPackSlice(reinterpret_cast<uint8_t const*>(pos)));
-    LOG_DEVEL << "After: UNIQUE add: "
-              << " current: " << resourceUsageScope().current();
   }
 
   AqlValue get() const override final {
@@ -697,6 +703,8 @@ struct AggregatorUniqueStep2 final : public AggregatorUnique {
         // already saw the same value
         continue;
       }
+
+      resourceUsageScope().increase(it.byteSize());
 
       char* pos = allocator.store(it.startAs<char>(), it.byteSize());
       seen.emplace(reinterpret_cast<uint8_t const*>(pos));

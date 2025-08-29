@@ -56,8 +56,6 @@ struct Aggregator {
     virtual std::size_t getAggregatorSize() const = 0;
   };
 
-  // explicit Aggregator(velocypack::Options const* opts) : _vpackOptions(opts)
-  // {}
   Aggregator(velocypack::Options const* opts, ResourceMonitor& monitor)
       : _vpackOptions(opts), _resourceMonitor(monitor), _usageScope(monitor) {}
   virtual ~Aggregator() = default;
