@@ -59,9 +59,7 @@ struct Aggregator {
   // explicit Aggregator(velocypack::Options const* opts) : _vpackOptions(opts)
   // {}
   Aggregator(velocypack::Options const* opts, ResourceMonitor& monitor)
-      : _vpackOptions(opts),
-        _resourceMonitor(monitor),
-        _usageScope(std::make_unique<ResourceUsageScope>(monitor, 0)) {}
+      : _vpackOptions(opts), _resourceMonitor(monitor), _usageScope(monitor) {}
   virtual ~Aggregator() = default;
   virtual void reset() = 0;
   virtual void reduce(AqlValue const&) = 0;
@@ -117,12 +115,12 @@ struct Aggregator {
   static bool requiresInput(std::string_view type);
 
   ResourceMonitor& resourceMonitor() { return _resourceMonitor; }
-  ResourceUsageScope& resourceUsageScope() const { return *_usageScope; }
+  ResourceUsageScope& resourceUsageScope() const { return _usageScope; }
 
  protected:
   velocypack::Options const* _vpackOptions;
   ResourceMonitor& _resourceMonitor;
-  std::unique_ptr<ResourceUsageScope> _usageScope;
+  ResourceUsageScope _usageScope;
 };
 
 }  // namespace aql
