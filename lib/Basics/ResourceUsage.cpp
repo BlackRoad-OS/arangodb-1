@@ -26,7 +26,6 @@
 #include "Basics/GlobalResourceMonitor.h"
 #include "Basics/debugging.h"
 #include "Basics/voc-errors.h"
-#include "Logger/LogMacros.h"
 
 using namespace arangodb;
 
@@ -71,6 +70,7 @@ void ResourceMonitor::increaseMemoryUsage(std::uint64_t value) {
       _current.fetch_add(value, std::memory_order_relaxed);
   std::uint64_t const current = previous + value;
   TRI_ASSERT(current >= value);
+
   // now calculate if the number of chunks used by instance's allocations stays
   // the same after the extra allocation. if yes, it was likely a very small
   // allocation, and we don't bother with updating the global counter for it.
@@ -131,6 +131,7 @@ void ResourceMonitor::increaseMemoryUsage(std::uint64_t value) {
     // number of chunks has changed, so this is either a substantial allocation
     // or we have piled up changes by lots of small allocations so far. time for
     // some memory expensive checks now...
+
     if (_limit > 0 && ADB_UNLIKELY(current > _limit)) {
       // we would use more memory than dictated by the instance's own limit.
       // because we will throw an exception directly afterwards, we now need to
