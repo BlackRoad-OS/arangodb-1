@@ -28,11 +28,8 @@
 #include "Aql/Functions.h"
 #include "Containers/FlatHashSet.h"
 #include "Basics/VelocyPackHelper.h"
-#include "Transaction/Context.h"
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
-
-#include "Logger/LogMacros.h"
 
 #include <velocypack/Builder.h>
 #include <velocypack/Iterator.h>
