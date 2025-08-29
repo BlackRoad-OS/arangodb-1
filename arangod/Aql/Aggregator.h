@@ -47,8 +47,7 @@ struct Aggregator {
 
   struct Factory {
     virtual ~Factory() = default;
-    // virtual std::unique_ptr<Aggregator> operator()(
-    //     velocypack::Options const*) const = 0;
+
     virtual std::unique_ptr<Aggregator> operator()(velocypack::Options const*,
                                                    ResourceMonitor&) const = 0;
     virtual void createInPlace(void*, velocypack::Options const*,
