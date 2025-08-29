@@ -40,6 +40,7 @@
 
 #include <utility>
 
+#include "Basics/SupervisedBuffer.h"
 #include <velocypack/Builder.h>
 #include <velocypack/Options.h>
 
@@ -133,16 +134,12 @@ HashedCollectExecutor::~HashedCollectExecutor() {
 }
 
 void HashedCollectExecutor::destroyAllGroupsAqlValues() {
-  size_t memoryUsage = 0;
   for (auto& it : _allGroups) {
-    memoryUsage += memoryUsageForGroup(it.first, true);
     for (auto& it2 : it.first.values) {
       const_cast<AqlValue*>(&it2)->destroy();
     }
   }
-  memoryUsage += _memoryUsageForInto;
 
-  _infos.getResourceMonitor().decreaseMemoryUsage(memoryUsage);
   _memoryUsageForInto = 0;
 }
 
@@ -387,8 +384,9 @@ HashedCollectExecutor::findOrEmplaceGroup(InputAqlItemRow& input) {
   std::unique_ptr<velocypack::Builder> builder;
 
   if (_infos.getCollectRegister().value() != RegisterId::maxRegisterId) {
-    // fill INTO register
-    builder = std::make_unique<velocypack::Builder>();
+    auto sbuffer = std::make_shared<velocypack::SupervisedBuffer>(
+        _infos.getResourceMonitor());
+    builder = std::make_unique<velocypack::Builder>(sbuffer);
     builder->openArray();
     addToIntoRegister(input, *builder);
   }
@@ -439,8 +437,6 @@ HashedCollectExecutor::Infos const& HashedCollectExecutor::infos()
 
 void HashedCollectExecutor::addToIntoRegister(InputAqlItemRow const& input,
                                               velocypack::Builder& builder) {
-  size_t previousSize = builder.buffer()->size();
-
   if (_infos.getExpressionVariable() != nullptr) {
     // get result of INTO expression variable
     input.getValue(_infos.getExpressionRegister())
@@ -457,29 +453,11 @@ void HashedCollectExecutor::addToIntoRegister(InputAqlItemRow const& input,
     }
     builder.close();
   }
-
-  // track memory usage of what we just added
-  size_t memoryUsage = builder.buffer()->size() - previousSize;
-  _infos.getResourceMonitor().increaseMemoryUsage(memoryUsage);
-
-  _memoryUsageForInto += memoryUsage;
 }
 
 size_t HashedCollectExecutor::memoryUsageForGroup(GroupKeyType const& group,
                                                   bool withBase) const {
-  // track memory usage of unordered_map entry (somewhat)
   size_t memoryUsage = 0;
-  if (withBase) {
-    memoryUsage += 4 * sizeof(void*) + /* generic overhead */
-                   group.values.size() * sizeof(AqlValue) +
-                   _aggregatorFactories.size() * sizeof(void*);
-
-    if (_infos.getCollectRegister().value() != RegisterId::maxRegisterId) {
-      // add overhead per per-group Builder object (allocated on the heap)
-      memoryUsage += sizeof(void*) + sizeof(velocypack::Builder);
-    }
-  }
-
   for (auto const& it : group.values) {
     if (it.requiresDestruction()) {
       memoryUsage += it.memoryUsage();
