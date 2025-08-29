@@ -22,6 +22,7 @@ class SupervisedBuffer : public Buffer<uint8_t> {
 
  private:
   void grow(ValueLength length) override {
+    LOG_DEVEL << "SupervisedBuffer::grow called";
     auto currentCapacity = this->capacity();
     Buffer<uint8_t>::grow(length);
     auto newCapacity = this->capacity();

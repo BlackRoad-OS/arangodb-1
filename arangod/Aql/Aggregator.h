@@ -25,6 +25,7 @@
 
 #include "Aql/AqlValue.h"
 #include "Basics/ResourceUsage.h"
+#include "Basics/SupervisedBuffer.h"
 
 #include <functional>
 #include <memory>
