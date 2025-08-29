@@ -75,7 +75,6 @@ class WindowExecutorInfos {
   QueryWarnings& warnings() const;
   velocypack::Options const* getVPackOptions() const;
   ResourceMonitor& getResourceMonitor() const { return _resourceMonitor; }
-  ResourceUsageScope& getResourceUsageScope() const { return *_usageScope; }
 
  private:
   WindowBounds const& _bounds;
@@ -94,7 +93,8 @@ class WindowExecutorInfos {
   velocypack::Options const* _vpackOptions;
 
   ResourceMonitor& _resourceMonitor;
-  std::unique_ptr<ResourceUsageScope> _usageScope;
+  // NOTE: removed `_usageScope`; memory accounting is handled by the
+  // aggregators via the `_resourceMonitor`.
 };
 
 class BaseWindowExecutor {

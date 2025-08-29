@@ -56,8 +56,7 @@ WindowExecutorInfos::WindowExecutorInfos(
       _aggregateRegisters(std::move(aggregateRegisters)),
       _warnings(w),
       _vpackOptions(opts),
-      _resourceMonitor(resourceMonitor),
-      _usageScope(std::make_unique<ResourceUsageScope>(resourceMonitor, 0)) {
+      _resourceMonitor(resourceMonitor) {
   TRI_ASSERT(!_aggregateRegisters.empty());
 }
 
