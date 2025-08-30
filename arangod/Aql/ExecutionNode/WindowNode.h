@@ -28,7 +28,6 @@
 #include "Aql/ExecutionNode/ExecutionNode.h"
 #include "Aql/ExecutionNodeId.h"
 #include "Basics/datetime.h"
-#include "Basics/ResourceUsage.h"
 
 #include <cstdint>
 #include <functional>

@@ -133,7 +133,6 @@ class ResourceUsageScope {
   }
   std::uint64_t peak() const noexcept { return _resourceMonitor.peak(); }
   std::uint64_t current() const noexcept { return _resourceMonitor.current(); }
-  ResourceMonitor& resourceMonitor() const noexcept { return _resourceMonitor; }
 
  private:
   ResourceMonitor& _resourceMonitor;

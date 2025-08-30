@@ -26,7 +26,6 @@
 #include "Aql/CollectOptions.h"
 #include "Aql/ExecutionNode/ExecutionNode.h"
 #include "Aql/ExecutionNodeId.h"
-#include "Basics/ResourceUsage.h"
 
 #include <cstdint>
 #include <functional>

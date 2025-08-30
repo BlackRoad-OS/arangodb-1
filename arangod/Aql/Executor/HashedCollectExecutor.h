@@ -106,7 +106,6 @@ class HashedCollectExecutorInfos {
     return _inputVariables;
   }
   arangodb::ResourceMonitor& getResourceMonitor() const;
-  ResourceUsageScope& getResourceUsageScope() const { return *_usageScope; }
 
  private:
   /// @brief aggregate types
@@ -138,7 +137,6 @@ class HashedCollectExecutorInfos {
 
   /// @brief resource manager
   arangodb::ResourceMonitor& _resourceMonitor;
-  std::unique_ptr<ResourceUsageScope> _usageScope;
 };
 
 /**

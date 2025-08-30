@@ -51,12 +51,9 @@ SortedCollectExecutor::CollectGroup::CollectGroup(Infos& infos)
     : groupLength(0),
       infos(infos),
       _lastInputRow(InputAqlItemRow{CreateInvalidInputRowHint{}}),
-      _buffer(std::make_shared<velocypack::SupervisedBuffer>(
-          infos.resourceMonitor())),
+      _buffer(velocypack::SupervisedBuffer(infos.resourceMonitor())),
       _builder(_buffer) {
   for (auto const& aggName : infos.getAggregateTypes()) {
-    // aggregators.emplace_back(
-    //     Aggregator::fromTypeString(infos.getVPackOptions(), aggName));
     aggregators.emplace_back(Aggregator::fromTypeString(
         infos.getVPackOptions(), aggName, infos.resourceMonitor()));
   }
@@ -259,6 +256,7 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     output.moveValueInto(it.first, _lastInputRow, &guard);
     // ownership of value is transferred into res
     this->groupValues[i].erase();
+    infos.resourceUsageScope().decrease(val.memoryUsage());
     ++i;
   }
 
@@ -277,11 +275,11 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
     TRI_ASSERT(_builder.isOpenArray());
     _builder.close();
 
-    AqlValue val(std::move(*_buffer));  // _buffer still usable after
+    AqlValue val(std::move(_buffer));  // _buffer still usable after
     AqlValueGuard guard{val, true};
 
     _builder.clear();  // necessary
-    TRI_ASSERT(_buffer->size() == 0);
+    TRI_ASSERT(_buffer.size() == 0);
 
     output.moveValueInto(infos.getCollectRegister(), _lastInputRow, &guard);
   }

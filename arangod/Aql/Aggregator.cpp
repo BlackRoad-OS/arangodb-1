@@ -183,8 +183,9 @@ struct AggregatorMin final : public Aggregator {
          AqlValue::Compare(_vpackOptions, value, cmpValue, true) > 0)) {
       // the value `null` itself will not be used in MIN() to compare lower than
       // e.g. value `false`
-      resourceUsageScope().decrease(value.memoryUsage());
+      auto memoryUsage  = value.memoryUsage();
       value.destroy();
+      resourceUsageScope().decrease(memoryUsage);
       resourceUsageScope().increase(cmpValue.memoryUsage());
       value = cmpValue.clone();
     }
@@ -212,8 +213,9 @@ struct AggregatorMax final : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     if (value.isEmpty() ||
         AqlValue::Compare(_vpackOptions, value, cmpValue, true) < 0) {
-      resourceUsageScope().decrease(value.memoryUsage());
+      auto memoryUsage  = value.memoryUsage();
       value.destroy();
+      resourceUsageScope().decrease(memoryUsage);
       resourceUsageScope().increase(cmpValue.memoryUsage());
       value = cmpValue.clone();
     }
@@ -796,6 +798,7 @@ struct AggregatorCountDistinct : public Aggregator {
   // cppcheck-suppress virtualCallInConstructor
   void reset() override final {
     seen.clear();
+    resourceUsageScope().revert();
     allocator.clear();
   }
 
@@ -1043,8 +1046,8 @@ struct AggregatorList : public Aggregator {
     // if preceding is `unbounded`. But closing the array here breaks the
     // velocypack slice.
     auto builderCopy = builder;
-    AqlValue a{std::move(*builderCopy.steal())};
-    return a;
+    builderCopy.close();
+    return AqlValue(std::move(*builderCopy.steal()));
   }
 
   mutable arangodb::velocypack::Builder builder;

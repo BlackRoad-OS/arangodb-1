@@ -61,8 +61,6 @@ struct IndexAggregateScanInfos {
   containers::FlatHashMap<VariableId, size_t> _expressionVariables;
 
   QueryContext* query;
-  ResourceMonitor* resourceMonitor;
-  std::unique_ptr<ResourceUsageScope> usageScope;
 };
 
 struct IndexAggregateScanStats {

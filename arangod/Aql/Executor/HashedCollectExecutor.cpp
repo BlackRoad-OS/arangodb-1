@@ -62,8 +62,7 @@ HashedCollectExecutorInfos::HashedCollectExecutorInfos(
       _inputVariables(std::move(inputVariables)),
       _expressionVariable(expressionVariable),
       _vpackOptions(opts),
-      _resourceMonitor(resourceMonitor),
-      _usageScope(std::make_unique<ResourceUsageScope>(resourceMonitor, 0)) {
+      _resourceMonitor(resourceMonitor) {
   TRI_ASSERT(!_groupRegisters.empty());
 }
 

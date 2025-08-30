@@ -61,7 +61,7 @@ struct Aggregator {
   Aggregator(velocypack::Options const* opts, ResourceMonitor& monitor)
       : _vpackOptions(opts),
         _resourceMonitor(monitor),
-        _usageScope(std::make_unique<ResourceUsageScope>(monitor, 0)) {}
+        _usageScope(ResourceUsageScope(monitor, 0)) {}
   virtual ~Aggregator() = default;
   virtual void reset() = 0;
   virtual void reduce(AqlValue const&) = 0;
@@ -76,10 +76,6 @@ struct Aggregator {
   static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options const*,
                                                     std::string_view type,
                                                     ResourceMonitor& monitor);
-
-  // static std::unique_ptr<Aggregator> fromTypeString(velocypack::Options
-  // const*,
-  //                                                 std::string_view type);
 
   /// @brief creates an aggregator from a velocypack slice
   static std::unique_ptr<Aggregator> fromVPack(velocypack::Options const*,
@@ -124,12 +120,12 @@ struct Aggregator {
   //   _usageScope = scope;
   // }
   ResourceMonitor& resourceMonitor() { return _resourceMonitor; }
-  ResourceUsageScope& resourceUsageScope() const { return *_usageScope; }
+  ResourceUsageScope& resourceUsageScope() { return _usageScope; }
 
  protected:
   velocypack::Options const* _vpackOptions;
   ResourceMonitor& _resourceMonitor;
-  std::unique_ptr<ResourceUsageScope> _usageScope;
+  ResourceUsageScope _usageScope;
 };
 
 }  // namespace aql

@@ -55,11 +55,6 @@ namespace arangodb::aql {
 
 namespace {
 
-// put it in a more generic place to be used elsewhere
-// cpp tests around this function, trying to create aql value from small number,
-// empty builder check if resource usage matches, makes sense to count twice
-// here bc of intermediate
-
 /// @brief extract attribute names from the arguments
 void extractKeys(containers::FlatHashSet<std::string>& names,
                  ExpressionContext* expressionContext,
