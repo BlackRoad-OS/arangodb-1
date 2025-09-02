@@ -113,7 +113,7 @@ struct Aggregator {
   /// can be optimized away (note current: COUNT/LENGTH don't, all others do)
   static bool requiresInput(std::string_view type);
 
-  ResourceMonitor& resourceMonitor() { return _resourceMonitor; }
+  ResourceMonitor& resourceMonitor() const { return _resourceMonitor; }
   ResourceUsageScope& resourceUsageScope() { return _usageScope; }
 
  protected:

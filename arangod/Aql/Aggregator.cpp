@@ -181,7 +181,12 @@ struct AggregatorMin final : public Aggregator {
          AqlValue::Compare(_vpackOptions, value, cmpValue, true) > 0)) {
       // the value `null` itself will not be used in MIN() to compare lower than
       // e.g. value `false`
+      auto memoryUsage = value.memoryUsage();
       value.destroy();
+      // Decrease memory after destroy(). If done before, another process might
+      // increase memory usage before it’s actually freed, possibly exceeding the limit.
+      resourceUsageScope().decrease(memoryUsage);
+      resourceUsageScope().increase(cmpValue.memoryUsage());
       value = cmpValue.clone();
     }
   }
@@ -208,6 +213,11 @@ struct AggregatorMax final : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     if (value.isEmpty() ||
         AqlValue::Compare(_vpackOptions, value, cmpValue, true) < 0) {
+      auto memoryUsage = value.memoryUsage();
+      // Decrease memory after destroy(). If done before, another process might
+      // increase memory usage before it’s actually freed, possibly exceeding the limit.
+      resourceUsageScope().decrease(memoryUsage);
+      resourceUsageScope().increase(cmpValue.memoryUsage());
       value.destroy();
       value = cmpValue.clone();
     }
@@ -618,7 +628,9 @@ struct AggregatorUnique : public Aggregator {
       : Aggregator(opts, resourceMonitor),
         allocator(1024),
         seen(512, basics::VelocyPackHelper::VPackHash(),
-             basics::VelocyPackHelper::VPackEqual(_vpackOptions)) {}
+             basics::VelocyPackHelper::VPackEqual(_vpackOptions)),
+        builder(velocypack::Builder(
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor))) {}
 
   ~AggregatorUnique() { reset(); }
 
@@ -705,7 +717,9 @@ struct AggregatorSortedUnique : public Aggregator {
                                   ResourceMonitor& resourceMonitor)
       : Aggregator(opts, resourceMonitor),
         allocator(1024),
-        seen(_vpackOptions) {}
+        seen(_vpackOptions),
+        builder(
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor)) {}
 
   ~AggregatorSortedUnique() { reset(); }
 
@@ -786,6 +800,7 @@ struct AggregatorCountDistinct : public Aggregator {
   // cppcheck-suppress virtualCallInConstructor
   void reset() override final {
     seen.clear();
+    resourceUsageScope().revert();
     allocator.clear();
   }
 
@@ -799,6 +814,7 @@ struct AggregatorCountDistinct : public Aggregator {
       return;
     }
 
+    resourceUsageScope().increase(s.byteSize());
     char* pos = allocator.store(s.startAs<char>(), s.byteSize());
     seen.emplace(reinterpret_cast<uint8_t const*>(pos));
   }
@@ -868,6 +884,7 @@ struct AggregatorCountDistinctStep2 final : public AggregatorCountDistinct {
         continue;
       }
 
+      resourceUsageScope().increase(it.byteSize());
       char* pos = allocator.store(it.startAs<char>(), it.byteSize());
       seen.emplace(reinterpret_cast<uint8_t const*>(pos));
     }
@@ -969,7 +986,9 @@ struct AggregatorBitXOr : public AggregatorBitFunction<BitFunctionXOr> {
 struct AggregatorMergeLists : public Aggregator {
   explicit AggregatorMergeLists(velocypack::Options const* opts,
                                 ResourceMonitor& resourceMonitor)
-      : Aggregator(opts, resourceMonitor) {}
+      : Aggregator(opts, resourceMonitor),
+        builder(
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor)) {}
 
   ~AggregatorMergeLists() { reset(); }
 
@@ -999,7 +1018,9 @@ struct AggregatorMergeLists : public Aggregator {
 struct AggregatorList : public Aggregator {
   explicit AggregatorList(velocypack::Options const* opts,
                           ResourceMonitor& resourceMonitor)
-      : Aggregator(opts, resourceMonitor) {}
+      : Aggregator(opts, resourceMonitor),
+        builder(
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor)) {}
 
   ~AggregatorList() { reset(); }
 
