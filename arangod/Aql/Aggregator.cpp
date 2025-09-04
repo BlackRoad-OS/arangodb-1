@@ -184,7 +184,8 @@ struct AggregatorMin final : public Aggregator {
       auto memoryUsage = value.memoryUsage();
       value.destroy();
       // Decrease memory after destroy(). If done before, another process might
-      // increase memory usage before it’s actually freed, possibly exceeding the limit.
+      // increase memory usage before it’s actually freed, possibly exceeding
+      // the limit.
       resourceUsageScope().decrease(memoryUsage);
       resourceUsageScope().increase(cmpValue.memoryUsage());
       value = cmpValue.clone();
@@ -215,7 +216,8 @@ struct AggregatorMax final : public Aggregator {
         AqlValue::Compare(_vpackOptions, value, cmpValue, true) < 0) {
       auto memoryUsage = value.memoryUsage();
       // Decrease memory after destroy(). If done before, another process might
-      // increase memory usage before it’s actually freed, possibly exceeding the limit.
+      // increase memory usage before it’s actually freed, possibly exceeding
+      // the limit.
       resourceUsageScope().decrease(memoryUsage);
       resourceUsageScope().increase(cmpValue.memoryUsage());
       value.destroy();
@@ -644,6 +646,7 @@ struct AggregatorUnique : public Aggregator {
   // cppcheck-suppress virtualCallInConstructor
   void reset() override final {
     seen.clear();
+    resourceUsageScope().revert();
     builder.clear();
     allocator.clear();
   }
@@ -658,6 +661,7 @@ struct AggregatorUnique : public Aggregator {
       return;
     }
 
+    resourceUsageScope().increase(s.byteSize());
     char* pos = allocator.store(s.startAs<char>(), s.byteSize());
     seen.emplace(reinterpret_cast<uint8_t const*>(pos));
 
@@ -707,6 +711,7 @@ struct AggregatorUniqueStep2 final : public AggregatorUnique {
         continue;
       }
 
+      resourceUsageScope().increase(it.byteSize());
       char* pos = allocator.store(it.startAs<char>(), it.byteSize());
       seen.emplace(reinterpret_cast<uint8_t const*>(pos));
 
