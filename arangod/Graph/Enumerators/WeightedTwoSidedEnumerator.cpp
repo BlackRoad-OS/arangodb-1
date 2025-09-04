@@ -470,7 +470,7 @@ void WeightedTwoSidedEnumerator<QueueType, PathStoreType, ProviderType,
 template<class QueueType, class PathStoreType, class ProviderType,
          class PathValidator>
 bool WeightedTwoSidedEnumerator<QueueType, PathStoreType, ProviderType,
-                                PathValidator>::isDone() {
+                                PathValidator>::isDone() const {
   if (!_candidatesStore.isEmpty()) {
     return false;
   }

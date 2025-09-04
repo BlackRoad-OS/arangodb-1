@@ -347,7 +347,7 @@ class WeightedTwoSidedEnumerator {
    * @return true There will be no further path.
    * @return false There is a chance that there is more data available.
    */
-  [[nodiscard]] bool isDone();
+  [[nodiscard]] bool isDone() const;
 
   /**
    * @brief Reset to new source and target vertices.
