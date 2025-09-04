@@ -37,9 +37,7 @@
 #include "Graph/Steps/SingleServerProviderStep.h"
 #include "Graph/TraverserOptions.h"
 
-#include <ios>
 #include <unordered_set>
-#include <thread>
 
 using namespace arangodb;
 using namespace arangodb::tests;

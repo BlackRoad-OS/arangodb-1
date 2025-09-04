@@ -865,7 +865,7 @@ WeightedTwoSidedEnumerator<QueueType, PathStoreType, ProviderType,
 template<class QueueType, class PathStoreType, class ProviderType,
          class PathValidator>
 auto WeightedTwoSidedEnumerator<QueueType, PathStoreType, ProviderType,
-                                PathValidator>::searchDone() -> bool {
+                                PathValidator>::searchDone() const -> bool {
   if (_options.isKilled()) {
     THROW_ARANGO_EXCEPTION(TRI_ERROR_QUERY_KILLED);
   }

@@ -25,8 +25,6 @@
 #pragma once
 
 #include "Graph/Options/QueryContextObserver.h"
-// TODO HEIKO: do not include h file here, use forward declaration instead
-// TODO HEIKO: do not include h file here, use forward declaration instead
 #include <cstddef>
 
 namespace arangodb::graph {
