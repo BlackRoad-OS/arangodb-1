@@ -135,3 +135,41 @@ Comprehensive test result aggregation, analysis, and reporting system providing 
 - Coordinates with crash detection for failure analysis
 - Supports multiple test execution patterns and configurations
 - Enables detailed performance analysis and optimization guidance
+
+## Arangosh V8 Extension Dependencies (Concise)
+
+Result processing relied on a narrower subset of arangosh V8 helpers focused on filesystem IO, hashing, time measurement, logging, and (indirect) crash/sanitizer integration.
+
+### Categories & Legacy Primitives
+- Filesystem: FS_READ / FS_WRITE / FS_LIST for loading partial result fragments, writing XML/JSON/YAML, scanning log dirs
+- Logging: SYS_LOG for progress, anomaly warnings, summary emission
+- Crypto/Hashing: MD5 / SHA256 sometimes for checksum or de-dup of stack traces / failure signatures
+- Buffer/Binary: Base64/hex (rare) when embedding binary crash snippet or compressed artifacts
+- Timing/Deadlines: correctTimeoutToExecutionDeadline* to bound long aggregation phases (large clusters)
+- Process/System (indirect): SYS_STATUS_EXTERNAL stats gathered earlier and injected into result objects
+- Random: SYS_GEN_RANDOM_ALPHA_NUMBERS occasionally for temporary file suffixes
+- Pipes: SYS_READPIPE indirectly when consuming streamed crash/sanitizer output already captured
+- Environment Influence: Verbosity flags toggled via global options parsed in testing.js
+
+### Python Mapping
+Category -> Module
+- Filesystem IO -> armadillo.core.fs
+- Logging -> armadillo.core.log (component=result_processing)
+- Hashing -> hashlib (md5 / sha256 helpers)
+- Deadlines -> armadillo.core.time.TimeoutManager (clamp long aggregation)
+- Crash/Sanitizer Data -> armadillo.core.crash models consumed (CrashReport, SanitizerSummary)
+- Serialization -> armadillo.core.serialize (helpers to emit junit_xml, json, yaml)
+- Random Suffix -> armadillo.core.crypto.random_id()
+- Table Rendering -> armadillo.report.format (ASCII / color)
+
+### Deferred (Post-MVP)
+- Parallel aggregation for very large result sets
+- Historical trend storage & regression detection engine
+- Signature-based flakiness clustering
+- Streaming incremental JUnit emission
+- Pluggable exporters (HTML dashboard, OpenTelemetry metrics)
+
+### Design Alignment
+ResultAggregator composes: Collector, Normalizer, Analyzer, Exporter.
+All exports routed through structured serializers; failures enriched with CrashReport references.
+TimeoutManager ensures large suites cannot stall shutdown phase.

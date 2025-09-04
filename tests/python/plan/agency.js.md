@@ -103,3 +103,71 @@ Comprehensive cluster consensus management system handling ArangoDB's agency (Ra
 - Graceful degradation during agency issues
 - Detailed error reporting and diagnostics
 - Integration with crash detection and analysis systems
+
+## Arangosh V8 Extension Dependencies
+
+Agency coordination in the legacy JS layer indirectly relies on several arangosh-specific V8 injected utilities. These power HTTP communication, timing, auth token handling, state dumps, and randomness for IDs.
+
+### Categories & Legacy Functions
+
+1. HTTP & Networking
+- Underlying usage via internal HTTP client built atop V8 utilities (e.g., SYS_DOWNLOAD style semantics)
+- Redirect & leader-follow handling at agency endpoint level
+- Timeout clamping before requests (deadline aware)
+
+2. Data Encoding (VelocyPack / JSON)
+- Transparent VPACK_TO_V8 / V8_TO_VPACK conversions for request/response bodies
+- Mixed response handling (binary VPack vs JSON debug mode `--forceJson`)
+
+3. Crypto / JWT
+- JWT signing / header assembly (potential RSA/private key or shared secret)
+- Hashing utilities (SHA256) occasionally for integrity checks
+
+4. Random / ID Generation
+- SYS_GEN_RANDOM_ALPHA_NUMBERS for log/job IDs, unique participant IDs
+
+5. Timing / Deadlines
+- correctTimeoutToExecutionDeadline* to avoid over-running global execution allowance
+- Sleep/wait loops polling leader or supervision state
+
+6. Logging & Diagnostics
+- SYS_LOG(topic, level) for consensus transitions, retry backoff reporting
+- Dynamic verbosity toggles for detailed Raft tracing
+
+7. Filesystem
+- FS_WRITE / FS_READ for agency dump exports
+- Optional compression (deferred until broader dump tooling phase)
+
+8. Errors
+- JS_ArangoError for enriched error codes surfaced during agency operations
+
+### Python Translation Plan (Initial Implementation Phase Mapping)
+
+Category -> Python Module / Abstraction:
+- HTTP Client -> armadillo.core.http (wrap httpx; retry + redirect + leader re-resolution)
+- Data Codec -> armadillo.core.codec (JSON only initially; placeholder strategy for future VPack)
+- JWT / Crypto -> armadillo.core.auth (HMAC/JWT handling using PyJWT or manual hmac + base64url)
+- Random IDs -> armadillo.core.crypto.random_id(length=...) using secrets
+- Deadlines -> armadillo.core.time.TimeoutManager.clamp_timeout()
+- Logging -> armadillo.core.log (structured, with context: component=agency, action=...)
+- FS Dumps -> armadillo.core.fs (write JSON snapshots)
+- Errors -> armadillo.core.errors.AgencyError (inherits ArmadilloError)
+
+### Deferred / Future Enhancements
+- Direct VelocyPack request/response handling (Phase 4+ or dedicated extension)
+- Leader redirect optimization (cache invalidation heuristics)
+- Compressed (gzip) agency dump artifacts
+- Detailed Raft trace channel (topic-based log filtering)
+- RSA private signing support if required for advanced JWT modes
+
+### Usage Hotspots in Agency Module
+- Leader election polling loops: needs deadline clamping + jittered sleeps
+- State read/modify CAS operations: HTTP + codec + error mapping
+- Job creation & tracking: random ID, HTTP, retry with backoff
+- Health supervision queries: periodic HTTP + timeout management
+- Dump generation: filesystem write + timestamped naming
+
+### Design Notes
+- Provide AgencyClient abstraction encapsulating: (http_client, codec, auth_provider, timeout_manager, logger)
+- All operations accept an optional per-call timeout which is clamped against global deadline
+- Backoff policy centralized (e.g., exponential with upper bound) to avoid ad hoc sleeps scattered in code

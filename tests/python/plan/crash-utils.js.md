@@ -107,3 +107,41 @@ Advanced crash detection, analysis, and debugging utilities providing comprehens
 - System core dump configuration detection and adaptation
 - File system permission and access handling
 - Process control and signal management across different kernels
+
+## Arangosh V8 Extension Dependencies (Concise)
+
+Crash analysis utilities leveraged numerous arangosh-injected primitives to discover cores, invoke debuggers, filter stacks, and manage timeouts.
+
+### Categories & Legacy Primitives
+- Process/System: SYS_EXECUTE_EXTERNAL, SYS_STATUS_EXTERNAL, SYS_KILL_EXTERNAL (invoke gdb, symbol tools)
+- Filesystem: FS_LIST / FS_READ / FS_WRITE / FS_REMOVE for core file discovery, temp scripts, filtered outputs
+- Timing/Deadlines: SYS_SLEEP, SYS_WAIT, correctTimeoutToExecutionDeadline* (bounded debugger runs)
+- Logging: SYS_LOG (crash summary, stack filtering decisions)
+- Random: SYS_GEN_RANDOM_ALPHA_NUMBERS (temp file suffixes)
+- Crypto/Hashing: SHA256 / MD5 occasionally to fingerprint stacks (dedupe)
+- Pipes: SYS_READPIPE (capture gdb stdout/stderr streaming)
+- Environment: Setting ASAN_OPTIONS / TSAN_OPTIONS for sanitizer-aware behavior
+- Buffer/Binary: Base64/hex (rare) for embedding snippets into JSON reports
+
+### Python Mapping
+Category -> Module
+- External Debugger Invocation -> armadillo.core.crash (gdb runner)
+- Filesystem Ops -> armadillo.core.fs
+- Deadlines -> armadillo.core.time.TimeoutManager
+- Logging -> armadillo.core.log (component=crash)
+- Random Temp Names -> armadillo.core.crypto.random_id()
+- Hash Fingerprints -> hashlib (sha256) inside crash filter
+- Pipes & Streaming -> subprocess with non-blocking read wrapper
+- Sanitizer Env Handling -> armadillo.ext.sanitizers (later phase)
+- Stack Filtering Rules -> armadillo.core.crash.filters (configurable patterns)
+
+### Deferred (Post-MVP)
+- Advanced stack de-dup & clustering
+- Symbolication caching layer
+- Parallel core analysis worker pool
+- Sanitizer log correlation (ASAN/TSAN interleave parsing)
+- Fingerprint-based regression suppression database
+
+### Design Alignment
+CrashAnalyzer composes: DebuggerInvoker, CoreLocator, StackFilter, ReportBuilder.
+All analysis steps time-boxed via clamp_timeout(); produces structured CrashReport objects integrated into result processing.

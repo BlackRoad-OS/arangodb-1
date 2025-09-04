@@ -142,3 +142,130 @@ Comprehensive wrapper for individual ArangoDB server instances providing process
 - **Advanced Process Control**: Suspend, resume, and controlled termination capabilities
 - **Comprehensive Logging**: Detailed logging with intelligent filtering and analysis
 - **Platform Integration**: Linux-specific features for enhanced monitoring and diagnostics
+
+## Arangosh V8 Extension Dependencies (Concise)
+
+Legacy `instance.js` depended on arangosh-injected V8 helpers. These inform Python replacements.
+
+### Categories & Legacy Primitives
+- Process/System: SYS_EXECUTE_EXTERNAL, SYS_STATUS_EXTERNAL, SYS_KILL_EXTERNAL, SYS_PROCESS_STATISTICS, SYS_GET_PID
+- Timing/Deadlines: SYS_SLEEP, SYS_WAIT, correctTimeoutToExecutionDeadline*
+- Filesystem: FS_EXISTS, FS_READ, FS_WRITE, FS_REMOVE(_DIRECTORY/_RECURSIVE), FS_LIST
+- Ports/Networking: SYS_TEST_PORT, endpoint normalization (getEndpoint)
+- Logging: SYS_LOG (level/topic), dynamic verbosity control
+- Random/IDs: SYS_GEN_RANDOM_ALPHA_NUMBERS (temp dirs, secrets)
+- Crypto/Auth: SHA256/HMAC for JWT signing, PBKDF2 (rare)
+- Crash/Debug: External gdb invocation via SYS_EXECUTE_EXTERNAL, core presence checks
+- Pipes: SYS_READPIPE (sanitizer/debug tool output)
+- Sanitizers: Environment variable assembly + post-run log scan
+- Buffer/Binary: Base64/hex helpers (minor)
+
+### Python Mapping
+Category -> Module
+- Process/System -> armadillo.core.process (subprocess + optional psutil)
+- Deadlines -> armadillo.core.time.TimeoutManager
+- Filesystem -> armadillo.core.fs (pathlib/shutil)
+- Ports -> armadillo.core.net (port probing)
+- Logging -> armadillo.core.log (structured, component=instance)
+- Random/IDs -> armadillo.core.crypto.random_id()
+- Auth/JWT -> armadillo.core.auth (HMAC JWT)
+- Crash/Debug -> armadillo.core.crash (Phase 1: abnormal exit + stderr capture)
+- Sanitizers -> armadillo.ext.sanitizers (stub until Phase 5)
+- Buffer/Binary -> builtin base64 / binascii
+
+### Deferred (Post-MVP)
+- Core dump symbolization (Phase 6)
+- Full sanitizer parsing (Phase 5)
+- Priority / cgroup tuning
+- Advanced resource delta profiling
+- Pipe multiplex optimization
+
+### Design Alignment
+Instance object composes: ProcessHandle, TimeoutManager, AuthProvider, LogScanner, HealthChecker.
+All waits use clamp_timeout(); errors specialized (InstanceStartError, InstanceCrashError).
+Structured lifecycle events feed result processing & crash analytics.
+
+## Arangosh V8 Extension Dependencies
+
+The per-instance wrapper relied on numerous arangosh V8-exposed primitives for process control, filesystem operations, authentication token handling, timing, crash diagnostics, and sanitizer integration.
+
+### Categories & Legacy Functions
+
+1. Process & System
+- SYS_EXECUTE_EXTERNAL / SYS_STATUS_EXTERNAL / SYS_KILL_EXTERNAL for spawning and monitoring `arangod`
+- SYS_PROCESS_STATISTICS for collecting CPU, RSS, I/O stats
+- SYS_GET_PID for identity checks
+- SYS_SLEEP / SYS_WAIT (deadline aware) for retry loops
+- Potential priority adjustments (SYS_SET_PRIORITY_EXTERNAL) (often unused but available)
+
+2. Filesystem & Paths
+- FS_EXISTS / FS_READ / FS_WRITE / FS_REMOVE(_DIRECTORY/_RECURSIVE)
+- FS_LIST for log and directory inspection
+- FS_ZIP_FILE / FS_UNZIP_FILE occasionally for archived artifacts (rare in instance wrapper itself)
+
+3. Logging
+- SYS_LOG(level/topic) for lifecycle events (start, ready, shutdown, crash)
+- Dynamic topic/verbosity toggling (extremeVerbosity)
+
+4. Networking / Ports
+- SYS_TEST_PORT to probe free ports for endpoints
+- Endpoint normalization helpers (getEndpoint() logic in V8 layer)
+
+5. Random / IDs
+- SYS_GEN_RANDOM_ALPHA_NUMBERS for temporary directory suffixes and JWT secrets (test mode)
+- Random numeric generation for ephemeral IDs in debugging contexts
+
+6. Crypto / Auth
+- JWT token generation (HMAC-based) using hashing primitives (SYS_SHA256/HMAC)
+- Optional PBKDF2 derivations if password-based auth flows appear
+
+7. Deadline / Timeout
+- correctTimeoutToExecutionDeadline* for startup readiness loops and shutdown grace periods
+
+8. Crash & Debug
+- Integration points for invoking external gdb/lldb via SYS_EXECUTE_EXTERNAL
+- Core file presence checks via FS_* utilities
+- Pipe handling (SYS_READPIPE) for reading debugger or sanitizer outputs
+
+9. Sanitizers
+- Environment variable assembly (ASAN_OPTIONS/TSAN_OPTIONS) written into process environment before spawn
+- Post-termination log scanning (FS_READ + filtering)
+
+10. Buffer / Binary
+- Base64/hex utilities when transporting crash signatures or sanitized stack fragments
+- Rare endian operations (mostly not needed here)
+
+### Python Translation Plan (Phase 1 Focus)
+
+Category -> Python Module:
+- Process/system -> armadillo.core.process (subprocess + psutil optional)
+- Filesystem -> armadillo.core.fs (pathlib + shutil)
+- Logging -> armadillo.core.log (structured + component=instance)
+- Ports -> armadillo.core.net (port probing)
+- Random -> armadillo.core.crypto.random_id()
+- Auth/JWT -> armadillo.core.auth (HMAC JWT; refresh support)
+- Deadlines -> armadillo.core.time.TimeoutManager
+- Crash/Debug -> armadillo.core.crash (stub Phase 1: detect abnormal exit + collect stderr)
+- Sanitizers -> armadillo.ext.sanitizers (deferred until later phase; Phase 1 stub capturing env)
+- Buffer/Binary -> native bytes utilities (base64, binascii)
+
+### Deferred / Future Phases
+- Full sanitizer report parsing (Phase 5)
+- Core dump symbolization (Phase 6 with gdb integration)
+- Advanced memory & network stat deltas (psutil extended + /proc parsing)
+- Pipe multiplex optimization
+- Priority / cgroup tuning
+
+### Usage Hotspots
+- Startup readiness: loop with HTTP ping + timeout clamping
+- Graceful shutdown: send SIGTERM then escalate to SIGKILL with deadline
+- Crash path: detect non-zero exit / signal, gather logs, produce CrashReport
+- Log scanning: parse fatal/assert lines, extract failure points
+- JWT rotation: rebuild auth header cache on demand
+
+### Design Notes
+- Instance object composes: ProcessHandle, HealthChecker, LogScanner, AuthProvider, TimeoutManager
+- Clear state machine: INIT -> STARTING -> RUNNING -> STOPPING -> STOPPED / CRASHED
+- All waits use monotonic deadlines via clamp_timeout()
+- Rich error classes (InstanceStartError, InstanceCrashError)
+- Structured lifecycle events emitted for result processing integration.

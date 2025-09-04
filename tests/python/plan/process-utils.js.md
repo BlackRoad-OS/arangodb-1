@@ -132,3 +132,53 @@ Core system utilities providing process management, binary path resolution, auth
 - Enables robust and reliable test execution across different environments
 - Supports development and debugging of the test framework itself
 - Ensures compatibility across different platforms and configurations
+
+## Arangosh V8 Extension Dependencies (Concise)
+
+`process-utils.js` was the heaviest direct consumer of arangosh V8 injected helpers, acting as a façade over system process, filesystem, auth, crypto, and timeout primitives.
+
+### Categories & Legacy Primitives
+- Process/System: SYS_EXECUTE_EXTERNAL, SYS_STATUS_EXTERNAL, SYS_KILL_EXTERNAL, SYS_SET_PRIORITY_EXTERNAL, SYS_PROCESS_STATISTICS, SYS_GET_PID
+- Timing/Deadlines: SYS_SLEEP, SYS_WAIT, correctTimeoutToExecutionDeadline*
+- Filesystem: FS_EXISTS, FS_READ, FS_WRITE, FS_REMOVE(_DIRECTORY/_RECURSIVE), FS_LIST, FS_LIST_TREE, FS_ZIP_FILE, FS_UNZIP_FILE, FS_ADLER32
+- Logging: SYS_LOG, SYS_LOG_LEVEL (dynamic verbosity / topic tuning)
+- Crypto/Hashing: SYS_MD5, SYS_SHA{1,224,256,384,512}, SYS_HMAC, SYS_PBKDF2, SYS_PBKDF2HS1, SYS_RSAPRIVSIGN (rare), checksums for artifact verification
+- Random/Nonce: SYS_GEN_RANDOM_{NUMBERS,ALPHA_NUMBERS,SALT}, SYS_CREATE_NONCE / SYS_CHECK_AND_MARK_NONCE
+- Auth/JWT: HMAC signing primitives for JWT generation
+- Networking/Ports: SYS_TEST_PORT (free port probing), getEndpoint normalization logic
+- Pipes: SYS_READPIPE, SYS_WRITEPIPE, SYS_CLOSEPIPE (stream tool output)
+- Environment/Sanitizers: Setting ASAN/TSAN env vars before spawn
+- Buffer/Binary: Base64/hex encode/decode for transporting tokens or compressed fragments
+- Compression/Archive: ZIP/GZIP via FS_* helpers (zip/unzip abstractions)
+
+### Python Mapping
+Category -> Module
+- Process & Stats -> armadillo.core.process (ProcessHandle, exec(), capture; optional psutil integration)
+- Filesystem & Archive -> armadillo.core.fs (pathlib/shutil/zipfile + zlib.adler32)
+- Logging -> armadillo.core.log
+- Deadlines -> armadillo.core.time.TimeoutManager
+- Crypto/Hashing -> armadillo.core.crypto (hashlib, hmac, pbkdf2_hmac)
+- Random/Nonce -> armadillo.core.crypto.random_id() + NonceRegistry
+- Auth/JWT -> armadillo.core.auth (HMAC JWT)
+- Ports -> armadillo.core.net (port probe)
+- Pipes/Streaming -> subprocess + nonblocking reader utilities
+- Sanitizer Env -> armadillo.ext.sanitizers (stub until later phase)
+- Compression -> builtin gzip/tarfile (zip in Phase 4 if needed)
+- Buffer/Binary -> base64 / binascii helpers
+
+### Deferred (Post-MVP)
+- RSA private signing (if required)
+- Advanced process tree cgroup/resource enforcement
+- Sandboxed FS layer (deny/allow list)
+- Parallel archive compression pipeline
+- Nonce replay attack audit logs
+
+### Design Alignment
+`process-utils` dissolves into focused services:
+- BinaryLocator
+- AuthProvider
+- ProcessExecutor / ProcessSupervisor
+- FilesystemService
+- CryptoService
+- TimeoutManager (shared)
+Exposed through a thin orchestration layer; all blocking waits use clamp_timeout() to respect global execution deadline.

@@ -74,6 +74,119 @@ Main orchestration module that serves as the entry point for the entire ArangoDB
 - **Test Utils**: Test discovery and filtering utilities
 - **Instance Management**: Server instance coordination
 
+## Arangosh V8 Extension Dependencies
+
+The legacy entry point indirectly relies on a broad V8-embedded C++ utility surface exposed into arangosh. These functions are not ordinary Node.js APIs and must be mapped or emulated.
+
+### Filesystem & Archives
+- FS_EXISTS / FS_READ / FS_WRITE / FS_LIST / FS_LIST_TREE / FS_REMOVE(_DIRECTORY/_RECURSIVE)
+- FS_ZIP_FILE / FS_UNZIP_FILE / FS_ADLER32
+Python plan:
+- Phase 1: Wrap pathlib + os + shutil + zipfile + hashlib (adler32 via zlib.adler32)
+- Provide thin `fs` helper with controlled root (future sandbox)
+Deferred: Full tree diffing, advanced permission modeling.
+
+### System / Process
+- SYS_EXECUTE_EXTERNAL / SYS_STATUS_EXTERNAL / SYS_KILL_EXTERNAL / SYS_SET_PRIORITY_EXTERNAL
+- SYS_PROCESS_STATISTICS / SYS_GET_PID / SYS_TEST_PORT
+- SYS_SLEEP, SYS_WAIT (with deadline clamping)
+- Pipes: SYS_READPIPE / SYS_WRITEPIPE / SYS_CLOSEPIPE
+Python plan:
+- Phase 1: subprocess (Popen), psutil (optional) for statistics, custom ProcessSupervisor
+- Port probing via socket.bind
+- Priority nice/ionice (Linux) deferred (Phase 6 optional)
+- Implement monotonic deadline aware sleep wrapper.
+
+### Networking / HTTP
+- SYS_DOWNLOAD (redirects, custom headers, timeout, VPack detection)
+Python plan:
+- Phase 1: Minimal HTTP via httpx/requests with streaming download & checksum
+- Redirect & timeout support native
+Deferred: Automatic VPack detection (JSON-only initial).
+
+### Data Conversion
+- VPACK_TO_V8 / V8_TO_VPACK (VelocyPack ↔ JS)
+Python plan:
+- Phase 1: JSON-only (HTTP JSON endpoints)
+- Future optional: python-arango / velocypack module adapter
+Decision: Provide abstraction `DataCodec` with strategy interface; default = JSON.
+
+### Crypto / Hashing
+- SYS_MD5, SYS_SHA{1,224,256,384,512}, SYS_HMAC, SYS_PBKDF2, SYS_PBKDF2HS1, SYS_RSAPRIVSIGN
+Python plan:
+- hashlib + hmac + hashlib.pbkdf2_hmac
+- RSA signing deferred (Phase 4+ if required by auth tooling)
+- Expose via `crypto` helper.
+
+### Random / Nonce
+- SYS_GEN_RANDOM_NUMBERS / _ALPHA_NUMBERS / _SALT
+- SYS_CREATE_NONCE / SYS_CHECK_AND_MARK_NONCE
+Python plan:
+- secrets (token_urlsafe / choice) + tracking set for nonce reuse detection.
+
+### Deadline / Timeout
+- correctTimeoutToExecutionDeadline(S/ms)
+- isExecutionDeadlineReached
+Python plan:
+- TimeoutManager: global execution_deadline (monotonic), `clamp_timeout(requested)`
+- Integrate into process waits & sleeps.
+
+### Logging
+- SYS_LOG / SYS_LOG_LEVEL + topic-based adjustments
+Python plan:
+- Structured logging (logging.Logger) with levels, colorized formatter (Phase 1)
+- Topic granularity simulated via hierarchical logger names.
+
+### Errors
+- JS_ArangoError construction (error codes, message enrichment)
+Python plan:
+- Custom ArmadilloError with code, cause, metadata.
+
+### Buffer / Binary
+- V8 Buffer operations (slicing, base64/hex, endian read/write)
+Python plan:
+- Use Python `bytes`/`bytearray`; helper functions for base64/hex
+- Endian utilities only when required by dump/restore (Phase 4).
+
+### Compression
+- gzip operations implicitly via FS_ utilities
+Python plan:
+- gzip / tarfile integration added Phase 4 (dump/restore).
+
+### Security Gating
+- V8SecurityFeature path & endpoint restrictions
+Python plan:
+- Not replicated initially; rely on controlled invocation context
+- Future: optional allowlist for file operations.
+
+### Usage in testing.js
+Direct calls are mostly mediated through higher-level modules (process-utils, result-processing). Entry point needs:
+- Process execution & monitoring
+- Filesystem access for test discovery & result emission
+- Logging & timeouts
+- Random suffix generation
+- Optional download (e.g., external artifacts) minimal
+All others routed indirectly.
+
+### Python Mapping Summary (Initial Phase 1)
+Category -> Module:
+- fs/archive -> armadillo.core.fs
+- process -> armadillo.core.process
+- timeouts -> armadillo.core.time
+- logging -> armadillo.core.log
+- crypto/random -> armadillo.core.crypto
+- data codec -> armadillo.core.codec (JSON only)
+- errors -> armadillo.core.errors
+Future: velocypack adapter (armadillo.ext.vpack), RSA signing, sandboxed FS.
+
+### Deferred / Out-of-Scope (For MVP)
+- Direct VelocyPack conversion
+- Advanced priority / cgroup tuning
+- Network packet capture (Phase 6)
+- Full security gating layer
+- RSA private signing
+- Pipe write multiplex optimization
+
 ## Special Features
 - **Auto Mode**: Automatically discovers and runs tests matching filter criteria
 - **Find Mode**: Searches and lists available tests without execution

@@ -15,6 +15,28 @@
 - Windows support (Linux-only)
 - Valgrind integration (replaced with modern profiling)
 - Legacy command-line compatibility (new clean CLI)
+- Pregel-related orchestration/tests (deprecated; not ported)
+
+## Supporting Design Documents
+
+The high-level plan is backed by a set of detailed subsidiary documents (all under `tests/python/plan/`):
+
+- `gap-analysis.md` – Complete gap taxonomy, mitigation phases, updated for deferred traversal & CRUD and Pregel removal
+- `coverage-mapping-and-confidence.md` – Capability→phase matrix + confidence scoring methodology (current 7.2 baseline, uplift path)
+- `phase1_planning_checklist.md` – Detailed Phase 1 component inventory, acceptance criteria, interfaces, risks
+- `result-analysis-cli.md` – Integrated analysis CLI design replacing `scripts/examine_results.js` (scaffold Phase 1, extensions Phases 3 & 6)
+- `aql-graph-traversal-generic-tests.js.md` – Traversal semantics & validator/optimizer expectations (deferred to Phase 7)
+- `rest-vs-aql-crud-differences.md` – REST vs AQL CRUD divergence matrix (deferred to Phase 7)
+- `sut-checker-base-and-analyzer.md` & `sut-checker-invariants.md` – Checker architecture, lifecycle, invariant domains & severity policies
+- Reverse‑engineered JS framework docs:
+  - `testing.js.md`, `instance.js.md`, `instance-manager.js.md`, `agency.js.md`, `crash-utils.js.md`, `result-processing.js.md`, `process-utils.js.md`, `client-tools.js.md`
+- Domain supplements feeding later phases: traversal & CRUD (Phase 7), advanced result analysis (Phases 3 & 6)
+
+Traceability:
+- Phase scoping & deferrals: see `coverage-mapping-and-confidence.md` (Phase column & DEFERRED status)
+- Risk & remediation references: see IDs in `gap-analysis.md`
+- Phase 1 execution gate: see acceptance criteria in `phase1_planning_checklist.md`
+- Analysis CLI evolution path: `result-analysis-cli.md` (phased feature table)
 
 ## Architecture Overview
 
@@ -204,6 +226,7 @@ armadillo/
 │   ├── commands/
 │   │   ├── __init__.py
 │   │   ├── test.py                # Test execution commands
+│   │   ├── analyze.py             # Result analysis (summary Phase 1, diff Phase 3, trends Phase 6)
 │   │   ├── cluster.py             # Cluster management commands
 │   │   ├── debug.py               # Debugging commands
 │   │   └── config.py              # Configuration commands
@@ -386,7 +409,17 @@ armadillo tests/ --gdb-debugging --output-dir ./test-results
 # Output formats (defaults to junit + json)
 armadillo tests/ --format junit
 armadillo tests/ --format json --format html
+
+# Result analysis (Phase 1 summary only)
+armadillo analyze ./test-results/UNITTEST_RESULT.json
+
+# Diff two runs (Phase 3+ once diff support lands)
+armadillo analyze ./run2/UNITTEST_RESULT.json --diff ./run1/UNITTEST_RESULT.json
+
+# Planned regression/trend hooks (Phase 6+)
+armadillo analyze ./run-latest/UNITTEST_RESULT.json --trend-cache ./trend/
 ```
+> See `result-analysis-cli.md` for phased feature evolution of the `analyze` command.
 
 ### Smart Defaults
 The framework provides intelligent defaults to minimize configuration:
@@ -397,6 +430,7 @@ The framework provides intelligent defaults to minimize configuration:
 - **Output**: JUnit XML + JSON reports to `./test-results/`
 - **Cleanup**: Automatic cleanup on success, keep instances on failure for debugging
 - **Timeout**: 15 minutes default, adjustable per test suite
+- **Analysis CLI**: `analyze` command (Phase 1: summary; Phase 3: `--diff` comparisons; Phase 6: regression/trend integration) – see `result-analysis-cli.md`
 
 ### CLI-Only Configuration
 All configuration is done via command-line arguments - no configuration files needed:
@@ -423,30 +457,42 @@ armadillo tests/ --exclude slow --exclude flaky
 ## Implementation Phases
 
 ### Phase 1: Core Foundation (Weeks 1-2)
-**Goal**: Basic server management and test execution capability
+**Goal**: Basic server management and test execution capability (JSON-only, single server).
 
 1. **Project Setup**
    - Create package structure and `pyproject.toml`
-   - Set up development environment (linting, type checking)
-   - Basic CLI with `typer` for test execution
+   - Dev environment (linting, type checking, pre-commit)
+   - Basic CLI with `typer` (run tests, single-server mode)
 
 2. **Core Infrastructure**
-   - Implement type definitions (`types.py`)
-   - Create configuration management (`config.py`)
-   - Add basic exception handling (`exceptions.py`)
+   - Types & config (`types.py`, `config.py`)
+   - Exceptions (`errors.py`)
+   - Logging (`log.py`) with structured/color output
+   - Crypto & Auth (`crypto.py`, `auth.py`) HMAC JWT + random_id + nonce registry
+   - TimeoutManager (`time.py`) with layered timeout strategy: global run deadline, per-test deadline mapping, cooperative async cancellation, watchdog thread, escalation signals (TERM->KILL), integration hook point for pytest-timeout if enabled, clamp_timeout()
+   - ProcessExecutor & ProcessSupervisor (`process.py`) spawn, supervise, escalate
+   - FilesystemService (`fs.py`) basic (no sandbox enforcement yet)
+   - DataCodec (`codec.py`) JSONCodec; VPack placeholder interface
+- Result Analysis CLI scaffold (`cli/commands/analyze.py`, `results/analysis/registry.py`) loading JSON results, basic analyzer registry, pretty summary (replacing legacy examine_results.js concept, extended later)
 
 3. **Single Server Support**
-   - Implement `ArangoServer` class for single server
-   - Add process management utilities
-   - Create port allocation system
-   - Basic health checking
+   - `ArangoServer` (start, stop, restart, health_check)
+   - Port allocation utility
+   - Startup readiness loop using TimeoutManager
+   - Graceful shutdown + escalation policy
 
 4. **Basic Test Execution**
-   - Simple test discovery and execution
-   - Basic result collection
-   - JUnit XML output for CI integration
+   - Minimal pytest plugin scaffold (fixture: arango_single_server)
+   - Result collection (JSON + JUnit exporter stubs)
+   - CLI triggers pytest with configured fixture
+   - Structured lifecycle events (in logs) for start/stop/crash
 
-**Deliverables**: Working single-server test execution with basic reporting
+5. **Foundational Documentation**
+   - README section for Phase 1 usage
+   - Developer guide for adding new codecs / processes
+
+**Deliverables**: Working single-server test execution with JSON + JUnit output, structured logging, deadline-aware process supervision, layered timeout enforcement, JSON-only DataCodec abstraction, initial analysis CLI scaffold (see `phase1_planning_checklist.md` for detailed acceptance criteria).
+
 
 ### Phase 2: Cluster Support (Weeks 3-4)
 **Goal**: Multi-server cluster coordination and pytest integration
@@ -499,7 +545,7 @@ armadillo tests/ --exclude slow --exclude flaky
    - Custom test collectors
    - Reporting hooks integration
 
-**Deliverables**: Complete test management, multi-format results, client tools integration
+**Deliverables**: Complete test management, multi-format results, client tools integration, analysis CLI enhancements (see `result-analysis-cli.md`)
 
 ### Phase 4: Advanced Monitoring (Weeks 7-8)
 **Goal**: Crash analysis and advanced debugging capabilities
@@ -583,6 +629,29 @@ armadillo tests/ --exclude slow --exclude flaky
    - Release preparation
 
 **Deliverables**: Production-ready framework with documentation and validation
+
+### Phase 7: Deferred Domain-Specific Suites (Post-Core Completion)
+**Goal**: Port high-complexity semantic suites after core stability and analysis/timeout subsystems mature.
+
+1. **Traversal Validator & Optimizer Suite**
+   - Re-implement legacy traversal generic tests (ordering, uniqueness, pruning, depth bounds, parallelism)
+   - Integrate optimizer rule expectation matrix
+   - Path validation utilities and graph dataset loaders
+   - Performance baseline + long-path stress scenarios
+
+2. **REST vs AQL CRUD Divergence Tests**
+   - Reproduce documented semantic divergences (see `rest-vs-aql-crud-differences.md`)
+   - Dual-operation comparator harness (REST vs AQL)
+   - Divergence classification + structured metrics emission
+   - Analyzer extensions for reporting divergence trends
+
+**Rationale**:
+- Decouples orchestration/resilience hardening from complex semantic domains
+- Reduces early-phase noise & flakiness risk
+- Ensures mature timeout + analysis layers before high-volume semantic matrix tests
+- Excludes deprecated Pregel functionality permanently (not ported)
+
+**Deliverables**: Fully integrated traversal and CRUD divergence suites with analyzer extensions, divergence metrics, and performance baselines (see `aql-graph-traversal-generic-tests.js.md` & `rest-vs-aql-crud-differences.md`)
 
 ## Dependencies
 

@@ -121,3 +121,50 @@ Comprehensive instance lifecycle manager that orchestrates creation, startup, mo
 - **Timeout Management**: Sophisticated timeout handling with deadline enforcement
 - **Resource Cleanup**: Comprehensive cleanup on failure or shutdown
 - **Error Propagation**: Proper error reporting and stack trace preservation
+
+## Arangosh V8 Extension Dependencies (Concise)
+
+The lifecycle manager aggregates and coordinates V8-exposed primitives already used by individual instances, adding topology-wide orchestration, monitoring loops, and crash aggregation.
+
+### Categories & Legacy Primitives
+- Process/System: SYS_EXECUTE_EXTERNAL, SYS_STATUS_EXTERNAL, SYS_KILL_EXTERNAL (spawn/monitor many arangod processes)
+- Timing/Deadlines: SYS_SLEEP, SYS_WAIT, correctTimeoutToExecutionDeadline* (polling loops for cluster readiness)
+- Filesystem: FS_READ/FS_WRITE (cluster logs, aggregated diagnostics), FS_LIST (enumerate instance dirs)
+- Networking: SYS_TEST_PORT (port allocation/probing), endpoint normalization (getEndpoint)
+- Logging: SYS_LOG (manager-level events: startup order, crashes, recovery actions)
+- Random: SYS_GEN_RANDOM_ALPHA_NUMBERS (temporary dir/group identifiers)
+- Crypto/Auth: HMAC SHA256 for shared JWT secret distribution
+- Crash/Debug: Invokes external gdb on crashed processes; aggregates core dump metadata
+- Pipes: SYS_READPIPE (collect parallel debugger / sanitizer output)
+- Sanitizers: Environment variable propagation to each instance; consolidated post-run scan
+- Buffer/Binary: Base64/hex minimal (e.g., encoding crash signatures)
+- Network Monitoring: May shell out / parse netstat via SYS_EXECUTE_EXTERNAL (legacy approach)
+
+### Python Mapping
+Category -> Module
+- Process/System -> armadillo.core.process (ProcessSupervisor orchestrating multiple ProcessHandle objects)
+- Timing -> armadillo.core.time.TimeoutManager
+- Filesystem -> armadillo.core.fs
+- Networking/Ports -> armadillo.core.net (port allocation & validation)
+- Logging -> armadillo.core.log (component=instance_manager)
+- Random -> armadillo.core.crypto.random_id()
+- Auth/JWT -> armadillo.core.auth (shared secret distribution)
+- Crash Aggregation -> armadillo.core.crash (collect per-instance CrashReport -> ClusterCrashSummary)
+- Sanitizers -> armadillo.ext.sanitizers (stub until Phase 5)
+- Net Monitoring -> armadillo.ext.netstat (future Phase 6; interim minimal stats)
+
+### Deferred (Post-MVP)
+- Parallel gdb symbolization across crashes
+- Packet capture orchestration (tcpdump integration)
+- Advanced resource balancer (dynamic memory redistribution)
+- Sanitizer triage & de-dup clustering
+- Network topology visualization export
+
+### Design Alignment
+Manager composes:
+- ProcessSupervisor (spawn/track)
+- TopologyPlanner (role/memory distribution)
+- HealthMonitor (poll + escalate)
+- CrashAggregator
+- AuthDistributor
+Uses monotonic deadlines for every wait; emits structured topology events consumed by result processing.

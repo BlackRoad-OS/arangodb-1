@@ -158,3 +158,49 @@ Comprehensive integration layer for all ArangoDB client tools providing configur
 - Supports complex multi-tool testing scenarios
 - Enables automated data generation and validation
 - Coordinates with result processing for comprehensive reporting
+
+## Arangosh V8 Extension Dependencies (Concise)
+
+Client tool orchestration leveraged a broad subset of arangosh V8 helpers for spawning tools, building configs, handling auth, managing temp files, and streaming outputs.
+
+### Categories & Legacy Primitives
+- Process/System: SYS_EXECUTE_EXTERNAL, SYS_STATUS_EXTERNAL, SYS_KILL_EXTERNAL (run arangosh, arangodump, arangorestore, arangoimport, arangoexport, arangobench, arangobackup)
+- Timing/Deadlines: SYS_SLEEP, correctTimeoutToExecutionDeadline* (polling long dumps/imports)
+- Filesystem: FS_EXISTS, FS_READ, FS_WRITE, FS_LIST, FS_REMOVE(_DIRECTORY/_RECURSIVE), FS_ZIP_FILE / FS_UNZIP_FILE (compressed dumps), FS_ADLER32 (integrity)
+- Logging: SYS_LOG (per-tool start/finish, progress, anomalies)
+- Crypto/Hashing: SHA256 / MD5 for checksum validation (dump/restore), HMAC for JWT
+- Random/IDs: SYS_GEN_RANDOM_ALPHA_NUMBERS (temp dir / file suffixes, run IDs)
+- Auth/JWT: HMAC signing primitives; keyfile reading via FS_READ
+- Buffer/Binary: Base64/hex (rare) for embedding small binary artifacts or credentials
+- Pipes: SYS_READPIPE (stream background arangosh / bench output), SYS_WRITEPIPE (inject commands)
+- Compression: ZIP helpers for dump archives (plus possible gzip layering)
+- Environment/Sanitizers: Propagate sanitizer env vars to tool processes
+- Network/Ports: getEndpoint normalization for tool targets
+
+### Python Mapping
+Category -> Module
+- Process Exec -> armadillo.core.process (ToolRunner abstraction)
+- Deadlines -> armadillo.core.time.TimeoutManager
+- Filesystem / Compression -> armadillo.core.fs (+ zipfile, gzip)
+- Logging -> armadillo.core.log (component=client_tools)
+- Crypto/Hash / JWT -> armadillo.core.auth + armadillo.core.crypto
+- Random IDs -> armadillo.core.crypto.random_id()
+- Pipes / Streaming -> subprocess with async readers
+- Dump/Restore Config -> armadillo.tools.dump_restore (future Phase 4)
+- Import/Export -> armadillo.tools.import_export
+- Benchmarks -> armadillo.tools.benchmark
+- Backup -> armadillo.tools.backup
+- Config Builders -> armadillo.tools.config (shared argument assembly)
+- Checksums -> zlib.adler32 / hashlib
+- Archiving -> zipfile (Phase 4), tarfile/gzip as needed
+
+### Deferred (Post-MVP)
+- Parallel segmented dump/restore optimization
+- Streaming incremental backup diff engine
+- Live progress socket listener for long imports
+- Advanced checksum manifest (multi-hash)
+- Interactive multi-shell coordination (script injection orchestration)
+- HTML/JSON live progress endpoints
+
+### Design Alignment
+Introduce ToolRunner (exec + timeout + structured output), ConfigBuilder (idempotent flag synthesis), and ArtifactManager (paths, archives, checksums). Each tool wrapper emits structured ToolEvent objects consumed by result processing. All waits/timeouts pass through TimeoutManager to enforce global deadline.
