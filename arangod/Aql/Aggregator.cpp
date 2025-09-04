@@ -331,7 +331,9 @@ struct AggregatorAverage : public Aggregator {
 struct AggregatorAverageStep1 final : public AggregatorAverage {
   explicit AggregatorAverageStep1(velocypack::Options const* opts,
                                   ResourceMonitor& resourceMonitor)
-      : AggregatorAverage(opts, resourceMonitor) {}
+      : AggregatorAverage(opts, resourceMonitor),
+        builder(velocypack::Builder(
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor))) {}
 
   // special version that will produce an array with sum and count separately
   AqlValue get() const override {
@@ -461,7 +463,9 @@ struct AggregatorVariance : public AggregatorVarianceBase {
 struct AggregatorVarianceBaseStep1 final : public AggregatorVarianceBase {
   AggregatorVarianceBaseStep1(velocypack::Options const* opts, bool population,
                               ResourceMonitor& resourceMonitor)
-      : AggregatorVarianceBase(opts, population, resourceMonitor) {}
+      : AggregatorVarianceBase(opts, population, resourceMonitor),
+        builder(velocypack::Builder(
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor))) {}
 
   AqlValue get() const override {
     builder.clear();
@@ -495,6 +499,7 @@ struct AggregatorVarianceBaseStep2 : public AggregatorVarianceBase {
   void reset() override {
     AggregatorVarianceBase::reset();
     values.clear();
+    resourceUsageScope().revert();
   }
 
   void reduce(AqlValue const& cmpValue) override {
@@ -515,17 +520,19 @@ struct AggregatorVarianceBaseStep2 : public AggregatorVarianceBase {
     }
 
     bool failed = false;
+    resourceUsageScope().increase(sizeof(double));
     double v1 = sumValue.toDouble(failed);
     if (failed) {
       invalid = true;
       return;
     }
+    resourceUsageScope().increase(sizeof(double));
     double v2 = meanValue.toDouble(failed);
     if (failed) {
       invalid = true;
       return;
     }
-
+    resourceUsageScope().increase(sizeof(uint64_t));
     int64_t c = countValue.toInt64();
     if (c == 0) {
       invalid = true;
@@ -726,6 +733,7 @@ struct AggregatorSortedUnique : public Aggregator {
   // cppcheck-suppress virtualCallInConstructor
   void reset() override final {
     seen.clear();
+    resourceUsageScope().revert();
     allocator.clear();
     builder.clear();
   }
@@ -740,6 +748,7 @@ struct AggregatorSortedUnique : public Aggregator {
       return;
     }
 
+    resourceUsageScope().increase(s.byteSize());
     char* pos = allocator.store(s.startAs<char>(), s.byteSize());
     seen.emplace(reinterpret_cast<uint8_t const*>(pos));
   }
@@ -781,6 +790,7 @@ struct AggregatorSortedUniqueStep2 final : public AggregatorSortedUnique {
         continue;
       }
 
+      resourceUsageScope().increase(it.byteSize());
       char* pos = allocator.store(it.startAs<char>(), it.byteSize());
       seen.emplace(reinterpret_cast<uint8_t const*>(pos));
     }
