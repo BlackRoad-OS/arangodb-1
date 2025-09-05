@@ -245,7 +245,7 @@ class HashedCollectExecutor {
 
   std::unique_ptr<ValueAggregators> makeAggregateValues() const;
 
-  size_t memoryUsageForGroup(GroupKeyType const& group, bool withBase) const;
+  //size_t memoryUsageForGroup(GroupKeyType const& group, bool withBase) const;
 
   Infos const& _infos;
 
@@ -267,7 +267,7 @@ class HashedCollectExecutor {
 
   size_t _returnedGroups = 0;
 
-  size_t _memoryUsageForInto;
+  //size_t _memoryUsageForInto;
 };
 
 }  // namespace aql

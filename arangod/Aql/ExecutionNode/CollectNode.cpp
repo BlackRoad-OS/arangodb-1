@@ -263,6 +263,7 @@ std::unique_ptr<ExecutionBlock> CollectNode::createBlock(
     ExecutionEngine& engine) const {
   switch (aggregationMethod()) {
     case CollectOptions::CollectMethod::kHash: {
+      LOG_DEVEL << "kHash was routed";
       ExecutionNode const* previousNode = getFirstDependency();
       TRI_ASSERT(previousNode != nullptr);
 
@@ -312,6 +313,7 @@ std::unique_ptr<ExecutionBlock> CollectNode::createBlock(
           &engine, this, std::move(registerInfos), std::move(executorInfos));
     }
     case CollectOptions::CollectMethod::kSorted: {
+      LOG_DEVEL << "kSorted was routed";
       ExecutionNode const* previousNode = getFirstDependency();
       TRI_ASSERT(previousNode != nullptr);
 
@@ -365,6 +367,7 @@ std::unique_ptr<ExecutionBlock> CollectNode::createBlock(
           &engine, this, std::move(registerInfos), std::move(executorInfos));
     }
     case CollectOptions::CollectMethod::kCount: {
+      LOG_DEVEL << "kCount was routed";
       TRI_ASSERT(aggregateVariables().size() == 1);
       TRI_ASSERT(hasOutVariable() == false);
       ExecutionNode const* previousNode = getFirstDependency();
@@ -383,6 +386,7 @@ std::unique_ptr<ExecutionBlock> CollectNode::createBlock(
           &engine, this, std::move(registerInfos), std::move(executorInfos));
     }
     case CollectOptions::CollectMethod::kDistinct: {
+      LOG_DEVEL << "kDistinct was routed";
       ExecutionNode const* previousNode = getFirstDependency();
       TRI_ASSERT(previousNode != nullptr);
 
