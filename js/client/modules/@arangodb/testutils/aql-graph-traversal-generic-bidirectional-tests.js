@@ -38,11 +38,32 @@ const localHelper = {
     // Remove extra whitespace, newlines and normalize spaces
     return query.replace(/\s+/g, ' ').trim();
   },
-  checkRunningQuery: function(queryString, maxAttempts = 10, debug = false) {
+  getDoneJobs: function() {
+    const response = arango.GET_RAW('/_api/job/done');
+    if(response.code == 200) {
+      this.debugPrint(`donejerbs ${JSON.stringify(response.parsedBody)}`);
+      return response.parsedBody;
+    } else {
+      assertFalse(true, `getDoneJobs failed. Response: ${response}`);
+    }
+  },
+  isJobDone: function(jobId) {
+    const dj = this.getDoneJobs();
+    return dj.some(x => x == jobId);
+  },
+  checkRunningQuery: function(queryString, maxAttempts = 10, debug = false, queryJobId = undefined) {
     const normalizedQueryString = this.normalizeQueryString(queryString);
     if (debug) {
       this.debugPrint("Checking for running query:", normalizedQueryString);
     }
+
+    if(this.isJobDone(queryJobId)) {
+      if (debug) {
+        this.debugPrint(`Query job done already ${queryJobId}`);
+      }
+      return "done";
+    }
+
     for (let i = 0; i < maxAttempts; i++) {
       const runningQueries = this.getRunningQueries();
       if (debug) {
@@ -135,9 +156,12 @@ const localHelper = {
     
     return response.headers['x-arango-async-id'];
   },
+  getJobStatus: function(jobId) {
+    return arango.GET_RAW(`/_api/job/${jobId}`);
+  },
   checkJobStatus: function(jobId, maxAttempts = 10) {
     for (let i = 0; i < maxAttempts; i++) {
-      const response = arango.GET_RAW('/_api/job/' + jobId);
+      const response = this.getJobStatus(jobId);
       if (response.code === 200) {
         return response;
       }
@@ -155,7 +179,10 @@ const localHelper = {
     if (debug) {
       this.debugPrint("First query job ID:", queryJobId);
     }
-    const runningQuery = this.checkRunningQuery(queryString, 10, debug);
+    const runningQuery = this.checkRunningQuery(queryString, 10, debug, queryJobId);
+    if(runningQuery == "done") {
+      assertTrue(false, "query has already finished.");
+    }
     const queryId = runningQuery.id;
     if (debug) {
       this.debugPrint("First query ID:", queryId);
@@ -177,7 +204,10 @@ const localHelper = {
     if (debug) {
       this.debugPrint("Second query job ID:", queryJobId2);
     }
-    const runningQuery2 = this.checkRunningQuery(queryString, 10, debug);
+    const runningQuery2 = this.checkRunningQuery(queryString, 10, debug, queryJobId2);
+    if(runningQuery === "done") {
+      assertTrue(false, "query has already finished.");
+    }
     const queryId2 = runningQuery2.id;
     if (debug) {
       this.debugPrint("Second query ID:", queryId2);
