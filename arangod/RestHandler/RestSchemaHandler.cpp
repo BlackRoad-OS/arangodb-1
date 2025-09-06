@@ -473,20 +473,25 @@ Result RestSchemaHandler::getViewAndCollections(
       viewBuilder.add(velocypack::Value(velocypack::ValueType::Object));
       viewBuilder.add("collectionName", velocypack::Value(colName));
       viewBuilder.add("fields", velocypack::ValueType::Array);
+      auto defaultAnalyzer = colValue.get("analyzers");
       std::set<std::string> includedAttrSet;
-      for (auto const& fi : velocypack::ObjectIterator(colValue.get("fields"))) {
+      for (auto const& fi :
+           velocypack::ObjectIterator(colValue.get("fields"))) {
         viewBuilder.add(velocypack::Value(velocypack::ValueType::Object));
-        TRI_ASSERT(fi.value.hasKey("analyzers"));
-
         viewBuilder.add("attribute", velocypack::Value(fi.key.copyString()));
-        viewBuilder.add("analyzers", fi.value.get("analyzers"));
+        // Some fields don't have "analyzers" attribute when they define it at
+        // the field level.
+        viewBuilder.add("analyzers", fi.value.hasKey("analyzers")
+                                         ? fi.value.get("analyzers")
+                                         : defaultAnalyzer);
+
         viewBuilder
             .close();  // Closing object -> {attribute: ***, analyzers: ***}
         includedAttrSet.insert(fi.key.copyString());
       }
       viewBuilder.close();  // Closing array -> fields: [{}, {}]
       if (colValue.get("includeAllFields").isTrue()) {
-        viewBuilder.add("allAttributeAnalyzers", colValue.get("analyzers"));
+        viewBuilder.add("allAttributeAnalyzers", defaultAnalyzer);
       }
       viewBuilder
           .close();  // Closing object -> {collectionName: ***, fields: []}
