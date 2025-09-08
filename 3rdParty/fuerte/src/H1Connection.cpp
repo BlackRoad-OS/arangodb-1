@@ -469,7 +469,11 @@ void H1Connection<ST>::asyncReadCallback(asio_ns::error_code const& ec) {
                             "response this="
                          << this << "\n";
 
-    if (!ec) {
+    if (_parser.flags & F_CONNECTION_CLOSE) {
+      this->shutdownConnection(fuerte::Error::ConnectionClosed);
+      return;
+    }
+    else if (!ec) {
       asyncWriteNextRequest();  // send next request
       return;
     }

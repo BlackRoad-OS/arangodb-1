@@ -240,6 +240,7 @@ struct ConnectionConfiguration {
   std::string _password;
   std::string _jwtToken;
 };
+
 }  // namespace detail
 }  // namespace v1
 }  // namespace fuerte

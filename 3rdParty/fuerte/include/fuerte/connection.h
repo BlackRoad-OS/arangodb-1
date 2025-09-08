@@ -56,6 +56,7 @@ class Connection : public std::enable_shared_from_this<Connection> {
     Closed = 3  /// closed permanently
   };
 
+
   /// @brief Send a request to the server and wait into a response it received.
   std::unique_ptr<Response> sendRequest(std::unique_ptr<Request> r);
 
@@ -242,5 +243,8 @@ class ConnectionBuilder {
  private:
   detail::ConnectionConfiguration _conf;
 };
+
+std::string to_string(Connection::State state);
+
 }}}  // namespace arangodb::fuerte::v1
 #endif
