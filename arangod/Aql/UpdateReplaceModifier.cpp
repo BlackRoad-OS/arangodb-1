@@ -33,12 +33,19 @@
 #include "VocBase/LogicalCollection.h"
 
 #include <velocypack/Collection.h>
+#include "Basics/SupervisedBuffer.h"
 
 class CollectionNameResolver;
 
 using namespace arangodb;
 using namespace arangodb::aql;
 using namespace arangodb::aql::ModificationExecutorHelpers;
+
+UpdateReplaceModifierCompletion::UpdateReplaceModifierCompletion(
+    ModificationExecutorInfos& infos)
+    : _infos(infos),
+      _keyDocBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          infos.getResourceMonitor())) {}
 
 ModifierOperationType UpdateReplaceModifierCompletion::accumulate(
     ModificationExecutorAccumulator& accu, InputAqlItemRow& row) {

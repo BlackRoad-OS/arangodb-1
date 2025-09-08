@@ -28,6 +28,7 @@
 #include "Aql/RegisterPlan.h"
 #include "Aql/QueryContext.h"
 #include "Cluster/ServerState.h"
+#include "Basics/ResourceUsage.h"
 
 using namespace arangodb;
 using namespace arangodb::aql;
@@ -67,4 +68,8 @@ ModificationExecutorInfos::ModificationExecutorInfos(
   auto isDBServer = ServerState::instance()->isDBServer();
   _producesResults = ProducesResults(_producesResults || !_options.silent ||
                                      (isDBServer && _ignoreDocumentNotFound));
+}
+
+ResourceMonitor& ModificationExecutorInfos::getResourceMonitor() const {
+  return _query.resourceMonitor();
 }
