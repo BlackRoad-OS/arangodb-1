@@ -329,7 +329,7 @@ Coordinators.)");
                       arangodb::options::Flags::OnDBServer,
                       arangodb::options::Flags::Enterprise))
       .setLongDescription(R"(If set to `true`, forces the cluster into creating
-all future collections with only a single shard and using the same DB-Server as
+all future collections with only a single shard and using the same DB-Server
 as these collections' shards leader. All collections created this way are
 eligible for specific AQL query optimizations that can improve query performance
 and provide advanced transactional guarantees.
@@ -1149,7 +1149,12 @@ std::shared_ptr<HeartbeatThread> ClusterFeature::heartbeatThread() {
 
 ClusterInfo& ClusterFeature::clusterInfo() {
   if (!_clusterInfo) {
-    THROW_ARANGO_EXCEPTION(TRI_ERROR_SHUTTING_DOWN);
+    if (server().isStopping()) {
+      THROW_ARANGO_EXCEPTION(TRI_ERROR_SHUTTING_DOWN);
+    } else {
+      ADB_PROD_ASSERT(_clusterInfo != nullptr)
+          << "_clusterInfo is null, but server is not shutting down";
+    }
   }
   return *_clusterInfo;
 }
