@@ -1,0 +1,268 @@
+"""Tests for core types and data structures."""
+
+import pytest
+from pathlib import Path
+from dataclasses import asdict
+
+from armadillo.core.types import (
+    DeploymentMode, ServerRole, TestOutcome,
+    ServerConfig, ClusterConfig, MonitoringConfig, ArmadilloConfig,
+    TestResult, TestSuiteResults, HealthStatus, ServerStats, ProcessStats
+)
+
+
+class TestEnums:
+    """Test enum types."""
+
+    def test_deployment_mode_values(self):
+        """Test DeploymentMode enum values."""
+        assert DeploymentMode.SINGLE_SERVER.value == "single_server"
+        assert DeploymentMode.CLUSTER.value == "cluster"
+
+    def test_server_role_values(self):
+        """Test ServerRole enum values."""
+        assert ServerRole.SINGLE.value == "single"
+        assert ServerRole.AGENT.value == "agent"
+        assert ServerRole.DBSERVER.value == "dbserver"
+        assert ServerRole.COORDINATOR.value == "coordinator"
+
+    def test_test_outcome_values(self):
+        """Test TestOutcome enum values."""
+        assert TestOutcome.PASSED.value == "passed"
+        assert TestOutcome.FAILED.value == "failed"
+        assert TestOutcome.SKIPPED.value == "skipped"
+        assert TestOutcome.ERROR.value == "error"
+        assert TestOutcome.TIMEOUT.value == "timeout"
+        assert TestOutcome.CRASHED.value == "crashed"
+
+
+class TestServerConfig:
+    """Test ServerConfig dataclass."""
+
+    def test_server_config_creation(self):
+        """Test ServerConfig creation with required fields."""
+        config = ServerConfig(
+            role=ServerRole.SINGLE,
+            port=8529,
+            data_dir=Path("/tmp/data"),
+            log_file=Path("/tmp/log.txt")
+        )
+
+        assert config.role == ServerRole.SINGLE
+        assert config.port == 8529
+        assert config.data_dir == Path("/tmp/data")
+        assert config.log_file == Path("/tmp/log.txt")
+        assert config.args == {}
+        assert config.memory_limit_mb is None
+        assert config.startup_timeout == 30.0
+
+    def test_server_config_with_optional_fields(self):
+        """Test ServerConfig with optional fields."""
+        config = ServerConfig(
+            role=ServerRole.COORDINATOR,
+            port=8530,
+            data_dir=Path("/tmp/data"),
+            log_file=Path("/tmp/log.txt"),
+            args={"server.threads": "4"},
+            memory_limit_mb=1024,
+            startup_timeout=60.0
+        )
+
+        assert config.args == {"server.threads": "4"}
+        assert config.memory_limit_mb == 1024
+        assert config.startup_timeout == 60.0
+
+
+class TestClusterConfig:
+    """Test ClusterConfig dataclass."""
+
+    def test_cluster_config_defaults(self):
+        """Test ClusterConfig default values."""
+        config = ClusterConfig()
+
+        assert config.agents == 3
+        assert config.dbservers == 3
+        assert config.coordinators == 1
+        assert config.replication_factor == 2
+
+    def test_cluster_config_custom(self):
+        """Test ClusterConfig with custom values."""
+        config = ClusterConfig(
+            agents=5,
+            dbservers=4,
+            coordinators=2,
+            replication_factor=3
+        )
+
+        assert config.agents == 5
+        assert config.dbservers == 4
+        assert config.coordinators == 2
+        assert config.replication_factor == 3
+
+
+class TestMonitoringConfig:
+    """Test MonitoringConfig dataclass."""
+
+    def test_monitoring_config_defaults(self):
+        """Test MonitoringConfig default values."""
+        config = MonitoringConfig()
+
+        assert config.enable_crash_analysis is True
+        assert config.enable_gdb_debugging is True
+        assert config.enable_memory_profiling is False
+        assert config.enable_network_monitoring is True
+        assert config.health_check_interval == 1.0
+        assert config.process_stats_interval == 5.0
+
+
+class TestArmadilloConfig:
+    """Test main ArmadilloConfig dataclass."""
+
+    def test_armadillo_config_creation(self):
+        """Test ArmadilloConfig creation."""
+        config = ArmadilloConfig(
+            deployment_mode=DeploymentMode.SINGLE_SERVER
+        )
+
+        assert config.deployment_mode == DeploymentMode.SINGLE_SERVER
+        assert isinstance(config.cluster, ClusterConfig)
+        assert isinstance(config.monitoring, MonitoringConfig)
+        assert config.test_timeout == 900.0
+        assert config.result_formats == ["junit", "json"]
+        assert config.temp_dir is None
+        assert config.keep_instances_on_failure is False
+        assert config.bin_dir is None
+        assert config.work_dir is None
+        assert config.verbose == 0
+
+
+class TestTestResult:
+    """Test TestResult dataclass."""
+
+    def test_test_result_creation(self):
+        """Test TestResult creation."""
+        result = TestResult(
+            name="test_example",
+            outcome=TestOutcome.PASSED,
+            duration=1.5
+        )
+
+        assert result.name == "test_example"
+        assert result.outcome == TestOutcome.PASSED
+        assert result.duration == 1.5
+        assert result.setup_duration == 0.0
+        assert result.teardown_duration == 0.0
+        assert result.error_message is None
+        assert result.failure_message is None
+        assert result.crash_info is None
+
+    def test_test_result_with_failure(self):
+        """Test TestResult with failure information."""
+        result = TestResult(
+            name="test_failed",
+            outcome=TestOutcome.FAILED,
+            duration=2.0,
+            failure_message="Assertion failed",
+            setup_duration=0.1,
+            teardown_duration=0.05
+        )
+
+        assert result.outcome == TestOutcome.FAILED
+        assert result.failure_message == "Assertion failed"
+        assert result.setup_duration == 0.1
+        assert result.teardown_duration == 0.05
+
+
+class TestTestSuiteResults:
+    """Test TestSuiteResults dataclass."""
+
+    def test_test_suite_results_creation(self):
+        """Test TestSuiteResults creation."""
+        test1 = TestResult("test1", TestOutcome.PASSED, 1.0)
+        test2 = TestResult("test2", TestOutcome.FAILED, 2.0)
+
+        results = TestSuiteResults(
+            tests=[test1, test2],
+            total_duration=10.5,
+            summary={"passed": 1, "failed": 1},
+            metadata={"framework": "armadillo"}
+        )
+
+        assert len(results.tests) == 2
+        assert results.total_duration == 10.5
+        assert results.summary == {"passed": 1, "failed": 1}
+        assert results.metadata == {"framework": "armadillo"}
+
+
+class TestHealthStatus:
+    """Test HealthStatus dataclass."""
+
+    def test_healthy_status(self):
+        """Test healthy status creation."""
+        status = HealthStatus(
+            is_healthy=True,
+            response_time=0.5
+        )
+
+        assert status.is_healthy is True
+        assert status.response_time == 0.5
+        assert status.error_message is None
+        assert status.details == {}
+
+    def test_unhealthy_status(self):
+        """Test unhealthy status with error."""
+        status = HealthStatus(
+            is_healthy=False,
+            response_time=5.0,
+            error_message="Connection timeout",
+            details={"status_code": 500}
+        )
+
+        assert status.is_healthy is False
+        assert status.response_time == 5.0
+        assert status.error_message == "Connection timeout"
+        assert status.details == {"status_code": 500}
+
+
+class TestServerStats:
+    """Test ServerStats dataclass."""
+
+    def test_server_stats_creation(self):
+        """Test ServerStats creation."""
+        stats = ServerStats(
+            process_id=12345,
+            memory_usage=1024*1024,
+            cpu_percent=25.5,
+            connection_count=10,
+            uptime=3600.0,
+            additional_metrics={"cache_hit_rate": 0.95}
+        )
+
+        assert stats.process_id == 12345
+        assert stats.memory_usage == 1024*1024
+        assert stats.cpu_percent == 25.5
+        assert stats.connection_count == 10
+        assert stats.uptime == 3600.0
+        assert stats.additional_metrics["cache_hit_rate"] == 0.95
+
+
+class TestProcessStats:
+    """Test ProcessStats dataclass."""
+
+    def test_process_stats_creation(self):
+        """Test ProcessStats creation."""
+        stats = ProcessStats(
+            pid=12345,
+            memory_rss=1024*1024,
+            memory_vms=2048*1024,
+            cpu_percent=15.0,
+            num_threads=8,
+            status="running"
+        )
+
+        assert stats.pid == 12345
+        assert stats.memory_rss == 1024*1024
+        assert stats.memory_vms == 2048*1024
+        assert stats.cpu_percent == 15.0
+        assert stats.num_threads == 8
+        assert stats.status == "running"

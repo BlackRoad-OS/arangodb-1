@@ -1,0 +1,62 @@
+{
+    "framework_version": "1.0.0",
+    "timestamp_utc": "2024-03-15T10:30:00.000000+00:00",
+    "duration_s": 125.5,
+    "tests": {
+        "tests/test_collections.py::test_create_collection": {
+            "status": "passed",
+            "duration_s": 2.1,
+            "setup_duration_s": 0.05,
+            "teardown_duration_s": 0.02
+        },
+        "tests/test_collections.py::test_delete_collection": {
+            "status": "passed",
+            "duration_s": 1.8,
+            "setup_duration_s": 0.04,
+            "teardown_duration_s": 0.03
+        },
+        "tests/test_users.py::test_create_user": {
+            "status": "failed",
+            "duration_s": 5.2,
+            "setup_duration_s": 0.1,
+            "teardown_duration_s": 0.05,
+            "failure_message": "AssertionError: User creation failed - permission denied"
+        },
+        "tests/test_replication.py::test_replication_sync": {
+            "status": "timeout",
+            "duration_s": 30.0,
+            "setup_duration_s": 2.0,
+            "teardown_duration_s": 0.0,
+            "error_message": "Test timed out after 30 seconds"
+        },
+        "tests/test_performance.py::test_bulk_insert": {
+            "status": "passed",
+            "duration_s": 15.3,
+            "setup_duration_s": 0.5,
+            "teardown_duration_s": 1.2
+        },
+        "tests/test_cluster.py::test_failover": {
+            "status": "skipped",
+            "duration_s": 0.0,
+            "setup_duration_s": 0.0,
+            "teardown_duration_s": 0.0
+        }
+    },
+    "meta": {
+        "summary": {
+            "total": 6,
+            "passed": 3,
+            "failed": 1,
+            "error": 0,
+            "skipped": 1,
+            "timeout": 1,
+            "crashed": 0
+        },
+        "metadata": {
+            "start_time": "2024-03-15T10:30:00.000000+00:00",
+            "end_time": "2024-03-15T10:32:05.500000+00:00",
+            "deployment_mode": "single_server",
+            "cluster": false
+        }
+    }
+}
