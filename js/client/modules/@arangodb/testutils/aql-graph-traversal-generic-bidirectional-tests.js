@@ -40,16 +40,16 @@ const localHelper = {
   },
   getDoneJobs: function() {
     const response = arango.GET_RAW('/_api/job/done');
-    if(response.code == 200) {
+    if(response.code === 200) {
       this.debugPrint(`donejerbs ${JSON.stringify(response.parsedBody)}`);
       return response.parsedBody;
     } else {
-      assertFalse(true, `getDoneJobs failed. Response: ${response}`);
+      assertTrue(false, `getDoneJobs failed. Response: ${response}`);
     }
   },
   isJobDone: function(jobId) {
     const dj = this.getDoneJobs();
-    return dj.some(x => x == jobId);
+    return dj.some(x => x === jobId);
   },
   checkRunningQuery: function(queryString, maxAttempts = 10, debug = false, queryJobId = undefined) {
     const normalizedQueryString = this.normalizeQueryString(queryString);
@@ -180,7 +180,7 @@ const localHelper = {
       this.debugPrint("First query job ID:", queryJobId);
     }
     const runningQuery = this.checkRunningQuery(queryString, 10, debug, queryJobId);
-    if(runningQuery == "done") {
+    if(runningQuery === "done") {
       assertTrue(false, "query has already finished.");
     }
     const queryId = runningQuery.id;
