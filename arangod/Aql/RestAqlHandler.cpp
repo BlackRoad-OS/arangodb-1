@@ -37,6 +37,7 @@
 #include "Basics/Exceptions.h"
 #include "Basics/StaticStrings.h"
 #include "Basics/StringUtils.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Basics/VelocyPackHelper.h"
 #include "Cluster/CallbackGuard.h"
 #include "Cluster/ClusterFeature.h"
@@ -204,7 +205,10 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
   {
     VPackSlice bindParametersSlice = querySlice.get("bindParameters");
     if (bindParametersSlice.isObject()) {
-      bindParameters = std::make_shared<VPackBuilder>(bindParametersSlice);
+      auto sb = std::make_shared<velocypack::SupervisedBuffer>(
+          _engine->getQuery().resourceMonitor());
+      bindParameters = std::make_shared<VPackBuilder>(sb);
+      bindParameters->add(bindParametersSlice);
     }
   }
 
@@ -266,7 +270,8 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
   // TODO: technically we could change the code in prepareClusterQuery to parse
   //       the collection info directly
   // Build the collection information
-  VPackBuilder collectionBuilder;
+  VPackBuilder collectionBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+      _engine->getQuery().resourceMonitor()));
   collectionBuilder.openArray();
   for (auto lockInf : VPackObjectIterator(lockInfoSlice)) {
     if (!lockInf.value.isArray()) {
@@ -323,7 +328,7 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
       co_await createTransactionContext(access, origin), std::move(options));
   TRI_ASSERT(clusterQueryId == 0 || clusterQueryId == q->id());
 
-  VPackBufferUInt8 buffer;
+  velocypack::SupervisedBuffer buffer(_engine->getQuery().resourceMonitor());
   VPackBuilder answerBuilder(buffer);
   answerBuilder.openObject();
   answerBuilder.add(StaticStrings::Error, VPackValue(false));
@@ -390,7 +395,8 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
 
   _queryRegistry->insertQuery(std::move(q), ttl, qs, std::move(rGuard));
 
-  generateResult(rest::ResponseCode::OK, std::move(buffer));
+  generateResult(rest::ResponseCode::OK,
+                 static_cast<velocypack::Buffer<uint8_t>&&>(std::move(buffer)));
 }
 
 // PUT method for /_api/aql/<operation>/<queryId>, (internal)
@@ -709,7 +715,8 @@ auto RestAqlHandler::handleUseQuery(std::string const& operation,
     opts = &_engine->getQuery().vpackOptions();
   }
 
-  VPackBuffer<uint8_t> answerBuffer;
+  velocypack::SupervisedBuffer answerBuffer(
+      _engine->getQuery().resourceMonitor());
   VPackBuilder answerBuilder(answerBuffer);
   answerBuilder.openObject(/*unindexed*/ true);
 
@@ -770,7 +777,10 @@ auto RestAqlHandler::handleUseQuery(std::string const& operation,
 
   answerBuilder.close();
 
-  generateResult(rest::ResponseCode::OK, std::move(answerBuffer), opts);
+  generateResult(
+      rest::ResponseCode::OK,
+      static_cast<velocypack::Buffer<uint8_t>&&>(std::move(answerBuffer)),
+      opts);
 
   co_return;
 }
@@ -811,7 +821,7 @@ auto RestAqlHandler::handleFinishQuery(std::string const& idString)
       << "Finalizing query with use_count " << query.use_count();
   auto res = co_await query->finalizeClusterQuery(errorCode);
 
-  VPackBufferUInt8 buffer;
+  velocypack::SupervisedBuffer buffer(_engine->getQuery().resourceMonitor());
   VPackBuilder answerBuilder(buffer);
   answerBuilder.openObject(/*unindexed*/ true);
   answerBuilder.add(VPackValue("stats"));
@@ -825,7 +835,9 @@ auto RestAqlHandler::handleFinishQuery(std::string const& idString)
   answerBuilder.add(StaticStrings::Code, VPackValue(res.errorNumber()));
   answerBuilder.close();
 
-  generateResult(rest::ResponseCode::OK, std::move(buffer));
+  generateResult(
+      rest::ResponseCode::OK,
+      static_cast<velocypack::Buffer<uint8_t>&&>(std::move(buffer)));
 }
 
 RequestLane RestAqlHandler::lane() const {
