@@ -208,10 +208,9 @@ RefactoredTraverserCache::extractCollectionName(
   return std::make_pair(colName, pos);
 }
 
-template<typename ResultType>
 bool RefactoredTraverserCache::appendVertex(
     aql::TraversalStats& stats, velocypack::HashedStringRef const& id,
-    ResultType& result) {
+    VPackBuilder& result) {
   auto collectionNameResult = extractCollectionName(id);
   if (collectionNameResult.fail()) {
     THROW_ARANGO_EXCEPTION(collectionNameResult.result());
@@ -230,29 +229,11 @@ bool RefactoredTraverserCache::appendVertex(
       auto cb = [&](LocalDocumentId, aql::DocumentData&& data, VPackSlice doc) {
         stats.incrScannedIndex(1);
         // copying...
-        if constexpr (std::is_same_v<ResultType, aql::AqlValue>) {
-          if (!_vertexProjections.empty()) {
-            // TODO: This does one unnecessary copy.
-            // We should be able to move the Projection into the
-            // AQL value.
-            transaction::BuilderLeaser builder(_trx);
-            {
-              VPackObjectBuilder guard(builder.get());
-              _vertexProjections.toVelocyPackFromDocument(*builder, doc, _trx);
-            }
-            result = aql::AqlValue(builder->slice());
-          } else if (data) {
-            result = aql::AqlValue(data);
-          } else {
-            result = aql::AqlValue(doc);
-          }
-        } else if constexpr (std::is_same_v<ResultType, velocypack::Builder>) {
-          if (!_vertexProjections.empty()) {
-            VPackObjectBuilder guard(&result);
-            _vertexProjections.toVelocyPackFromDocument(result, doc, _trx);
-          } else {
-            result.add(doc);
-          }
+        if (!_vertexProjections.empty()) {
+          VPackObjectBuilder guard(&result);
+          _vertexProjections.toVelocyPackFromDocument(result, doc, _trx);
+        } else {
+          result.add(doc);
         }
         return true;
       };

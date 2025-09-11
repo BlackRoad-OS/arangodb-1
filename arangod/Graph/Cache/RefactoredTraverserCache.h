@@ -124,11 +124,9 @@ class RefactoredTraverserCache {
   /// @brief Lookup a document from the database.
   ///        if this returns false the result is unmodified
   //////////////////////////////////////////////////////////////////////////////
-
-  template<typename ResultType>
   bool appendVertex(aql::TraversalStats& stats,
                     arangodb::velocypack::HashedStringRef const& idString,
-                    ResultType& result);
+                    velocypack::Builder& result);
 
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Lookup an edge document from the database.
