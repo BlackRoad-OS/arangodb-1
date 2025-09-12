@@ -57,6 +57,7 @@
 #include "Basics/conversions.h"
 #include "Basics/fasthash.h"
 #include "Basics/system-functions.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Cluster/ServerState.h"
 #include "Graph/Graph.h"
 #include "Logger/LogMacros.h"
@@ -184,7 +185,8 @@ Query::Query(QueryId id, std::shared_ptr<transaction::Context> ctx,
   }
 
   if (level >= ProfileLevel::TraceOne) {
-    VPackBuilder b;
+    auto sb = velocypack::SupervisedBuffer(resourceMonitor());
+    VPackBuilder b(sb);
     _queryOptions.toVelocyPack(b, /*disableOptimizerRules*/ false);
     LOG_TOPIC("8979d", INFO, Logger::QUERIES) << "options: " << b.toJson();
   }
@@ -460,7 +462,8 @@ async<void> Query::prepareQuery() {
           /*verbose*/ false, /*includeInternals*/ false,
           /*explainRegisters*/ false);
       try {
-        auto b = velocypack::Builder();
+        velocypack::SupervisedBuffer sb(resourceMonitor());
+        auto b = velocypack::Builder(sb);
         plan->toVelocyPack(
             b, flags,
             buildSerializeQueryDataCallback({.includeNumericIds = false,
@@ -558,7 +561,8 @@ void Query::storePlanInCache(ExecutionPlan& plan) {
       /*verbosePlans*/ true, /*explainInternals*/ true,
       /*explainRegisters*/ false);
 
-  velocypack::Builder serialized;
+  velocypack::SupervisedBuffer sb(resourceMonitor());
+  velocypack::Builder serialized(sb);
   // Note that in this serialization it is crucial to include the numeric
   // ids, otherwise the Plan can not be instantiated correctly, when this
   // plan comes back from the query plan cache!
@@ -870,7 +874,10 @@ futures::Future<futures::Unit> Query::execute(
         }
         // NOTE: If the options have a shorter lifetime than the builder, it
         // gets invalid (at least set() and close() are broken).
-        queryResult.data = std::make_shared<VPackBuilder>(&vpackOptions());
+        auto sb = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+        auto supervisedBuilder = std::make_shared<VPackBuilder>(sb);
+        supervisedBuilder->options = &vpackOptions();
+        queryResult.data = supervisedBuilder;
 
         // reserve some space in Builder to avoid frequent reallocs
         queryResult.data->reserve(16 * 1024);
@@ -936,7 +943,7 @@ futures::Future<futures::Unit> Query::execute(
             // cache low-level pointer to avoid repeated shared-ptr-derefs
             TRI_ASSERT(queryResult.data != nullptr);
             auto& resultBuilder = *queryResult.data;
-            size_t previousLength = resultBuilder.bufferRef().byteSize();
+            //size_t previousLength = resultBuilder.bufferRef().byteSize();
             auto& vpackOpts = vpackOptions();
 
             size_t const n = block->numRows();
@@ -950,12 +957,12 @@ futures::Future<futures::Unit> Query::execute(
               }
             }
 
-            size_t newLength = resultBuilder.bufferRef().byteSize();
-            TRI_ASSERT(newLength >= previousLength);
-            size_t diff = newLength - previousLength;
+            // newLength = resultBuilder.bufferRef().byteSize();
+            //TRI_ASSERT(newLength >= previousLength);
+            //size_t diff = newLength - previousLength;
 
-            _resourceMonitor->increaseMemoryUsage(diff);
-            _resultMemoryUsage += diff;
+            //_resourceMonitor->increaseMemoryUsage(diff);
+            //_resultMemoryUsage += diff;
           }
 
           if (state == ExecutorState::DONE) {
@@ -1000,7 +1007,9 @@ futures::Future<futures::Unit> Query::execute(
         [[fallthrough]];
       case ExecutionPhase::FINALIZE: {
         if (!queryResult.extra) {
-          queryResult.extra = std::make_shared<VPackBuilder>();
+          auto sb =
+              std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+          queryResult.extra = std::make_shared<VPackBuilder>(sb);
         }
 
         // TODO Refactor finalize into a coroutine (that's aware of
@@ -1148,7 +1157,9 @@ QueryResultV8 Query::executeV8(v8::Isolate* isolate) {
     VPackOptions options = VPackOptions::Defaults;
     options.buildUnindexedArrays = true;
     options.buildUnindexedObjects = true;
-    auto builder = std::make_shared<VPackBuilder>(&options);
+    auto sb = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+    auto builder = std::make_shared<VPackBuilder>(sb);
+    builder->options = &options;
 
     try {
       ss->resetWakeupHandler();
@@ -1237,7 +1248,8 @@ QueryResultV8 Query::executeV8(v8::Isolate* isolate) {
     }
     queryResult.v8Data = resArray;
     queryResult.context = _trx->transactionContext();
-    queryResult.extra = std::make_shared<VPackBuilder>();
+    auto sbForExtra = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+    queryResult.extra = std::make_shared<VPackBuilder>(sbForExtra);
     queryResult.allowDirtyReads = _allowDirtyReads;
 
     if (useQueryCache && _warnings.empty()) {
@@ -1383,12 +1395,16 @@ QueryResult Query::parse() {
 /// @brief explain an AQL query
 QueryResult Query::explain() {
   QueryResult result;
-  result.extra = std::make_shared<VPackBuilder>();
+  auto sbForExtra = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+  result.extra = std::make_shared<VPackBuilder>(sbForExtra);
 
   VPackOptions options;
   options.checkAttributeUniqueness = false;
   options.buildUnindexedArrays = true;
-  result.data = std::make_shared<VPackBuilder>(&options);
+  auto sbForResultData = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+  auto builderForResultData = std::make_shared<VPackBuilder>(sbForResultData);
+  builderForResultData->options = &options;
+  result.data = builderForResultData;
 
   try {
     if (tryLoadPlanFromCache()) {
@@ -1486,12 +1502,12 @@ QueryResult Query::explain() {
         _queryOptions.verbosePlans, _queryOptions.explainInternals,
         _queryOptions.explainRegisters == ExplainRegisterPlan::Yes);
 
-    ResourceUsageScope scope(*_resourceMonitor);
+    //ResourceUsageScope scope(*_resourceMonitor);
 
     if (_queryOptions.allPlans) {
       VPackArrayBuilder guard(result.data.get());
 
-      size_t previousSize = result.data->bufferRef().byteSize();
+      //size_t previousSize = result.data->bufferRef().byteSize();
       auto const& plans = opt.getPlans();
       for (auto& it : plans) {
         auto& pln = it.first;
@@ -1509,9 +1525,9 @@ QueryResult Query::explain() {
         }
 
         // memory accounting for different execution plans
-        size_t currentSize = result.data->bufferRef().byteSize();
-        scope.increase(currentSize - previousSize);
-        previousSize = currentSize;
+        //size_t currentSize = result.data->bufferRef().byteSize();
+        //scope.increase(currentSize - previousSize);
+        //previousSize = currentSize;
 
         TRI_IF_FAILURE("Query::serializePlans2") {
           THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
@@ -1535,7 +1551,7 @@ QueryResult Query::explain() {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
       }
 
-      scope.increase(result.data->bufferRef().byteSize());
+      //scope.increase(result.data->bufferRef().byteSize());
 
       TRI_IF_FAILURE("Query::serializePlans2") {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
@@ -1566,7 +1582,7 @@ QueryResult Query::explain() {
     }
 
     // the query object no owns the memory used by the plan(s)
-    _planMemoryUsage += scope.trackedAndSteal();
+    //_planMemoryUsage += scope.trackedAndSteal();
 
     // technically no need to commit, as we are only explaining here
     auto commitResult = _trx->commit();
@@ -2113,7 +2129,8 @@ void Query::handlePostProcessing(QueryList& querylist) {
   std::shared_ptr<velocypack::String> querySlice;
   auto buildQuerySlice = [&querySlice, &options, this]() {
     if (querySlice == nullptr) {
-      velocypack::Builder builder;
+      velocypack::SupervisedBuffer sb(resourceMonitor());
+      velocypack::Builder builder(sb);
       toVelocyPack(builder, /*isCurrent*/ false, options);
 
       querySlice = std::make_shared<velocypack::String>(builder.slice());
@@ -2292,7 +2309,7 @@ futures::Future<Result> finishDBServerParts(Query& query, ErrorCode errorCode) {
       break;
   }
 
-  VPackBuffer<uint8_t> body;
+  velocypack::SupervisedBuffer body(query.resourceMonitor());
   VPackBuilder builder(body);
   builder.openObject(true);
   builder.add(StaticStrings::Code, VPackValue(errorCode));
