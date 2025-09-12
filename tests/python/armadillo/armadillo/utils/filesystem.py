@@ -3,6 +3,7 @@
 import os
 import tempfile
 import shutil
+import uuid
 from pathlib import Path
 from typing import Union, Optional
 from contextlib import contextmanager
@@ -12,6 +13,9 @@ from ..core.errors import FilesystemError, PathError, AtomicWriteError
 from ..core.log import get_logger
 
 logger = get_logger(__name__)
+
+# Global test session ID for directory isolation
+_test_session_id: Optional[str] = None
 
 
 class FilesystemService:
@@ -25,9 +29,19 @@ class FilesystemService:
         if self._work_dir is None:
             config = get_config()
             if config.work_dir:
-                self._work_dir = config.work_dir
+                # Use configured work dir but add session isolation
+                base_work_dir = config.work_dir
+                if _test_session_id:
+                    self._work_dir = base_work_dir / f"session_{_test_session_id}"
+                else:
+                    self._work_dir = base_work_dir
             else:
-                self._work_dir = derive_sub_tmp("work")
+                # Use temp dir with session isolation
+                base_work_dir = derive_sub_tmp("work")
+                if _test_session_id:
+                    self._work_dir = base_work_dir / f"session_{_test_session_id}"
+                else:
+                    self._work_dir = base_work_dir
 
         self._work_dir.mkdir(parents=True, exist_ok=True)
         return self._work_dir
@@ -269,4 +283,43 @@ def safe_remove(path: Path) -> bool:
 def cleanup_work_dir() -> None:
     """Clean up work directory."""
     _filesystem_service.cleanup_work_dir()
+
+
+def set_test_session_id(session_id: Optional[str] = None) -> str:
+    """Set a unique test session ID for directory isolation.
+
+    Args:
+        session_id: Optional session ID. If None, a random ID is generated.
+
+    Returns:
+        The session ID that was set
+    """
+    global _test_session_id
+    if session_id is None:
+        session_id = str(uuid.uuid4())[:8]  # Short random ID
+
+    _test_session_id = session_id
+    logger.info(f"Set test session ID: {session_id}")
+
+    # Clear the work directory cache to use new session-isolated paths
+    global _filesystem_service
+    _filesystem_service._work_dir = None
+
+    return session_id
+
+
+def get_test_session_id() -> Optional[str]:
+    """Get the current test session ID."""
+    return _test_session_id
+
+
+def clear_test_session() -> None:
+    """Clear the test session ID and reset to shared directories."""
+    global _test_session_id
+    _test_session_id = None
+
+    # Clear the work directory cache
+    global _filesystem_service
+    _filesystem_service._work_dir = None
+    logger.info("Cleared test session ID")
 

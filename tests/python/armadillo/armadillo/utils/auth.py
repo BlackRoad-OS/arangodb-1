@@ -1,23 +1,43 @@
-"""JWT authentication provider with HMAC signing."""
+"""Authentication utilities for secure communication with ArangoDB."""
 
 import time
 import jwt
-from typing import Dict, Optional, Any
+import base64
+from typing import Dict, Optional, Any, List, Union
 from datetime import datetime, timezone
 
 from ..core.errors import JWTError, AuthenticationError
 from ..core.log import get_logger
-from .crypto import generate_secret
+from .crypto import generate_secret, register_nonce, is_nonce_used
 
 logger = get_logger(__name__)
 
 
 class AuthProvider:
-    """Provides JWT token generation and authentication services."""
+    """Enhanced JWT-based authentication provider for secure ArangoDB communication."""
 
-    def __init__(self, secret: Optional[str] = None, algorithm: str = "HS256") -> None:
+    def __init__(self,
+                 secret: Optional[str] = None,
+                 algorithm: str = "HS256",
+                 default_username: str = "root",
+                 default_password: str = "") -> None:
+        """Initialize authentication provider.
+
+        Args:
+            secret: Secret key for JWT signing (generated if not provided)
+            algorithm: JWT signing algorithm
+            default_username: Default username for basic auth fallback
+            default_password: Default password for basic auth fallback
+        """
         self.algorithm = algorithm
         self.secret = secret or generate_secret()
+        self.default_username = default_username
+        self.default_password = default_password
+
+        # Token management
+        self._active_tokens: Dict[str, Dict[str, Any]] = {}
+        self._token_counter = 0
+
         logger.debug(f"AuthProvider initialized with algorithm {algorithm}")
 
     def issue_jwt(self,
@@ -56,9 +76,11 @@ class AuthProvider:
         except Exception as e:
             raise JWTError(f"Failed to verify JWT token: {e}") from e
 
-    def authorization_header(self, ttl: float = 3600.0) -> Dict[str, str]:
+    def authorization_header(self,
+                           ttl: float = 3600.0,
+                           claims: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         """Generate authorization header with Bearer token."""
-        token = self.issue_jwt(ttl=ttl)
+        token = self.issue_jwt(ttl=ttl, claims=claims)
         return {"Authorization": f"Bearer {token}"}
 
     def get_auth_headers(self, ttl: float = 3600.0) -> Dict[str, str]:
@@ -103,6 +125,202 @@ class AuthProvider:
             raise
         except Exception as e:
             raise JWTError(f"Failed to refresh token: {e}") from e
+
+    def create_user_token(self,
+                         username: str,
+                         permissions: List[str],
+                         ttl: float = 3600.0,
+                         additional_claims: Optional[Dict[str, Any]] = None) -> str:
+        """Create a user-specific JWT token with permissions.
+
+        Args:
+            username: Username
+            permissions: List of permissions
+            ttl: Token time-to-live in seconds
+            additional_claims: Additional claims to include
+
+        Returns:
+            JWT token for the user
+        """
+        claims = {
+            'username': username,
+            'permissions': permissions,
+            'token_type': 'user'
+        }
+
+        if additional_claims:
+            claims.update(additional_claims)
+
+        token = self.issue_jwt(ttl=ttl, claims=claims)
+
+        # Track the token
+        self._token_counter += 1
+        token_id = f"user_{self._token_counter}_{username}"
+        self._active_tokens[token_id] = {
+            'token': token,
+            'username': username,
+            'permissions': permissions,
+            'created': time.time(),
+            'expires': time.time() + ttl
+        }
+
+        logger.debug(f"Created user token for {username} with {len(permissions)} permissions")
+        return token
+
+    def create_service_token(self,
+                           service_name: str,
+                           permissions: List[str],
+                           ttl: float = 86400.0) -> str:
+        """Create a service-specific JWT token.
+
+        Args:
+            service_name: Service identifier
+            permissions: List of service permissions
+            ttl: Token time-to-live in seconds (default: 24 hours)
+
+        Returns:
+            JWT token for the service
+        """
+        claims = {
+            'service': service_name,
+            'permissions': permissions,
+            'token_type': 'service'
+        }
+
+        token = self.issue_jwt(ttl=ttl, claims=claims)
+
+        # Track the token
+        self._token_counter += 1
+        token_id = f"service_{self._token_counter}_{service_name}"
+        self._active_tokens[token_id] = {
+            'token': token,
+            'service': service_name,
+            'permissions': permissions,
+            'created': time.time(),
+            'expires': time.time() + ttl
+        }
+
+        logger.debug(f"Created service token for {service_name}")
+        return token
+
+    def get_basic_auth_header(self,
+                             username: Optional[str] = None,
+                             password: Optional[str] = None) -> Dict[str, str]:
+        """Generate HTTP basic authentication header.
+
+        Args:
+            username: Username (default: provider default)
+            password: Password (default: provider default)
+
+        Returns:
+            Dictionary with Authorization header
+        """
+        user = username or self.default_username
+        pwd = password or self.default_password
+
+        credentials = f"{user}:{pwd}"
+        encoded = base64.b64encode(credentials.encode()).decode()
+
+        return {"Authorization": f"Basic {encoded}"}
+
+    def create_cluster_auth_headers(self,
+                                  cluster_id: str,
+                                  role: str = "test_cluster",
+                                  ttl: float = 7200.0) -> Dict[str, str]:
+        """Create authentication headers for cluster communication.
+
+        Args:
+            cluster_id: Unique cluster identifier
+            role: Cluster role (e.g., coordinator, dbserver)
+            ttl: Token validity duration
+
+        Returns:
+            Dictionary with authentication headers
+        """
+        claims = {
+            'cluster_id': cluster_id,
+            'cluster_role': role,
+            'token_type': 'cluster'
+        }
+
+        return self.authorization_header(ttl=ttl, claims=claims)
+
+    def validate_token_permissions(self,
+                                 token: str,
+                                 required_permissions: List[str]) -> bool:
+        """Validate that a token has required permissions.
+
+        Args:
+            token: JWT token to validate
+            required_permissions: List of required permissions
+
+        Returns:
+            True if token has all required permissions
+        """
+        try:
+            payload = self.verify_jwt(token)
+            token_permissions = payload.get('permissions', [])
+
+            # Check if all required permissions are present
+            return all(perm in token_permissions for perm in required_permissions)
+
+        except JWTError:
+            return False
+
+    def get_active_tokens(self) -> Dict[str, Dict[str, Any]]:
+        """Get information about active tokens.
+
+        Returns:
+            Dictionary of active token information
+        """
+        current_time = time.time()
+
+        # Remove expired tokens
+        expired_tokens = [
+            token_id for token_id, info in self._active_tokens.items()
+            if info['expires'] <= current_time
+        ]
+
+        for token_id in expired_tokens:
+            del self._active_tokens[token_id]
+
+        return self._active_tokens.copy()
+
+    def revoke_token(self, token_id: str) -> bool:
+        """Revoke an active token.
+
+        Args:
+            token_id: Token identifier to revoke
+
+        Returns:
+            True if token was revoked
+        """
+        if token_id in self._active_tokens:
+            del self._active_tokens[token_id]
+            logger.info(f"Revoked token {token_id}")
+            return True
+        return False
+
+    def cleanup_expired_tokens(self) -> int:
+        """Clean up expired tokens.
+
+        Returns:
+            Number of tokens cleaned up
+        """
+        current_time = time.time()
+
+        expired_tokens = [
+            token_id for token_id, info in self._active_tokens.items()
+            if info['expires'] <= current_time
+        ]
+
+        for token_id in expired_tokens:
+            del self._active_tokens[token_id]
+
+        if expired_tokens:
+            logger.debug(f"Cleaned up {len(expired_tokens)} expired tokens")
+
+        return len(expired_tokens)
 
 
 class BasicAuthProvider:

@@ -50,6 +50,12 @@ def run(
         "--format",
         help="Result output formats"
     ),
+    build_dir: Optional[Path] = typer.Option(
+        None,
+        "--build-dir",
+        "-b",
+        help="ArangoDB build directory (auto-detected if not specified)"
+    ),
     keep_instances_on_failure: bool = typer.Option(
         False,
         "--keep-instances-on-failure",
@@ -70,6 +76,11 @@ def run(
 
     try:
         config = get_config()
+
+        # Set build directory if provided
+        if build_dir:
+            config.bin_dir = build_dir.resolve()
+            console.print(f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]")
 
         # Use default test paths if none provided
         if not test_paths:

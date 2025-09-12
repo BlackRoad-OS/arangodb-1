@@ -45,8 +45,13 @@ class ArangoServer:
                  config: Optional[ServerConfig] = None) -> None:
         self.server_id = server_id
         self.role = role
+
+        # Strict validation to prevent ServerConfig objects being assigned to port
+        if port is not None and not isinstance(port, int):
+            raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
+
         self.port = port or allocate_port()
-        self.endpoint = f"http://localhost:{self.port}"
+        self.endpoint = f"http://127.0.0.1:{self.port}"
 
         # Set up directories
         self.base_dir = server_dir(server_id)
@@ -82,13 +87,15 @@ class ArangoServer:
                 # Build command line
                 command = self._build_command()
 
-                # Start supervised process
+                # Start supervised process from repository root (like old framework)
+                repository_root = self._get_repository_root()
                 self._process_info = start_supervised_process(
                     self.server_id,
                     command,
-                    cwd=self.base_dir,
+                    cwd=repository_root,
                     startup_timeout=effective_timeout,
-                    readiness_check=lambda: self._check_readiness()
+                    readiness_check=lambda: self._check_readiness(),
+                    inherit_console=True  # ArangoDB writes directly to console - no buffering delays
                 )
 
                 self._is_running = True
@@ -135,9 +142,12 @@ class ArangoServer:
     def is_running(self) -> bool:
         """Check if server process is running."""
         if not self._is_running:
+            logger.debug(f"is_running({self.server_id}): _is_running=False")
             return False
 
-        return is_process_running(self.server_id)
+        supervisor_result = is_process_running(self.server_id)
+        logger.debug(f"is_running({self.server_id}): _is_running=True, supervisor={supervisor_result}")
+        return supervisor_result
 
     async def health_check(self, timeout: float = 5.0) -> HealthStatus:
         """Perform health check on the server."""
@@ -197,6 +207,14 @@ class ArangoServer:
                 error_message=f"Health check error: {e}"
             )
 
+    def get_stats_sync(self) -> Optional[ServerStats]:
+        """Synchronous stats wrapper."""
+        try:
+            return asyncio.run(self.get_stats())
+        except Exception as e:
+            logger.debug(f"Stats error for {self.server_id}: {e}")
+            return None
+
     async def get_stats(self) -> Optional[ServerStats]:
         """Get server statistics."""
         if not self.is_running():
@@ -239,23 +257,79 @@ class ArangoServer:
             process_info=self._process_info
         )
 
+    def _get_repository_root(self) -> Path:
+        """Get the ArangoDB repository root directory."""
+        config = get_config()
+
+        if config.bin_dir:
+            # Derive repository root from build directory
+            # Examples: build-clang/bin -> repository root is ../..
+            #           build/bin -> repository root is ../..
+            #           bin -> repository root is ..
+            bin_path = Path(config.bin_dir)
+            if bin_path.name == "bin" and bin_path.parent.exists():
+                # build-clang/bin -> build-clang -> repository_root
+                repository_root = bin_path.parent.parent
+            else:
+                # build-clang -> repository_root
+                repository_root = bin_path.parent
+
+            # Validate by checking for expected directories
+            if (repository_root / "js").exists() and (repository_root / "etc").exists():
+                return repository_root
+
+        # Fallback: assume current working directory is repository root
+        cwd = Path.cwd()
+        if (cwd / "js").exists() and (cwd / "etc").exists():
+            return cwd
+
+        # Last resort: go up directory tree looking for repository root
+        search_path = Path.cwd()
+        for _ in range(5):  # Don't search too far up
+            if (search_path / "js").exists() and (search_path / "etc").exists():
+                return search_path
+            search_path = search_path.parent
+
+        # If all else fails, use current directory
+        logger.warning("Could not determine repository root, using current working directory")
+        return Path.cwd()
+
+    def _get_config_file_for_role(self) -> str:
+        """Get the appropriate config file for the server role."""
+        if self.role == ServerRole.SINGLE:
+            return "etc/testing/arangod-single.conf"
+        elif self.role == ServerRole.AGENT:
+            return "etc/testing/arangod-agent.conf"
+        elif self.role == ServerRole.COORDINATOR:
+            return "etc/testing/arangod-coordinator.conf"
+        elif self.role == ServerRole.DBSERVER:
+            return "etc/testing/arangod-dbserver.conf"
+        else:
+            # Default fallback
+            return "etc/testing/arangod.conf"
+
     def _build_command(self) -> List[str]:
         """Build ArangoDB command line."""
         config = get_config()
+        repository_root = self._get_repository_root()
 
-        # Start with arangod binary
-        arangod_path = "arangod"
+        # Get arangod binary path
         if config.bin_dir:
             arangod_path = str(config.bin_dir / "arangod")
+        else:
+            # Fallback to arangod in PATH (likely to fail, but maintains compatibility)
+            arangod_path = "arangod"
 
+        # Build command following old framework approach
         command = [
             arangod_path,
+            # Use config file and define TOP_DIR (like old framework)
+            "--configuration", self._get_config_file_for_role(),
+            "--define", f"TOP_DIR={repository_root}",
+            # Server-specific parameters
             "--server.endpoint", f"tcp://0.0.0.0:{self.port}",
             "--database.directory", str(self.data_dir),
-            "--javascript.app-path", str(self.app_dir),
-            "--log.file", str(self.log_file),
-            "--log.level", "info",
-            "--server.authentication", "false",  # Disable auth for simplicity in Phase 1
+            "--javascript.app-path", str(self.app_dir)
         ]
 
         # Add role-specific arguments
@@ -280,16 +354,84 @@ class ArangoServer:
             for key, value in self.config.args.items():
                 command.extend([f"--{key}", str(value)])
 
-        logger.debug(f"Built command for {self.server_id}: {' '.join(command)}")
+        # Log the complete command for debugging
+        logger.info(f">>> ARANGOD COMMAND FOR {self.server_id} <<<")
+        logger.info(f"Command: {' '.join(command)}")
+        logger.info(f">>> END ARANGOD COMMAND <<<")
         return command
 
     def _check_readiness(self) -> bool:
         """Check if server is ready to accept connections."""
         try:
-            health = self.health_check_sync(timeout=2.0)
+            # During startup, don't use self.is_running() as it creates circular dependency
+            # Just check if the process is running via supervisor and test HTTP connection
+            if not is_process_running(self.server_id):
+                logger.debug(f"Readiness check failed for {self.server_id}: Process not running")
+                return False
+
+            # Make direct HTTP health check without using self.is_running()
+            health = self._direct_health_check(timeout=2.0)
+            if not health.is_healthy:
+                logger.debug(f"Readiness check failed for {self.server_id}: {health.error_message}")
             return health.is_healthy
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Readiness check exception for {self.server_id}: {e}")
             return False
+
+    def _direct_health_check(self, timeout: float = 5.0) -> HealthStatus:
+        """Direct health check without using self.is_running() to avoid circular dependency."""
+        start_time = time.time()
+
+        try:
+            # Use asyncio.run to make direct HTTP request
+            return asyncio.run(self._async_direct_health_check(timeout))
+        except Exception as e:
+            response_time = time.time() - start_time
+            return HealthStatus(
+                is_healthy=False,
+                response_time=response_time,
+                error_message=f"Direct health check error: {e}"
+            )
+
+    async def _async_direct_health_check(self, timeout: float) -> HealthStatus:
+        """Async direct health check implementation."""
+        start_time = time.time()
+
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                headers = self.auth_provider.get_auth_headers()
+
+                async with session.get(f"{self.endpoint}/_api/version", headers=headers) as response:
+                    response_time = time.time() - start_time
+
+                    if response.status == 200:
+                        details = await response.json()
+                        return HealthStatus(
+                            is_healthy=True,
+                            response_time=response_time,
+                            details=details
+                        )
+                    else:
+                        return HealthStatus(
+                            is_healthy=False,
+                            response_time=response_time,
+                            error_message=f"HTTP {response.status}: {response.reason}"
+                        )
+
+        except asyncio.TimeoutError:
+            response_time = time.time() - start_time
+            return HealthStatus(
+                is_healthy=False,
+                response_time=response_time,
+                error_message="Connection timeout"
+            )
+        except Exception as e:
+            response_time = time.time() - start_time
+            return HealthStatus(
+                is_healthy=False,
+                response_time=response_time,
+                error_message=f"Connection error: {e}"
+            )
 
     def _cleanup_on_failure(self) -> None:
         """Clean up resources on startup failure."""

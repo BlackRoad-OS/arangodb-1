@@ -44,6 +44,12 @@ def main(
         "--config",
         "-c",
         help="Configuration file path"
+    ),
+    build_dir: Optional[Path] = typer.Option(
+        None,
+        "--build-dir",
+        "-b",
+        help="ArangoDB build directory (auto-detected if not specified)"
     )
 ):
     """Armadillo: Modern ArangoDB Testing Framework."""
@@ -63,10 +69,15 @@ def main(
 
     # Load configuration
     try:
-        load_config(
+        config = load_config(
             config_file=config_file,
             verbose=verbose
         )
+
+        # Set build directory if provided at global level
+        if build_dir:
+            config.bin_dir = build_dir.resolve()
+            console.print(f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]")
     except Exception as e:
         console.print(f"[red]Configuration error: {e}[/red]")
         raise typer.Exit(1)

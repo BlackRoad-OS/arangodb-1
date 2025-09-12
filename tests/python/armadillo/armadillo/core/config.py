@@ -8,6 +8,7 @@ from dataclasses import dataclass, fields
 
 from .types import ArmadilloConfig, DeploymentMode, ClusterConfig, MonitoringConfig
 from .errors import ConfigurationError, PathError
+from .build_detection import detect_build_directory, validate_build_directory
 
 T = TypeVar('T')
 
@@ -213,6 +214,13 @@ class ConfigManager:
 
         # Create temp directory
         config.temp_dir.mkdir(parents=True, exist_ok=True)
+
+        # Auto-detect build directory if not explicitly set
+        if config.bin_dir is None:
+            detected_build_dir = detect_build_directory()
+            if detected_build_dir:
+                config.bin_dir = detected_build_dir
+                # Note: verbose info logged by detection function
 
         # Validate paths exist
         if config.bin_dir and not config.bin_dir.exists():

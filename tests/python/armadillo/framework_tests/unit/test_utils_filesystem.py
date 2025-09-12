@@ -365,7 +365,7 @@ class TestFilesystemService:
         service = FilesystemService()
         nonexistent_dir = temp_dir / "nonexistent"
 
-        with pytest.raises(PathError, match="Directory not found"):
+        with pytest.raises(FilesystemError, match="Error listing files|Directory not found"):
             service.list_files(nonexistent_dir)
 
     def test_temp_file_context_manager(self, temp_dir):
