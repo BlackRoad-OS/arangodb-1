@@ -34,6 +34,7 @@
 #include "Aql/SharedQueryState.h"
 #include "Async/async.h"
 #include "Basics/ScopeGuard.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Logger/LogMacros.h"
 #include "RestServer/QueryRegistryFeature.h"
 #include "StorageEngine/TransactionState.h"
@@ -169,6 +170,7 @@ QueryStreamCursor::QueryStreamCursor(PrivateToken, std::shared_ptr<Query> q,
                                      bool isRetriable)
     : Cursor(TRI_NewServerSpecificTick(), batchSize, ttl, /*hasCount*/ false,
              isRetriable),
+      _extrasBuffer(velocypack::SupervisedBuffer(q->resourceMonitor())),
       _query(std::move(q)),
       _queryResultPos(0),
       _finalization(false),
