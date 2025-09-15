@@ -192,6 +192,54 @@ bool RefactoredTraverserCache::appendEdge(EdgeDocumentToken const& idToken,
   return res;
 }
 
+bool RefactoredTraverserCache::lookupVertexDocument(
+    aql::TraversalStats& stats, std::string const& shardId,
+    std::string_view key, velocypack::Builder& result) {
+  if (!_produceVertices) {
+    // we don't need any vertex data, return quickly
+    result.add(VPackSlice::nullSlice());
+    return true;
+  }
+  try {
+    transaction::AllowImplicitCollectionsSwitcher disallower(
+        _trx->state()->options(), _allowImplicitCollections);
+
+    auto cb = [&](LocalDocumentId, aql::DocumentData&& data, VPackSlice doc) {
+      stats.incrScannedIndex(1);
+      // copying...
+
+      if (!_vertexProjections.empty()) {
+        VPackObjectBuilder guard(&result);
+        _vertexProjections.toVelocyPackFromDocument(result, doc, _trx);
+      } else {
+        result.add(doc);
+      }
+      return true;
+    };
+    Result res = _trx->documentFastPathLocal(shardId, key, cb).waitAndGet();
+    if (res.ok()) {
+      return true;
+    }
+
+    if (!res.is(TRI_ERROR_ARANGO_DOCUMENT_NOT_FOUND)) {
+      // ok we are in a rather bad state. Better throw and abort.
+      THROW_ARANGO_EXCEPTION(res);
+    }
+  } catch (basics::Exception const& ex) {
+    if (isWithClauseMissing(ex)) {
+      // turn the error into a different error
+      auto message = absl::StrCat("collection not known to traversal: '",
+                                  shardId, "'. please add 'WITH ", shardId,
+                                  "' as the first line in your AQL");
+      THROW_ARANGO_EXCEPTION_MESSAGE(TRI_ERROR_QUERY_COLLECTION_LOCK_FAILED,
+                                     message);
+    }
+    // rethrow original error
+    throw;
+  }
+  return false;
+}
+
 ResultT<std::pair<std::string, size_t>>
 RefactoredTraverserCache::extractCollectionName(
     velocypack::HashedStringRef const& idHashed) const {
@@ -211,66 +259,18 @@ RefactoredTraverserCache::extractCollectionName(
 bool RefactoredTraverserCache::appendVertex(
     aql::TraversalStats& stats, velocypack::HashedStringRef const& id,
     velocypack::Builder& result) {
-  auto collectionNameResult = extractCollectionName(id);
-  if (collectionNameResult.fail()) {
-    THROW_ARANGO_EXCEPTION(collectionNameResult.result());
+  auto maybeCollectionNameResult = extractCollectionName(id);
+  if (maybeCollectionNameResult.fail()) {
+    THROW_ARANGO_EXCEPTION(maybeCollectionNameResult.result());
   }
 
-  auto findDocumentInCollection = [&](std::string const& shardId) -> bool {
-    if (!_produceVertices) {
-      // we don't need any vertex data, return quickly
-      result.add(VPackSlice::nullSlice());
-      return true;
-    }
-    try {
-      transaction::AllowImplicitCollectionsSwitcher disallower(
-          _trx->state()->options(), _allowImplicitCollections);
+  auto const& [collectionName, collectionNamePos] =
+      maybeCollectionNameResult.get();
+  auto const key = id.substr(collectionNamePos + 1).stringView();
 
-      auto cb = [&](LocalDocumentId, aql::DocumentData&& data, VPackSlice doc) {
-        stats.incrScannedIndex(1);
-        // copying...
-
-        if (!_vertexProjections.empty()) {
-          VPackObjectBuilder guard(&result);
-          _vertexProjections.toVelocyPackFromDocument(result, doc, _trx);
-        } else {
-          result.add(doc);
-        }
-        return true;
-      };
-      Result res =
-          _trx->documentFastPathLocal(
-                  shardId,
-                  id.substr(collectionNameResult.get().second + 1).stringView(),
-                  cb)
-              .waitAndGet();
-      if (res.ok()) {
-        return true;
-      }
-
-      if (!res.is(TRI_ERROR_ARANGO_DOCUMENT_NOT_FOUND)) {
-        // ok we are in a rather bad state. Better throw and abort.
-        THROW_ARANGO_EXCEPTION(res);
-      }
-    } catch (basics::Exception const& ex) {
-      if (isWithClauseMissing(ex)) {
-        // turn the error into a different error
-        auto message = absl::StrCat("collection not known to traversal: '",
-                                    shardId, "'. please add 'WITH ", shardId,
-                                    "' as the first line in your AQL");
-        THROW_ARANGO_EXCEPTION_MESSAGE(TRI_ERROR_QUERY_COLLECTION_LOCK_FAILED,
-                                       message);
-      }
-      // rethrow original error
-      throw;
-    }
-    return false;
-  };
-
-  std::string const& collectionName = collectionNameResult.get().first;
   if (_collectionToShardMap.empty()) {
     TRI_ASSERT(!ServerState::instance()->isDBServer());
-    if (findDocumentInCollection(collectionName)) {
+    if (lookupVertexDocument(stats, collectionName, key, builder)) {
       return true;
     }
   } else {
@@ -284,7 +284,7 @@ bool RefactoredTraverserCache::appendVertex(
               "' as the first line in your AQL");
     }
     for (auto const& shard : it->second) {
-      if (findDocumentInCollection(shard)) {
+      if (lookupVertexDocument(stats, shard, key, builder)) {
         // Short circuit, as soon as one shard contains this document
         // we can return it.
         return true;

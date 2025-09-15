@@ -120,6 +120,10 @@ class RefactoredTraverserCache {
       arangodb::velocypack::HashedStringRef idString);
 
  private:
+  bool lookupVertexDocument(aql::TraversalStats& stats,
+                            std::string const& shardId, std::string_view key,
+                            velocypack::Builder& result);
+
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Lookup a document from the database.
   ///        if this returns false the result is unmodified
