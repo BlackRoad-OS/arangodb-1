@@ -9,11 +9,11 @@ from armadillo.results.collector import (
     ResultCollector, get_result_collector, record_test_result,
     finalize_results, export_results
 )
-from armadillo.core.types import TestResult, TestSuiteResults, TestOutcome
+from armadillo.core.types import ExecutionResult, SuiteExecutionResults, ExecutionOutcome
 from armadillo.core.errors import ResultProcessingError
 
 
-class TestResultCollector:
+class ExecutionResultCollector:
     """Test ResultCollector class."""
 
     def test_result_collector_creation(self):
@@ -29,7 +29,7 @@ class TestResultCollector:
         """Test adding individual test results."""
         collector = ResultCollector()
 
-        result = TestResult("test_example", TestOutcome.PASSED, 1.5)
+        result = ExecutionResult("test_example", ExecutionOutcome.PASSED, 1.5)
         collector.add_test_result(result)
 
         assert len(collector.tests) == 1
@@ -40,9 +40,9 @@ class TestResultCollector:
         collector = ResultCollector()
 
         results = [
-            TestResult("test1", TestOutcome.PASSED, 1.0),
-            TestResult("test2", TestOutcome.FAILED, 2.0),
-            TestResult("test3", TestOutcome.SKIPPED, 0.0)
+            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0),
+            ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0),
+            ExecutionResult("test3", ExecutionOutcome.SKIPPED, 0.0)
         ]
 
         for result in results:
@@ -57,7 +57,7 @@ class TestResultCollector:
 
         collector.record_test(
             name="test_direct",
-            outcome=TestOutcome.FAILED,
+            outcome=ExecutionOutcome.FAILED,
             duration=2.5,
             setup_duration=0.1,
             teardown_duration=0.05,
@@ -67,7 +67,7 @@ class TestResultCollector:
         assert len(collector.tests) == 1
         result = collector.tests[0]
         assert result.name == "test_direct"
-        assert result.outcome == TestOutcome.FAILED
+        assert result.outcome == ExecutionOutcome.FAILED
         assert result.duration == 2.5
         assert result.setup_duration == 0.1
         assert result.teardown_duration == 0.05
@@ -90,9 +90,9 @@ class TestResultCollector:
         start_time = collector.start_time
 
         # Add some test results
-        collector.add_test_result(TestResult("test1", TestOutcome.PASSED, 1.0))
-        collector.add_test_result(TestResult("test2", TestOutcome.FAILED, 2.0))
-        collector.add_test_result(TestResult("test3", TestOutcome.SKIPPED, 0.5))
+        collector.add_test_result(ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0))
+        collector.add_test_result(ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0))
+        collector.add_test_result(ExecutionResult("test3", ExecutionOutcome.SKIPPED, 0.5))
         collector.set_metadata(framework="test")
 
         # Wait a bit to ensure duration calculation
@@ -100,7 +100,7 @@ class TestResultCollector:
 
         results = collector.finalize_results()
 
-        assert isinstance(results, TestSuiteResults)
+        assert isinstance(results, SuiteExecutionResults)
         assert len(results.tests) == 3
         assert results.total_duration > 0
         assert results.summary["total"] == 3
@@ -130,7 +130,7 @@ class TestResultCollector:
         collector.finalize_results()
 
         with pytest.raises(ResultProcessingError, match="Cannot add results after finalization"):
-            collector.add_test_result(TestResult("late_test", TestOutcome.PASSED, 1.0))
+            collector.add_test_result(ExecutionResult("late_test", ExecutionOutcome.PASSED, 1.0))
 
     def test_calculate_summary(self):
         """Test summary calculation."""
@@ -138,14 +138,14 @@ class TestResultCollector:
 
         # Add results with different outcomes
         outcomes = [
-            TestOutcome.PASSED, TestOutcome.PASSED,
-            TestOutcome.FAILED, TestOutcome.ERROR,
-            TestOutcome.SKIPPED, TestOutcome.TIMEOUT,
-            TestOutcome.CRASHED
+            ExecutionOutcome.PASSED, ExecutionOutcome.PASSED,
+            ExecutionOutcome.FAILED, ExecutionOutcome.ERROR,
+            ExecutionOutcome.SKIPPED, ExecutionOutcome.TIMEOUT,
+            ExecutionOutcome.CRASHED
         ]
 
         for i, outcome in enumerate(outcomes):
-            collector.add_test_result(TestResult(f"test_{i}", outcome, 1.0))
+            collector.add_test_result(ExecutionResult(f"test_{i}", outcome, 1.0))
 
         summary = collector._calculate_summary()
 
@@ -162,8 +162,8 @@ class TestResultCollector:
         collector = ResultCollector()
 
         # Add test data
-        collector.add_test_result(TestResult("test1", TestOutcome.PASSED, 1.5))
-        collector.add_test_result(TestResult("test2", TestOutcome.FAILED, 2.0,
+        collector.add_test_result(ExecutionResult("test1", ExecutionOutcome.PASSED, 1.5))
+        collector.add_test_result(ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0,
                                            failure_message="Test failed"))
 
         exported_files = collector.export_results(["json"], temp_dir)
@@ -188,12 +188,12 @@ class TestResultCollector:
         collector = ResultCollector()
 
         # Add test data
-        collector.add_test_result(TestResult("test_suite::test_passed", TestOutcome.PASSED, 1.0))
-        collector.add_test_result(TestResult("test_suite::test_failed", TestOutcome.FAILED, 2.0,
+        collector.add_test_result(ExecutionResult("test_suite::test_passed", ExecutionOutcome.PASSED, 1.0))
+        collector.add_test_result(ExecutionResult("test_suite::test_failed", ExecutionOutcome.FAILED, 2.0,
                                            failure_message="Assertion error"))
-        collector.add_test_result(TestResult("test_suite::test_error", TestOutcome.ERROR, 1.5,
+        collector.add_test_result(ExecutionResult("test_suite::test_error", ExecutionOutcome.ERROR, 1.5,
                                            error_message="Runtime error"))
-        collector.add_test_result(TestResult("test_suite::test_skipped", TestOutcome.SKIPPED, 0.0))
+        collector.add_test_result(ExecutionResult("test_suite::test_skipped", ExecutionOutcome.SKIPPED, 0.0))
 
         exported_files = collector.export_results(["junit"], temp_dir)
 
@@ -214,7 +214,7 @@ class TestResultCollector:
         """Test exporting results in multiple formats."""
         collector = ResultCollector()
 
-        collector.add_test_result(TestResult("test1", TestOutcome.PASSED, 1.0))
+        collector.add_test_result(ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0))
 
         exported_files = collector.export_results(["json", "junit"], temp_dir)
 
@@ -228,7 +228,7 @@ class TestResultCollector:
         """Test exporting with unknown format."""
         collector = ResultCollector()
 
-        collector.add_test_result(TestResult("test1", TestOutcome.PASSED, 1.0))
+        collector.add_test_result(ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0))
 
         exported_files = collector.export_results(["unknown"], temp_dir)
 
@@ -239,7 +239,7 @@ class TestResultCollector:
         """Test that export creates output directory if it doesn't exist."""
         collector = ResultCollector()
 
-        collector.add_test_result(TestResult("test1", TestOutcome.PASSED, 1.0))
+        collector.add_test_result(ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0))
 
         output_dir = temp_dir / "new_output_dir"
         exported_files = collector.export_results(["json"], output_dir)
@@ -264,14 +264,14 @@ class TestGlobalResultFunctions:
         import armadillo.results.collector
         armadillo.results.collector._result_collector = None
 
-        record_test_result("global_test", TestOutcome.PASSED, 1.0, setup_duration=0.1)
+        record_test_result("global_test", ExecutionOutcome.PASSED, 1.0, setup_duration=0.1)
 
         collector = get_result_collector()
         assert len(collector.tests) == 1
 
         result = collector.tests[0]
         assert result.name == "global_test"
-        assert result.outcome == TestOutcome.PASSED
+        assert result.outcome == ExecutionOutcome.PASSED
         assert result.duration == 1.0
         assert result.setup_duration == 0.1
 
@@ -281,12 +281,12 @@ class TestGlobalResultFunctions:
         import armadillo.results.collector
         armadillo.results.collector._result_collector = ResultCollector()
 
-        record_test_result("test1", TestOutcome.PASSED, 1.0)
-        record_test_result("test2", TestOutcome.FAILED, 2.0)
+        record_test_result("test1", ExecutionOutcome.PASSED, 1.0)
+        record_test_result("test2", ExecutionOutcome.FAILED, 2.0)
 
         results = finalize_results()
 
-        assert isinstance(results, TestSuiteResults)
+        assert isinstance(results, SuiteExecutionResults)
         assert len(results.tests) == 2
 
     def test_export_results_function(self, temp_dir):
@@ -295,7 +295,7 @@ class TestGlobalResultFunctions:
         import armadillo.results.collector
         armadillo.results.collector._result_collector = ResultCollector()
 
-        record_test_result("test1", TestOutcome.PASSED, 1.0)
+        record_test_result("test1", ExecutionOutcome.PASSED, 1.0)
 
         exported_files = export_results(["json"], temp_dir)
 
@@ -303,7 +303,7 @@ class TestGlobalResultFunctions:
         assert exported_files["json"].exists()
 
 
-class TestResultCollectorEdgeCases:
+class ExecutionResultCollectorEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_empty_result_collection(self, temp_dir):
@@ -324,8 +324,8 @@ class TestResultCollectorEdgeCases:
         """Test handling tests with very short durations."""
         collector = ResultCollector()
 
-        collector.add_test_result(TestResult("fast_test", TestOutcome.PASSED, 0.001))
-        collector.add_test_result(TestResult("instant_test", TestOutcome.PASSED, 0.0))
+        collector.add_test_result(ExecutionResult("fast_test", ExecutionOutcome.PASSED, 0.001))
+        collector.add_test_result(ExecutionResult("instant_test", ExecutionOutcome.PASSED, 0.0))
 
         results = collector.finalize_results()
 
@@ -340,7 +340,7 @@ class TestResultCollectorEdgeCases:
 
         collector.record_test(
             name="complex_test",
-            outcome=TestOutcome.CRASHED,
+            outcome=ExecutionOutcome.CRASHED,
             duration=5.0,
             setup_duration=1.0,
             teardown_duration=0.5,
@@ -353,7 +353,7 @@ class TestResultCollectorEdgeCases:
 
         test = results.tests[0]
         assert test.name == "complex_test"
-        assert test.outcome == TestOutcome.CRASHED
+        assert test.outcome == ExecutionOutcome.CRASHED
         assert test.error_message == "Segmentation fault"
         assert test.failure_message == "Process crashed"
         assert test.crash_info == crash_info
@@ -364,8 +364,8 @@ class TestResultCollectorEdgeCases:
 
         # Add many test results
         for i in range(1000):
-            outcome = TestOutcome.PASSED if i % 2 == 0 else TestOutcome.FAILED
-            collector.add_test_result(TestResult(f"test_{i}", outcome, 0.1))
+            outcome = ExecutionOutcome.PASSED if i % 2 == 0 else ExecutionOutcome.FAILED
+            collector.add_test_result(ExecutionResult(f"test_{i}", outcome, 0.1))
 
         results = collector.finalize_results()
 
@@ -379,7 +379,7 @@ class TestResultCollectorEdgeCases:
 
         collector.record_test(
             name="test_unicode_你好",
-            outcome=TestOutcome.FAILED,
+            outcome=ExecutionOutcome.FAILED,
             duration=1.0,
             failure_message="Failed with 🚫 emoji and 世界 characters"
         )

@@ -20,7 +20,7 @@ class ServerRole(Enum):
     COORDINATOR = "coordinator"
 
 
-class TestOutcome(Enum):
+class ExecutionOutcome(Enum):
     """Test execution outcome."""
     PASSED = "passed"
     FAILED = "failed"
@@ -81,10 +81,10 @@ class ArmadilloConfig:
 
 # Result types for test execution
 @dataclass
-class TestResult:
+class ExecutionResult:
     """Individual test result."""
     name: str
-    outcome: TestOutcome
+    outcome: ExecutionOutcome
     duration: float
     setup_duration: float = 0.0
     teardown_duration: float = 0.0
@@ -94,9 +94,9 @@ class TestResult:
 
 
 @dataclass
-class TestSuiteResults:
+class SuiteExecutionResults:
     """Results for a complete test suite."""
-    tests: List[TestResult]
+    tests: List[ExecutionResult]
     total_duration: float
     summary: Dict[str, int] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)

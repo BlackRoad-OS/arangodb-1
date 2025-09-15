@@ -9,7 +9,7 @@ from armadillo.core.errors import (
     NetworkError, ConnectionError, AuthenticationError, JWTError, NonceReplayError,
     CodecError, SerializationError, DeserializationError,
     FilesystemError, PathError, AtomicWriteError,
-    TestExecutionError, TestTimeoutError, TestSetupError, TestTeardownError,
+    ExecutionError, ExecutionTimeoutError, SetupError, TeardownError,
     ClusterError, AgencyError, LeaderElectionError,
     MonitoringError, CrashAnalysisError, GdbError, SanitizerError,
     ResultProcessingError, ResultExportError, AnalysisError,
@@ -81,23 +81,23 @@ class TestServerErrors:
         assert error.response_time is None
 
 
-class TestTestExecutionErrors:
+class TestExecutionErrors:
     """Test test execution related errors."""
 
     def test_test_timeout_error(self):
-        """Test TestTimeoutError with test name."""
-        error = TestTimeoutError("Test timed out", 60.0, "test_example")
+        """Test ExecutionTimeoutError with test name."""
+        error = ExecutionTimeoutError("Test timed out", 60.0, "test_example")
         assert error.timeout == 60.0
         assert error.test_name == "test_example"
 
     def test_test_timeout_error_without_name(self):
-        """Test TestTimeoutError without test name."""
-        error = TestTimeoutError("Test timed out", 30.0)
+        """Test ExecutionTimeoutError without test name."""
+        error = ExecutionTimeoutError("Test timed out", 30.0)
         assert error.timeout == 30.0
         assert error.test_name is None
 
 
-class TestTimeoutErrors:
+class ExecutionTimeoutErrors:
     """Test timeout management errors."""
 
     def test_deadline_exceeded_error(self):

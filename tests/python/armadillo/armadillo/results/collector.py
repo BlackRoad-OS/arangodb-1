@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..core.types import TestResult, TestSuiteResults, TestOutcome
+from ..core.types import ExecutionResult, SuiteExecutionResults, ExecutionOutcome
 from ..core.errors import ResultProcessingError
 from ..core.log import get_logger
 from ..utils.codec import get_codec, to_json_string
@@ -18,12 +18,12 @@ class ResultCollector:
     """Collects and aggregates test results."""
 
     def __init__(self) -> None:
-        self.tests: List[TestResult] = []
+        self.tests: List[ExecutionResult] = []
         self.start_time = time.time()
         self.metadata: Dict[str, Any] = {}
         self._finalized = False
 
-    def add_test_result(self, result: TestResult) -> None:
+    def add_test_result(self, result: ExecutionResult) -> None:
         """Add a single test result."""
         if self._finalized:
             raise ResultProcessingError("Cannot add results after finalization")
@@ -33,7 +33,7 @@ class ResultCollector:
 
     def record_test(self,
                    name: str,
-                   outcome: TestOutcome,
+                   outcome: ExecutionOutcome,
                    duration: float,
                    setup_duration: float = 0.0,
                    teardown_duration: float = 0.0,
@@ -41,7 +41,7 @@ class ResultCollector:
                    failure_message: Optional[str] = None,
                    crash_info: Optional[Dict[str, Any]] = None) -> None:
         """Record a test result directly."""
-        result = TestResult(
+        result = ExecutionResult(
             name=name,
             outcome=outcome,
             duration=duration,
@@ -57,7 +57,7 @@ class ResultCollector:
         """Set metadata for the test run."""
         self.metadata.update(metadata)
 
-    def finalize_results(self) -> TestSuiteResults:
+    def finalize_results(self) -> SuiteExecutionResults:
         """Finalize and process all results."""
         if self._finalized:
             raise ResultProcessingError("Results already finalized")
@@ -75,7 +75,7 @@ class ResultCollector:
             'total_duration': total_duration,
         })
 
-        results = TestSuiteResults(
+        results = SuiteExecutionResults(
             tests=self.tests.copy(),
             total_duration=total_duration,
             summary=summary,
@@ -92,7 +92,7 @@ class ResultCollector:
         if not self._finalized:
             results = self.finalize_results()
         else:
-            results = TestSuiteResults(
+            results = SuiteExecutionResults(
                 tests=self.tests,
                 total_duration=time.time() - self.start_time,
                 summary=self._calculate_summary(),
@@ -145,7 +145,7 @@ class ResultCollector:
 
         return summary
 
-    def _export_json(self, results: TestSuiteResults, file_path: Path) -> None:
+    def _export_json(self, results: SuiteExecutionResults, file_path: Path) -> None:
         """Export results as JSON."""
         # Convert to dictionary format expected by analysis tools
         export_data = {
@@ -184,7 +184,7 @@ class ResultCollector:
         atomic_write(file_path, json_content)
         logger.debug(f"Exported JSON results to {file_path}")
 
-    def _export_junit(self, results: TestSuiteResults, file_path: Path) -> None:
+    def _export_junit(self, results: SuiteExecutionResults, file_path: Path) -> None:
         """Export results as JUnit XML."""
         import xml.etree.ElementTree as ET
         from xml.dom import minidom
@@ -207,28 +207,28 @@ class ResultCollector:
             testcase.set('time', f"{test.duration:.3f}")
 
             # Add failure/error information
-            if test.outcome == TestOutcome.FAILED:
+            if test.outcome == ExecutionOutcome.FAILED:
                 failure = ET.SubElement(testcase, 'failure')
                 failure.set('message', test.failure_message or 'Test failed')
                 if test.failure_message:
                     failure.text = test.failure_message
 
-            elif test.outcome == TestOutcome.ERROR:
+            elif test.outcome == ExecutionOutcome.ERROR:
                 error = ET.SubElement(testcase, 'error')
                 error.set('message', test.error_message or 'Test error')
                 if test.error_message:
                     error.text = test.error_message
 
-            elif test.outcome == TestOutcome.SKIPPED:
+            elif test.outcome == ExecutionOutcome.SKIPPED:
                 skipped = ET.SubElement(testcase, 'skipped')
                 skipped.set('message', 'Test skipped')
 
-            elif test.outcome == TestOutcome.TIMEOUT:
+            elif test.outcome == ExecutionOutcome.TIMEOUT:
                 error = ET.SubElement(testcase, 'error')
                 error.set('message', 'Test timed out')
                 error.set('type', 'timeout')
 
-            elif test.outcome == TestOutcome.CRASHED:
+            elif test.outcome == ExecutionOutcome.CRASHED:
                 error = ET.SubElement(testcase, 'error')
                 error.set('message', 'Test crashed')
                 error.set('type', 'crash')
@@ -260,12 +260,12 @@ def get_result_collector() -> ResultCollector:
     return _result_collector
 
 
-def record_test_result(name: str, outcome: TestOutcome, duration: float, **kwargs) -> None:
+def record_test_result(name: str, outcome: ExecutionOutcome, duration: float, **kwargs) -> None:
     """Record a test result using global collector."""
     get_result_collector().record_test(name, outcome, duration, **kwargs)
 
 
-def finalize_results() -> TestSuiteResults:
+def finalize_results() -> SuiteExecutionResults:
     """Finalize results using global collector."""
     return get_result_collector().finalize_results()
 

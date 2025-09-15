@@ -5,9 +5,9 @@ from pathlib import Path
 from dataclasses import asdict
 
 from armadillo.core.types import (
-    DeploymentMode, ServerRole, TestOutcome,
+    DeploymentMode, ServerRole, ExecutionOutcome,
     ServerConfig, ClusterConfig, MonitoringConfig, ArmadilloConfig,
-    TestResult, TestSuiteResults, HealthStatus, ServerStats, ProcessStats
+    ExecutionResult, SuiteExecutionResults, HealthStatus, ServerStats, ProcessStats
 )
 
 
@@ -27,13 +27,13 @@ class TestEnums:
         assert ServerRole.COORDINATOR.value == "coordinator"
 
     def test_test_outcome_values(self):
-        """Test TestOutcome enum values."""
-        assert TestOutcome.PASSED.value == "passed"
-        assert TestOutcome.FAILED.value == "failed"
-        assert TestOutcome.SKIPPED.value == "skipped"
-        assert TestOutcome.ERROR.value == "error"
-        assert TestOutcome.TIMEOUT.value == "timeout"
-        assert TestOutcome.CRASHED.value == "crashed"
+        """Test ExecutionOutcome enum values."""
+        assert ExecutionOutcome.PASSED.value == "passed"
+        assert ExecutionOutcome.FAILED.value == "failed"
+        assert ExecutionOutcome.SKIPPED.value == "skipped"
+        assert ExecutionOutcome.ERROR.value == "error"
+        assert ExecutionOutcome.TIMEOUT.value == "timeout"
+        assert ExecutionOutcome.CRASHED.value == "crashed"
 
 
 class TestServerConfig:
@@ -136,19 +136,19 @@ class TestArmadilloConfig:
         assert config.verbose == 0
 
 
-class TestTestResult:
-    """Test TestResult dataclass."""
+class TestExecutionResult:
+    """Test ExecutionResult dataclass."""
 
     def test_test_result_creation(self):
-        """Test TestResult creation."""
-        result = TestResult(
+        """Test ExecutionResult creation."""
+        result = ExecutionResult(
             name="test_example",
-            outcome=TestOutcome.PASSED,
+            outcome=ExecutionOutcome.PASSED,
             duration=1.5
         )
 
         assert result.name == "test_example"
-        assert result.outcome == TestOutcome.PASSED
+        assert result.outcome == ExecutionOutcome.PASSED
         assert result.duration == 1.5
         assert result.setup_duration == 0.0
         assert result.teardown_duration == 0.0
@@ -157,31 +157,31 @@ class TestTestResult:
         assert result.crash_info is None
 
     def test_test_result_with_failure(self):
-        """Test TestResult with failure information."""
-        result = TestResult(
+        """Test ExecutionResult with failure information."""
+        result = ExecutionResult(
             name="test_failed",
-            outcome=TestOutcome.FAILED,
+            outcome=ExecutionOutcome.FAILED,
             duration=2.0,
             failure_message="Assertion failed",
             setup_duration=0.1,
             teardown_duration=0.05
         )
 
-        assert result.outcome == TestOutcome.FAILED
+        assert result.outcome == ExecutionOutcome.FAILED
         assert result.failure_message == "Assertion failed"
         assert result.setup_duration == 0.1
         assert result.teardown_duration == 0.05
 
 
-class TestTestSuiteResults:
-    """Test TestSuiteResults dataclass."""
+class TestSuiteExecutionResults:
+    """Test SuiteExecutionResults dataclass."""
 
     def test_test_suite_results_creation(self):
-        """Test TestSuiteResults creation."""
-        test1 = TestResult("test1", TestOutcome.PASSED, 1.0)
-        test2 = TestResult("test2", TestOutcome.FAILED, 2.0)
+        """Test SuiteExecutionResults creation."""
+        test1 = ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0)
+        test2 = ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0)
 
-        results = TestSuiteResults(
+        results = SuiteExecutionResults(
             tests=[test1, test2],
             total_duration=10.5,
             summary={"passed": 1, "failed": 1},

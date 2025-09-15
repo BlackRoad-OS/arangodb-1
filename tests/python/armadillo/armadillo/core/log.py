@@ -196,9 +196,15 @@ class LogManager:
     def shutdown(self) -> None:
         """Shutdown logging system."""
         if self._json_handler:
-            self._json_handler.close()
+            try:
+                self._json_handler.close()
+            except Exception:
+                pass  # Ignore handler close errors
         if self._console_handler:
-            self._console_handler.close()
+            try:
+                self._console_handler.close()
+            except Exception:
+                pass  # Ignore handler close errors
 
         logging.shutdown()
 

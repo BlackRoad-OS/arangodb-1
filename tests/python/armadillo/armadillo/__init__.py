@@ -13,7 +13,7 @@ __version__ = "1.0.0"
 from .core.types import (
     DeploymentMode,
     ServerRole,
-    TestOutcome,
+    ExecutionOutcome,
     ServerConfig,
     ClusterConfig,
     MonitoringConfig,
@@ -24,7 +24,7 @@ __all__ = [
     "__version__",
     "DeploymentMode",
     "ServerRole",
-    "TestOutcome",
+    "ExecutionOutcome",
     "ServerConfig",
     "ClusterConfig",
     "MonitoringConfig",

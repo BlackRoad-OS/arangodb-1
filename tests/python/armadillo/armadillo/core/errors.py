@@ -137,12 +137,12 @@ class AtomicWriteError(FilesystemError):
 
 
 # Test Execution Errors
-class TestExecutionError(ArmadilloError):
+class ExecutionError(ArmadilloError):
     """Error during test execution."""
     pass
 
 
-class TestTimeoutError(TestExecutionError):
+class ExecutionTimeoutError(ExecutionError):
     """Test execution timed out."""
 
     def __init__(self, message: str, timeout: float, test_name: Optional[str] = None,
@@ -152,12 +152,12 @@ class TestTimeoutError(TestExecutionError):
         self.test_name = test_name
 
 
-class TestSetupError(TestExecutionError):
+class SetupError(ExecutionError):
     """Error during test setup."""
     pass
 
 
-class TestTeardownError(TestExecutionError):
+class TeardownError(ExecutionError):
     """Error during test teardown."""
     pass
 

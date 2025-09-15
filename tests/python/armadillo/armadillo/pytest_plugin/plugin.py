@@ -165,6 +165,27 @@ class ArmadilloPlugin:
         """
         logger.debug("Session server pre-start analysis complete")
 
+    def pytest_sessionstart(self, session: pytest.Session) -> None:
+        """Called at the beginning of the pytest session."""
+        logger.debug("ArmadilloPlugin: Session start")
+
+        # Load configuration
+        load_config()
+
+        # Configure logging
+        configure_logging()
+
+        # Initialize session-specific resources
+        set_test_session_id()
+
+    def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
+        """Called at the end of the pytest session."""
+        logger.debug(f"ArmadilloPlugin: Session finish with exit status {exitstatus}")
+        # Clean up session resources
+        clear_test_session()
+        cleanup_work_dir()
+        stop_watchdog()
+
     def pytest_runtest_setup(self, item: pytest.Item) -> None:
         """Set up test execution environment."""
         test_name = item.nodeid
