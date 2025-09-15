@@ -345,19 +345,14 @@ Result ClusterProvider<StepImpl>::fetchEdgesFromEngines(Step* step) {
 
   network::RequestOptions reqOpts;
   reqOpts.database = trx()->vocbase().name();
-  reqOpts.skipScheduler = true;  // hack to avoid scheduler queue
 
   std::vector<Future<network::Response>> futures;
   futures.reserve(engines->size());
 
   ScopeGuard sg([&]() noexcept {
-    for (Future<network::Response>& f : futures) {
-      try {
-        // TODO: As soon as we switch to the new future library, we need to
-        // replace the wait with proper *finally* method.
-        f.wait();
-      } catch (...) {
-      }
+    try {
+      futures::collectAll(std::move(futures)).wait();
+    } catch (...) {
     }
   });
 
@@ -368,18 +363,19 @@ Result ClusterProvider<StepImpl>::fetchEdgesFromEngines(Step* step) {
         reqOpts));
   }
 
-  std::vector<std::pair<EdgeType, VertexType>> connectedEdges;
-  for (Future<network::Response>& f : futures) {
-    // NOTE: If you remove this waitAndGet() in favour of an asynchronous
-    // operation, remember to remove the `skipScheduler = true` option of the
-    // corresponding requests.
-    network::Response const& r = f.waitAndGet();
+  auto responses = futures::collectAll(std::move(futures)).waitAndGet();
 
-    if (r.fail()) {
-      return network::fuerteToArangoErrorCode(r);
+  std::vector<std::pair<EdgeType, VertexType>> connectedEdges;
+  for (auto const& response : responses) {
+    if (not response.hasValue()) {
+      return TRI_ERROR_INTERNAL;
     }
 
-    auto payload = r.response().stealPayload();
+    if (response->fail()) {
+      return network::fuerteToArangoErrorCode(*response);
+    }
+
+    auto payload = response->response().stealPayload();
     VPackSlice resSlice(payload->data());
     if (!resSlice.isObject()) {
       // Response has invalid format
