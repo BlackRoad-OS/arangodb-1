@@ -27,10 +27,13 @@ TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
 
       ASSERT_EQ(monitor.current(), 0);
       largeValue = AqlValue{builder.slice(), builder.size()};
+      monitor.increaseMemoryUsage(largeValue.memoryUsage());
 
       ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
+
+    monitor.decreaseMemoryUsage(largeValue.memoryUsage());
     largeValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -45,10 +48,15 @@ TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
       builder.close();
       ASSERT_EQ(monitor.current(), 0);
       smallValue = AqlValue{builder.slice(), builder.size()};
+      // memoryUsage for small values  is zero
+      // because they fit in the AqlValue's inline buffer
+      monitor.increaseMemoryUsage(smallValue.memoryUsage());
       ASSERT_EQ(monitor.current(), smallValue.memoryUsage());
     }
     // is the same as comparing to smallValue.memoryUsage
     ASSERT_EQ(monitor.current(), 0);
+
+    monitor.decreaseMemoryUsage(smallValue.memoryUsage());
     smallValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -70,11 +78,16 @@ TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
 
       ASSERT_GT(monitor.current(), 0);
       largeValue = AqlValue{builder.slice(), builder.size()};
+      // the buffer has already increased the monitor for its
+      // capacity, this call adds the AqlValue footprint on top.
+      monitor.increaseMemoryUsage(largeValue.memoryUsage());
       // While builder exists, monitor >= aql value usage (buffer + aql value)
       ASSERT_GE(monitor.current(), largeValue.memoryUsage());
     }
     // now monitor is only the aql value usage
     ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
+
+    monitor.decreaseMemoryUsage(largeValue.memoryUsage());
     largeValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -90,9 +103,12 @@ TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
       builder.close();
       ASSERT_GT(monitor.current(), 0);
       smallValue = AqlValue{builder.slice(), builder.size()};
+      // account small value on the monitor
+      monitor.increaseMemoryUsage(smallValue.memoryUsage());
       ASSERT_GE(monitor.current(), smallValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), smallValue.memoryUsage());
+    monitor.decreaseMemoryUsage(smallValue.memoryUsage());
     smallValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -124,9 +140,13 @@ TEST(SupervisedBuferTest,
       sizeBeforeLocal = sizeBefore;
       largeValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = largeValue.memoryUsage();
+      // account the value's memory on top of manual buffer accounting
+      monitor.increaseMemoryUsage(valueSizeLocal);
       ASSERT_GE(monitor.current(), sizeBefore + largeValue.memoryUsage());
     }
     ASSERT_GE(monitor.current(), sizeBeforeLocal + valueSizeLocal);
+    // drop our manual accounting for the value before destroying it
+    monitor.decreaseMemoryUsage(valueSizeLocal);
     largeValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -152,9 +172,11 @@ TEST(SupervisedBuferTest,
       sizeBeforeLocal = sizeBefore;
       smallValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = smallValue.memoryUsage();
+      monitor.increaseMemoryUsage(valueSizeLocal);
       ASSERT_GE(monitor.current(), sizeBefore + smallValue.memoryUsage());
     }
     ASSERT_GE(monitor.current(), sizeBeforeLocal + valueSizeLocal);
+    monitor.decreaseMemoryUsage(valueSizeLocal);
     smallValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -185,9 +207,12 @@ TEST(SupervisedBuferTest,
       sizeBeforeLocal = sizeBefore;
       largeValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = largeValue.memoryUsage();
+      // account the value's memory on top of the manual buffer
+      monitor.increaseMemoryUsage(valueSizeLocal);
       ASSERT_EQ(monitor.current(), sizeBefore + largeValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), sizeBeforeLocal + valueSizeLocal);
+    monitor.decreaseMemoryUsage(valueSizeLocal);
     largeValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -212,9 +237,11 @@ TEST(SupervisedBuferTest,
       sizeBeforeLocal = sizeBefore;
       smallValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = smallValue.memoryUsage();
+      monitor.increaseMemoryUsage(valueSizeLocal);
       ASSERT_EQ(monitor.current(), sizeBefore + smallValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), sizeBeforeLocal + valueSizeLocal);
+    monitor.decreaseMemoryUsage(valueSizeLocal);
     smallValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
@@ -234,6 +261,8 @@ TEST(SupervisedBuferTest, ReuseSupervisedBufferAccountsMemory) {
     builder.add(Value(std::string(1024, 'a')));
     builder.close();
     firstValue = AqlValue{builder.slice(), builder.size()};
+
+    monitor.increaseMemoryUsage(firstValue.memoryUsage());
     ASSERT_GE(monitor.current(), firstValue.memoryUsage());
   }
   ASSERT_EQ(monitor.current(), firstValue.memoryUsage());
@@ -245,12 +274,17 @@ TEST(SupervisedBuferTest, ReuseSupervisedBufferAccountsMemory) {
     builder.add(Value(std::string(2048, 'b')));
     builder.close();
     secondValue = AqlValue{builder.slice(), builder.size()};
+
+    monitor.increaseMemoryUsage(secondValue.memoryUsage());
     ASSERT_GE(monitor.current(),
               firstValue.memoryUsage() + secondValue.memoryUsage());
   }
   ASSERT_EQ(monitor.current(),
             firstValue.memoryUsage() + secondValue.memoryUsage());
 
+  // drop our manual accounting for both values before destroying them
+  monitor.decreaseMemoryUsage(firstValue.memoryUsage());
+  monitor.decreaseMemoryUsage(secondValue.memoryUsage());
   firstValue.destroy();
   secondValue.destroy();
   ASSERT_EQ(monitor.current(), 0);
@@ -272,6 +306,9 @@ TEST(SupervisedBuferTest, SupervisedBuilderGrowthAndRecycle) {
     builder.add(Value(3));
     builder.close();
     AqlValue smallValue = AqlValue{builder.slice(), builder.size()};
+    // account the small value on the monitor. smallValue.memoryUsage()
+    // may be zero, in which case this has no effect.
+    monitor.increaseMemoryUsage(smallValue.memoryUsage());
     std::size_t memory1 = monitor.current();
     ASSERT_GE(memory1, builder.size());
 
@@ -282,6 +319,7 @@ TEST(SupervisedBuferTest, SupervisedBuilderGrowthAndRecycle) {
     }
     builder.close();
     AqlValue largeValue = AqlValue{builder.slice(), builder.size()};
+    monitor.increaseMemoryUsage(largeValue.memoryUsage());
     std::size_t memory2 = monitor.current();
     ASSERT_GT(memory2, memory1);
     ASSERT_GE(memory2, builder.size());
@@ -290,11 +328,16 @@ TEST(SupervisedBuferTest, SupervisedBuilderGrowthAndRecycle) {
     // builder.size() becomes 0 because of capacity.
     builder.clear();
     AqlValue clearedValue = AqlValue{builder.slice(), builder.size()};
+    monitor.increaseMemoryUsage(clearedValue.memoryUsage());
     std::size_t memory3 = monitor.current();
     ASSERT_EQ(memory3, memory2);
 
+    // drop accounting in reverse order of creation
+    monitor.decreaseMemoryUsage(clearedValue.memoryUsage());
     clearedValue.destroy();
+    monitor.decreaseMemoryUsage(largeValue.memoryUsage());
     largeValue.destroy();
+    monitor.decreaseMemoryUsage(smallValue.memoryUsage());
     smallValue.destroy();
   }
   ASSERT_EQ(monitor.current(), 0);
