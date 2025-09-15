@@ -91,7 +91,8 @@ RefactoredTraverserCache::RefactoredTraverserCache(
                                      .getFeature<QueryRegistryFeature>()
                                      .requireWith()),
       _vertexProjections(vertexProjections),
-      _edgeProjections(edgeProjections) {
+      _edgeProjections(edgeProjections),
+      _dataLake(resourceMonitor) {
   TRI_ASSERT(!ServerState::instance()->isCoordinator());
 }
 
@@ -195,25 +196,13 @@ bool RefactoredTraverserCache::appendEdge(EdgeDocumentToken const& idToken,
 bool RefactoredTraverserCache::lookupVertexDocument(
     aql::TraversalStats& stats, std::string const& shardId,
     std::string_view key, velocypack::Builder& result) {
-  if (!_produceVertices) {
-    // we don't need any vertex data, return quickly
-    result.add(VPackSlice::nullSlice());
-    return true;
-  }
   try {
     transaction::AllowImplicitCollectionsSwitcher disallower(
         _trx->state()->options(), _allowImplicitCollections);
 
     auto cb = [&](LocalDocumentId, aql::DocumentData&& data, VPackSlice doc) {
       stats.incrScannedIndex(1);
-      // copying...
-
-      if (!_vertexProjections.empty()) {
-        VPackObjectBuilder guard(&result);
-        _vertexProjections.toVelocyPackFromDocument(result, doc, _trx);
-      } else {
-        result.add(doc);
-      }
+      result.add(doc);
       return true;
     };
     Result res = _trx->documentFastPathLocal(shardId, key, cb).waitAndGet();
@@ -256,21 +245,24 @@ RefactoredTraverserCache::extractCollectionName(
   return std::make_pair(colName, pos);
 }
 
-bool RefactoredTraverserCache::appendVertex(
-    aql::TraversalStats& stats, velocypack::HashedStringRef const& id,
-    velocypack::Builder& result) {
+bool RefactoredTraverserCache::addVertexToCache(
+    aql::TraversalStats& stats, velocypack::HashedStringRef const& id) {
+  auto result = velocypack::Builder();
+
   auto maybeCollectionNameResult = extractCollectionName(id);
   if (maybeCollectionNameResult.fail()) {
     THROW_ARANGO_EXCEPTION(maybeCollectionNameResult.result());
   }
-
   auto const& [collectionName, collectionNamePos] =
       maybeCollectionNameResult.get();
   auto const key = id.substr(collectionNamePos + 1).stringView();
 
   if (_collectionToShardMap.empty()) {
     TRI_ASSERT(!ServerState::instance()->isDBServer());
-    if (lookupVertexDocument(stats, collectionName, key, builder)) {
+    if (lookupVertexDocument(stats, collectionName, key, result)) {
+      // AddToCache
+      auto sl = _dataLake.add(result.buffer());
+      _vertexData.emplace(id, sl);
       return true;
     }
   } else {
@@ -284,13 +276,44 @@ bool RefactoredTraverserCache::appendVertex(
               "' as the first line in your AQL");
     }
     for (auto const& shard : it->second) {
-      if (lookupVertexDocument(stats, shard, key, builder)) {
+      if (lookupVertexDocument(stats, shard, key, result)) {
         // Short circuit, as soon as one shard contains this document
         // we can return it.
+        // AddToCache
+        auto sl = _dataLake.add(result.buffer());
+        _vertexData.emplace(id, sl);
         return true;
       }
     }
   }
+  return false;
+}
+
+bool RefactoredTraverserCache::appendVertex(
+    aql::TraversalStats& stats, velocypack::HashedStringRef const& id,
+    velocypack::Builder& result) {
+  if (!_produceVertices) {
+    // we don't need any vertex data, return quickly
+    result.add(VPackSlice::nullSlice());
+    return true;
+  }
+
+  // Vertex not cached -> cache it
+  if (!_vertexData.contains(id)) {
+    addVertexToCache(stats, id);
+  }
+
+  // TODO: less evaluations of caching function
+  auto lk = _vertexData.at(id);
+  if (!_vertexProjections.empty()) {
+    VPackObjectBuilder guard(&result);
+    _vertexProjections.toVelocyPackFromDocument(result, lk, _trx);
+  } else {
+    result.add(lk);
+  }
+  return true;
+
+  // how do we get here in the original function?
 
   // Register a warning. It is okay though but helps the user
   std::string msg = "vertex '" + id.toString() + "' not found";

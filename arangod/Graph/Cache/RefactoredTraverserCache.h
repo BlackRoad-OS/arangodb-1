@@ -29,8 +29,9 @@
 #include "Basics/StringHeap.h"
 #include "Basics/MemoryTypes/MemoryTypes.h"
 #include "Containers/FlatHashSet.h"
-
-#include <velocypack/HashedStringRef.h>
+#include "Containers/FlatHashMap.h"
+#include "Graph/ClusterGraphDatalake.h"
+#include "Graph/Providers/TypeAliases.h"
 
 namespace arangodb {
 
@@ -123,7 +124,8 @@ class RefactoredTraverserCache {
   bool lookupVertexDocument(aql::TraversalStats& stats,
                             std::string const& shardId, std::string_view key,
                             velocypack::Builder& result);
-
+  bool addVertexToCache(aql::TraversalStats& stats,
+                        velocypack::HashedStringRef const& id);
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Lookup a document from the database.
   ///        if this returns false the result is unmodified
@@ -172,7 +174,8 @@ class RefactoredTraverserCache {
   arangodb::StringHeap _stringHeap;
 
   //////////////////////////////////////////////////////////////////////////////
-  /// @brief Set of all strings persisted in the stringHeap. So we can save some
+  /// @brief Set of all strings persisted in the stringHeap. So we can save
+  /// some
   ///        memory by not storing them twice.
   //////////////////////////////////////////////////////////////////////////////
   containers::FlatHashSet<arangodb::velocypack::HashedStringRef>
@@ -194,6 +197,12 @@ class RefactoredTraverserCache {
 
   /// @brief Projections on edge data, responsibility is with BaseOptions
   aql::Projections const& _edgeProjections;
+
+  /// @brief Experiment to see whether caching vertex data speeds
+  /// up traversals
+  containers::FlatHashMap<VertexType, velocypack::Slice> _vertexData;
+  // Hold on to vertex docs
+  graph::ClusterGraphDatalake _dataLake;
 };
 
 }  // namespace graph
