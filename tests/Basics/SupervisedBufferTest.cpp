@@ -343,7 +343,11 @@ TEST(SupervisedbufferTest, SupervisedBuilderGrowthAndRecycle) {
   ASSERT_EQ(monitor.current(), 0);
 }
 
+<<<<<<< HEAD
 TEST(SupervisedbufferTest, DetailedBufferResizeAndRecycle) {
+=======
+TEST(SupervisedBufferTest, DetailedBufferResizeAndRecycle) {
+>>>>>>> 57d55981f907d7fa71c3dc281e847b130db6679b
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
