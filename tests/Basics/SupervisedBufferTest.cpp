@@ -12,7 +12,7 @@ using namespace arangodb;
 using namespace arangodb::aql;
 using namespace arangodb::velocypack;
 
-TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
+TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -62,7 +62,7 @@ TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
   }
 }
 
-TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
+TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -114,7 +114,7 @@ TEST(SupervisedBuferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
   }
 }
 
-TEST(SupervisedBuferTest,
+TEST(SupervisedbufferTest,
      ManuallyIncreaseAccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
@@ -182,7 +182,7 @@ TEST(SupervisedBuferTest,
   }
 }
 
-TEST(SupervisedBuferTest,
+TEST(SupervisedbufferTest,
      ManuallyIncreaseAccountsMemoryLargeAndSmallValuesNormalBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
@@ -247,7 +247,7 @@ TEST(SupervisedBuferTest,
   }
 }
 
-TEST(SupervisedBuferTest, ReuseSupervisedBufferAccountsMemory) {
+TEST(SupervisedbufferTest, ReuseSupervisedBufferAccountsMemory) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -290,7 +290,7 @@ TEST(SupervisedBuferTest, ReuseSupervisedBufferAccountsMemory) {
   ASSERT_EQ(monitor.current(), 0);
 }
 
-TEST(SupervisedBuferTest, SupervisedBuilderGrowthAndRecycle) {
+TEST(SupervisedbufferTest, SupervisedBuilderGrowthAndRecycle) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -343,7 +343,7 @@ TEST(SupervisedBuferTest, SupervisedBuilderGrowthAndRecycle) {
   ASSERT_EQ(monitor.current(), 0);
 }
 
-TEST(SupervisedBuferTest, DetailedBufferResizeAndRecycle) {
+TEST(SupervisedbufferTest, DetailedBufferResizeAndRecycle) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
