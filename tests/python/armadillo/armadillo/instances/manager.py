@@ -19,7 +19,7 @@ from ..core.errors import (
 from ..core.log import get_logger
 from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
-from ..core.config import get_config
+from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager
 from ..utils.filesystem import work_dir, server_dir, ensure_dir
 from ..utils.auth import get_auth_provider
@@ -52,14 +52,15 @@ class DeploymentPlan:
 class InstanceManager:
     """Manages lifecycle of multiple ArangoDB server instances."""
 
-    def __init__(self, deployment_id: str) -> None:
+    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None) -> None:
         """Initialize instance manager.
 
         Args:
             deployment_id: Unique identifier for this deployment
+            config_provider: Configuration provider (uses global config if None)
         """
         self.deployment_id = deployment_id
-        self.config = get_config()
+        self.config = config_provider or get_config()
         self.port_manager = get_port_manager()
         self.auth_provider = get_auth_provider()
 
@@ -286,7 +287,8 @@ class InstanceManager:
                 server_id=server_id,
                 role=server_config.role,
                 port=port_value,  # Use explicit integer port value
-                config=minimal_config  # Only pass needed configuration data
+                config=minimal_config,  # Only pass needed configuration data
+                config_provider=self.config  # Pass injected config provider
             )
 
             # Set directories from ServerConfig after creation

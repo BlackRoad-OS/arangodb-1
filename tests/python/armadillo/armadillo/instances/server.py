@@ -12,7 +12,7 @@ from ..core.errors import (
     ServerError, ServerStartupError, ServerShutdownError,
     HealthCheckError, NetworkError, ConnectionError
 )
-from ..core.config import get_config
+from ..core.config import get_config, ConfigProvider
 from ..core.process import start_supervised_process, stop_supervised_process, is_process_running, ProcessInfo
 from ..core.log import get_logger, log_server_event
 from ..core.time import clamp_timeout, timeout_scope
@@ -42,7 +42,8 @@ class ArangoServer:
                  server_id: str,
                  role: ServerRole = ServerRole.SINGLE,
                  port: Optional[int] = None,
-                 config: Optional[ServerConfig] = None) -> None:
+                 config: Optional[ServerConfig] = None,
+                 config_provider: Optional[ConfigProvider] = None) -> None:
         self.server_id = server_id
         self.role = role
 
@@ -65,6 +66,7 @@ class ArangoServer:
 
         # Server configuration
         self.config = config
+        self._config_provider = config_provider or get_config()
         self._is_running = False
         self._process_info: Optional[ProcessInfo] = None
 
@@ -259,14 +261,12 @@ class ArangoServer:
 
     def _get_repository_root(self) -> Path:
         """Get the ArangoDB repository root directory."""
-        config = get_config()
-
-        if config.bin_dir:
+        if self._config_provider.bin_dir:
             # Derive repository root from build directory
             # Examples: build-clang/bin -> repository root is ../..
             #           build/bin -> repository root is ../..
             #           bin -> repository root is ..
-            bin_path = Path(config.bin_dir)
+            bin_path = Path(self._config_provider.bin_dir)
             if bin_path.name == "bin" and bin_path.parent.exists():
                 # build-clang/bin -> build-clang -> repository_root
                 repository_root = bin_path.parent.parent
@@ -310,12 +310,11 @@ class ArangoServer:
 
     def _build_command(self) -> List[str]:
         """Build ArangoDB command line."""
-        config = get_config()
         repository_root = self._get_repository_root()
 
         # Get arangod binary path
-        if config.bin_dir:
-            arangod_path = str(config.bin_dir / "arangod")
+        if self._config_provider.bin_dir:
+            arangod_path = str(self._config_provider.bin_dir / "arangod")
         else:
             # Fallback to arangod in PATH (likely to fail, but maintains compatibility)
             arangod_path = "arangod"

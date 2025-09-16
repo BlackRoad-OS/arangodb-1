@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from pathlib import Path
 
 from armadillo.instances.server import ArangoServer
-from armadillo.core.types import ServerRole
+from armadillo.core.types import ServerRole, ClusterConfig
 
 
 class TestArangoServerBasic:
@@ -45,15 +45,33 @@ class TestArangoServerBasic:
 
     def test_server_with_different_ports(self):
         """Test server creation with different ports."""
-        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531)
-        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532)
+        # Create mock config provider
+        mock_config = Mock()
+        mock_config.bin_dir = Path("/fake/bin")
+        mock_config.work_dir = Path("/fake/work")
+        mock_config.cluster = ClusterConfig()
+        mock_config.verbose = 0
+        mock_config.keep_instances_on_failure = False
+        mock_config.test_timeout = 30.0
+        
+        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531, config_provider=mock_config)
+        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532, config_provider=mock_config)
 
         assert server1.endpoint == "http://127.0.0.1:8531"
         assert server2.endpoint == "http://127.0.0.1:8532"
 
     def test_server_not_running_initially(self):
         """Test server is not running initially."""
-        server = ArangoServer("test", ServerRole.SINGLE, 8529)
+        # Create mock config provider
+        mock_config = Mock()
+        mock_config.bin_dir = Path("/fake/bin")
+        mock_config.work_dir = Path("/fake/work")
+        mock_config.cluster = ClusterConfig()
+        mock_config.verbose = 0
+        mock_config.keep_instances_on_failure = False
+        mock_config.test_timeout = 30.0
+        
+        server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config)
 
         assert server.is_running() is False
 
@@ -63,10 +81,20 @@ class TestArangoServerLifecycle:
 
     def setup_method(self):
         """Set up test environment."""
+        # Create mock config provider
+        self.mock_config = Mock()
+        self.mock_config.bin_dir = Path("/fake/bin")
+        self.mock_config.work_dir = Path("/fake/work")
+        self.mock_config.cluster = ClusterConfig()
+        self.mock_config.verbose = 0
+        self.mock_config.keep_instances_on_failure = False
+        self.mock_config.test_timeout = 30.0
+        
         self.server = ArangoServer(
             server_id="test_server",
             role=ServerRole.SINGLE,
-            port=8529
+            port=8529,
+            config_provider=self.mock_config
         )
 
     @patch('armadillo.instances.server.start_supervised_process')
@@ -125,7 +153,16 @@ class TestArangoServerConfiguration:
 
     def setup_method(self):
         """Set up test environment."""
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529)
+        # Create mock config provider
+        mock_config = Mock()
+        mock_config.bin_dir = Path("/fake/bin")
+        mock_config.work_dir = Path("/fake/work")
+        mock_config.cluster = ClusterConfig()
+        mock_config.verbose = 0
+        mock_config.keep_instances_on_failure = False
+        mock_config.test_timeout = 30.0
+        
+        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config)
 
     @patch('pathlib.Path.exists', return_value=True)
     def test_build_command_returns_list(self, mock_exists):
@@ -159,7 +196,16 @@ class TestArangoServerErrorHandling:
 
     def setup_method(self):
         """Set up test environment."""
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529)
+        # Create mock config provider
+        mock_config = Mock()
+        mock_config.bin_dir = Path("/fake/bin")
+        mock_config.work_dir = Path("/fake/work")
+        mock_config.cluster = ClusterConfig()
+        mock_config.verbose = 0
+        mock_config.keep_instances_on_failure = False
+        mock_config.test_timeout = 30.0
+        
+        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config)
 
     @patch('armadillo.instances.server.start_supervised_process')
     def test_start_process_failure(self, mock_start):
@@ -205,7 +251,16 @@ class TestArangoServerIntegration:
     @patch('pathlib.Path.exists', return_value=True)
     def test_full_lifecycle_workflow(self, mock_exists, mock_is_running, mock_stop, mock_start):
         """Test complete start->check->stop workflow."""
-        server = ArangoServer("lifecycle_test", ServerRole.SINGLE, 8529)
+        # Create mock config provider
+        mock_config = Mock()
+        mock_config.bin_dir = Path("/fake/bin")
+        mock_config.work_dir = Path("/fake/work")
+        mock_config.cluster = ClusterConfig()
+        mock_config.verbose = 0
+        mock_config.keep_instances_on_failure = False
+        mock_config.test_timeout = 30.0
+        
+        server = ArangoServer("lifecycle_test", ServerRole.SINGLE, 8529, config_provider=mock_config)
 
         # Mock successful start
         mock_start.return_value = Mock(pid=12345)
