@@ -15,6 +15,14 @@ def cleanup_logging():
     """Clean up logging system after each test."""
     yield
 
+    # Use the new reset_logging function for proper cleanup
+    try:
+        from armadillo.core.log import reset_logging
+        reset_logging()
+    except ImportError:
+        # Fallback to manual cleanup if import fails
+        pass
+
     # Clean up all loggers
     logger_dict = logging.Logger.manager.loggerDict
     for name in list(logger_dict.keys()):
@@ -27,7 +35,10 @@ def cleanup_logging():
     # Remove all handlers from root logger
     root_logger = logging.getLogger()
     for handler in root_logger.handlers[:]:
-        handler.close()
+        try:
+            handler.close()
+        except Exception:
+            pass  # Ignore close errors
         root_logger.removeHandler(handler)
 
     # Reset logging configuration

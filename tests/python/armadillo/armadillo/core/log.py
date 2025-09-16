@@ -165,13 +165,18 @@ class ArmadilloRichHandler(RichHandler):
 
 
 class LogManager:
-    """Central logging configuration and management."""
+    """Central logging configuration and management.
+
+    This class maintains backward compatibility while using the new
+    IsolatedLogManager architecture under the hood.
+    """
 
     def __init__(self) -> None:
+        # Import here to avoid circular imports
+        from .logger_factory import IsolatedLogManager
+
+        self._manager = IsolatedLogManager("global")
         self._configured = False
-        self._log_file: Optional[Path] = None
-        self._json_handler: Optional[logging.Handler] = None
-        self._console_handler: Optional[logging.Handler] = None
 
     def configure(self,
                   level: Union[int, str] = logging.INFO,
@@ -183,54 +188,75 @@ class LogManager:
         if self._configured:
             return
 
+        # Configure the underlying isolated manager
+        self._manager.configure(
+            level=level,
+            log_file=log_file,
+            enable_json=enable_json,
+            enable_console=enable_console,
+            console_level=console_level
+        )
+
+        # Also configure root logger for backward compatibility with code
+        # that might use logging.getLogger() directly
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.DEBUG)
 
-        # Remove any existing handlers
+        # Remove any existing handlers to prevent duplication
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
 
-        # Configure JSON file logging
+        # Add handlers to root logger for backward compatibility
         if enable_json and log_file:
-            self._log_file = Path(log_file)
-            self._log_file.parent.mkdir(parents=True, exist_ok=True)
+            json_handler = logging.FileHandler(log_file)
+            json_handler.setFormatter(StructuredFormatter())
+            json_handler.setLevel(level)
+            root_logger.addHandler(json_handler)
 
-            self._json_handler = logging.FileHandler(self._log_file)
-            self._json_handler.setFormatter(StructuredFormatter())
-            self._json_handler.setLevel(level)
-            root_logger.addHandler(self._json_handler)
-
-        # Configure console logging
         if enable_console:
             console_level = console_level or level
-            self._console_handler = ArmadilloRichHandler(
+            console_handler = ArmadilloRichHandler(
                 show_time=True,
                 show_path=False,
                 markup=True
             )
-            self._console_handler.setLevel(console_level)
-            root_logger.addHandler(self._console_handler)
+            console_handler.setLevel(console_level)
+            root_logger.addHandler(console_handler)
 
         self._configured = True
 
     def get_logger(self, name: str) -> logging.Logger:
         """Get a logger instance."""
-        return logging.getLogger(name)
+        # Use the isolated manager for new loggers
+        return self._manager.create_logger(name)
 
     def shutdown(self) -> None:
         """Shutdown logging system."""
-        if self._json_handler:
+        self._manager.shutdown()
+
+        # Also shutdown root logger for backward compatibility
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]:
             try:
-                self._json_handler.close()
+                handler.close()
             except Exception:
                 pass  # Ignore handler close errors
-        if self._console_handler:
-            try:
-                self._console_handler.close()
-            except Exception:
-                pass  # Ignore handler close errors
+            root_logger.removeHandler(handler)
 
         logging.shutdown()
+
+    def reset_configuration(self) -> None:
+        """Reset configuration to allow reconfiguration.
+
+        This is useful for test isolation where different tests
+        might need different logging configurations.
+        """
+        self._configured = False
+        self._manager.shutdown()
+
+        # Re-create isolated manager
+        from .logger_factory import IsolatedLogManager
+        self._manager = IsolatedLogManager("global")
 
 
 # Global log manager instance
@@ -250,6 +276,15 @@ def get_logger(name: str) -> logging.Logger:
 def shutdown_logging() -> None:
     """Shutdown the logging system."""
     _log_manager.shutdown()
+
+
+def reset_logging() -> None:
+    """Reset logging configuration to allow reconfiguration.
+
+    This is useful for test isolation where different tests
+    might need different logging configurations.
+    """
+    _log_manager.reset_configuration()
 
 
 def log_event(logger: logging.Logger, event_type: str, message: str, **kwargs) -> None:
