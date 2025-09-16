@@ -19,6 +19,7 @@ from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import server_dir, atomic_write
 from ..utils.ports import allocate_port, release_port, PortAllocator
 from ..utils.auth import get_auth_provider
+from .command_builder import CommandBuilder, ServerCommandBuilder
 
 logger = get_logger(__name__)
 
@@ -45,7 +46,8 @@ class ArangoServer:
                  config: Optional[ServerConfig] = None,
                  config_provider: Optional[ConfigProvider] = None,
                  logger: Optional[Logger] = None,
-                 port_allocator: Optional[PortAllocator] = None) -> None:
+                 port_allocator: Optional[PortAllocator] = None,
+                 command_builder: Optional[CommandBuilder] = None) -> None:
         self.server_id = server_id
         self.role = role
 
@@ -72,6 +74,10 @@ class ArangoServer:
         self.config = config
         self._config_provider = config_provider or get_config()
         self._logger = logger or get_logger(__name__)
+        self._command_builder = command_builder or ServerCommandBuilder(
+            config_provider=self._config_provider,
+            logger=self._logger
+        )
         self._is_running = False
         self._process_info: Optional[ProcessInfo] = None
 
@@ -108,7 +114,7 @@ class ArangoServer:
                 command = self._build_command()
 
                 # Start supervised process from repository root (like old framework)
-                repository_root = self._get_repository_root()
+                repository_root = self._command_builder.get_repository_root()
                 self._process_info = start_supervised_process(
                     self.server_id,
                     command,
@@ -277,105 +283,17 @@ class ArangoServer:
             process_info=self._process_info
         )
 
-    def _get_repository_root(self) -> Path:
-        """Get the ArangoDB repository root directory."""
-        if self._config_provider.bin_dir:
-            # Derive repository root from build directory
-            # Examples: build-clang/bin -> repository root is ../..
-            #           build/bin -> repository root is ../..
-            #           bin -> repository root is ..
-            bin_path = Path(self._config_provider.bin_dir)
-            if bin_path.name == "bin" and bin_path.parent.exists():
-                # build-clang/bin -> build-clang -> repository_root
-                repository_root = bin_path.parent.parent
-            else:
-                # build-clang -> repository_root
-                repository_root = bin_path.parent
-
-            # Validate by checking for expected directories
-            if (repository_root / "js").exists() and (repository_root / "etc").exists():
-                return repository_root
-
-        # Fallback: assume current working directory is repository root
-        cwd = Path.cwd()
-        if (cwd / "js").exists() and (cwd / "etc").exists():
-            return cwd
-
-        # Last resort: go up directory tree looking for repository root
-        search_path = Path.cwd()
-        for _ in range(5):  # Don't search too far up
-            if (search_path / "js").exists() and (search_path / "etc").exists():
-                return search_path
-            search_path = search_path.parent
-
-        # If all else fails, use current directory
-        logger.warning("Could not determine repository root, using current working directory")
-        return Path.cwd()
-
-    def _get_config_file_for_role(self) -> str:
-        """Get the appropriate config file for the server role."""
-        if self.role == ServerRole.SINGLE:
-            return "etc/testing/arangod-single.conf"
-        elif self.role == ServerRole.AGENT:
-            return "etc/testing/arangod-agent.conf"
-        elif self.role == ServerRole.COORDINATOR:
-            return "etc/testing/arangod-coordinator.conf"
-        elif self.role == ServerRole.DBSERVER:
-            return "etc/testing/arangod-dbserver.conf"
-        else:
-            # Default fallback
-            return "etc/testing/arangod.conf"
 
     def _build_command(self) -> List[str]:
-        """Build ArangoDB command line."""
-        repository_root = self._get_repository_root()
-
-        # Get arangod binary path
-        if self._config_provider.bin_dir:
-            arangod_path = str(self._config_provider.bin_dir / "arangod")
-        else:
-            # Fallback to arangod in PATH (likely to fail, but maintains compatibility)
-            arangod_path = "arangod"
-
-        # Build command following old framework approach
-        command = [
-            arangod_path,
-            # Use config file and define TOP_DIR (like old framework)
-            "--configuration", self._get_config_file_for_role(),
-            "--define", f"TOP_DIR={repository_root}",
-            # Server-specific parameters
-            "--server.endpoint", f"tcp://0.0.0.0:{self.port}",
-            "--database.directory", str(self.data_dir),
-            "--javascript.app-path", str(self.app_dir)
-        ]
-
-        # Add role-specific arguments
-        if self.role == ServerRole.SINGLE:
-            command.extend([
-                "--server.storage-engine", "rocksdb"
-            ])
-        elif self.role == ServerRole.AGENT:
-            command.extend([
-                "--agency.activate", "true",
-                "--agency.size", "3",
-                "--agency.supervision", "true"
-            ])
-        elif self.role in [ServerRole.COORDINATOR, ServerRole.DBSERVER]:
-            command.extend([
-                "--cluster.create-waits-for-sync-replication", "false",
-                "--cluster.write-concern", "1"
-            ])
-
-        # Add custom arguments from config
-        if self.config and self.config.args:
-            for key, value in self.config.args.items():
-                command.extend([f"--{key}", str(value)])
-
-        # Log the complete command for debugging
-        logger.info(f">>> ARANGOD COMMAND FOR {self.server_id} <<<")
-        logger.info(f"Command: {' '.join(command)}")
-        logger.info(f">>> END ARANGOD COMMAND <<<")
-        return command
+        """Build ArangoDB command line using injected command builder."""
+        return self._command_builder.build_command(
+            server_id=self.server_id,
+            role=self.role,
+            port=self.port,
+            data_dir=self.data_dir,
+            app_dir=self.app_dir,
+            config=self.config
+        )
 
     def _check_readiness(self) -> bool:
         """Check if server is ready to accept connections."""

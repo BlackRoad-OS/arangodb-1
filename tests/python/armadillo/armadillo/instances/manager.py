@@ -19,6 +19,7 @@ from ..core.errors import (
 from ..core.log import get_logger, Logger
 from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
+from .command_builder import ServerCommandBuilder
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.filesystem import work_dir, server_dir, ensure_dir
@@ -286,6 +287,12 @@ class InstanceManager:
                 startup_timeout=server_config.startup_timeout
             )
 
+            # Create command builder for this server
+            command_builder = ServerCommandBuilder(
+                config_provider=self.config,
+                logger=self._logger
+            )
+            
             server = ArangoServer(
                 server_id=server_id,
                 role=server_config.role,
@@ -293,7 +300,8 @@ class InstanceManager:
                 config=minimal_config,  # Only pass needed configuration data
                 config_provider=self.config,  # Pass injected config provider
                 logger=self._logger,  # Pass injected logger
-                port_allocator=self.port_manager  # Pass injected port allocator
+                port_allocator=self.port_manager,  # Pass injected port allocator
+                command_builder=command_builder  # Pass injected command builder
             )
 
             # Set directories from ServerConfig after creation
