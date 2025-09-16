@@ -11,7 +11,8 @@ from pathlib import Path
 
 from armadillo.utils.ports import (
     PortManager, find_free_port, check_port_available, wait_for_port,
-    get_port_manager, allocate_port, allocate_ports, release_port, release_ports
+    get_port_manager, allocate_port, allocate_ports, release_port, release_ports,
+    reset_port_manager
 )
 from armadillo.core.errors import NetworkError
 
@@ -478,6 +479,24 @@ class TestGlobalPortManager:
         release_ports([9050, 9051, 9052])
 
         mock_manager.release_ports.assert_called_once_with([9050, 9051, 9052])
+
+    def test_reset_port_manager_function(self):
+        """Test module-level reset_port_manager function."""
+        from armadillo.utils.ports import reset_port_manager
+        import armadillo.utils.ports
+        
+        # Set up a mock manager in the global variable
+        mock_manager = Mock()
+        armadillo.utils.ports._port_manager = mock_manager
+        
+        # Call reset_port_manager
+        reset_port_manager()
+        
+        # Should clear reservations and reset global manager
+        mock_manager.clear_reservations.assert_called_once()
+        
+        # Check that global manager is reset to None
+        assert armadillo.utils.ports._port_manager is None
 
 
 class TestPortManagerIntegration:

@@ -222,6 +222,19 @@ def get_port_manager(base_port: int = 8529, max_ports: int = 1000) -> PortManage
     return _port_manager
 
 
+def reset_port_manager() -> None:
+    """Reset the global port manager.
+    
+    This is useful for test isolation where different tests
+    might need different port manager configurations.
+    """
+    global _port_manager
+    if _port_manager:
+        _port_manager.clear_reservations()
+        _port_manager = None
+        logger.debug("Reset global port manager")
+
+
 def allocate_port(preferred: Optional[int] = None) -> int:
     """Allocate port using global manager."""
     return get_port_manager().allocate_port(preferred)

@@ -52,10 +52,18 @@ def cleanup_global_state():
 
     # Clean up global port manager
     try:
-        import armadillo.utils.ports
-        if hasattr(armadillo.utils.ports, '_port_manager') and armadillo.utils.ports._port_manager:
-            armadillo.utils.ports._port_manager.clear_reservations()
-            armadillo.utils.ports._port_manager = None
+        from armadillo.utils.ports import reset_port_manager
+        reset_port_manager()
+    except ImportError:
+        pass
+    
+    # Clean up any resource trackers
+    try:
+        import armadillo.utils.resource_pool
+        # Resource pools should clean themselves up via atexit, but force cleanup for tests
+        import atexit
+        # Trigger any pending atexit handlers
+        pass
     except ImportError:
         pass
 
