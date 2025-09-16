@@ -12,12 +12,16 @@ from .selector import (
     create_suite_selector,
 )
 
-# TODO: Import other modules when implemented
-# from .organizer import (
-#     TestSuiteOrganizer,
-#     TestSuite,
-#     SuiteConfig,
-# )
+from .organizer import (
+    TestSuiteOrganizer,
+    TestSuite,
+    SuiteConfig,
+    SuitePriority,
+    SuiteStatus,
+    create_marker_suite,
+    create_pattern_suite,
+    create_priority_suite,
+)
 # from .parallel import (
 #     ParallelExecutor,
 #     ExecutionPlan,
@@ -30,7 +34,7 @@ from .selector import (
 # )
 
 __all__ = [
-    # Test Selection (currently implemented)
+    # Test Selection
     'TestSelector',
     'TestFilter', 
     'FilterCriteria',
@@ -41,12 +45,17 @@ __all__ = [
     'create_pattern_selector',
     'create_suite_selector',
     
+    # Test Organization
+    'TestSuiteOrganizer',
+    'TestSuite',
+    'SuiteConfig',
+    'SuitePriority',
+    'SuiteStatus',
+    'create_marker_suite',
+    'create_pattern_suite',
+    'create_priority_suite',
+    
     # TODO: Add when implemented
-    # # Test Organization
-    # 'TestSuiteOrganizer',
-    # 'TestSuite',
-    # 'SuiteConfig',
-    # 
     # # Parallel Execution
     # 'ParallelExecutor',
     # 'ExecutionPlan',
