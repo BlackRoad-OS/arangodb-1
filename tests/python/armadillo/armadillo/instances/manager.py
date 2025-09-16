@@ -21,6 +21,7 @@ from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
 from .command_builder import ServerCommandBuilder
 from .health_checker import ServerHealthChecker
+from .deployment_planner import DeploymentPlanner, StandardDeploymentPlanner
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.filesystem import work_dir, server_dir, ensure_dir
@@ -54,7 +55,7 @@ class DeploymentPlan:
 class InstanceManager:
     """Manages lifecycle of multiple ArangoDB server instances."""
 
-    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None, port_allocator: Optional[PortAllocator] = None) -> None:
+    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None, port_allocator: Optional[PortAllocator] = None, deployment_planner: Optional[DeploymentPlanner] = None) -> None:
         """Initialize instance manager.
 
         Args:
@@ -62,12 +63,19 @@ class InstanceManager:
             config_provider: Configuration provider (uses global config if None)
             logger: Logger instance (uses global logger if None)
             port_allocator: Port allocator (uses global manager if None)
+            deployment_planner: Deployment planner (creates standard planner if None)
         """
         self.deployment_id = deployment_id
         self.config = config_provider or get_config()
         self._logger = logger or get_logger(__name__)
         self.port_manager = port_allocator or get_port_manager()
         self.auth_provider = get_auth_provider()
+        
+        # Create deployment planner with injected dependencies
+        self._deployment_planner = deployment_planner or StandardDeploymentPlanner(
+            port_allocator=self.port_manager,
+            logger=self._logger
+        )
 
         # Instance state
         self._servers: Dict[str, ArangoServer] = {}
@@ -102,7 +110,7 @@ class InstanceManager:
         mode: DeploymentMode,
         cluster_config: Optional[ClusterConfig] = None
     ) -> DeploymentPlan:
-        """Create deployment plan for the specified mode.
+        """Create deployment plan for the specified mode using injected planner.
 
         Args:
             mode: Deployment mode
@@ -111,92 +119,17 @@ class InstanceManager:
         Returns:
             Deployment plan
         """
-        plan = DeploymentPlan(deployment_mode=mode)
-
-        if mode == DeploymentMode.SINGLE_SERVER:
-            # Single server deployment
-            port = self.port_manager.allocate_port("single")
-            server_config = ServerConfig(
-                role=ServerRole.SINGLE,
-                port=port,
-                data_dir=server_dir(self.deployment_id) / "single" / "data",
-                log_file=server_dir(self.deployment_id) / "single" / "arangod.log"
-            )
-            plan.servers.append(server_config)
-            plan.coordination_endpoints.append(f"http://127.0.0.1:{port}")
-
-        elif mode == DeploymentMode.CLUSTER:
-            cluster_cfg = cluster_config or self.config.cluster
-
-            # Create agents
-            agent_endpoints = []
-            for i in range(cluster_cfg.agents):
-                port = self.port_manager.allocate_port()  # Allocate any available port
-                agent_config = ServerConfig(
-                    role=ServerRole.AGENT,
-                    port=port,
-                    data_dir=server_dir(self.deployment_id) / f"agent_{i}" / "data",
-                    log_file=server_dir(self.deployment_id) / f"agent_{i}" / "arangod.log",
-                    args={
-                        "agency.activate": "true",
-                        "agency.size": str(cluster_cfg.agents),
-                        "agency.supervision": "true",
-                        "server.authentication": "false",  # Start with auth disabled
-                        "agency.my-address": f"tcp://127.0.0.1:{port}",
-                    }
-                )
-                plan.servers.append(agent_config)
-                agent_endpoints.append(f"tcp://127.0.0.1:{port}")
-
-            plan.agency_endpoints = agent_endpoints
-
-            # Add agency endpoints to all agents
-            for server in plan.get_agents():
-                server.args["agency.endpoint"] = ",".join(agent_endpoints)
-
-            # Create database servers
-            for i in range(cluster_cfg.dbservers):
-                port = self.port_manager.allocate_port()  # Allocate any available port
-                dbserver_config = ServerConfig(
-                    role=ServerRole.DBSERVER,
-                    port=port,
-                    data_dir=server_dir(self.deployment_id) / f"dbserver_{i}" / "data",
-                    log_file=server_dir(self.deployment_id) / f"dbserver_{i}" / "arangod.log",
-                    args={
-                        "cluster.my-role": "PRIMARY",
-                        "cluster.my-address": f"tcp://127.0.0.1:{port}",
-                        "cluster.agency-endpoint": ",".join(agent_endpoints),
-                        "server.authentication": "false",
-                    }
-                )
-                plan.servers.append(dbserver_config)
-
-            # Create coordinators
-            coordinator_endpoints = []
-            for i in range(cluster_cfg.coordinators):
-                port = self.port_manager.allocate_port()  # Allocate any available port
-                coordinator_config = ServerConfig(
-                    role=ServerRole.COORDINATOR,
-                    port=port,
-                    data_dir=server_dir(self.deployment_id) / f"coordinator_{i}" / "data",
-                    log_file=server_dir(self.deployment_id) / f"coordinator_{i}" / "arangod.log",
-                    args={
-                        "cluster.my-role": "COORDINATOR",
-                        "cluster.my-address": f"tcp://127.0.0.1:{port}",
-                        "cluster.agency-endpoint": ",".join(agent_endpoints),
-                        "server.authentication": "false",
-                    }
-                )
-                plan.servers.append(coordinator_config)
-                coordinator_endpoints.append(f"http://127.0.0.1:{port}")
-
-            plan.coordination_endpoints = coordinator_endpoints
-
-        else:
-            raise ValueError(f"Unsupported deployment mode: {mode}")
-
+        # Use default cluster config if none provided for cluster mode
+        if mode == DeploymentMode.CLUSTER and cluster_config is None:
+            cluster_config = self.config.cluster
+        
+        plan = self._deployment_planner.create_deployment_plan(
+            deployment_id=self.deployment_id,
+            mode=mode,
+            cluster_config=cluster_config
+        )
+        
         self._deployment_plan = plan
-        logger.info(f"Created deployment plan: {mode.value} with {len(plan.servers)} servers")
         return plan
 
     def deploy_servers(self, timeout: float = 300.0) -> None:
