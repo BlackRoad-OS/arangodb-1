@@ -1,5 +1,5 @@
 /* jshint globalstrict:false, strict:false, maxlen: 200 */
-/* global db, arango, print, assertEqual, assertTrue */
+/* global db, arango, assertEqual, assertTrue */
 
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
@@ -68,12 +68,27 @@ function restSchemaHandlerTestSuite() {
     let cusIndex;
 
     function tearDown() {
-        try { productDescriptionArangoSearch.drop(); } catch (e) {}
-        try { descriptionArangoSearch.drop(); } catch (e) {}
-        try { establishedArangoSearch.drop(); } catch (e) {}
+        try {
+            productDescriptionArangoSearch.drop();
+        } catch (e) {
+        }
+        try {
+            descriptionArangoSearch.drop();
+        } catch (e) {
+        }
+        try {
+            establishedArangoSearch.drop();
+        } catch (e) {
+        }
 
-        try { gm._drop(GRAPH_PURCHASE_HISTORY); } catch (e) {}
-        try { gm._drop(GRAPH_MANUFACTURE); } catch (e) {}
+        try {
+            gm._drop(GRAPH_PURCHASE_HISTORY);
+        } catch (e) {
+        }
+        try {
+            gm._drop(GRAPH_MANUFACTURE);
+        } catch (e) {
+        }
 
         db._drop(EDGE_PURCHASED);
         db._drop(EDGE_MANUFACTURED);
@@ -98,19 +113,19 @@ function restSchemaHandlerTestSuite() {
 
             gm._create(
                 GRAPH_PURCHASE_HISTORY,
-                [ gm._relation(EDGE_PURCHASED, COLLECTION_CUSTOMERS, COLLECTION_PRODUCTS) ],
-                [ COLLECTION_LOGS ] // Orphan collection
+                [gm._relation(EDGE_PURCHASED, COLLECTION_CUSTOMERS, COLLECTION_PRODUCTS)],
+                [COLLECTION_LOGS] // Orphan collection
             );
             gm._create(
                 GRAPH_MANUFACTURE, [
                     gm._relation(EDGE_MANUFACTURED, COLLECTION_COMPANIES, COLLECTION_PRODUCTS),
                     gm._relation(EDGE_CONTAINS, [
                         COLLECTION_PRODUCTS, COLLECTION_SPECIAL_PRODUCTS
-                        ], [
+                    ], [
                         COLLECTION_MATERIALS, COLLECTION_SPECIAL_MATERIALS
                     ])
                 ],
-                [ COLLECTION_LOGS, COLLECTION_SPECIAL_LOGS ] // Orphan collections
+                [COLLECTION_LOGS, COLLECTION_SPECIAL_LOGS] // Orphan collections
             );
 
 
@@ -124,7 +139,7 @@ function restSchemaHandlerTestSuite() {
             });
             customersCollection.save({
                 _key: 'C3', name: 'C3', age: 55,
-                address: { city: 'Berlin', country: 'Germany'},
+                address: {city: 'Berlin', country: 'Germany'},
                 comment: 'Is a student at a University in San Francisco, major is financial'
             });
             customersCollection.save({
@@ -132,14 +147,33 @@ function restSchemaHandlerTestSuite() {
                 comment: 'Used to work in financial industry but now working as a teacher at school'
             });
 
-            productsCollection.save({ _key: 'P1', name: 'P1', price: 499.99, used: false, description: 'Made in Germany and new' });
-            productsCollection.save({ _key: 'P2', name: 'P2', price: 'expensive', description: 'Made in USA and new' });
-            productsCollection.save({ _key: 'P3', name: 'P3', price: 1499, version: '14.5', used: true, description: 'Made in Italy and used' });
-            productsCollection.save({ _key: 'P4', name: 'P4', price: 2499, version: 1, description: 'Made in Japan and used' });
+            productsCollection.save({
+                _key: 'P1',
+                name: 'P1',
+                price: 499.99,
+                used: false,
+                description: 'Made in Germany and new'
+            });
+            productsCollection.save({_key: 'P2', name: 'P2', price: 'expensive', description: 'Made in USA and new'});
+            productsCollection.save({
+                _key: 'P3',
+                name: 'P3',
+                price: 1499,
+                version: '14.5',
+                used: true,
+                description: 'Made in Italy and used'
+            });
+            productsCollection.save({
+                _key: 'P4',
+                name: 'P4',
+                price: 2499,
+                version: 1,
+                description: 'Made in Japan and used'
+            });
 
-            companiesCollection.save({ _key: 'E1', name: 'E1', established: 1990, isPublic: true });
-            companiesCollection.save({ _key: 'E2', name: 'E2', established: '5/2025', isPublic: false });
-            companiesCollection.save({ _key: 'E3', name: 'E3', established: 1990 });
+            companiesCollection.save({_key: 'E1', name: 'E1', established: 1990, isPublic: true});
+            companiesCollection.save({_key: 'E2', name: 'E2', established: '5/2025', isPublic: false});
+            companiesCollection.save({_key: 'E3', name: 'E3', established: 1990});
 
             purchaseHistoryGraph = gm._graph(GRAPH_PURCHASE_HISTORY);
             manufactureGraph = gm._graph(GRAPH_MANUFACTURE);
@@ -147,20 +181,26 @@ function restSchemaHandlerTestSuite() {
             productDescriptionArangoSearch = db._createView(
                 VIEW_PRODUCT_DESCRIPTION,
                 'arangosearch',
-                { links: { products: {
+                {
+                    links: {
+                        products: {
                             includeAllFields: true,
                             analyzers: ['identity'],
-                            fields: { description: { analyzers: ['text_en'] } }
-                } } }
+                            fields: {description: {analyzers: ['text_en']}}
+                        }
+                    }
+                }
             );
             descriptionArangoSearch = db._createView(
                 VIEW_DESCRIPTION,
                 'arangosearch',
-                { links: {
-                        products: { fields: { description: { analyzers: ['text_en'] } } },
+                {
+                    links: {
+                        products: {fields: {description: {analyzers: ['text_en']}}},
                         customers: {
                             analyzers: ['text_en'],
-                            fields: { comment: {} } } // Should inherit 'text_en'
+                            fields: {comment: {}}
+                        } // Should inherit 'text_en'
                     }
                 }
             );
@@ -168,8 +208,9 @@ function restSchemaHandlerTestSuite() {
             establishedArangoSearch = db._createView(
                 VIEW_ESTABLISHED,
                 'arangosearch',
-                { links: {
-                        companies: { fields: { established: {} } } // Should inherit the default analyzer
+                {
+                    links: {
+                        companies: {fields: {established: {}}} // Should inherit the default analyzer
                     }
                 }
             );
@@ -177,7 +218,7 @@ function restSchemaHandlerTestSuite() {
             function createPurchaseEdge(customerKey, productKey, purchaseDate) {
                 purchaseHistoryGraph[EDGE_PURCHASED].save({
                     _from: `${COLLECTION_CUSTOMERS}/${customerKey}`,
-                    _to:   `${COLLECTION_PRODUCTS}/${productKey}`,
+                    _to: `${COLLECTION_PRODUCTS}/${productKey}`,
                     date: purchaseDate
                 });
             }
@@ -185,7 +226,7 @@ function restSchemaHandlerTestSuite() {
             function createManufactureEdge(companyKey, productKey, amount) {
                 manufactureGraph[EDGE_MANUFACTURED].save({
                     _from: `${COLLECTION_COMPANIES}/${companyKey}`,
-                    _to:   `${COLLECTION_PRODUCTS}/${productKey}`,
+                    _to: `${COLLECTION_PRODUCTS}/${productKey}`,
                     amount: amount
                 });
             }
@@ -198,8 +239,8 @@ function restSchemaHandlerTestSuite() {
             createManufactureEdge('E1', 'P1', 1000);
             createManufactureEdge('E2', 'P2', 10);
 
-            prodIndex = productsCollection.ensureIndex({ name: "proInd", type: "persistent", fields: ["price"]});
-            cusIndex = customersCollection.ensureIndex({ name: "cusInd", type: "geo", fields: ["address"]});
+            prodIndex = productsCollection.ensureIndex({name: "proInd", type: "persistent", fields: ["price"]});
+            cusIndex = customersCollection.ensureIndex({name: "cusInd", type: "geo", fields: ["address"]});
         },
 
         tearDownAll: tearDown,
@@ -356,16 +397,16 @@ function restSchemaHandlerTestSuite() {
             assertEqual(estabview.links[0].fields[0].analyzers[0], 'identity', 'analyzer should be inherited from the default analyzer');
         },
 
-        test_WrongHttpMethod_ShouldReturn404: function() {
-            let body = { fake : "fake" };
+        test_WrongHttpMethod_ShouldReturn404: function () {
+            let body = {fake: "fake"};
             paths.forEach(path => {
                 const url = api + path;
                 [
-                    { name: "POST",    fn: () => arango.POST_RAW(url, body) },
-                    { name: "PUT",     fn: () => arango.PUT_RAW(url, body) },
-                    { name: "PATCH",   fn: () => arango.PATCH_RAW(url, body) },
-                    { name: "DELETE",  fn: () => arango.DELETE_RAW(url) }
-                ].forEach(({ name, fn }) => {
+                    {name: "POST", fn: () => arango.POST_RAW(url, body)},
+                    {name: "PUT", fn: () => arango.PUT_RAW(url, body)},
+                    {name: "PATCH", fn: () => arango.PATCH_RAW(url, body)},
+                    {name: "DELETE", fn: () => arango.DELETE_RAW(url)}
+                ].forEach(({name, fn}) => {
                     const doc = fn();
                     //assertEqual(405, doc.code, 'Wrong HTTP method should return 405');
                     assertTrue(doc.code === 405,
@@ -374,7 +415,7 @@ function restSchemaHandlerTestSuite() {
             });
         },
 
-        test_TooManySuffixes_ShouldReturn404: function() {
+        test_TooManySuffixes_ShouldReturn404: function () {
             let tooManySuffixes = ['/collection/products/fake', '/graph/purchaseHistory/fake', '/view/descView/fake'];
             tooManySuffixes.forEach(path => {
                 const doc = arango.GET_RAW(api + path);
@@ -382,12 +423,12 @@ function restSchemaHandlerTestSuite() {
             });
         },
 
-        test_PathWithoutNames_ShouldReturn404: function() {
-          let pathWithoutNames = ['/collection', '/graph', '/view'];
-          pathWithoutNames.forEach(path => {
-              const doc = arango.GET_RAW(api + path);
-              assertEqual(404, doc.code, 'Expected HTTP 404 for paths without names');
-          });
+        test_PathWithoutNames_ShouldReturn404: function () {
+            let pathWithoutNames = ['/collection', '/graph', '/view'];
+            pathWithoutNames.forEach(path => {
+                const doc = arango.GET_RAW(api + path);
+                assertEqual(404, doc.code, 'Expected HTTP 404 for paths without names');
+            });
         },
 
         test_InvalidSampleNumValues_ShouldReturn400: function () {
@@ -424,14 +465,14 @@ function restSchemaHandlerTestSuite() {
 
         test_EmptySampleNum_ShouldReturn200: function () {
             paths.forEach(path => {
-                const doc = arango.GET_RAW(api + path+ '?sampleNum=');
+                const doc = arango.GET_RAW(api + path + '?sampleNum=');
                 assertEqual(200, doc.code, 'Empty sampleNum should default to valid response');
             });
         },
 
         test_EmptyExampleNum_ShouldReturn200: function () {
             paths.forEach(path => {
-                const doc = arango.GET_RAW(api + path + '?exmapleNum=');
+                const doc = arango.GET_RAW(api + path + '?exampleNum=');
                 assertEqual(200, doc.code, 'Empty exampleNum should default to valid response');
             });
         },
@@ -479,7 +520,7 @@ function restSchemaHandlerTestSuite() {
                 const doc = arango.GET_RAW(api + path + '?exampleNum=0');
                 assertEqual(200, doc.code, 'Expected HTTP 200 for exampleNum=0');
                 const body = doc.parsedBody;
-                assertTrue(Array.isArray(body.collections),'collections should be an array');
+                assertTrue(Array.isArray(body.collections), 'collections should be an array');
 
                 body.collections.forEach(coll => {
                     assertTrue(Array.isArray(coll.examples),
@@ -515,15 +556,17 @@ function restSchemaHandlerTestSuite() {
 
             assertTrue(Array.isArray(body.schema), 'schema should be an array');
             const attrMap = {};
-            body.schema.forEach(attr => { attrMap[attr.attribute] = attr; });
+            body.schema.forEach(attr => {
+                attrMap[attr.attribute] = attr;
+            });
             const expectedSchema = {
-                "_id": { types: ["string"], optional: false },
-                "_key": { types: ["string"], optional: false },
-                "description": { types: ["string"], optional: false },
-                "name": { types: ["string"], optional: false },
-                "price": { types: ["string","number"], optional: false },
-                "used": { types: ["bool"], optional: true },
-                "version":{ types: ["string","number"], optional: true }
+                "_id": {types: ["string"], optional: false},
+                "_key": {types: ["string"], optional: false},
+                "description": {types: ["string"], optional: false},
+                "name": {types: ["string"], optional: false},
+                "price": {types: ["string", "number"], optional: false},
+                "used": {types: ["bool"], optional: true},
+                "version": {types: ["string", "number"], optional: true}
             };
             Object.entries(expectedSchema).forEach(([attrName, expected]) => {
                 const actual = attrMap[attrName];
@@ -556,13 +599,15 @@ function restSchemaHandlerTestSuite() {
             assertTrue(Array.isArray(body.schema), 'schema should be an array');
 
             const attrMap = {};
-            body.schema.forEach(attr => { attrMap[attr.attribute] = attr; });
+            body.schema.forEach(attr => {
+                attrMap[attr.attribute] = attr;
+            });
             const expectedSchema = {
-                "_from": { types: ["string"], optional: false },
-                "_id": { types: ["string"], optional: false },
-                "_key": { types: ["string"], optional: false },
-                "_to": { types: ["string"], optional: false },
-                "date": { types: ["string"], optional: false}
+                "_from": {types: ["string"], optional: false},
+                "_id": {types: ["string"], optional: false},
+                "_key": {types: ["string"], optional: false},
+                "_to": {types: ["string"], optional: false},
+                "date": {types: ["string"], optional: false}
             };
             Object.entries(expectedSchema).forEach(([attrName, expected]) => {
                 const actual = attrMap[attrName];
@@ -612,9 +657,9 @@ function restSchemaHandlerTestSuite() {
             assertAttribute(products.schema, '_id', ['string'], false);
             assertAttribute(products.schema, '_key', ['string'], false);
             assertAttribute(products.schema, 'name', ['string'], false);
-            assertAttribute(products.schema, 'price', ['number','string'], false);
+            assertAttribute(products.schema, 'price', ['number', 'string'], false);
             assertAttribute(products.schema, 'used', ['bool'], true);
-            assertAttribute(products.schema, 'version', ['number','string'], true);
+            assertAttribute(products.schema, 'version', ['number', 'string'], true);
             assertTrue(products.examples[0]._id.startsWith('products/'),
                 'Example product _id malformed in graph response');
 
@@ -625,8 +670,8 @@ function restSchemaHandlerTestSuite() {
             assertEqual(4, customers.numOfDocuments);
             assertAttribute(customers.schema, '_id', ['string'], false);
             assertAttribute(customers.schema, '_key', ['string'], false);
-            assertAttribute(customers.schema, 'address', ['string','object'], false);
-            assertAttribute(customers.schema, 'age', ['string','number'], false);
+            assertAttribute(customers.schema, 'address', ['string', 'object'], false);
+            assertAttribute(customers.schema, 'age', ['string', 'number'], false);
             assertAttribute(customers.schema, 'isStudent', ['bool'], true);
             assertAttribute(customers.schema, 'name', ['string'], false);
 
