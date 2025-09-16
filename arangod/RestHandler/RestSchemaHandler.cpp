@@ -310,10 +310,9 @@ Result RestSchemaHandler::getCollection(std::string const& colName,
   bindVars->add("exampleNum", VPackValue(exampleNum));
   bindVars->close();
 
-  auto origin =
-      transaction::OperationOriginREST{"querying collection's schema"};
+  auto origin = transaction::OperationOriginAQL{"querying collection's schema"};
   auto query = aql::Query::create(
-      std::make_shared<transaction::StandaloneContext>(_vocbase, origin),
+      transaction::StandaloneContext::create(_vocbase, origin),
       aql::QueryString{_queryStr}, bindVars,
       aql::QueryOptions{velocypack::Parser::fromJson("{}")->slice()});
 
