@@ -113,12 +113,16 @@ class TestArangoServerLifecycle:
         self.mock_port_allocator = Mock()
         self.mock_port_allocator.allocate_port.return_value = 8529
         self.mock_port_allocator.release_port = Mock()
-        
+
         # Create mock command builder
         self.mock_command_builder = Mock()
         self.mock_command_builder.build_command.return_value = ["/fake/bin/arangod", "--test-arg"]
         self.mock_command_builder.get_repository_root.return_value = Path("/fake/repo")
-        
+
+        # Create mock health checker
+        self.mock_health_checker = Mock()
+        self.mock_health_checker.check_readiness.return_value = True
+
         self.server = ArangoServer(
             server_id="test_server",
             role=ServerRole.SINGLE,
@@ -126,7 +130,8 @@ class TestArangoServerLifecycle:
             config_provider=self.mock_config,
             logger=self.mock_logger,
             port_allocator=self.mock_port_allocator,
-            command_builder=self.mock_command_builder
+            command_builder=self.mock_command_builder,
+            health_checker=self.mock_health_checker
         )
 
     @patch('armadillo.instances.server.start_supervised_process')
@@ -204,8 +209,8 @@ class TestArangoServerConfiguration:
         from armadillo.instances.command_builder import ServerCommandBuilder
         command_builder = ServerCommandBuilder(config_provider=mock_config, logger=mock_logger)
 
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, 
-                                  config_provider=mock_config, 
+        self.server = ArangoServer("test", ServerRole.SINGLE, 8529,
+                                  config_provider=mock_config,
                                   logger=mock_logger,
                                   port_allocator=mock_port_allocator,
                                   command_builder=command_builder)
@@ -262,11 +267,16 @@ class TestArangoServerErrorHandling:
         mock_command_builder.build_command.return_value = ["/fake/bin/arangod", "--test-arg"]
         mock_command_builder.get_repository_root.return_value = Path("/fake/repo")
 
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, 
-                                  config_provider=mock_config, 
+        # Create mock health checker
+        mock_health_checker = Mock()
+        mock_health_checker.check_readiness.return_value = True
+
+        self.server = ArangoServer("test", ServerRole.SINGLE, 8529,
+                                  config_provider=mock_config,
                                   logger=mock_logger,
                                   port_allocator=mock_port_allocator,
-                                  command_builder=mock_command_builder)
+                                  command_builder=mock_command_builder,
+                                  health_checker=mock_health_checker)
 
     @patch('armadillo.instances.server.start_supervised_process')
     def test_start_process_failure(self, mock_start):

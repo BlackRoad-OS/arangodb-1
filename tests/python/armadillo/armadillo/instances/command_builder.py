@@ -10,7 +10,7 @@ from ..core.log import Logger
 
 class CommandBuilder(Protocol):
     """Protocol for command builders to enable dependency injection."""
-    
+
     def build_command(self,
                      server_id: str,
                      role: ServerRole,
@@ -20,7 +20,7 @@ class CommandBuilder(Protocol):
                      config: Optional[ServerConfig] = None) -> List[str]:
         """Build command line arguments for server startup."""
         ...
-    
+
     def get_repository_root(self) -> Path:
         """Get the ArangoDB repository root directory."""
         ...
@@ -28,13 +28,13 @@ class CommandBuilder(Protocol):
 
 class ServerCommandBuilder:
     """Builds ArangoDB server command lines based on role and configuration."""
-    
+
     def __init__(self,
                  config_provider: ConfigProvider,
                  logger: Logger) -> None:
         self._config_provider = config_provider
         self._logger = logger
-    
+
     def build_command(self,
                      server_id: str,
                      role: ServerRole,
@@ -90,9 +90,9 @@ class ServerCommandBuilder:
         self._logger.info(f">>> ARANGOD COMMAND FOR {server_id} <<<")
         self._logger.info(f"Command: {' '.join(command)}")
         self._logger.info(f">>> END ARANGOD COMMAND <<<")
-        
+
         return command
-    
+
     def get_repository_root(self) -> Path:
         """Get the ArangoDB repository root directory."""
         return self._get_repository_root()

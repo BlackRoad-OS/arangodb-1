@@ -20,6 +20,7 @@ from ..core.log import get_logger, Logger
 from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
 from .command_builder import ServerCommandBuilder
+from .health_checker import ServerHealthChecker
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.filesystem import work_dir, server_dir, ensure_dir
@@ -292,7 +293,13 @@ class InstanceManager:
                 config_provider=self.config,
                 logger=self._logger
             )
-            
+
+            # Create health checker for this server
+            health_checker = ServerHealthChecker(
+                logger=self._logger,
+                auth_provider=get_auth_provider()
+            )
+
             server = ArangoServer(
                 server_id=server_id,
                 role=server_config.role,
@@ -301,7 +308,8 @@ class InstanceManager:
                 config_provider=self.config,  # Pass injected config provider
                 logger=self._logger,  # Pass injected logger
                 port_allocator=self.port_manager,  # Pass injected port allocator
-                command_builder=command_builder  # Pass injected command builder
+                command_builder=command_builder,  # Pass injected command builder
+                health_checker=health_checker  # Pass injected health checker
             )
 
             # Set directories from ServerConfig after creation

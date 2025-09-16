@@ -1,7 +1,5 @@
 """ArangoDB server instance wrapper with lifecycle management and health monitoring."""
 
-import asyncio
-import aiohttp
 import time
 from pathlib import Path
 from typing import Optional, Dict, List, Any
@@ -20,6 +18,7 @@ from ..utils.filesystem import server_dir, atomic_write
 from ..utils.ports import allocate_port, release_port, PortAllocator
 from ..utils.auth import get_auth_provider
 from .command_builder import CommandBuilder, ServerCommandBuilder
+from .health_checker import HealthChecker, ServerHealthChecker
 
 logger = get_logger(__name__)
 
@@ -47,7 +46,8 @@ class ArangoServer:
                  config_provider: Optional[ConfigProvider] = None,
                  logger: Optional[Logger] = None,
                  port_allocator: Optional[PortAllocator] = None,
-                 command_builder: Optional[CommandBuilder] = None) -> None:
+                 command_builder: Optional[CommandBuilder] = None,
+                 health_checker: Optional[HealthChecker] = None) -> None:
         self.server_id = server_id
         self.role = role
 
@@ -78,11 +78,16 @@ class ArangoServer:
             config_provider=self._config_provider,
             logger=self._logger
         )
-        self._is_running = False
-        self._process_info: Optional[ProcessInfo] = None
 
         # Authentication
         self.auth_provider = get_auth_provider()
+
+        self._health_checker = health_checker or ServerHealthChecker(
+            logger=self._logger,
+            auth_provider=self.auth_provider
+        )
+        self._is_running = False
+        self._process_info: Optional[ProcessInfo] = None
 
         log_server_event(self._logger, "created", server_id=server_id, role=role.value, port=self.port)
 
@@ -296,77 +301,9 @@ class ArangoServer:
         )
 
     def _check_readiness(self) -> bool:
-        """Check if server is ready to accept connections."""
-        try:
-            # During startup, don't use self.is_running() as it creates circular dependency
-            # Just check if the process is running via supervisor and test HTTP connection
-            if not is_process_running(self.server_id):
-                logger.debug(f"Readiness check failed for {self.server_id}: Process not running")
-                return False
+        """Check if server is ready to accept connections using injected health checker."""
+        return self._health_checker.check_readiness(self.server_id, self.endpoint)
 
-            # Make direct HTTP health check without using self.is_running()
-            health = self._direct_health_check(timeout=2.0)
-            if not health.is_healthy:
-                logger.debug(f"Readiness check failed for {self.server_id}: {health.error_message}")
-            return health.is_healthy
-        except Exception as e:
-            logger.debug(f"Readiness check exception for {self.server_id}: {e}")
-            return False
-
-    def _direct_health_check(self, timeout: float = 5.0) -> HealthStatus:
-        """Direct health check without using self.is_running() to avoid circular dependency."""
-        start_time = time.time()
-
-        try:
-            # Use asyncio.run to make direct HTTP request
-            return asyncio.run(self._async_direct_health_check(timeout))
-        except Exception as e:
-            response_time = time.time() - start_time
-            return HealthStatus(
-                is_healthy=False,
-                response_time=response_time,
-                error_message=f"Direct health check error: {e}"
-            )
-
-    async def _async_direct_health_check(self, timeout: float) -> HealthStatus:
-        """Async direct health check implementation."""
-        start_time = time.time()
-
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-                headers = self.auth_provider.get_auth_headers()
-
-                async with session.get(f"{self.endpoint}/_api/version", headers=headers) as response:
-                    response_time = time.time() - start_time
-
-                    if response.status == 200:
-                        details = await response.json()
-                        return HealthStatus(
-                            is_healthy=True,
-                            response_time=response_time,
-                            details=details
-                        )
-                    else:
-                        return HealthStatus(
-                            is_healthy=False,
-                            response_time=response_time,
-                            error_message=f"HTTP {response.status}: {response.reason}"
-                        )
-
-        except asyncio.TimeoutError:
-            response_time = time.time() - start_time
-            return HealthStatus(
-                is_healthy=False,
-                response_time=response_time,
-                error_message="Connection timeout"
-            )
-        except Exception as e:
-            response_time = time.time() - start_time
-            return HealthStatus(
-                is_healthy=False,
-                response_time=response_time,
-                error_message=f"Connection error: {e}"
-            )
 
     def _cleanup_on_failure(self) -> None:
         """Clean up resources on startup failure."""

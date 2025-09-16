@@ -32,17 +32,17 @@ class TestServerCommandBuilder:
         # Create fake repository structure
         repo_root = tmp_path / "fake_repo"
         repo_root.mkdir()
-        
+
         # Create expected directories
         (repo_root / "js").mkdir()
         (repo_root / "etc").mkdir()
-        
+
         # Update mock config to point to build directory
         build_dir = repo_root / "build"
         build_dir.mkdir()
         bin_dir = build_dir / "bin"
         bin_dir.mkdir()
-        
+
         self.mock_config.bin_dir = bin_dir
         return repo_root
 
@@ -58,28 +58,28 @@ class TestServerCommandBuilder:
 
         assert isinstance(command, list)
         assert len(command) > 0
-        
+
         # Should contain arangod executable
         assert command[0].endswith("arangod")
-        
+
         # Should contain configuration
         assert "--configuration" in command
         assert "etc/testing/arangod-single.conf" in command
-        
+
         # Should contain TOP_DIR
         assert "--define" in command
         top_dir_idx = command.index("--define") + 1
         assert command[top_dir_idx].startswith("TOP_DIR=")
-        
+
         # Should contain endpoint
         assert "--server.endpoint" in command
         endpoint_idx = command.index("--server.endpoint") + 1
         assert "8529" in command[endpoint_idx]
-        
+
         # Should contain directories
         assert "--database.directory" in command
         assert "--javascript.app-path" in command
-        
+
         # Single server specific
         assert "--server.storage-engine" in command
         assert "rocksdb" in command
@@ -96,7 +96,7 @@ class TestServerCommandBuilder:
 
         # Should contain agent configuration
         assert "etc/testing/arangod-agent.conf" in command
-        
+
         # Agent specific parameters
         assert "--agency.activate" in command
         assert "true" in command
@@ -116,7 +116,7 @@ class TestServerCommandBuilder:
 
         # Should contain coordinator configuration
         assert "etc/testing/arangod-coordinator.conf" in command
-        
+
         # Cluster specific parameters
         assert "--cluster.create-waits-for-sync-replication" in command
         assert "false" in command
@@ -135,7 +135,7 @@ class TestServerCommandBuilder:
 
         # Should contain dbserver configuration
         assert "etc/testing/arangod-dbserver.conf" in command
-        
+
         # Cluster specific parameters
         assert "--cluster.create-waits-for-sync-replication" in command
         assert "--cluster.write-concern" in command
@@ -160,7 +160,7 @@ class TestServerCommandBuilder:
         )
 
         command_str = " ".join(command)
-        
+
         # Should contain custom arguments
         assert "--log.level" in command_str
         assert "debug" in command_str
@@ -170,7 +170,7 @@ class TestServerCommandBuilder:
     def test_get_repository_root_from_build_bin(self, setup_repo_structure):
         """Test repository root detection from build/bin directory."""
         repo_root = setup_repo_structure
-        
+
         detected_root = self.builder.get_repository_root()
         assert detected_root == repo_root
 
@@ -178,13 +178,13 @@ class TestServerCommandBuilder:
         """Test repository root detection fallback to current directory."""
         # Mock config with non-existent bin_dir
         self.mock_config.bin_dir = None
-        
+
         # Create fake repo structure in temp dir and change to it
         repo_dir = tmp_path / "repo_cwd_test"
         repo_dir.mkdir()
         (repo_dir / "js").mkdir()
         (repo_dir / "etc").mkdir()
-        
+
         import os
         original_cwd = os.getcwd()
         try:
@@ -198,16 +198,16 @@ class TestServerCommandBuilder:
         """Test repository root detection by searching parent directories."""
         # Mock config with non-existent bin_dir
         self.mock_config.bin_dir = None
-        
+
         # Create nested structure: repo/deep/nested/current
         repo_dir = tmp_path / "repo_parent_test"
         repo_dir.mkdir()
         (repo_dir / "js").mkdir()
         (repo_dir / "etc").mkdir()
-        
+
         nested_dir = repo_dir / "deep" / "nested" / "current"
         nested_dir.mkdir(parents=True)
-        
+
         import os
         original_cwd = os.getcwd()
         try:
@@ -236,7 +236,7 @@ class TestServerCommandBuilder:
 
         # Should have called logger with command information
         self.mock_logger.info.assert_called()
-        
+
         # Check specific log messages
         log_calls = [call.args[0] for call in self.mock_logger.info.call_args_list]
         assert any(">>> ARANGOD COMMAND FOR test_logging <<<" in msg for msg in log_calls)
@@ -246,7 +246,7 @@ class TestServerCommandBuilder:
     def test_binary_path_fallback_when_no_bin_dir(self, setup_repo_structure):
         """Test fallback to 'arangod' in PATH when no bin_dir configured."""
         self.mock_config.bin_dir = None
-        
+
         command = self.builder.build_command(
             server_id="test_fallback",
             role=ServerRole.SINGLE,
@@ -254,6 +254,6 @@ class TestServerCommandBuilder:
             data_dir=Path("/fake/data"),
             app_dir=Path("/fake/apps")
         )
-        
+
         # Should use 'arangod' directly (will likely fail in real usage)
         assert command[0] == "arangod"
