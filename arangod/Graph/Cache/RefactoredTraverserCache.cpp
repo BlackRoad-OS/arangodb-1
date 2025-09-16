@@ -300,7 +300,19 @@ bool RefactoredTraverserCache::appendVertex(
 
   // Vertex not cached -> cache it
   if (!_vertexData.contains(id)) {
-    addVertexToCache(stats, id);
+    if (!addVertexToCache(stats, id)) {
+      // The document was not found, and hence not cached. We could cache the
+      // fact that the document wasn't found in a proper implementation.
+      //
+      // maybe also not just return here :Face-with-rolling-eyes:
+      //
+      // Register a warning. It is okay though but helps the user
+      std::string msg = "vertex '" + id.toString() + "' not found";
+      _query->warnings().registerWarning(TRI_ERROR_ARANGO_DOCUMENT_NOT_FOUND,
+                                         msg.c_str());
+      // This is expected, we may have dangling edges. Interpret as NULL
+      return false;
+    }
   }
 
   // TODO: less evaluations of caching function
@@ -312,15 +324,6 @@ bool RefactoredTraverserCache::appendVertex(
     result.add(lk);
   }
   return true;
-
-  // how do we get here in the original function?
-
-  // Register a warning. It is okay though but helps the user
-  std::string msg = "vertex '" + id.toString() + "' not found";
-  _query->warnings().registerWarning(TRI_ERROR_ARANGO_DOCUMENT_NOT_FOUND,
-                                     msg.c_str());
-  // This is expected, we may have dangling edges. Interpret as NULL
-  return false;
 }
 
 void RefactoredTraverserCache::insertEdgeIntoResult(
