@@ -316,15 +316,7 @@ Result RestSchemaHandler::getCollection(std::string const& colName,
       aql::QueryString{_queryStr}, bindVars,
       aql::QueryOptions{velocypack::Parser::fromJson("{}")->slice()});
 
-  aql::QueryResult qr;
-  try {
-    while (query->execute(qr) == aql::ExecutionState::WAITING) {
-    }
-  } catch (basics::Exception const& e) {
-    return Result{e.code(), std::format("Schema query for {} threw: {}",
-                                        colName, e.what())};
-  }
-
+  aql::QueryResult qr = query->executeSync();
   if (qr.result.fail()) {
     return Result{qr.result.errorNumber(),
                   std::format("Schema query failed for {}: {}", colName,

@@ -363,7 +363,8 @@ ResultT<std::vector<std::unique_ptr<Graph>>> GraphManager::lookupAllGraphs()
   VPackSlice graphs = graphsBuilder.slice();
   if (!graphs.isObject() || !graphs.hasKey("graphs") ||
       !graphs.get("graphs").isArray()) {
-    TRI_ASSERT(graphs.isObject() && graphs.hasKey("graphs") && graphs.get("graphs").isArray());
+    TRI_ASSERT(graphs.isObject() && graphs.hasKey("graphs") &&
+               graphs.get("graphs").isArray());
     return Result{TRI_ERROR_GRAPH_INTERNAL_DATA_CORRUPT,
                   "readGraphs() returned malformed data"};
   }
