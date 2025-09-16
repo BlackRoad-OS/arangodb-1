@@ -56,7 +56,7 @@ def cleanup_global_state():
         reset_port_manager()
     except ImportError:
         pass
-    
+
     # Clean up any resource trackers
     try:
         import armadillo.utils.resource_pool

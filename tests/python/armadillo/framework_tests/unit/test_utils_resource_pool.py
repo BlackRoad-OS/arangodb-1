@@ -22,7 +22,7 @@ class TestResourceTracker:
     def setup_method(self):
         """Set up test environment."""
         self.tracker = ResourceTracker("test_tracker")
-        
+
     def teardown_method(self):
         """Clean up after test."""
         self.tracker.cleanup_all()
@@ -36,9 +36,9 @@ class TestResourceTracker:
     def test_register_resource_type(self):
         """Test registering a resource type with cleanup callback."""
         cleanup_mock = Mock()
-        
+
         self.tracker.register_resource_type("test_type", cleanup_mock)
-        
+
         assert "test_type" in self.tracker._cleanup_callbacks
         assert self.tracker._cleanup_callbacks["test_type"] == cleanup_mock
         assert "test_type" in self.tracker._allocated_resources
@@ -47,10 +47,10 @@ class TestResourceTracker:
         """Test tracking resources."""
         cleanup_mock = Mock()
         self.tracker.register_resource_type("ports", cleanup_mock)
-        
+
         self.tracker.track_resource("ports", 8529)
         self.tracker.track_resource("ports", 8530)
-        
+
         tracked = self.tracker.get_tracked_resources("ports")
         assert 8529 in tracked
         assert 8530 in tracked
@@ -60,11 +60,11 @@ class TestResourceTracker:
         """Test untracking resources."""
         cleanup_mock = Mock()
         self.tracker.register_resource_type("ports", cleanup_mock)
-        
+
         self.tracker.track_resource("ports", 8529)
         self.tracker.track_resource("ports", 8530)
         self.tracker.untrack_resource("ports", 8529)
-        
+
         tracked = self.tracker.get_tracked_resources("ports")
         assert 8529 not in tracked
         assert 8530 in tracked
@@ -74,17 +74,17 @@ class TestResourceTracker:
         """Test cleaning up a specific resource type."""
         cleanup_mock = Mock()
         self.tracker.register_resource_type("ports", cleanup_mock)
-        
+
         self.tracker.track_resource("ports", 8529)
         self.tracker.track_resource("ports", 8530)
-        
+
         self.tracker.cleanup_type("ports")
-        
+
         # Cleanup callback should be called with tracked resources
         cleanup_mock.assert_called_once()
         args = cleanup_mock.call_args[0][0]  # First argument (list of resources)
         assert set(args) == {8529, 8530}
-        
+
         # Resources should be cleared
         assert len(self.tracker.get_tracked_resources("ports")) == 0
 
@@ -92,15 +92,15 @@ class TestResourceTracker:
         """Test cleaning up all resource types."""
         port_cleanup = Mock()
         file_cleanup = Mock()
-        
+
         self.tracker.register_resource_type("ports", port_cleanup)
         self.tracker.register_resource_type("files", file_cleanup)
-        
+
         self.tracker.track_resource("ports", 8529)
         self.tracker.track_resource("files", "/tmp/test")
-        
+
         self.tracker.cleanup_all()
-        
+
         port_cleanup.assert_called_once_with([8529])
         file_cleanup.assert_called_once_with(["/tmp/test"])
 
@@ -108,18 +108,18 @@ class TestResourceTracker:
         """Test that cleanup continues even if one callback fails."""
         def failing_cleanup(resources):
             raise Exception("Cleanup failed")
-        
+
         port_cleanup = Mock()
-        
+
         self.tracker.register_resource_type("failing", failing_cleanup)
         self.tracker.register_resource_type("ports", port_cleanup)
-        
+
         self.tracker.track_resource("failing", "test")
         self.tracker.track_resource("ports", 8529)
-        
+
         # Should not raise exception
         self.tracker.cleanup_all()
-        
+
         # Successful cleanup should still be called
         port_cleanup.assert_called_once_with([8529])
 
@@ -127,29 +127,29 @@ class TestResourceTracker:
         """Test tracking resource without prior type registration."""
         # Should create the resource type automatically
         self.tracker.track_resource("new_type", "resource")
-        
+
         tracked = self.tracker.get_tracked_resources("new_type")
         assert "resource" in tracked
 
     def test_thread_safety(self):
         """Test that resource tracker is thread-safe."""
         pytest.skip("Threading is globally mocked - test requires real threads")
-        
+
         cleanup_mock = Mock()
         self.tracker.register_resource_type("ports", cleanup_mock)
-        
+
         def track_resources(start_port):
             for i in range(10):
                 self.tracker.track_resource("ports", start_port + i)
-        
+
         thread1 = threading.Thread(target=track_resources, args=(8000,))
         thread2 = threading.Thread(target=track_resources, args=(9000,))
-        
+
         thread1.start()
         thread2.start()
         thread1.join()
         thread2.join()
-        
+
         tracked = self.tracker.get_tracked_resources("ports")
         # Should have all 20 ports tracked
         assert len(tracked) == 20
@@ -162,7 +162,7 @@ class TestPortPool:
         """Set up test environment."""
         self.mock_port_manager = Mock(spec=PortManager)
         self.mock_resource_tracker = Mock()
-        
+
         self.pool = PortPool(
             port_manager=self.mock_port_manager,
             resource_tracker=self.mock_resource_tracker,
@@ -178,9 +178,9 @@ class TestPortPool:
     def test_acquire_port(self):
         """Test acquiring a single port."""
         self.mock_port_manager.allocate_port.return_value = 8529
-        
+
         port = self.pool.acquire(preferred=8529)
-        
+
         assert port == 8529
         self.mock_port_manager.allocate_port.assert_called_once_with(8529)
         self.mock_resource_tracker.track_resource.assert_called_once_with("ports", 8529)
@@ -188,12 +188,12 @@ class TestPortPool:
     def test_acquire_multiple_ports(self):
         """Test acquiring multiple ports."""
         self.mock_port_manager.allocate_ports.return_value = [8529, 8530, 8531]
-        
+
         ports = self.pool.acquire_multiple(3)
-        
+
         assert ports == [8529, 8530, 8531]
         self.mock_port_manager.allocate_ports.assert_called_once_with(3)
-        
+
         # Should track each port individually
         expected_calls = [
             call("ports", 8529),
@@ -205,18 +205,18 @@ class TestPortPool:
     def test_release_port(self):
         """Test releasing a single port."""
         self.pool.release(8529)
-        
+
         self.mock_port_manager.release_port.assert_called_once_with(8529)
         self.mock_resource_tracker.untrack_resource.assert_called_once_with("ports", 8529)
 
     def test_release_multiple_ports(self):
         """Test releasing multiple ports."""
         ports = [8529, 8530, 8531]
-        
+
         self.pool.release_multiple(ports)
-        
+
         self.mock_port_manager.release_ports.assert_called_once_with(ports)
-        
+
         # Should untrack each port individually
         expected_calls = [
             call("ports", 8529),
@@ -228,52 +228,52 @@ class TestPortPool:
     def test_acquire_context_manager(self):
         """Test port acquisition with context manager."""
         self.mock_port_manager.allocate_port.return_value = 8529
-        
+
         with self.pool.acquire_context(preferred=8529) as port:
             assert port == 8529
             self.mock_port_manager.allocate_port.assert_called_once_with(8529)
-        
+
         # Should release port after context
         self.mock_port_manager.release_port.assert_called_once_with(8529)
 
     def test_acquire_multiple_context_manager(self):
         """Test multiple port acquisition with context manager."""
         self.mock_port_manager.allocate_ports.return_value = [8529, 8530]
-        
+
         with self.pool.acquire_multiple_context(2) as ports:
             assert ports == [8529, 8530]
             self.mock_port_manager.allocate_ports.assert_called_once_with(2)
-        
+
         # Should release ports after context
         self.mock_port_manager.release_ports.assert_called_once_with([8529, 8530])
 
     def test_get_allocated_ports(self):
         """Test getting allocated ports."""
         self.mock_resource_tracker.get_tracked_resources.return_value = [8529, 8530]
-        
+
         allocated = self.pool.get_allocated_ports()
-        
+
         assert allocated == [8529, 8530]
         self.mock_resource_tracker.get_tracked_resources.assert_called_once_with("ports")
 
     def test_cleanup_all_ports(self):
         """Test cleaning up all allocated ports."""
         self.pool.cleanup_all_ports()
-        
+
         self.mock_resource_tracker.cleanup_type.assert_called_once_with("ports")
 
     def test_shutdown(self):
         """Test pool shutdown."""
         self.pool.shutdown()
-        
+
         self.mock_resource_tracker.cleanup_all.assert_called_once()
 
     def test_is_port_available(self):
         """Test checking port availability."""
         self.mock_port_manager.is_port_available.return_value = True
-        
+
         available = self.pool.is_port_available(8529)
-        
+
         assert available is True
         self.mock_port_manager.is_port_available.assert_called_once_with(8529)
 
@@ -284,7 +284,7 @@ class TestManagedPortPool:
     def setup_method(self):
         """Set up test environment."""
         self.temp_dir = Path(tempfile.mkdtemp())
-        
+
     def teardown_method(self):
         """Clean up after test."""
         # Clean up temp directory
@@ -296,7 +296,7 @@ class TestManagedPortPool:
         """Test creating managed pool with persistence."""
         mock_port_manager = Mock()
         mock_port_manager_class.return_value = mock_port_manager
-        
+
         pool = ManagedPortPool(
             base_port=9000,
             max_ports=500,
@@ -304,10 +304,10 @@ class TestManagedPortPool:
             enable_persistence=True,
             work_dir=self.temp_dir
         )
-        
+
         # Should create PortManager with correct parameters
         mock_port_manager_class.assert_called_once_with(base_port=9000, max_ports=500)
-        
+
         # Should set reservation file
         expected_file = self.temp_dir / "port_reservations_test_managed.txt"
         mock_port_manager.set_reservation_file.assert_called_once_with(expected_file)
@@ -317,7 +317,7 @@ class TestManagedPortPool:
         """Test creating managed pool without persistence."""
         mock_port_manager = Mock()
         mock_port_manager_class.return_value = mock_port_manager
-        
+
         pool = ManagedPortPool(
             base_port=9000,
             max_ports=500,
@@ -325,7 +325,7 @@ class TestManagedPortPool:
             enable_persistence=False,
             work_dir=None
         )
-        
+
         # Should not set reservation file
         mock_port_manager.set_reservation_file.assert_not_called()
 
@@ -334,7 +334,7 @@ class TestManagedPortPool:
     def test_atexit_registration(self, mock_port_manager_class, mock_atexit):
         """Test that shutdown is registered with atexit."""
         pool = ManagedPortPool(name="test_atexit")
-        
+
         # Should register shutdown method
         mock_atexit.assert_called_once()
         # The registered function should be the shutdown method
@@ -348,7 +348,7 @@ class TestPortPoolUtilities:
     def setup_method(self):
         """Set up test environment."""
         self.temp_dir = Path(tempfile.mkdtemp())
-        
+
     def teardown_method(self):
         """Clean up after test."""
         import shutil
@@ -359,14 +359,14 @@ class TestPortPoolUtilities:
         """Test creating isolated port pool."""
         mock_pool = Mock()
         mock_managed_pool_class.return_value = mock_pool
-        
+
         pool = create_isolated_port_pool(
             name="test_isolated",
             base_port=9000,
             max_ports=500,
             work_dir=self.temp_dir
         )
-        
+
         mock_managed_pool_class.assert_called_once_with(
             base_port=9000,
             max_ports=500,
@@ -374,7 +374,7 @@ class TestPortPoolUtilities:
             enable_persistence=True,
             work_dir=self.temp_dir
         )
-        
+
         assert pool == mock_pool
 
     @patch('armadillo.utils.resource_pool.ManagedPortPool')
@@ -382,13 +382,13 @@ class TestPortPoolUtilities:
         """Test creating ephemeral port pool."""
         mock_pool = Mock()
         mock_managed_pool_class.return_value = mock_pool
-        
+
         pool = create_ephemeral_port_pool(
             name="test_ephemeral",
             base_port=9000,
             max_ports=500
         )
-        
+
         mock_managed_pool_class.assert_called_once_with(
             base_port=9000,
             max_ports=500,
@@ -396,7 +396,7 @@ class TestPortPoolUtilities:
             enable_persistence=False,
             work_dir=None
         )
-        
+
         assert pool == mock_pool
 
 
@@ -413,7 +413,7 @@ class TestPortPoolIntegration:
             name="integration_test",
             enable_persistence=False
         )
-        
+
     def teardown_method(self):
         """Clean up after test."""
         self.pool.shutdown()
@@ -422,17 +422,17 @@ class TestPortPoolIntegration:
         """Test real port allocation and release."""
         # Acquire a port
         port = self.pool.acquire()
-        
+
         assert port >= self.base_port
         assert port < self.base_port + 100
-        
+
         # Port should be tracked
         allocated = self.pool.get_allocated_ports()
         assert port in allocated
-        
+
         # Release the port
         self.pool.release(port)
-        
+
         # Port should no longer be tracked
         allocated_after = self.pool.get_allocated_ports()
         assert port not in allocated_after
@@ -443,7 +443,7 @@ class TestPortPoolIntegration:
             # Port should be allocated
             allocated = self.pool.get_allocated_ports()
             assert port in allocated
-        
+
         # After context, port should be released
         allocated_after = self.pool.get_allocated_ports()
         assert port not in allocated_after
@@ -453,12 +453,12 @@ class TestPortPoolIntegration:
         # Allocate several ports
         port1 = self.pool.acquire()
         port2 = self.pool.acquire()
-        
+
         assert len(self.pool.get_allocated_ports()) == 2
-        
+
         # Shutdown should clean up all ports
         self.pool.shutdown()
-        
-        # All ports should be released (though we can't easily verify 
+
+        # All ports should be released (though we can't easily verify
         # the internal state after shutdown, the test passes if no exceptions)
         # This mainly tests that shutdown doesn't crash

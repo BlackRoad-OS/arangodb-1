@@ -484,17 +484,17 @@ class TestGlobalPortManager:
         """Test module-level reset_port_manager function."""
         from armadillo.utils.ports import reset_port_manager
         import armadillo.utils.ports
-        
+
         # Set up a mock manager in the global variable
         mock_manager = Mock()
         armadillo.utils.ports._port_manager = mock_manager
-        
+
         # Call reset_port_manager
         reset_port_manager()
-        
+
         # Should clear reservations and reset global manager
         mock_manager.clear_reservations.assert_called_once()
-        
+
         # Check that global manager is reset to None
         assert armadillo.utils.ports._port_manager is None
 
