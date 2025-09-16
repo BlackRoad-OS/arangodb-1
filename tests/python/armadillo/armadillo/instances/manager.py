@@ -19,9 +19,8 @@ from ..core.errors import (
 from ..core.log import get_logger, Logger
 from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
-from .command_builder import ServerCommandBuilder
-from .health_checker import ServerHealthChecker
 from .deployment_planner import DeploymentPlanner, StandardDeploymentPlanner
+from .server_factory import ServerFactory, StandardServerFactory
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.filesystem import work_dir, server_dir, ensure_dir
@@ -55,7 +54,7 @@ class DeploymentPlan:
 class InstanceManager:
     """Manages lifecycle of multiple ArangoDB server instances."""
 
-    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None, port_allocator: Optional[PortAllocator] = None, deployment_planner: Optional[DeploymentPlanner] = None) -> None:
+    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None, port_allocator: Optional[PortAllocator] = None, deployment_planner: Optional[DeploymentPlanner] = None, server_factory: Optional[ServerFactory] = None) -> None:
         """Initialize instance manager.
 
         Args:
@@ -64,17 +63,25 @@ class InstanceManager:
             logger: Logger instance (uses global logger if None)
             port_allocator: Port allocator (uses global manager if None)
             deployment_planner: Deployment planner (creates standard planner if None)
+            server_factory: Server factory (creates standard factory if None)
         """
         self.deployment_id = deployment_id
         self.config = config_provider or get_config()
         self._logger = logger or get_logger(__name__)
         self.port_manager = port_allocator or get_port_manager()
         self.auth_provider = get_auth_provider()
-        
+
         # Create deployment planner with injected dependencies
         self._deployment_planner = deployment_planner or StandardDeploymentPlanner(
             port_allocator=self.port_manager,
             logger=self._logger
+        )
+
+        # Create server factory with injected dependencies
+        self._server_factory = server_factory or StandardServerFactory(
+            config_provider=self.config,
+            logger=self._logger,
+            port_allocator=self.port_manager
         )
 
         # Instance state
@@ -122,13 +129,13 @@ class InstanceManager:
         # Use default cluster config if none provided for cluster mode
         if mode == DeploymentMode.CLUSTER and cluster_config is None:
             cluster_config = self.config.cluster
-        
+
         plan = self._deployment_planner.create_deployment_plan(
             deployment_id=self.deployment_id,
             mode=mode,
             cluster_config=cluster_config
         )
-        
+
         self._deployment_plan = plan
         return plan
 
@@ -184,77 +191,13 @@ class InstanceManager:
                 raise ServerStartupError(f"Failed to deploy servers: {e}")
 
     def _create_server_instances(self) -> None:
-        """Create ArangoServer instances from ServerConfig objects."""
+        """Create ArangoServer instances using injected server factory."""
         if not self._deployment_plan:
             raise ServerError("No deployment plan available")
 
-        # Define a minimal config class to pass only needed data to ArangoServer
-        @dataclass
-        class MinimalConfig:
-            args: dict
-            memory_limit_mb: Optional[int] = None
-            startup_timeout: float = 30.0
-
-        self._servers = {}
-
-        for i, server_config in enumerate(self._deployment_plan.servers):
-            # Create server ID based on role and index
-            if server_config.role == ServerRole.AGENT:
-                server_id = f"agent_{i}"
-            elif server_config.role == ServerRole.DBSERVER:
-                server_id = f"dbserver_{i}"
-            elif server_config.role == ServerRole.COORDINATOR:
-                server_id = f"coordinator_{i}"
-            else:
-                server_id = f"server_{i}"
-
-            # Create ArangoServer instance with explicit port value
-            # Extract the integer port from server_config to avoid any object reference issues
-            port_value = server_config.port
-            if not isinstance(port_value, int):
-                raise ServerError(f"Invalid port type for {server_id}: {type(port_value)} (expected int)")
-
-            # Create a minimal config object with just the needed data to avoid port overrides
-            minimal_config = MinimalConfig(
-                args=server_config.args.copy(),
-                memory_limit_mb=server_config.memory_limit_mb,
-                startup_timeout=server_config.startup_timeout
-            )
-
-            # Create command builder for this server
-            command_builder = ServerCommandBuilder(
-                config_provider=self.config,
-                logger=self._logger
-            )
-
-            # Create health checker for this server
-            health_checker = ServerHealthChecker(
-                logger=self._logger,
-                auth_provider=get_auth_provider()
-            )
-
-            server = ArangoServer(
-                server_id=server_id,
-                role=server_config.role,
-                port=port_value,  # Use explicit integer port value
-                config=minimal_config,  # Only pass needed configuration data
-                config_provider=self.config,  # Pass injected config provider
-                logger=self._logger,  # Pass injected logger
-                port_allocator=self.port_manager,  # Pass injected port allocator
-                command_builder=command_builder,  # Pass injected command builder
-                health_checker=health_checker  # Pass injected health checker
-            )
-
-            # Set directories from ServerConfig after creation
-            server.data_dir = server_config.data_dir
-            server.log_file = server_config.log_file
-
-            # Store the full ServerConfig for reference
-            server._server_config = server_config
-
-            self._servers[server_id] = server
-
-            logger.debug(f"Created server instance {server_id} with role {server_config.role.value} on port {port_value}")
+        self._servers = self._server_factory.create_server_instances(
+            self._deployment_plan.servers
+        )
 
     def shutdown_deployment(self, timeout: float = 120.0) -> None:
         """Shutdown all deployed servers.

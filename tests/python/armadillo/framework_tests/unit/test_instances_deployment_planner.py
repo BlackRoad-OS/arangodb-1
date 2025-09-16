@@ -67,7 +67,7 @@ class TestStandardDeploymentPlanner:
         )
 
         assert plan.deployment_mode == DeploymentMode.CLUSTER
-        
+
         # Default cluster config: 3 agents, 3 dbservers, 1 coordinator
         total_servers = 3 + 3 + 1  # agents + dbservers + coordinators
         assert len(plan.servers) == total_servers
@@ -190,7 +190,7 @@ class TestStandardDeploymentPlanner:
         agents = plan.get_agents()
         expected_agency_endpoints = [
             "tcp://127.0.0.1:8529",
-            "tcp://127.0.0.1:8530", 
+            "tcp://127.0.0.1:8530",
             "tcp://127.0.0.1:8531"
         ]
 

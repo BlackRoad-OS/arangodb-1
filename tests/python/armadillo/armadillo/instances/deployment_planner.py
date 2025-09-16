@@ -11,7 +11,7 @@ from ..utils.filesystem import server_dir
 
 class DeploymentPlanner(Protocol):
     """Protocol for deployment planners to enable dependency injection."""
-    
+
     def create_deployment_plan(self,
                              deployment_id: str,
                              mode: DeploymentMode,
@@ -22,13 +22,13 @@ class DeploymentPlanner(Protocol):
 
 class StandardDeploymentPlanner:
     """Creates deployment plans for ArangoDB server configurations."""
-    
+
     def __init__(self,
                  port_allocator: PortAllocator,
                  logger: Logger) -> None:
         self._port_allocator = port_allocator
         self._logger = logger
-    
+
     def create_deployment_plan(self,
                              deployment_id: str,
                              mode: DeploymentMode,
@@ -47,7 +47,7 @@ class StandardDeploymentPlanner:
             ValueError: If deployment mode is not supported
         """
         from ..instances.manager import DeploymentPlan  # Avoid circular import
-        
+
         plan = DeploymentPlan(deployment_mode=mode)
 
         if mode == DeploymentMode.SINGLE_SERVER:
