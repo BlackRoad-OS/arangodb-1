@@ -1,5 +1,5 @@
 /* jshint globalstrict:false, strict:false, maxlen: 200 */
-/* global db, arango, assertEqual, assertTrue */
+/* global db, arango, print, assertEqual, assertTrue */
 
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
@@ -51,6 +51,7 @@ function restSchemaHandlerTestSuite() {
 
     const VIEW_PRODUCT_DESCRIPTION = 'productDescView';
     const VIEW_DESCRIPTION = 'descView';
+    const VIEW_ESTABLISHED = 'establishedView';
 
     let customersCollection;
     let productsCollection;
@@ -61,6 +62,7 @@ function restSchemaHandlerTestSuite() {
 
     let productDescriptionArangoSearch;
     let descriptionArangoSearch;
+    let establishedArangoSearch;
 
     let prodIndex;
     let cusIndex;
@@ -68,6 +70,7 @@ function restSchemaHandlerTestSuite() {
     function tearDown() {
         try { productDescriptionArangoSearch.drop(); } catch (e) {}
         try { descriptionArangoSearch.drop(); } catch (e) {}
+        try { establishedArangoSearch.drop(); } catch (e) {}
 
         try { gm._drop(GRAPH_PURCHASE_HISTORY); } catch (e) {}
         try { gm._drop(GRAPH_MANUFACTURE); } catch (e) {}
@@ -155,7 +158,18 @@ function restSchemaHandlerTestSuite() {
                 'arangosearch',
                 { links: {
                         products: { fields: { description: { analyzers: ['text_en'] } } },
-                        customers: { fields: { comment: { analyzers: ['text_en'] } } }
+                        customers: {
+                            analyzers: ['text_en'],
+                            fields: { comment: {} } } // Should inherit 'text_en'
+                    }
+                }
+            );
+
+            establishedArangoSearch = db._createView(
+                VIEW_ESTABLISHED,
+                'arangosearch',
+                { links: {
+                        companies: { fields: { established: {} } } // Should inherit the default analyzer
                     }
                 }
             );
@@ -336,6 +350,10 @@ function restSchemaHandlerTestSuite() {
             const descView = body.views.find(v => v.viewName === 'descView');
             assertTrue(descView, 'descView should exist');
             assertEqual(descView.links.length, 2, 'descView should have 2 links');
+
+            const estabview = body.views.find(v => v.viewName === 'establishedView');
+            assertTrue(estabview, 'estabView should exist');
+            assertEqual(estabview.links[0].fields[0].analyzers[0], 'identity', 'analyzer should be inherited from the default analyzer');
         },
 
         test_WrongHttpMethod_ShouldReturn404: function() {
@@ -736,6 +754,21 @@ function restSchemaHandlerTestSuite() {
                 'View field analyzer mismatch for productDescView');
             assertEqual('identity', vProdView.links[0].allAttributeAnalyzers[0],
                 'View allAttributeAnalyzers mismatch for productDescView');
+        },
+
+        test_GetViewBlankAnalyers_ShouldReturnInheritedAnalyzers: function () {
+            const doc = arango.GET_RAW(api + '/view/establishedView');
+            assertEqual(200, doc.code, 'Expected HTTP 200 for view/establishedDescView');
+            const body = doc.parsedBody;
+            const vEstaView = body.views[0];
+            assertTrue(Array.isArray(vEstaView.links),
+                'View links should be an array for establishedDescView');
+
+            assertEqual(1, vEstaView.links.length, 'There should be only 1 link');
+            assertEqual('established', vEstaView.links[0].fields[0].attribute,
+                'View field attribute mismatch for establishedView');
+            assertEqual('identity', vEstaView.links[0].fields[0].analyzers[0],
+                'View field analyzer mismatch for establishedView');
         }
     };
 }
