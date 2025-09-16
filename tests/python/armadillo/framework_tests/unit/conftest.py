@@ -15,15 +15,19 @@ def cleanup_logging():
     """Clean up logging system after each test."""
     yield
 
-    # Use the new reset_logging function for proper cleanup
+    # Use the new unified test environment reset for comprehensive cleanup
     try:
-        from armadillo.core.log import reset_logging
-        reset_logging()
+        from armadillo.testing import reset_test_environment
+        reset_test_environment()
     except ImportError:
-        # Fallback to manual cleanup if import fails
-        pass
+        # Fallback to individual cleanup functions
+        try:
+            from armadillo.core.log import reset_logging
+            reset_logging()
+        except ImportError:
+            pass
 
-    # Clean up all loggers
+    # Additional manual cleanup for backward compatibility
     logger_dict = logging.Logger.manager.loggerDict
     for name in list(logger_dict.keys()):
         if name.startswith('armadillo'):
@@ -47,22 +51,22 @@ def cleanup_logging():
 
 @pytest.fixture(autouse=True)
 def cleanup_global_state():
-    """Clean up global state after each test."""
+    """Clean up global state after each test.
+
+    Note: Most cleanup is now handled by reset_test_environment() in cleanup_logging.
+    This fixture provides additional manual cleanup for backward compatibility.
+    """
     yield
 
-    # Clean up global port manager
-    try:
-        from armadillo.utils.ports import reset_port_manager
-        reset_port_manager()
-    except ImportError:
-        pass
+    # Additional global state cleanup beyond what reset_test_environment does
+    # (Most cleanup is already done by cleanup_logging -> reset_test_environment)
 
-    # Clean up any resource trackers
+    # Clean up any lingering resource trackers that might not be managed by the new system
     try:
         import armadillo.utils.resource_pool
         # Resource pools should clean themselves up via atexit, but force cleanup for tests
         import atexit
-        # Trigger any pending atexit handlers
+        # Trigger any pending atexit handlers if needed
         pass
     except ImportError:
         pass
