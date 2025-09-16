@@ -943,7 +943,6 @@ futures::Future<futures::Unit> Query::execute(
             // cache low-level pointer to avoid repeated shared-ptr-derefs
             TRI_ASSERT(queryResult.data != nullptr);
             auto& resultBuilder = *queryResult.data;
-            //size_t previousLength = resultBuilder.bufferRef().byteSize();
             auto& vpackOpts = vpackOptions();
 
             size_t const n = block->numRows();
@@ -956,13 +955,6 @@ futures::Future<futures::Unit> Query::execute(
                                  /*allowUnindexed*/ true);
               }
             }
-
-            // newLength = resultBuilder.bufferRef().byteSize();
-            //TRI_ASSERT(newLength >= previousLength);
-            //size_t diff = newLength - previousLength;
-
-            //_resourceMonitor->increaseMemoryUsage(diff);
-            //_resultMemoryUsage += diff;
           }
 
           if (state == ExecutorState::DONE) {
@@ -1502,12 +1494,9 @@ QueryResult Query::explain() {
         _queryOptions.verbosePlans, _queryOptions.explainInternals,
         _queryOptions.explainRegisters == ExplainRegisterPlan::Yes);
 
-    //ResourceUsageScope scope(*_resourceMonitor);
-
     if (_queryOptions.allPlans) {
       VPackArrayBuilder guard(result.data.get());
 
-      //size_t previousSize = result.data->bufferRef().byteSize();
       auto const& plans = opt.getPlans();
       for (auto& it : plans) {
         auto& pln = it.first;
@@ -1523,11 +1512,6 @@ QueryResult Query::explain() {
         TRI_IF_FAILURE("Query::serializePlans1") {
           THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
         }
-
-        // memory accounting for different execution plans
-        //size_t currentSize = result.data->bufferRef().byteSize();
-        //scope.increase(currentSize - previousSize);
-        //previousSize = currentSize;
 
         TRI_IF_FAILURE("Query::serializePlans2") {
           THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
@@ -1550,8 +1534,6 @@ QueryResult Query::explain() {
       TRI_IF_FAILURE("Query::serializePlans1") {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
       }
-
-      //scope.increase(result.data->bufferRef().byteSize());
 
       TRI_IF_FAILURE("Query::serializePlans2") {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
@@ -1580,9 +1562,6 @@ QueryResult Query::explain() {
         }
       }
     }
-
-    // the query object no owns the memory used by the plan(s)
-    //_planMemoryUsage += scope.trackedAndSteal();
 
     // technically no need to commit, as we are only explaining here
     auto commitResult = _trx->commit();
