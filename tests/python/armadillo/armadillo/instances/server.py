@@ -14,7 +14,7 @@ from ..core.errors import (
 )
 from ..core.config import get_config, ConfigProvider
 from ..core.process import start_supervised_process, stop_supervised_process, is_process_running, ProcessInfo
-from ..core.log import get_logger, log_server_event
+from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import server_dir, atomic_write
 from ..utils.ports import allocate_port, release_port
@@ -43,7 +43,8 @@ class ArangoServer:
                  role: ServerRole = ServerRole.SINGLE,
                  port: Optional[int] = None,
                  config: Optional[ServerConfig] = None,
-                 config_provider: Optional[ConfigProvider] = None) -> None:
+                 config_provider: Optional[ConfigProvider] = None,
+                 logger: Optional[Logger] = None) -> None:
         self.server_id = server_id
         self.role = role
 
@@ -67,13 +68,14 @@ class ArangoServer:
         # Server configuration
         self.config = config
         self._config_provider = config_provider or get_config()
+        self._logger = logger or get_logger(__name__)
         self._is_running = False
         self._process_info: Optional[ProcessInfo] = None
 
         # Authentication
         self.auth_provider = get_auth_provider()
 
-        log_server_event(logger, "created", server_id=server_id, role=role.value, port=self.port)
+        log_server_event(self._logger, "created", server_id=server_id, role=role.value, port=self.port)
 
     def start(self, timeout: Optional[float] = None) -> None:
         """Start the ArangoDB server."""
@@ -82,7 +84,7 @@ class ArangoServer:
 
         effective_timeout = clamp_timeout(timeout or 30.0, f"server_start_{self.server_id}")
 
-        log_server_event(logger, "starting", server_id=self.server_id)
+        log_server_event(self._logger, "starting", server_id=self.server_id)
 
         try:
             with timeout_scope(effective_timeout, f"start_server_{self.server_id}"):
@@ -101,11 +103,11 @@ class ArangoServer:
                 )
 
                 self._is_running = True
-                log_server_event(logger, "started", server_id=self.server_id,
+                log_server_event(self._logger, "started", server_id=self.server_id,
                                pid=self._process_info.pid)
 
         except Exception as e:
-            log_server_event(logger, "start_failed", server_id=self.server_id, error=str(e))
+            log_server_event(self._logger, "start_failed", server_id=self.server_id, error=str(e))
             # Clean up on failure
             self._cleanup_on_failure()
             raise ServerStartupError(f"Failed to start server {self.server_id}: {e}") from e
@@ -113,16 +115,16 @@ class ArangoServer:
     def stop(self, graceful: bool = True, timeout: float = 30.0) -> None:
         """Stop the ArangoDB server."""
         if not self._is_running:
-            logger.warning(f"Server {self.server_id} is not running")
+            self._logger.warning(f"Server {self.server_id} is not running")
             return
 
-        log_server_event(logger, "stopping", server_id=self.server_id, graceful=graceful)
+        log_server_event(self._logger, "stopping", server_id=self.server_id, graceful=graceful)
 
         try:
             stop_supervised_process(self.server_id, graceful=graceful, timeout=timeout)
-            log_server_event(logger, "stopped", server_id=self.server_id)
+            log_server_event(self._logger, "stopped", server_id=self.server_id)
         except Exception as e:
-            log_server_event(logger, "stop_failed", server_id=self.server_id, error=str(e))
+            log_server_event(self._logger, "stop_failed", server_id=self.server_id, error=str(e))
             raise ServerShutdownError(f"Failed to stop server {self.server_id}: {e}") from e
         finally:
             self._is_running = False
@@ -132,23 +134,23 @@ class ArangoServer:
 
     def restart(self, wait_ready: bool = True, timeout: float = 30.0) -> None:
         """Restart the ArangoDB server."""
-        log_server_event(logger, "restarting", server_id=self.server_id)
+        log_server_event(self._logger, "restarting", server_id=self.server_id)
 
         if self._is_running:
             self.stop(timeout=timeout / 2)
 
         self.start(timeout=timeout / 2)
 
-        log_server_event(logger, "restarted", server_id=self.server_id)
+        log_server_event(self._logger, "restarted", server_id=self.server_id)
 
     def is_running(self) -> bool:
         """Check if server process is running."""
         if not self._is_running:
-            logger.debug(f"is_running({self.server_id}): _is_running=False")
+            self._logger.debug(f"is_running({self.server_id}): _is_running=False")
             return False
 
         supervisor_result = is_process_running(self.server_id)
-        logger.debug(f"is_running({self.server_id}): _is_running=True, supervisor={supervisor_result}")
+        self._logger.debug(f"is_running({self.server_id}): _is_running=True, supervisor={supervisor_result}")
         return supervisor_result
 
     async def health_check(self, timeout: float = 5.0) -> HealthStatus:

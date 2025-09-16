@@ -5,7 +5,7 @@ import json
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, TextIO, Union
+from typing import Any, Dict, Optional, TextIO, Union, Protocol
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -15,6 +15,30 @@ from rich.text import Text
 from rich.theme import Theme
 
 from .errors import ArmadilloError
+
+
+class Logger(Protocol):
+    """Protocol for logger instances to enable dependency injection."""
+    
+    def debug(self, msg: str, *args, **kwargs) -> None:
+        """Log debug message."""
+        ...
+    
+    def info(self, msg: str, *args, **kwargs) -> None:
+        """Log info message."""
+        ...
+    
+    def warning(self, msg: str, *args, **kwargs) -> None:
+        """Log warning message."""
+        ...
+    
+    def error(self, msg: str, *args, **kwargs) -> None:
+        """Log error message."""
+        ...
+    
+    def exception(self, msg: str, *args, **kwargs) -> None:
+        """Log exception with traceback."""
+        ...
 
 
 class LogContext:

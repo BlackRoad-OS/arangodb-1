@@ -54,8 +54,11 @@ class TestArangoServerBasic:
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
         
-        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531, config_provider=mock_config)
-        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532, config_provider=mock_config)
+        # Create mock logger
+        mock_logger = Mock()
+        
+        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531, config_provider=mock_config, logger=mock_logger)
+        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532, config_provider=mock_config, logger=mock_logger)
 
         assert server1.endpoint == "http://127.0.0.1:8531"
         assert server2.endpoint == "http://127.0.0.1:8532"
@@ -71,7 +74,10 @@ class TestArangoServerBasic:
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
         
-        server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config)
+        # Create mock logger
+        mock_logger = Mock()
+        
+        server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
         assert server.is_running() is False
 
@@ -90,11 +96,15 @@ class TestArangoServerLifecycle:
         self.mock_config.keep_instances_on_failure = False
         self.mock_config.test_timeout = 30.0
         
+        # Create mock logger
+        self.mock_logger = Mock()
+        
         self.server = ArangoServer(
             server_id="test_server",
             role=ServerRole.SINGLE,
             port=8529,
-            config_provider=self.mock_config
+            config_provider=self.mock_config,
+            logger=self.mock_logger
         )
 
     @patch('armadillo.instances.server.start_supervised_process')
@@ -162,7 +172,10 @@ class TestArangoServerConfiguration:
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
         
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config)
+        # Create mock logger
+        mock_logger = Mock()
+        
+        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
     @patch('pathlib.Path.exists', return_value=True)
     def test_build_command_returns_list(self, mock_exists):
@@ -205,7 +218,10 @@ class TestArangoServerErrorHandling:
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
         
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config)
+        # Create mock logger
+        mock_logger = Mock()
+        
+        self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
     @patch('armadillo.instances.server.start_supervised_process')
     def test_start_process_failure(self, mock_start):
@@ -260,7 +276,10 @@ class TestArangoServerIntegration:
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
         
-        server = ArangoServer("lifecycle_test", ServerRole.SINGLE, 8529, config_provider=mock_config)
+        # Create mock logger
+        mock_logger = Mock()
+        
+        server = ArangoServer("lifecycle_test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
         # Mock successful start
         mock_start.return_value = Mock(pid=12345)
