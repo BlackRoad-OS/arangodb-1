@@ -15,32 +15,32 @@ T = TypeVar('T')
 
 class ConfigProvider(Protocol):
     """Protocol for configuration providers to enable dependency injection."""
-    
+
     @property
     def bin_dir(self) -> Optional[Path]:
         """ArangoDB binary directory path."""
         ...
-    
+
     @property
     def work_dir(self) -> Optional[Path]:
         """Working directory for temporary files."""
         ...
-    
+
     @property
     def cluster(self) -> ClusterConfig:
         """Cluster configuration."""
         ...
-    
+
     @property
     def verbose(self) -> int:
         """Verbosity level."""
         ...
-    
+
     @property
     def keep_instances_on_failure(self) -> bool:
         """Whether to keep instances running on failure."""
         ...
-    
+
     @property
     def test_timeout(self) -> float:
         """Default test timeout in seconds."""

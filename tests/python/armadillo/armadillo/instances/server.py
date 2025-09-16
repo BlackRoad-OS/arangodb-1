@@ -85,7 +85,7 @@ class ArangoServer:
         if self._port_allocator:
             return self._port_allocator.allocate_port(preferred)
         return allocate_port(preferred)
-    
+
     def _release_port(self, port: int) -> None:
         """Release a port using injected allocator or fallback to global function."""
         if self._port_allocator:
