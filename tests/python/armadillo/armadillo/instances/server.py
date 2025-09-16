@@ -17,7 +17,7 @@ from ..core.process import start_supervised_process, stop_supervised_process, is
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import server_dir, atomic_write
-from ..utils.ports import allocate_port, release_port
+from ..utils.ports import allocate_port, release_port, PortAllocator
 from ..utils.auth import get_auth_provider
 
 logger = get_logger(__name__)
@@ -44,7 +44,8 @@ class ArangoServer:
                  port: Optional[int] = None,
                  config: Optional[ServerConfig] = None,
                  config_provider: Optional[ConfigProvider] = None,
-                 logger: Optional[Logger] = None) -> None:
+                 logger: Optional[Logger] = None,
+                 port_allocator: Optional[PortAllocator] = None) -> None:
         self.server_id = server_id
         self.role = role
 
@@ -52,7 +53,9 @@ class ArangoServer:
         if port is not None and not isinstance(port, int):
             raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
 
-        self.port = port or allocate_port()
+        # Store port allocator with fallback to global function
+        self._port_allocator = port_allocator
+        self.port = port or self._allocate_port()
         self.endpoint = f"http://127.0.0.1:{self.port}"
 
         # Set up directories
@@ -76,6 +79,19 @@ class ArangoServer:
         self.auth_provider = get_auth_provider()
 
         log_server_event(self._logger, "created", server_id=server_id, role=role.value, port=self.port)
+
+    def _allocate_port(self, preferred: Optional[int] = None) -> int:
+        """Allocate a port using injected allocator or fallback to global function."""
+        if self._port_allocator:
+            return self._port_allocator.allocate_port(preferred)
+        return allocate_port(preferred)
+    
+    def _release_port(self, port: int) -> None:
+        """Release a port using injected allocator or fallback to global function."""
+        if self._port_allocator:
+            self._port_allocator.release_port(port)
+        else:
+            release_port(port)
 
     def start(self, timeout: Optional[float] = None) -> None:
         """Start the ArangoDB server."""
@@ -130,7 +146,7 @@ class ArangoServer:
             self._is_running = False
             self._process_info = None
             # Release allocated port
-            release_port(self.port)
+            self._release_port(self.port)
 
     def restart(self, wait_ready: bool = True, timeout: float = 30.0) -> None:
         """Restart the ArangoDB server."""

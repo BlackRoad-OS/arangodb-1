@@ -53,12 +53,17 @@ class TestArangoServerBasic:
         mock_config.verbose = 0
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
-        
+
         # Create mock logger
         mock_logger = Mock()
         
-        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531, config_provider=mock_config, logger=mock_logger)
-        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532, config_provider=mock_config, logger=mock_logger)
+        # Create mock port allocator
+        mock_port_allocator = Mock()
+        mock_port_allocator.allocate_port.return_value = 8529
+        mock_port_allocator.release_port = Mock()
+        
+        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
+        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
 
         assert server1.endpoint == "http://127.0.0.1:8531"
         assert server2.endpoint == "http://127.0.0.1:8532"
@@ -73,11 +78,16 @@ class TestArangoServerBasic:
         mock_config.verbose = 0
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
-        
+
         # Create mock logger
         mock_logger = Mock()
         
-        server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
+        # Create mock port allocator
+        mock_port_allocator = Mock()
+        mock_port_allocator.allocate_port.return_value = 8529
+        mock_port_allocator.release_port = Mock()
+        
+        server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
 
         assert server.is_running() is False
 
@@ -95,16 +105,22 @@ class TestArangoServerLifecycle:
         self.mock_config.verbose = 0
         self.mock_config.keep_instances_on_failure = False
         self.mock_config.test_timeout = 30.0
-        
+
         # Create mock logger
         self.mock_logger = Mock()
+        
+        # Create mock port allocator
+        self.mock_port_allocator = Mock()
+        self.mock_port_allocator.allocate_port.return_value = 8529
+        self.mock_port_allocator.release_port = Mock()
         
         self.server = ArangoServer(
             server_id="test_server",
             role=ServerRole.SINGLE,
             port=8529,
             config_provider=self.mock_config,
-            logger=self.mock_logger
+            logger=self.mock_logger,
+            port_allocator=self.mock_port_allocator
         )
 
     @patch('armadillo.instances.server.start_supervised_process')
@@ -171,10 +187,10 @@ class TestArangoServerConfiguration:
         mock_config.verbose = 0
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
-        
+
         # Create mock logger
         mock_logger = Mock()
-        
+
         self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
     @patch('pathlib.Path.exists', return_value=True)
@@ -217,10 +233,10 @@ class TestArangoServerErrorHandling:
         mock_config.verbose = 0
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
-        
+
         # Create mock logger
         mock_logger = Mock()
-        
+
         self.server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
     @patch('armadillo.instances.server.start_supervised_process')
@@ -275,10 +291,10 @@ class TestArangoServerIntegration:
         mock_config.verbose = 0
         mock_config.keep_instances_on_failure = False
         mock_config.test_timeout = 30.0
-        
+
         # Create mock logger
         mock_logger = Mock()
-        
+
         server = ArangoServer("lifecycle_test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
 
         # Mock successful start

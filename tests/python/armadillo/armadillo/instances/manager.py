@@ -20,7 +20,7 @@ from ..core.log import get_logger, Logger
 from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
 from ..core.config import get_config, ConfigProvider
-from ..utils.ports import get_port_manager
+from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.filesystem import work_dir, server_dir, ensure_dir
 from ..utils.auth import get_auth_provider
 
@@ -52,18 +52,19 @@ class DeploymentPlan:
 class InstanceManager:
     """Manages lifecycle of multiple ArangoDB server instances."""
 
-    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None) -> None:
+    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None, port_allocator: Optional[PortAllocator] = None) -> None:
         """Initialize instance manager.
 
         Args:
             deployment_id: Unique identifier for this deployment
             config_provider: Configuration provider (uses global config if None)
             logger: Logger instance (uses global logger if None)
+            port_allocator: Port allocator (uses global manager if None)
         """
         self.deployment_id = deployment_id
         self.config = config_provider or get_config()
         self._logger = logger or get_logger(__name__)
-        self.port_manager = get_port_manager()
+        self.port_manager = port_allocator or get_port_manager()
         self.auth_provider = get_auth_provider()
 
         # Instance state
@@ -291,7 +292,8 @@ class InstanceManager:
                 port=port_value,  # Use explicit integer port value
                 config=minimal_config,  # Only pass needed configuration data
                 config_provider=self.config,  # Pass injected config provider
-                logger=self._logger  # Pass injected logger
+                logger=self._logger,  # Pass injected logger
+                port_allocator=self.port_manager  # Pass injected port allocator
             )
 
             # Set directories from ServerConfig after creation

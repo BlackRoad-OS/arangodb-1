@@ -2,7 +2,7 @@
 
 import socket
 import threading
-from typing import Set, Optional, List
+from typing import Set, Optional, List, Protocol
 from pathlib import Path
 
 from ..core.errors import NetworkError
@@ -10,6 +10,26 @@ from ..core.log import get_logger
 from .filesystem import atomic_write, read_text, safe_remove
 
 logger = get_logger(__name__)
+
+
+class PortAllocator(Protocol):
+    """Protocol for port allocation to enable dependency injection."""
+    
+    def allocate_port(self, preferred: Optional[int] = None) -> int:
+        """Allocate an available port."""
+        ...
+    
+    def allocate_ports(self, count: int) -> List[int]:
+        """Allocate multiple ports."""
+        ...
+    
+    def release_port(self, port: int) -> None:
+        """Release a previously allocated port."""
+        ...
+    
+    def release_ports(self, ports: List[int]) -> None:
+        """Release multiple previously allocated ports."""
+        ...
 
 
 class PortManager:
