@@ -12,15 +12,15 @@ def test_statistics_description_success_mock(mock_get):
     mock_response.status_code = 200
     mock_response.text = '{"description": "Statistics description"}'
     mock_get.return_value = mock_response
-    
+
     # This is the same code from our converted test
     base_url = "http://127.0.0.1:8529"
     response = requests.get(f"{base_url}/_admin/statistics-description")
-    
+
     # The same assertions from our converted test
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     assert response.text is not None, "Response body should not be empty"
-    
+
     # Verify the request was made correctly
     mock_get.assert_called_once_with("http://127.0.0.1:8529/_admin/statistics-description")
 
@@ -37,14 +37,14 @@ def test_statistics_description_404_mock(mock_get):
         "errorMessage": "endpoint not found"
     }
     mock_get.return_value = mock_response
-    
+
     # This is the same code from our converted test
     base_url = "http://127.0.0.1:8529"
     response = requests.get(f"{base_url}/_admin/statistics-description/asd123")
-    
+
     # The same assertions from our converted test
     assert response.status_code == 404, f"Expected 404, got {response.status_code}"
-    
+
     body = response.json()
     assert body.get('error') is True, "Response should indicate error"
     assert body.get('errorNum') == 404, f"Expected errorNum 404, got {body.get('errorNum')}"
@@ -66,16 +66,17 @@ def test_statistics_success_mock(mock_get):
         }
     }
     mock_get.return_value = mock_response
-    
+
     # This is the same code from our converted test
     base_url = "http://127.0.0.1:8529"
     response = requests.get(f"{base_url}/_admin/statistics")
-    
+
     # The same assertions from our converted test
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-    
+
     body = response.json()
     assert body is not None, "Response body should not be empty"
     assert 'server' in body, "Response should contain server statistics"
     assert 'uptime' in body['server'], "Server stats should contain uptime"
     assert body['server']['uptime'] > 0, f"Server uptime should be > 0, got {body['server']['uptime']}"
+

@@ -1,9 +1,12 @@
 """ArangoDB server instance wrapper with lifecycle management and health monitoring."""
 
+import asyncio
 import time
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass
+
+import aiohttp
 
 from ..core.types import ServerRole, ServerConfig, HealthStatus, ServerStats
 from ..core.errors import (

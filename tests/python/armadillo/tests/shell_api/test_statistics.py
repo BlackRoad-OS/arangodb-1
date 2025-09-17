@@ -18,22 +18,20 @@ class TestStatisticsAPI:
     @pytest.fixture(scope="function")
     def arango_client(self, arango_single_server):
         """Get ArangoDB client connected to test server."""
-        server_info = arango_single_server
-        
-        # Create client with explicit HTTP client for raw requests
-        client = ArangoClient(
-            hosts=f"http://127.0.0.1:{server_info.port}"
-        )
-        
+        server = arango_single_server  # This is now a real ArangoServer object
+
+        # Create client using the server's endpoint
+        client = ArangoClient(hosts=server.endpoint)
+
         # Connect to system database for admin endpoints
         db = client.db('_system')
         return db
-    
-    @pytest.fixture(scope="function") 
+
+    @pytest.fixture(scope="function")
     def base_url(self, arango_single_server):
         """Get base URL for HTTP requests."""
-        server_info = arango_single_server
-        return f"http://127.0.0.1:{server_info.port}"
+        server = arango_single_server  # This is now a real ArangoServer object
+        return server.endpoint
 
     def test_statistics_description_correct_endpoint(self, base_url):
         """Test /_admin/statistics-description endpoint returns 200."""

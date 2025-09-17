@@ -45,6 +45,9 @@ development = [
 [project.scripts]
 armadillo = "armadillo.cli.main:app"
 
+[project.entry-points.pytest11]
+armadillo = "armadillo.pytest_plugin.plugin"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

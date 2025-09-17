@@ -93,10 +93,7 @@ def run(
         for path in test_paths:
             pytest_args.append(str(path))
 
-        # Add Armadillo plugin
-        pytest_args.extend([
-            "-p", "armadillo.pytest_plugin.plugin",
-        ])
+        # Armadillo plugin is automatically loaded via entry point in pyproject.toml
 
         # Add output options
         output_dir.mkdir(parents=True, exist_ok=True)
