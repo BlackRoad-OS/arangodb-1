@@ -6,13 +6,14 @@
 #include "Basics/ResourceUsage.h"
 #include "Basics/SupervisedBuffer.h"
 #include <velocypack/Builder.h>
+#include <velocypack/Buffer.h>
 #include <string>
 
 using namespace arangodb;
 using namespace arangodb::aql;
 using namespace arangodb::velocypack;
 
-TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
+TEST(SupervisedBufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -26,9 +27,9 @@ TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
       builder.close();
 
       ASSERT_EQ(monitor.current(), 0);
+      ASSERT_GE(builder.size(), 1024U);
       largeValue = AqlValue{builder.slice(), builder.size()};
       monitor.increaseMemoryUsage(largeValue.memoryUsage());
-
       ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
@@ -44,16 +45,14 @@ TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
     {
       Builder builder;
       builder.openArray();
-      builder.add(Value(1));
+      builder.add(Value(1));  // inline in AqlValue
       builder.close();
+
       ASSERT_EQ(monitor.current(), 0);
       smallValue = AqlValue{builder.slice(), builder.size()};
-      // memoryUsage for small values  is zero
-      // because they fit in the AqlValue's inline buffer
-      monitor.increaseMemoryUsage(smallValue.memoryUsage());
+      monitor.increaseMemoryUsage(smallValue.memoryUsage());  // very likely 0
       ASSERT_EQ(monitor.current(), smallValue.memoryUsage());
     }
-    // is the same as comparing to smallValue.memoryUsage
     ASSERT_EQ(monitor.current(), 0);
 
     monitor.decreaseMemoryUsage(smallValue.memoryUsage());
@@ -62,7 +61,7 @@ TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
   }
 }
 
-TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
+TEST(SupervisedBufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -70,21 +69,21 @@ TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
     ResourceUsageScope usageScope(monitor);
     AqlValue largeValue;
     {
+      ASSERT_EQ(monitor.current(), 0);  // scope starts empty
       SupervisedBuffer supervisedBuffer(monitor);
       Builder builder(supervisedBuffer);
       builder.openArray();
       builder.add(Value(std::string(1024, 'a')));
       builder.close();
 
-      ASSERT_GT(monitor.current(), 0);
+      ASSERT_GE(builder.size(), 1024U);
+      ASSERT_GE(monitor.current(), builder.size());  // capacity >= size
       largeValue = AqlValue{builder.slice(), builder.size()};
-      // the buffer has already increased the monitor for its
-      // capacity, this call adds the AqlValue footprint on top.
+      // buffer accounted already; now also account the AqlValue
       monitor.increaseMemoryUsage(largeValue.memoryUsage());
-      // While builder exists, monitor >= aql value usage (buffer + aql value)
-      ASSERT_GE(monitor.current(), largeValue.memoryUsage());
+      ASSERT_GE(monitor.current(), builder.size() + largeValue.memoryUsage());
     }
-    // now monitor is only the aql value usage
+    // now only AqlValue is accounted
     ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
 
     monitor.decreaseMemoryUsage(largeValue.memoryUsage());
@@ -98,23 +97,28 @@ TEST(SupervisedbufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
     {
       SupervisedBuffer supervisedBuffer(monitor);
       Builder builder(supervisedBuffer);
+
+      std::size_t before = monitor.current();
       builder.openArray();
-      builder.add(Value(1));
+      builder.add(Value(1));  // inline in AqlValue
       builder.close();
-      ASSERT_GT(monitor.current(), 0);
+
+      // tiny write should not force a capacity grow; monitor unchanged
+      ASSERT_EQ(monitor.current(), before);
+
       smallValue = AqlValue{builder.slice(), builder.size()};
-      // account small value on the monitor
-      monitor.increaseMemoryUsage(smallValue.memoryUsage());
-      ASSERT_GE(monitor.current(), smallValue.memoryUsage());
+      monitor.increaseMemoryUsage(smallValue.memoryUsage());  // likely 0
+      ASSERT_EQ(monitor.current(), before + smallValue.memoryUsage());
     }
     ASSERT_EQ(monitor.current(), smallValue.memoryUsage());
+
     monitor.decreaseMemoryUsage(smallValue.memoryUsage());
     smallValue.destroy();
     ASSERT_EQ(monitor.current(), 0);
   }
 }
 
-TEST(SupervisedbufferTest,
+TEST(SupervisedBufferTest,
      ManuallyIncreaseAccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
@@ -130,25 +134,24 @@ TEST(SupervisedbufferTest,
       builder.openArray();
       builder.add(Value(std::string(2048, 'a')));
       builder.close();
-      ASSERT_GT(monitor.current(), 0);
+
+      ASSERT_GE(monitor.current(), builder.size());  // capacity accounted
 
       std::size_t monitorBefore = monitor.current();
       std::size_t sizeBefore = builder.size();
-      usageScope.increase(sizeBefore);
+      usageScope.increase(sizeBefore);  // manual buffer usage accounting
       ASSERT_EQ(monitor.current(), monitorBefore + sizeBefore);
 
       sizeBeforeLocal = sizeBefore;
       largeValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = largeValue.memoryUsage();
-      // account the value's memory on top of manual buffer accounting
-      monitor.increaseMemoryUsage(valueSizeLocal);
-      ASSERT_GE(monitor.current(), sizeBefore + largeValue.memoryUsage());
+      monitor.increaseMemoryUsage(valueSizeLocal);  // add value usage
+      ASSERT_GE(monitor.current(), sizeBefore + valueSizeLocal);
     }
     ASSERT_GE(monitor.current(), sizeBeforeLocal + valueSizeLocal);
-    // drop our manual accounting for the value before destroying it
     monitor.decreaseMemoryUsage(valueSizeLocal);
     largeValue.destroy();
-    usageScope.decrease(sizeBeforeLocal);
+    usageScope.decrease(sizeBeforeLocal);  // balance manual accounting
     ASSERT_EQ(monitor.current(), 0);
   }
 
@@ -161,9 +164,10 @@ TEST(SupervisedbufferTest,
       SupervisedBuffer supervisedBuffer(monitor);
       Builder builder(supervisedBuffer);
       builder.openArray();
-      builder.add(Value(42));
+      builder.add(Value(42));  // inline in AqlValue
       builder.close();
-      ASSERT_GT(monitor.current(), 0);
+
+      ASSERT_GE(monitor.current(), builder.size());  // capacity accounted
 
       std::size_t monitorBefore = monitor.current();
       std::size_t sizeBefore = builder.size();
@@ -172,9 +176,9 @@ TEST(SupervisedbufferTest,
 
       sizeBeforeLocal = sizeBefore;
       smallValue = AqlValue{builder.slice(), builder.size()};
-      valueSizeLocal = smallValue.memoryUsage();
+      valueSizeLocal = smallValue.memoryUsage();  // likely 0
       monitor.increaseMemoryUsage(valueSizeLocal);
-      ASSERT_GE(monitor.current(), sizeBefore + smallValue.memoryUsage());
+      ASSERT_GE(monitor.current(), sizeBefore + valueSizeLocal);
     }
     ASSERT_GE(monitor.current(), sizeBeforeLocal + valueSizeLocal);
     monitor.decreaseMemoryUsage(valueSizeLocal);
@@ -184,7 +188,7 @@ TEST(SupervisedbufferTest,
   }
 }
 
-TEST(SupervisedbufferTest,
+TEST(SupervisedBufferTest,
      ManuallyIncreaseAccountsMemoryLargeAndSmallValuesNormalBuffer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
@@ -209,13 +213,13 @@ TEST(SupervisedbufferTest,
       sizeBeforeLocal = sizeBefore;
       largeValue = AqlValue{builder.slice(), builder.size()};
       valueSizeLocal = largeValue.memoryUsage();
-      // account the value's memory on top of the manual buffer
       monitor.increaseMemoryUsage(valueSizeLocal);
-      ASSERT_EQ(monitor.current(), sizeBefore + largeValue.memoryUsage());
+      ASSERT_EQ(monitor.current(), sizeBefore + valueSizeLocal);
     }
     ASSERT_EQ(monitor.current(), sizeBeforeLocal + valueSizeLocal);
     monitor.decreaseMemoryUsage(valueSizeLocal);
     largeValue.destroy();
+    usageScope.decrease(sizeBeforeLocal);
     ASSERT_EQ(monitor.current(), 0);
   }
 
@@ -227,7 +231,7 @@ TEST(SupervisedbufferTest,
     {
       Builder builder;
       builder.openArray();
-      builder.add(Value(42));
+      builder.add(Value(42));  // inline in AqlValue
       builder.close();
       ASSERT_EQ(monitor.current(), 0);
 
@@ -238,18 +242,19 @@ TEST(SupervisedbufferTest,
 
       sizeBeforeLocal = sizeBefore;
       smallValue = AqlValue{builder.slice(), builder.size()};
-      valueSizeLocal = smallValue.memoryUsage();
+      valueSizeLocal = smallValue.memoryUsage();  // likely 0
       monitor.increaseMemoryUsage(valueSizeLocal);
-      ASSERT_EQ(monitor.current(), sizeBefore + smallValue.memoryUsage());
+      ASSERT_EQ(monitor.current(), sizeBefore + valueSizeLocal);
     }
     ASSERT_EQ(monitor.current(), sizeBeforeLocal + valueSizeLocal);
     monitor.decreaseMemoryUsage(valueSizeLocal);
     smallValue.destroy();
+    usageScope.decrease(sizeBeforeLocal);
     ASSERT_EQ(monitor.current(), 0);
   }
 }
 
-TEST(SupervisedbufferTest, ReuseSupervisedBufferAccountsMemory) {
+TEST(SupervisedBufferTest, ReuseSupervisedBufferAccountsMemory) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -284,7 +289,7 @@ TEST(SupervisedbufferTest, ReuseSupervisedBufferAccountsMemory) {
   ASSERT_EQ(monitor.current(),
             firstValue.memoryUsage() + secondValue.memoryUsage());
 
-  // drop our manual accounting for both values before destroying them
+  // drop manual accounting for both values before destroying them
   monitor.decreaseMemoryUsage(firstValue.memoryUsage());
   monitor.decreaseMemoryUsage(secondValue.memoryUsage());
   firstValue.destroy();
@@ -292,7 +297,7 @@ TEST(SupervisedbufferTest, ReuseSupervisedBufferAccountsMemory) {
   ASSERT_EQ(monitor.current(), 0);
 }
 
-TEST(SupervisedbufferTest, SupervisedBuilderGrowthAndRecycle) {
+TEST(SupervisedBufferTest, SupervisedBuilderGrowthAndRecycle) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor{global};
 
@@ -301,27 +306,22 @@ TEST(SupervisedbufferTest, SupervisedBuilderGrowthAndRecycle) {
     SupervisedBuffer supervisedBuffer(monitor);
     Builder builder(supervisedBuffer);
 
-    // memory should be low >= size here
     builder.openArray();
     builder.add(Value(1));
     builder.add(Value(2));
     builder.add(Value(3));
     builder.close();
-    AqlValue smallValue = AqlValue{builder.slice(), builder.size()};
-    // account the small value on the monitor. smallValue.memoryUsage()
-    // may be zero, in which case this has no effect.
-    monitor.increaseMemoryUsage(smallValue.memoryUsage());
+
     std::size_t memory1 = monitor.current();
     ASSERT_GE(memory1, builder.size());
 
     builder.clear();
+
     builder.openArray();
     for (int i = 0; i < 200; ++i) {
       builder.add(Value(std::string(1024, 'a')));
     }
     builder.close();
-    AqlValue largeValue = AqlValue{builder.slice(), builder.size()};
-    monitor.increaseMemoryUsage(largeValue.memoryUsage());
     std::size_t memory2 = monitor.current();
     ASSERT_GT(memory2, memory1);
     ASSERT_GE(memory2, builder.size());
@@ -329,10 +329,6 @@ TEST(SupervisedbufferTest, SupervisedBuilderGrowthAndRecycle) {
     builder.clear();
     std::size_t memory3 = monitor.current();
     ASSERT_EQ(memory3, memory2);
-    monitor.decreaseMemoryUsage(largeValue.memoryUsage());
-    largeValue.destroy();
-    monitor.decreaseMemoryUsage(smallValue.memoryUsage());
-    smallValue.destroy();
   }
   ASSERT_EQ(monitor.current(), 0);
 }
@@ -348,12 +344,14 @@ TEST(SupervisedBufferTest, DetailedBufferResizeAndRecycle) {
 
     builder.openArray();
     for (int i = 0; i < 5; ++i) {
-      builder.add(Value(i));
+      builder.add(Value(i));  // tiny
     }
     builder.close();
     std::size_t memory1 = monitor.current();
     ASSERT_GE(memory1, builder.size());
+
     builder.clear();
+
     builder.openArray();
     for (int i = 0; i < 100; ++i) {
       builder.add(Value(std::string(256, 'a')));
@@ -362,15 +360,15 @@ TEST(SupervisedBufferTest, DetailedBufferResizeAndRecycle) {
     std::size_t memory2 = monitor.current();
     ASSERT_GE(memory2, builder.size());
     ASSERT_GT(memory2, memory1);
-
     ASSERT_GE(monitor.current(), builder.size());
 
     builder.clear();
+
     builder.openArray();
     builder.close();
     std::size_t memory3 = monitor.current();
     ASSERT_GE(memory3, builder.size());
-    ASSERT_EQ(memory3, memory2);
+    ASSERT_EQ(memory3, memory2);  // capacity kept after clear
   }
   ASSERT_EQ(monitor.current(), 0);
 }
@@ -383,18 +381,38 @@ TEST(SupervisedBufferTest, AccountCapacityGrowAndClear) {
   {
     SupervisedBuffer supervisedBuffer(monitor);
     Builder builder(supervisedBuffer);
+
+    // add amount > local inline capacity
+    const int bigN = 200;
     builder.openArray();
-    for (int i = 0; i < 200; ++i) {
+    for (int i = 0; i < bigN; ++i) {
       builder.add(Value("abcde"));
     }
     builder.close();
 
-    // current is capacity, so it must be >= byte size
+    // current tracks capacity, which must be >= payload size
     ASSERT_GE(monitor.current(), builder.size());
-    // recycle but don’t shrink
-    std::size_t keep = monitor.current();
+
+    // current usage snapshot
+    std::size_t snapshot = monitor.current();
+
+    // recycle but don't deallocate
     builder.clear();
-    ASSERT_EQ(monitor.current(), keep);
+
+    // usage must remain at the snapshot
+    ASSERT_EQ(monitor.current(), snapshot);
+
+    // append half of the previous amount
+    const int halfN = bigN / 2;
+    builder.openArray();
+    for (int i = 0; i < halfN; ++i) {
+      builder.add(Value("abcde"));
+    }
+    builder.close();
+
+    // usage must still be equal to the snapshot, because capacity was
+    // maintained
+    ASSERT_EQ(monitor.current(), snapshot);
   }
 
   ASSERT_EQ(monitor.current(), 0);
@@ -441,7 +459,7 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
       ASSERT_GE(monitor.current(), builder.size());
     }
 
-    // Add more items until the buffer grows twice
+    // add more items until the buffer grows twice
     int growths = 0;
     for (int i = 0; i < 512 && growths < 2; ++i) {
       builder.add(Value("abcdefghijklmnopqrstuvwxyz"));
@@ -459,12 +477,12 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
     builder.close();
     ASSERT_GE(monitor.current(), builder.size());
 
-    // Recycle the buffer, memory doesn't decrease
+    // recycle the buffer, memory doesn't decrease
     auto maintainedMonitorCurrent = monitor.current();
     builder.clear();
     ASSERT_EQ(monitor.current(), maintainedMonitorCurrent);
 
-    // Append items but capacity must remain the same
+    // capacity must remain the same
     builder.openArray();
     for (int i = 0; i < 16; ++i) {
       builder.add(Value("abcde"));
@@ -473,6 +491,69 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
     }
     builder.close();
     ASSERT_EQ(monitor.current(), maintainedMonitorCurrent);
+  }
+
+  ASSERT_EQ(monitor.current(), 0);
+}
+
+TEST(SupervisedBufferTest, StealWithMemoryAccounting) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor{global};
+
+  {
+    // scope that will own the bytes after the steal
+    ResourceUsageScope owningScope(monitor);
+
+    SupervisedBuffer supervisedBuffer(monitor);
+    Builder builder(supervisedBuffer);
+
+    // the local inline capacity is 192 bytes
+    std::size_t localCap = supervisedBuffer.capacity();
+
+    // Force growth beyond local capacity
+    builder.openArray();
+    for (int i = 0; i < 64; ++i) {
+      builder.add(Value(std::string(256, 'a')));
+    }
+    builder.close();
+
+    // buffer grew, so it allocated on the heap
+    ASSERT_GT(supervisedBuffer.capacity(), localCap);
+
+    // Snapshot total and buffer capacity immediately before stealing
+    std::size_t beforeTotal = monitor.current();
+    std::size_t capBefore = supervisedBuffer.capacity();
+
+    uint8_t* stolen = supervisedBuffer.stealWithMemoryAccounting(owningScope);
+
+    // ownership moved, bytes still accounted so the memory accounted in the
+    // monitor is the same
+    ASSERT_EQ(monitor.current(), beforeTotal);
+
+    // buffer returned to its local inline capacity after steal
+    ASSERT_EQ(supervisedBuffer.capacity(), localCap);
+
+    // owning scope now accounts for the bytes formerly in the buffer
+    {
+      std::size_t t0 = monitor.current();
+      owningScope.decrease(capBefore);
+      std::size_t t1 = monitor.current();
+      ASSERT_EQ(t0 - t1, capBefore)
+          << "owningScope must own the former buffer capacity";
+      owningScope.increase(capBefore);
+      std::size_t t2 = monitor.current();
+      ASSERT_EQ(t2, t0);
+    }
+
+    // capacity should remain local
+    builder.openArray();
+    builder.add(Value("abcde"));
+    builder.close();
+    ASSERT_EQ(supervisedBuffer.capacity(), localCap);
+    ASSERT_EQ(monitor.current(), beforeTotal);
+
+    // frees the stolen memory
+    velocypack_free(stolen);
   }
 
   ASSERT_EQ(monitor.current(), 0);
