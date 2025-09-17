@@ -1,5 +1,5 @@
 devel
-
+-----
 
 * Fix BTS-2214: In a rare hash collision situation it can happen that a
   valid edge in an enterprise graph fails to validate and is rejected.
