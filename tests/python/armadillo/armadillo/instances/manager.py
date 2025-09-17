@@ -172,10 +172,12 @@ class InstanceManager:
                 elif plan.deployment_mode == DeploymentMode.CLUSTER:
                     self._start_cluster()
 
+                # Mark deployment as active before health check
+                self._is_deployed = True
+
                 # Verify deployment health
                 self._verify_deployment_health()
 
-                self._is_deployed = True
                 self._is_healthy = True
 
                 deployment_time = time.time() - self._startup_time
