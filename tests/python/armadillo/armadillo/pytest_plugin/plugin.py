@@ -200,7 +200,7 @@ class ArmadilloPlugin:
     def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug(f"ArmadilloPlugin: Session finish with exit status {exitstatus}")
-        
+
         # Stop all session servers
         for server_id, server in list(self._session_servers.items()):
             try:
@@ -208,7 +208,7 @@ class ArmadilloPlugin:
                 server.stop(timeout=30.0)
             except Exception as e:
                 logger.error(f"Error stopping session server {server_id}: {e}")
-        
+
         # Stop all session deployments (clusters)
         for deployment_id, manager in list(self._session_deployments.items()):
             try:
@@ -216,7 +216,7 @@ class ArmadilloPlugin:
                 manager.destroy_all_servers(timeout=60.0)
             except Exception as e:
                 logger.error(f"Error stopping session deployment {deployment_id}: {e}")
-        
+
         # Clean up session resources
         clear_test_session()
         cleanup_work_dir()
@@ -306,13 +306,13 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
 @pytest.fixture(scope="session")
 def arango_deployment():
     """Provide ArangoDB deployment based on CLI configuration - deployment agnostic.
-    
-    Returns the appropriate server/coordinator endpoint regardless of whether 
+
+    Returns the appropriate server/coordinator endpoint regardless of whether
     we're running single server or cluster mode.
     """
     import os
     deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single_server')
-    
+
     if deployment_mode == 'cluster':
         # Use cluster fixture and return coordinator for client connections
         logger.info("Auto-detecting cluster deployment for tests")
@@ -323,7 +323,7 @@ def arango_deployment():
         return coordinators[0]  # Return first coordinator as entry point
     else:
         # Use single server fixture
-        logger.info("Auto-detecting single server deployment for tests") 
+        logger.info("Auto-detecting single server deployment for tests")
         return _plugin._get_or_create_single_server()
 
 
@@ -339,7 +339,7 @@ def _get_or_create_cluster(self) -> 'InstanceManager':
         from ..core.types import ClusterConfig, DeploymentMode
         cluster_config = ClusterConfig(
             agents=3,
-            dbservers=2, 
+            dbservers=2,
             coordinators=1
         )
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
@@ -357,7 +357,7 @@ def _get_or_create_cluster(self) -> 'InstanceManager':
 
         logger.info("Session cluster deployment ready")
         self._session_deployments["cluster"] = manager
-        
+
     return self._session_deployments["cluster"]
 
 
@@ -365,7 +365,7 @@ def _get_or_create_single_server(self) -> ArangoServer:
     """Get or create session single server."""
     if "single" not in self._session_servers:
         server = ArangoServer("test_single_server", ServerRole.SINGLE)
-        
+
         logger.info("Starting session single server")
         server.start(timeout=60.0)
 
@@ -376,7 +376,7 @@ def _get_or_create_single_server(self) -> ArangoServer:
 
         logger.info(f"Session single server ready at {server.endpoint}")
         self._session_servers["single"] = server
-        
+
     return self._session_servers["single"]
 
 
@@ -385,7 +385,7 @@ ArmadilloPlugin._get_or_create_cluster = _get_or_create_cluster
 ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 
 
-@pytest.fixture(scope="function") 
+@pytest.fixture(scope="function")
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server."""
     from ..utils.crypto import random_id
