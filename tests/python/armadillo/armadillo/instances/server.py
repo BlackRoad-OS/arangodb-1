@@ -63,11 +63,19 @@ class ArangoServer:
         self.port = port or self._allocate_port()
         self.endpoint = f"http://127.0.0.1:{self.port}"
 
-        # Set up directories
-        self.base_dir = server_dir(server_id)
-        self.data_dir = self.base_dir / "data"
-        self.app_dir = self.base_dir / "apps"
-        self.log_file = self.base_dir / "arangodb.log"
+        # Set up directories - use config-specified paths if available, otherwise default paths
+        if config and config.data_dir:
+            self.data_dir = Path(config.data_dir)
+            self.log_file = Path(config.log_file)
+            # Derive other directories from configured data_dir
+            self.base_dir = self.data_dir.parent
+            self.app_dir = self.base_dir / "apps"
+        else:
+            # Default directory structure
+            self.base_dir = server_dir(server_id)
+            self.data_dir = self.base_dir / "data"
+            self.app_dir = self.base_dir / "apps"
+            self.log_file = self.base_dir / "arangodb.log"
 
         # Ensure directories exist
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +137,7 @@ class ArangoServer:
                     cwd=repository_root,
                     startup_timeout=effective_timeout,
                     readiness_check=lambda: self._check_readiness(),
-                    inherit_console=False  # Capture output to debug startup failures
+                    inherit_console=True  # ArangoDB writes directly to console - no buffering delays
                 )
 
                 self._is_running = True

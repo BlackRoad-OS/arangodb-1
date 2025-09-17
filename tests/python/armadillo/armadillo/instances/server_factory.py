@@ -2,6 +2,7 @@
 
 from typing import Dict, Optional, Protocol
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..core.types import ServerRole, ServerConfig
 from ..core.config import ConfigProvider
@@ -28,6 +29,8 @@ class MinimalConfig:
     args: dict
     memory_limit_mb: Optional[int] = None
     startup_timeout: float = 30.0
+    data_dir: Optional[Path] = None
+    log_file: Optional[Path] = None
 
 
 class StandardServerFactory:
@@ -87,7 +90,9 @@ class StandardServerFactory:
         minimal_config = MinimalConfig(
             args=server_config.args.copy(),
             memory_limit_mb=server_config.memory_limit_mb,
-            startup_timeout=server_config.startup_timeout
+            startup_timeout=server_config.startup_timeout,
+            data_dir=server_config.data_dir,
+            log_file=server_config.log_file
         )
 
         # Create dependencies for this server
