@@ -148,6 +148,7 @@ TEST(SupervisedbufferTest,
     // drop our manual accounting for the value before destroying it
     monitor.decreaseMemoryUsage(valueSizeLocal);
     largeValue.destroy();
+    usageScope.decrease(sizeBeforeLocal);
     ASSERT_EQ(monitor.current(), 0);
   }
 
@@ -178,6 +179,7 @@ TEST(SupervisedbufferTest,
     ASSERT_GE(monitor.current(), sizeBeforeLocal + valueSizeLocal);
     monitor.decreaseMemoryUsage(valueSizeLocal);
     smallValue.destroy();
+    usageScope.decrease(sizeBeforeLocal);
     ASSERT_EQ(monitor.current(), 0);
   }
 }
