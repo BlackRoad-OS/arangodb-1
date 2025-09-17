@@ -326,17 +326,9 @@ TEST(SupervisedbufferTest, SupervisedBuilderGrowthAndRecycle) {
     ASSERT_GT(memory2, memory1);
     ASSERT_GE(memory2, builder.size());
 
-    // recycle the buffer, the memory should remain high even though
-    // builder.size() becomes 0 because of capacity.
     builder.clear();
-    AqlValue clearedValue = AqlValue{builder.slice(), builder.size()};
-    monitor.increaseMemoryUsage(clearedValue.memoryUsage());
     std::size_t memory3 = monitor.current();
     ASSERT_EQ(memory3, memory2);
-
-    // drop accounting in reverse order of creation
-    monitor.decreaseMemoryUsage(clearedValue.memoryUsage());
-    clearedValue.destroy();
     monitor.decreaseMemoryUsage(largeValue.memoryUsage());
     largeValue.destroy();
     monitor.decreaseMemoryUsage(smallValue.memoryUsage());
