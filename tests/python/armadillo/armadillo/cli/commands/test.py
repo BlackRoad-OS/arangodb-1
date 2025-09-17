@@ -75,18 +75,33 @@ def run(
         False,
         "--show-output",
         "-s",
-        help="Show server output during tests (disables pytest capture)"
+        help="Show ArangoDB server output during tests (disables pytest capture)"
     ),
     extra_args: Optional[List[str]] = typer.Option(
         None,
         "--pytest-arg",
         help="Additional arguments to pass to pytest"
+    ),
+    log_level: str = typer.Option(
+        "WARNING",
+        "--log-level",
+        help="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
     )
 ):
     """Run tests with ArangoDB instances."""
 
     try:
         config = get_config()
+
+        # Configure framework logging level (independent of server output)
+        import os
+        from ...core.log import LogManager
+
+        # Set environment variable for pytest plugin to read
+        os.environ['ARMADILLO_LOG_LEVEL'] = log_level.upper()
+
+        log_manager = LogManager()
+        log_manager.configure(level=log_level.upper(), enable_console=True)
 
         # Set build directory if provided
         if build_dir:

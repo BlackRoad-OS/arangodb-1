@@ -30,6 +30,21 @@ class ArmadilloPlugin:
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
+        # Configure third-party logging early to prevent noise
+        import os
+        import logging
+
+        # Get log level from environment variable (set by CLI)
+        log_level = os.environ.get('ARMADILLO_LOG_LEVEL', 'WARNING').upper()
+
+        if log_level != 'DEBUG':
+            # Silence noisy third-party libraries unless explicitly debugging
+            logging.getLogger('faker').setLevel(logging.WARNING)
+            logging.getLogger('urllib3').setLevel(logging.WARNING)
+            logging.getLogger('requests').setLevel(logging.WARNING)
+            logging.getLogger('asyncio').setLevel(logging.WARNING)
+            logging.getLogger('aiohttp').setLevel(logging.WARNING)
+
         # Register custom markers
         config.addinivalue_line(
             "markers", "arango_single: Requires single ArangoDB server"
