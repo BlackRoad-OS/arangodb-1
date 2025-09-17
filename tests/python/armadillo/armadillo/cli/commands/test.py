@@ -70,6 +70,17 @@ def run(
         None,
         "--max-workers",
         help="Maximum parallel workers"
+    ),
+    show_output: bool = typer.Option(
+        False,
+        "--show-output",
+        "-s",
+        help="Show server output during tests (disables pytest capture)"
+    ),
+    extra_args: Optional[List[str]] = typer.Option(
+        None,
+        "--pytest-arg",
+        help="Additional arguments to pass to pytest"
     )
 ):
     """Run tests with ArangoDB instances."""
@@ -94,6 +105,14 @@ def run(
             pytest_args.append(str(path))
 
         # Armadillo plugin is automatically loaded via entry point in pyproject.toml
+
+        # Add server output visibility option
+        if show_output:
+            pytest_args.append("-s")  # Disable pytest output capture
+
+        # Add custom pytest arguments
+        if extra_args:
+            pytest_args.extend(extra_args)
 
         # Add output options
         output_dir.mkdir(parents=True, exist_ok=True)
