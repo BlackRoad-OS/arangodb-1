@@ -344,16 +344,8 @@ def _get_or_create_cluster(self) -> 'InstanceManager':
         )
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
 
-        # Deploy cluster
+        # Deploy cluster with proper sequencing (agents -> agency ready -> dbservers -> coordinators)
         manager.deploy_servers(timeout=300.0)
-
-        # Initialize cluster coordination
-        orchestrator = get_cluster_orchestrator(deployment_id)
-        import asyncio
-        asyncio.run(orchestrator.initialize_cluster_coordination(timeout=120.0))
-
-        # Wait for cluster to be ready
-        asyncio.run(orchestrator.wait_for_cluster_ready(timeout=180.0))
 
         logger.info("Session cluster deployment ready")
         self._session_deployments["cluster"] = manager
@@ -430,20 +422,12 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
         )
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
 
-        # Deploy cluster
+        # Deploy cluster with proper sequencing (agents -> agency ready -> dbservers -> coordinators)
         manager.deploy_servers(timeout=300.0)
-
-        # Initialize cluster coordination
-        orchestrator = get_cluster_orchestrator(deployment_id)
-        asyncio.run(orchestrator.initialize_cluster_coordination(timeout=120.0))
-
-        # Wait for cluster to be ready
-        asyncio.run(orchestrator.wait_for_cluster_ready(timeout=180.0))
 
         logger.info(f"Session cluster deployment {deployment_id} ready")
         # Register with plugin for tracking and safety cleanup
         _plugin._session_deployments[deployment_id] = manager
-        _plugin._session_orchestrators[deployment_id] = orchestrator
         logger.debug(f"Cluster deployment {deployment_id} registered with plugin")
 
         yield manager
@@ -458,7 +442,6 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
         finally:
             # Always remove from plugin tracking, even if shutdown failed
             _plugin._session_deployments.pop(deployment_id, None)
-            _plugin._session_orchestrators.pop(deployment_id, None)
             logger.debug(f"Cluster deployment {deployment_id} removed from plugin tracking")
 
 

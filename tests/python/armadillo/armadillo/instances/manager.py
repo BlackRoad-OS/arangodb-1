@@ -501,8 +501,11 @@ class InstanceManager:
         logger.info(f"Single server {server_id} started successfully")
 
     def _start_cluster(self) -> None:
-        """Start cluster deployment in proper order."""
-        # Start agents first
+        """Start cluster deployment in proper sequence: agents -> wait -> dbservers -> coordinators."""
+        logger.info("Starting cluster servers in sequence")
+        
+        # 1. Start agents first  
+        logger.info("Starting agents...")
         agent_futures = []
         for server_id, server in self._servers.items():
             if server.role == ServerRole.AGENT:
@@ -519,10 +522,13 @@ class InstanceManager:
             except Exception as e:
                 raise ServerStartupError(f"Failed to start agent {server_id}: {e}")
 
-        # Wait for agency to become ready
+        # 2. Wait for agency to become ready
+        logger.info("Waiting for agency to become ready...")
         self._wait_for_agency_ready()
+        logger.info("Agency is ready!")
 
-        # Start database servers
+        # 3. Start database servers
+        logger.info("Starting database servers...")
         dbserver_futures = []
         for server_id, server in self._servers.items():
             if server.role == ServerRole.DBSERVER:
@@ -539,7 +545,8 @@ class InstanceManager:
             except Exception as e:
                 raise ServerStartupError(f"Failed to start database server {server_id}: {e}")
 
-        # Start coordinators
+        # 4. Start coordinators
+        logger.info("Starting coordinators...")
         coordinator_futures = []
         for server_id, server in self._servers.items():
             if server.role == ServerRole.COORDINATOR:
@@ -558,30 +565,153 @@ class InstanceManager:
 
         logger.info("All cluster servers started successfully")
 
+        # 5. Final readiness check
+        logger.info("Performing final cluster readiness check...")
+        self._wait_for_cluster_ready()
+        logger.info("Cluster is fully ready!")
+
     def _wait_for_agency_ready(self, timeout: float = 30.0) -> None:
-        """Wait for agency to become ready.
+        """Wait for agency to become ready - matches JavaScript detectAgencyAlive logic.
 
         Args:
             timeout: Maximum time to wait
         """
         logger.info("Waiting for agency to become ready")
 
+        import requests
         start_time = time.time()
+        
+        # Get all agents
+        agents = [(server_id, server) for server_id, server in self._servers.items() 
+                 if server.role == ServerRole.AGENT]
+        
+        iteration = 0
         while time.time() - start_time < timeout:
+            iteration += 1
             try:
-                # Check if any agent is responsive
-                for server_id, server in self._servers.items():
-                    if server.role == ServerRole.AGENT:
-                        health = server.health_check_sync(timeout=2.0)
-                        if health.is_healthy:
-                            logger.info("Agency is ready")
-                            return
-            except Exception:
+                have_config = 0
+                have_leader = 0
+                leader_id = None
+                
+                logger.debug(f"Agency check iteration {iteration}")
+                
+                # Check each agent for leadership and configuration
+                for server_id, server in agents:
+                    try:
+                        logger.debug(f"Checking agent {server_id} at {server.endpoint}")
+                        response = requests.get(f"{server.endpoint}/_api/agency/config", timeout=2.0)
+                        logger.debug(f"Agent {server_id} response: {response.status_code}")
+                        
+                        if response.status_code == 200:
+                            config = response.json()
+                            logger.debug(f"Agent {server_id} config keys: {list(config.keys())}")
+                            
+                            # Check for leadership (like JS lastAcked check)
+                            if 'lastAcked' in config:
+                                have_leader += 1
+                                logger.debug(f"Agent {server_id} has leadership")
+                            
+                            # Check for configuration (like JS leaderId check)
+                            if 'leaderId' in config and config['leaderId'] != "":
+                                have_config += 1
+                                logger.debug(f"Agent {server_id} has leaderId: {config['leaderId']}")
+                                if leader_id is None:
+                                    leader_id = config['leaderId']
+                                elif leader_id != config['leaderId']:
+                                    # Agents disagree on leader - reset
+                                    logger.debug(f"Agent {server_id} disagrees on leader: {config['leaderId']} vs {leader_id}")
+                                    have_leader = 0
+                                    have_config = 0
+                                    break
+                        else:
+                            logger.debug(f"Agent {server_id} not ready: {response.status_code}")
+                    except Exception as e:
+                        # Agent not ready yet
+                        logger.debug(f"Agent {server_id} not responding: {e}")
+                        pass
+                
+                logger.debug(f"Agency status: have_leader={have_leader}, have_config={have_config}, need_config={len(agents)}")
+                
+                # Check if agency is fully ready (like JavaScript condition)
+                if have_leader >= 1 and have_config == len(agents):
+                    logger.info("Agency is ready!")
+                    return
+                    
+            except Exception as e:
+                logger.debug(f"Agency check exception: {e}")
                 pass
 
-            time.sleep(1.0)
+            # Log progress every 10 iterations to avoid spam
+            if iteration % 10 == 0:
+                logger.info(f"Still waiting for agency (iteration {iteration})")
+                
+            time.sleep(0.5)
 
         raise AgencyError("Agency did not become ready within timeout")
+
+    def _wait_for_cluster_ready(self, timeout: float = 600.0) -> None:
+        """Wait for all cluster nodes to become ready - matches JavaScript checkClusterAlive logic.
+
+        Args:
+            timeout: Maximum time to wait (10 minutes like JS framework)
+        """
+        logger.info("Waiting for all cluster nodes to become ready")
+
+        import requests
+        start_time = time.time()
+        count = 0
+        
+        while time.time() - start_time < timeout:
+            count += 1
+            all_ready = True
+            
+            for server_id, server in self._servers.items():
+                try:
+                    # Choose endpoint based on server role (like JavaScript logic)
+                    if server.role == ServerRole.COORDINATOR:
+                        # Use /_api/foxx for coordinators (like JS)
+                        url = f"{server.endpoint}/_api/foxx"
+                        method = 'GET'
+                    else:
+                        # Use /_api/version for agents and dbservers (like JS)
+                        url = f"{server.endpoint}/_api/version"
+                        method = 'POST'
+                    
+                    response = requests.request(method, url, timeout=2.0)
+                    
+                    if response.status_code == 200:
+                        logger.debug(f"Server {server_id} ({server.role.value}) is ready")
+                        continue
+                    elif response.status_code == 403:
+                        # Service API might be disabled (like JS error handling)
+                        try:
+                            error_body = response.json()
+                            if error_body.get('errorNum') == 1931:  # ERROR_SERVICE_API_DISABLED
+                                logger.debug(f"Service API disabled on {server_id}, continuing")
+                                continue
+                        except:
+                            pass
+                    
+                    # Server not ready
+                    all_ready = False
+                    logger.debug(f"Server {server_id} not ready yet (status: {response.status_code})")
+                    
+                except Exception as e:
+                    # Server not responding
+                    all_ready = False
+                    logger.debug(f"Server {server_id} not responding: {e}")
+                    
+            if all_ready:
+                logger.info("All cluster nodes are ready!")
+                return
+                
+            # Avoid log spam - only log every 10 iterations
+            if count % 10 == 0:
+                logger.info(f"Still waiting for cluster readiness (attempt {count})...")
+                
+            time.sleep(0.5)
+
+        raise ClusterError(f"Cluster did not become ready within {timeout} seconds")
 
     def _verify_deployment_health(self) -> None:
         """Verify that all servers in deployment are healthy."""

@@ -129,7 +129,7 @@ class ArangoServer:
                     cwd=repository_root,
                     startup_timeout=effective_timeout,
                     readiness_check=lambda: self._check_readiness(),
-                    inherit_console=True  # ArangoDB writes directly to console - no buffering delays
+                    inherit_console=False  # Capture output to debug startup failures
                 )
 
                 self._is_running = True

@@ -84,7 +84,13 @@ class ServerCommandBuilder:
         # Add custom arguments from config
         if config and config.args:
             for key, value in config.args.items():
-                command.extend([f"--{key}", str(value)])
+                if isinstance(value, list):
+                    # For list values, add multiple arguments with the same key
+                    for item in value:
+                        command.extend([f"--{key}", str(item)])
+                else:
+                    # For single values, add one argument
+                    command.extend([f"--{key}", str(value)])
 
         # Log the complete command for debugging
         self._logger.info(f">>> ARANGOD COMMAND FOR {server_id} <<<")
