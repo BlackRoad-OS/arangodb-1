@@ -36,7 +36,7 @@ from .organizer import (
 __all__ = [
     # Test Selection
     'TestSelector',
-    'TestFilter', 
+    'TestFilter',
     'FilterCriteria',
     'SelectionResult',
     'FilterType',
@@ -44,7 +44,7 @@ __all__ = [
     'create_marker_selector',
     'create_pattern_selector',
     'create_suite_selector',
-    
+
     # Test Organization
     'TestSuiteOrganizer',
     'TestSuite',
@@ -54,13 +54,13 @@ __all__ = [
     'create_marker_suite',
     'create_pattern_suite',
     'create_priority_suite',
-    
+
     # TODO: Add when implemented
     # # Parallel Execution
     # 'ParallelExecutor',
     # 'ExecutionPlan',
     # 'ResourceCoordinator',
-    # 
+    #
     # # Background Processes
     # 'BackgroundProcessManager',
     # 'BackgroundProcess',
