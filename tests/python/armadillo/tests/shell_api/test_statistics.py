@@ -13,12 +13,12 @@ from arango import ArangoClient, ArangoError
 
 
 class TestStatisticsAPI:
-    """Test suite for ArangoDB statistics API endpoints."""
+    """Test suite for ArangoDB statistics API endpoints - deployment agnostic."""
 
     @pytest.fixture(scope="function")
-    def arango_client(self, arango_single_server):
-        """Get ArangoDB client connected to test server."""
-        server = arango_single_server  # This is now a real ArangoServer object
+    def arango_client(self, arango_deployment):
+        """Get ArangoDB client connected to test deployment (single server or coordinator)."""
+        server = arango_deployment  # Works with both single server and cluster coordinator
 
         # Create client using the server's endpoint
         client = ArangoClient(hosts=server.endpoint)
@@ -28,9 +28,9 @@ class TestStatisticsAPI:
         return db
 
     @pytest.fixture(scope="function")
-    def base_url(self, arango_single_server):
-        """Get base URL for HTTP requests."""
-        server = arango_single_server  # This is now a real ArangoServer object
+    def base_url(self, arango_deployment):
+        """Get base URL for HTTP requests to any deployment."""
+        server = arango_deployment  # Works with both single server and cluster coordinator
         return server.endpoint
 
     def test_statistics_description_correct_endpoint(self, base_url):
@@ -130,13 +130,5 @@ class TestStatisticsAPI:
             f"Sync request should not increase async counter: {after_async_requests} -> {final_async_requests}"
 
 
-@pytest.mark.arango_single
-class TestStatisticsAPISingle(TestStatisticsAPI):
-    """Statistics API tests for single server deployment."""
-    pass
-
-
-@pytest.mark.arango_cluster
-class TestStatisticsAPICluster(TestStatisticsAPI):
-    """Statistics API tests for cluster deployment."""
-    pass
+# Test class is now deployment-agnostic - works with both single server and cluster
+# No need for separate Single/Cluster test classes or deployment-specific markers

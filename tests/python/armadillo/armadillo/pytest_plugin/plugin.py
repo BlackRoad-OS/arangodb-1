@@ -45,6 +45,10 @@ class ArmadilloPlugin:
             logging.getLogger('asyncio').setLevel(logging.WARNING)
             logging.getLogger('aiohttp').setLevel(logging.WARNING)
 
+        # Store deployment mode for auto-detect fixtures
+        deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single')
+        self._deployment_mode = deployment_mode
+
         # Register custom markers
         config.addinivalue_line(
             "markers", "arango_single: Requires single ArangoDB server"
@@ -196,6 +200,23 @@ class ArmadilloPlugin:
     def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug(f"ArmadilloPlugin: Session finish with exit status {exitstatus}")
+        
+        # Stop all session servers
+        for server_id, server in list(self._session_servers.items()):
+            try:
+                logger.debug(f"Stopping session server {server_id}")
+                server.stop(timeout=30.0)
+            except Exception as e:
+                logger.error(f"Error stopping session server {server_id}: {e}")
+        
+        # Stop all session deployments (clusters)
+        for deployment_id, manager in list(self._session_deployments.items()):
+            try:
+                logger.debug(f"Stopping session deployment {deployment_id}")
+                manager.destroy_all_servers(timeout=60.0)
+            except Exception as e:
+                logger.error(f"Error stopping session deployment {deployment_id}: {e}")
+        
         # Clean up session resources
         clear_test_session()
         cleanup_work_dir()
@@ -282,7 +303,89 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
             logger.debug("Session single server removed from plugin tracking")
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
+def arango_deployment():
+    """Provide ArangoDB deployment based on CLI configuration - deployment agnostic.
+    
+    Returns the appropriate server/coordinator endpoint regardless of whether 
+    we're running single server or cluster mode.
+    """
+    import os
+    deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single_server')
+    
+    if deployment_mode == 'cluster':
+        # Use cluster fixture and return coordinator for client connections
+        logger.info("Auto-detecting cluster deployment for tests")
+        cluster_manager = _plugin._get_or_create_cluster()
+        coordinators = cluster_manager.get_servers_by_role(ServerRole.COORDINATOR)
+        if not coordinators:
+            raise RuntimeError("No coordinators available in cluster")
+        return coordinators[0]  # Return first coordinator as entry point
+    else:
+        # Use single server fixture
+        logger.info("Auto-detecting single server deployment for tests") 
+        return _plugin._get_or_create_single_server()
+
+
+def _get_or_create_cluster(self) -> 'InstanceManager':
+    """Get or create session cluster deployment."""
+    if "cluster" not in self._session_deployments:
+        deployment_id = f"cluster_{random_id(8)}"
+        manager = get_instance_manager(deployment_id)
+
+        logger.info(f"Starting session cluster deployment {deployment_id}")
+
+        # Create cluster deployment plan
+        from ..core.types import ClusterConfig, DeploymentMode
+        cluster_config = ClusterConfig(
+            agents=3,
+            dbservers=2, 
+            coordinators=1
+        )
+        plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
+
+        # Deploy cluster
+        manager.deploy_servers(timeout=300.0)
+
+        # Initialize cluster coordination
+        orchestrator = get_cluster_orchestrator(deployment_id)
+        import asyncio
+        asyncio.run(orchestrator.initialize_cluster_coordination(timeout=120.0))
+
+        # Wait for cluster to be ready
+        asyncio.run(orchestrator.wait_for_cluster_ready(timeout=180.0))
+
+        logger.info("Session cluster deployment ready")
+        self._session_deployments["cluster"] = manager
+        
+    return self._session_deployments["cluster"]
+
+
+def _get_or_create_single_server(self) -> ArangoServer:
+    """Get or create session single server."""
+    if "single" not in self._session_servers:
+        server = ArangoServer("test_single_server", ServerRole.SINGLE)
+        
+        logger.info("Starting session single server")
+        server.start(timeout=60.0)
+
+        # Verify server is healthy
+        health = server.health_check_sync(timeout=10.0)
+        if not health.is_healthy:
+            raise RuntimeError(f"Server health check failed: {health.error_message}")
+
+        logger.info(f"Session single server ready at {server.endpoint}")
+        self._session_servers["single"] = server
+        
+    return self._session_servers["single"]
+
+
+# Add methods to plugin class
+ArmadilloPlugin._get_or_create_cluster = _get_or_create_cluster
+ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
+
+
+@pytest.fixture(scope="function") 
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server."""
     from ..utils.crypto import random_id

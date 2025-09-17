@@ -97,8 +97,16 @@ def run(
         import os
         from ...core.log import LogManager
 
-        # Set environment variable for pytest plugin to read
+        # Set environment variables for pytest plugin to read
         os.environ['ARMADILLO_LOG_LEVEL'] = log_level.upper()
+
+        # Set deployment mode  
+        if cluster:
+            os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'cluster'
+        elif single_server:
+            os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'single_server'
+        else:
+            os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'single_server'  # default
 
         log_manager = LogManager()
         log_manager.configure(level=log_level.upper(), enable_console=True)
