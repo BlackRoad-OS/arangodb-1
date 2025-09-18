@@ -83,13 +83,13 @@ class TestServerHealthChecker:
             response_time=0.2,
             details={"version": "3.9.0"}
         )
-        
+
         # Mock asyncio.run to return expected status without awaiting coroutine
         def mock_run(coro):
             # Close the coroutine to prevent "never awaited" warning
             coro.close()
             return expected_status
-        
+
         mock_asyncio_run.side_effect = mock_run
         result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
 
@@ -104,7 +104,7 @@ class TestServerHealthChecker:
             # Close the coroutine to prevent "never awaited" warning
             coro.close()
             raise Exception("Async error")
-        
+
         mock_asyncio_run.side_effect = mock_run
         result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
 
@@ -134,12 +134,12 @@ class TestServerHealthChecker:
 
         # Test auth provider integration with proper mocking
         mock_status = HealthStatus(is_healthy=True, response_time=0.1)
-        
+
         def mock_run(coro):
             # Close the coroutine to prevent "never awaited" warning
             coro.close()
             return mock_status
-        
+
         mock_asyncio_run.side_effect = mock_run
         result = self.health_checker.check_health("http://localhost:8529")
         assert result == mock_status
