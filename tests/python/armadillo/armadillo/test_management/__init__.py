@@ -1,8 +1,8 @@
 """Advanced test management for Armadillo framework."""
 
 from .selector import (
-    TestSelector,
-    TestFilter,
+    Selector,
+    Filter,
     FilterCriteria,
     SelectionResult,
     FilterType,
@@ -13,8 +13,8 @@ from .selector import (
 )
 
 from .organizer import (
-    TestSuiteOrganizer,
-    TestSuite,
+    SuiteOrganizer,
+    Suite,
     SuiteConfig,
     SuitePriority,
     SuiteStatus,
@@ -35,8 +35,8 @@ from .organizer import (
 
 __all__ = [
     # Test Selection
-    'TestSelector',
-    'TestFilter',
+    'Selector',
+    'Filter',
     'FilterCriteria',
     'SelectionResult',
     'FilterType',
@@ -46,8 +46,8 @@ __all__ = [
     'create_suite_selector',
 
     # Test Organization
-    'TestSuiteOrganizer',
-    'TestSuite',
+    'SuiteOrganizer',
+    'Suite',
     'SuiteConfig',
     'SuitePriority',
     'SuiteStatus',

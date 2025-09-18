@@ -6,11 +6,11 @@ from pathlib import Path
 import time
 
 from armadillo.test_management.organizer import (
-    SuiteConfig, TestSuite, TestSuiteOrganizer,
+    SuiteConfig, Suite, SuiteOrganizer,
     SuitePriority, SuiteStatus,
     create_marker_suite, create_pattern_suite, create_priority_suite
 )
-from armadillo.test_management.selector import TestSelector, create_marker_selector
+from armadillo.test_management.selector import Selector, create_marker_selector
 
 
 class TestSuiteConfig:
@@ -102,14 +102,14 @@ class TestSuiteConfig:
         assert config.depends_on == ["dep1"]  # Should only appear once
 
 
-class TestTestSuite:
-    """Test TestSuite functionality."""
+class TestSuiteFunctionality:
+    """Test Suite functionality."""
 
     def setup_method(self):
         """Set up test environment."""
         self.config = SuiteConfig(name="test_suite", description="Test suite")
-        self.selector = TestSelector()
-        self.suite = TestSuite(config=self.config, selector=self.selector)
+        self.selector = Selector()
+        self.suite = Suite(config=self.config, selector=self.selector)
 
         # Create mock test items
         self.mock_tests = []
@@ -137,7 +137,7 @@ class TestTestSuite:
 
         # Add child suite
         child_config = SuiteConfig(name="child_suite")
-        child_suite = TestSuite(config=child_config, selector=TestSelector())
+        child_suite = Suite(config=child_config, selector=Selector())
         child_suite.tests = self.mock_tests[3:]  # 2 tests
         self.suite.add_child(child_suite)
 
@@ -183,7 +183,7 @@ class TestTestSuite:
     def test_suite_hierarchy_management(self):
         """Test parent-child hierarchy."""
         child_config = SuiteConfig(name="child")
-        child_suite = TestSuite(config=child_config, selector=TestSelector())
+        child_suite = Suite(config=child_config, selector=Selector())
 
         # Add child
         self.suite.add_child(child_suite)
@@ -207,7 +207,7 @@ class TestTestSuite:
 
         # Child suite
         child_config = SuiteConfig(name="child")
-        child_suite = TestSuite(config=child_config, selector=TestSelector())
+        child_suite = Suite(config=child_config, selector=Selector())
         self.suite.add_child(child_suite)
 
         assert child_suite.get_path() == ["test_suite", "child"]
@@ -215,7 +215,7 @@ class TestTestSuite:
 
         # Grandchild suite
         grandchild_config = SuiteConfig(name="grandchild")
-        grandchild_suite = TestSuite(config=grandchild_config, selector=TestSelector())
+        grandchild_suite = Suite(config=grandchild_config, selector=Selector())
         child_suite.add_child(grandchild_suite)
 
         assert grandchild_suite.get_path() == ["test_suite", "child", "grandchild"]
@@ -227,13 +227,13 @@ class TestTestSuite:
 
         # Add child with tests
         child_config = SuiteConfig(name="child")
-        child_suite = TestSuite(config=child_config, selector=TestSelector())
+        child_suite = Suite(config=child_config, selector=Selector())
         child_suite.tests = self.mock_tests[2:4]
         self.suite.add_child(child_suite)
 
         # Add grandchild with tests
         grandchild_config = SuiteConfig(name="grandchild")
-        grandchild_suite = TestSuite(config=grandchild_config, selector=TestSelector())
+        grandchild_suite = Suite(config=grandchild_config, selector=Selector())
         grandchild_suite.tests = [self.mock_tests[4]]
         child_suite.add_child(grandchild_suite)
 
@@ -284,7 +284,7 @@ class TestTestSuite:
 
         # Add child
         child_config = SuiteConfig(name="child")
-        child_suite = TestSuite(config=child_config, selector=TestSelector())
+        child_suite = Suite(config=child_config, selector=Selector())
         self.suite.add_child(child_suite)
 
         summary = self.suite.summary()
@@ -304,26 +304,26 @@ class TestTestSuite:
         assert summary['has_parent'] is False
 
 
-class TestTestSuiteOrganizer:
-    """Test TestSuiteOrganizer functionality."""
+class TestSuiteOrganizer:
+    """Test SuiteOrganizer functionality."""
 
     def setup_method(self):
         """Set up test environment."""
-        self.organizer = TestSuiteOrganizer()
+        self.organizer = SuiteOrganizer()
 
         # Create sample suites
         self.auth_config = SuiteConfig(name="auth_suite", priority=SuitePriority.HIGH)
-        self.auth_suite = TestSuite(config=self.auth_config, selector=TestSelector())
+        self.auth_suite = Suite(config=self.auth_config, selector=Selector())
 
         self.collections_config = SuiteConfig(name="collections_suite")
-        self.collections_suite = TestSuite(config=self.collections_config, selector=TestSelector())
+        self.collections_suite = Suite(config=self.collections_config, selector=Selector())
 
         self.slow_config = SuiteConfig(
             name="slow_suite",
             priority=SuitePriority.LOW,
             depends_on=["auth_suite"]
         )
-        self.slow_suite = TestSuite(config=self.slow_config, selector=TestSelector())
+        self.slow_suite = Suite(config=self.slow_config, selector=Selector())
 
     def test_organizer_creation(self):
         """Test organizer creation."""
@@ -434,7 +434,7 @@ class TestTestSuiteOrganizer:
         mock_tests.append(other_test)
 
         # Patch the selector's select_tests method to return the appropriate tests
-        with patch('armadillo.test_management.selector.TestSelector.select_tests') as mock_select:
+        with patch('armadillo.test_management.selector.Selector.select_tests') as mock_select:
             def select_tests_side_effect(all_tests):
                 # Mock result that returns tests for the suite being created
                 result = Mock()
@@ -498,16 +498,16 @@ class TestTestSuiteOrganizer:
         """Test hierarchical organization."""
         # Create suites with hierarchical names
         parent_config = SuiteConfig(name="parent")
-        parent_suite = TestSuite(config=parent_config, selector=TestSelector())
+        parent_suite = Suite(config=parent_config, selector=Selector())
 
         child1_config = SuiteConfig(name="parent.child1")
-        child1_suite = TestSuite(config=child1_config, selector=TestSelector())
+        child1_suite = Suite(config=child1_config, selector=Selector())
 
         child2_config = SuiteConfig(name="parent.child2")
-        child2_suite = TestSuite(config=child2_config, selector=TestSelector())
+        child2_suite = Suite(config=child2_config, selector=Selector())
 
         grandchild_config = SuiteConfig(name="parent.child1.grandchild")
-        grandchild_suite = TestSuite(config=grandchild_config, selector=TestSelector())
+        grandchild_suite = Suite(config=grandchild_config, selector=Selector())
 
         # Add all suites
         for suite in [parent_suite, child1_suite, child2_suite, grandchild_suite]:
@@ -546,7 +546,7 @@ class TestTestSuiteOrganizer:
         """Test circular dependency detection."""
         # Create circular dependency
         circular_config = SuiteConfig(name="circular", depends_on=["slow_suite"])
-        circular_suite = TestSuite(config=circular_config, selector=TestSelector())
+        circular_suite = Suite(config=circular_config, selector=Selector())
 
         self.slow_suite.config.depends_on = ["circular"]  # Create circle
 
@@ -561,11 +561,11 @@ class TestTestSuiteOrganizer:
         """Test dependency validation."""
         # Add suite with non-existent dependency
         invalid_config = SuiteConfig(name="invalid", depends_on=["non_existent"])
-        invalid_suite = TestSuite(config=invalid_config, selector=TestSelector())
+        invalid_suite = Suite(config=invalid_config, selector=Selector())
 
         # Add suite with conflict
         conflict_config = SuiteConfig(name="conflict", conflicts_with=["collections_suite"])
-        conflict_suite = TestSuite(config=conflict_config, selector=TestSelector())
+        conflict_suite = Suite(config=conflict_config, selector=Selector())
 
         self.organizer.add_suite(invalid_suite)
         self.organizer.add_suite(conflict_suite)
@@ -662,7 +662,7 @@ class TestConvenienceFunctions:
 
     def test_create_priority_suite(self):
         """Test priority-based suite creation."""
-        selector = TestSelector()
+        selector = Selector()
         suite = create_priority_suite("critical_tests", SuitePriority.CRITICAL, selector, "Critical tests")
 
         assert suite.name == "critical_tests"
@@ -677,7 +677,7 @@ class TestIntegrationScenarios:
 
     def setup_method(self):
         """Set up integration test environment."""
-        self.organizer = TestSuiteOrganizer()
+        self.organizer = SuiteOrganizer()
 
         # Create mock tests with various characteristics
         self.mock_tests = []
@@ -731,7 +731,7 @@ class TestIntegrationScenarios:
             depends_on=[dependency_name]
         )
         critical_selector = create_marker_selector(require_markers=["integration"])
-        critical_suite = TestSuite(config=critical_config, selector=critical_selector)
+        critical_suite = Suite(config=critical_config, selector=critical_selector)
         self.organizer.add_suite(critical_suite)
 
         # Step 4: Collect all tests
@@ -764,24 +764,24 @@ class TestIntegrationScenarios:
         """Test hierarchical suites with dependencies."""
         # Create parent suite
         parent_config = SuiteConfig(name="integration", priority=SuitePriority.LOW)
-        parent_suite = TestSuite(config=parent_config, selector=TestSelector())
+        parent_suite = Suite(config=parent_config, selector=Selector())
 
         # Create child suites with dependencies
         auth_config = SuiteConfig(
             name="integration.auth",
             depends_on=["unit_tests"]
         )
-        auth_suite = TestSuite(config=auth_config, selector=create_marker_selector(require_markers=["integration"]))
+        auth_suite = Suite(config=auth_config, selector=create_marker_selector(require_markers=["integration"]))
 
         collections_config = SuiteConfig(
             name="integration.collections",
             depends_on=["integration.auth"]
         )
-        collections_suite = TestSuite(config=collections_config, selector=TestSelector())
+        collections_suite = Suite(config=collections_config, selector=Selector())
 
         # Add unit tests suite (dependency)
         unit_config = SuiteConfig(name="unit_tests", priority=SuitePriority.HIGH)
-        unit_suite = TestSuite(config=unit_config, selector=create_marker_selector(require_markers=["unit"]))
+        unit_suite = Suite(config=unit_config, selector=create_marker_selector(require_markers=["unit"]))
 
         # Add all suites
         for suite in [parent_suite, auth_suite, collections_suite, unit_suite]:
@@ -809,13 +809,13 @@ class TestIntegrationScenarios:
             conflicts_with=["slow_suite"],
             priority=SuitePriority.HIGH
         )
-        fast_suite = TestSuite(config=fast_config, selector=create_marker_selector(require_markers=["fast"]))
+        fast_suite = Suite(config=fast_config, selector=create_marker_selector(require_markers=["fast"]))
 
         slow_config = SuiteConfig(
             name="slow_suite",
             priority=SuitePriority.LOW
         )
-        slow_suite = TestSuite(config=slow_config, selector=create_marker_selector(require_markers=["slow"]))
+        slow_suite = Suite(config=slow_config, selector=create_marker_selector(require_markers=["slow"]))
 
         self.organizer.add_suite(fast_suite)
         self.organizer.add_suite(slow_suite)
@@ -849,8 +849,8 @@ class TestIntegrationScenarios:
             if i > 5:
                 config.depends_on = [f"suite_{(i-3):02d}"]
 
-            selector = TestSelector()
-            suite = TestSuite(config=config, selector=selector)
+            selector = Selector()
+            suite = Suite(config=config, selector=selector)
             self.organizer.add_suite(suite)
 
         # Calculate execution order

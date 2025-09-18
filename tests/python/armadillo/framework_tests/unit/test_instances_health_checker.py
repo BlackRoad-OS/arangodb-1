@@ -85,7 +85,11 @@ class TestServerHealthChecker:
         )
         mock_asyncio_run.return_value = expected_status
 
-        result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
+        # Suppress coroutine warnings during mocking
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
 
         assert result == expected_status
         mock_asyncio_run.assert_called_once()
@@ -117,7 +121,10 @@ class TestServerHealthChecker:
         # Logger should be called (either success or failure)
         assert self.mock_logger.debug.called
 
-        # Test auth provider integration
-        self.health_checker.check_health("http://localhost:8529")
+        # Test auth provider integration - suppress coroutine warnings
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            self.health_checker.check_health("http://localhost:8529")
         # Auth provider should be accessed during health check
         # (This is tested more thoroughly in async tests)

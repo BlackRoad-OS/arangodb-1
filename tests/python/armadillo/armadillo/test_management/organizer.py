@@ -9,7 +9,7 @@ import re
 import pytest
 from pytest import Item as PytestItem
 
-from .selector import TestSelector, FilterOperation, create_marker_selector, create_pattern_selector
+from .selector import Selector, FilterOperation, create_marker_selector, create_pattern_selector
 from ..core.log import get_logger
 
 logger = get_logger(__name__)
@@ -115,10 +115,10 @@ class SuiteConfig:
 
 
 @dataclass
-class TestSuite:
+class Suite:
     """A logical grouping of tests with associated metadata and configuration."""
     config: SuiteConfig
-    selector: TestSelector
+    selector: Selector
     tests: List[PytestItem] = field(default_factory=list)
     status: SuiteStatus = SuiteStatus.PENDING
 
@@ -131,8 +131,8 @@ class TestSuite:
     errors: int = 0
 
     # Hierarchy
-    parent: Optional['TestSuite'] = None
-    children: List['TestSuite'] = field(default_factory=list)
+    parent: Optional['Suite'] = None
+    children: List['Suite'] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -166,7 +166,7 @@ class TestSuite:
             return 0.0
         return (self.passed / self.test_count) * 100
 
-    def collect_tests(self, all_tests: List[PytestItem]) -> 'TestSuite':
+    def collect_tests(self, all_tests: List[PytestItem]) -> 'Suite':
         """Collect tests for this suite using the configured selector.
 
         Args:
@@ -181,7 +181,7 @@ class TestSuite:
         logger.debug(f"Suite '{self.name}' collected {len(self.tests)} tests")
         return self
 
-    def add_child(self, child_suite: 'TestSuite') -> 'TestSuite':
+    def add_child(self, child_suite: 'Suite') -> 'Suite':
         """Add a child suite.
 
         Args:
@@ -195,7 +195,7 @@ class TestSuite:
             child_suite.parent = self
         return self
 
-    def remove_child(self, child_suite: 'TestSuite') -> 'TestSuite':
+    def remove_child(self, child_suite: 'Suite') -> 'Suite':
         """Remove a child suite.
 
         Args:
@@ -280,7 +280,7 @@ class TestSuite:
         }
 
 
-class TestSuiteOrganizer:
+class SuiteOrganizer:
     """Organizes and manages test suites with hierarchy and dependencies."""
 
     def __init__(self, logger_factory=None):
@@ -294,11 +294,11 @@ class TestSuiteOrganizer:
         else:
             self.logger = get_logger(__name__)
 
-        self.suites: Dict[str, TestSuite] = {}
-        self.root_suites: List[TestSuite] = []
+        self.suites: Dict[str, Suite] = {}
+        self.root_suites: List[Suite] = []
         self.execution_order: List[str] = []
 
-    def create_suite(self, config: SuiteConfig, selector: TestSelector = None) -> TestSuite:
+    def create_suite(self, config: SuiteConfig, selector: Selector = None) -> Suite:
         """Create a new test suite.
 
         Args:
@@ -309,15 +309,15 @@ class TestSuiteOrganizer:
             Created test suite
         """
         if selector is None:
-            selector = TestSelector()
+            selector = Selector()
 
-        suite = TestSuite(config=config, selector=selector)
+        suite = Suite(config=config, selector=selector)
         self.add_suite(suite)
 
         self.logger.debug(f"Created suite: {config.name}")
         return suite
 
-    def add_suite(self, suite: TestSuite) -> 'TestSuiteOrganizer':
+    def add_suite(self, suite: Suite) -> 'SuiteOrganizer':
         """Add a suite to the organizer.
 
         Args:
@@ -377,7 +377,7 @@ class TestSuiteOrganizer:
         self.logger.debug(f"Removed suite: {suite_name}")
         return True
 
-    def get_suite(self, suite_name: str) -> Optional[TestSuite]:
+    def get_suite(self, suite_name: str) -> Optional[Suite]:
         """Get a suite by name.
 
         Args:
@@ -388,7 +388,7 @@ class TestSuiteOrganizer:
         """
         return self.suites.get(suite_name)
 
-    def find_suites(self, criteria: Dict[str, Any]) -> List[TestSuite]:
+    def find_suites(self, criteria: Dict[str, Any]) -> List[Suite]:
         """Find suites matching given criteria.
 
         Args:
@@ -403,7 +403,7 @@ class TestSuiteOrganizer:
                 matching_suites.append(suite)
         return matching_suites
 
-    def organize_by_markers(self, all_tests: List[PytestItem]) -> 'TestSuiteOrganizer':
+    def organize_by_markers(self, all_tests: List[PytestItem]) -> 'SuiteOrganizer':
         """Automatically organize tests into suites based on pytest markers.
 
         Args:
@@ -437,7 +437,7 @@ class TestSuiteOrganizer:
 
         return self
 
-    def organize_by_paths(self, all_tests: List[PytestItem]) -> 'TestSuiteOrganizer':
+    def organize_by_paths(self, all_tests: List[PytestItem]) -> 'SuiteOrganizer':
         """Automatically organize tests into suites based on file paths.
 
         Args:
@@ -476,15 +476,15 @@ class TestSuiteOrganizer:
                     tags={dir_name, "path_based", "auto_generated"}
                 )
 
-                selector = TestSelector()
-                suite = TestSuite(config=config, selector=selector, tests=tests)
+                selector = Selector()
+                suite = Suite(config=config, selector=selector, tests=tests)
                 self.add_suite(suite)
 
                 self.logger.debug(f"Auto-created path suite '{dir_name}_suite' with {len(tests)} tests")
 
         return self
 
-    def organize_hierarchical(self, separator: str = ".") -> 'TestSuiteOrganizer':
+    def organize_hierarchical(self, separator: str = ".") -> 'SuiteOrganizer':
         """Organize suites into hierarchy based on names with separators.
 
         Args:
@@ -524,7 +524,7 @@ class TestSuiteOrganizer:
                             description=f"Parent suite for {name} category",
                             tags={name, "parent_suite", "auto_generated"}
                         )
-                        parent_suite = self.create_suite(parent_config, TestSelector())
+                        parent_suite = self.create_suite(parent_config, Selector())
                     else:
                         parent_suite = self.suites[current_name]
 
@@ -622,7 +622,7 @@ class TestSuiteOrganizer:
 
         return errors
 
-    def collect_all_tests(self, all_tests: List[PytestItem]) -> 'TestSuiteOrganizer':
+    def collect_all_tests(self, all_tests: List[PytestItem]) -> 'SuiteOrganizer':
         """Collect tests for all suites.
 
         Args:
@@ -691,7 +691,7 @@ class TestSuiteOrganizer:
 
     def _build_hierarchy_tree(self) -> Dict[str, Any]:
         """Build a tree representation of suite hierarchy."""
-        def build_tree(suite: TestSuite) -> Dict[str, Any]:
+        def build_tree(suite: Suite) -> Dict[str, Any]:
             return {
                 'name': suite.name,
                 'test_count': suite.test_count,
@@ -705,7 +705,7 @@ class TestSuiteOrganizer:
 
 
 # Convenience functions for common suite patterns
-def create_marker_suite(name: str, marker: str, description: str = "") -> TestSuite:
+def create_marker_suite(name: str, marker: str, description: str = "") -> Suite:
     """Create a suite based on a pytest marker.
 
     Args:
@@ -723,10 +723,10 @@ def create_marker_suite(name: str, marker: str, description: str = "") -> TestSu
     )
 
     selector = create_marker_selector(require_markers=[marker])
-    return TestSuite(config=config, selector=selector)
+    return Suite(config=config, selector=selector)
 
 
-def create_pattern_suite(name: str, pattern: str, description: str = "") -> TestSuite:
+def create_pattern_suite(name: str, pattern: str, description: str = "") -> Suite:
     """Create a suite based on a test name pattern.
 
     Args:
@@ -744,11 +744,11 @@ def create_pattern_suite(name: str, pattern: str, description: str = "") -> Test
     )
 
     selector = create_pattern_selector(include_patterns=[pattern])
-    return TestSuite(config=config, selector=selector)
+    return Suite(config=config, selector=selector)
 
 
 def create_priority_suite(name: str, priority: SuitePriority,
-                         selector: TestSelector, description: str = "") -> TestSuite:
+                         selector: Selector, description: str = "") -> Suite:
     """Create a suite with specific priority.
 
     Args:
@@ -767,4 +767,4 @@ def create_priority_suite(name: str, priority: SuitePriority,
         tags={priority.name.lower()}
     )
 
-    return TestSuite(config=config, selector=selector)
+    return Suite(config=config, selector=selector)

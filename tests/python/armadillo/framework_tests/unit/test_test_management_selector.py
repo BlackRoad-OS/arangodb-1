@@ -5,7 +5,7 @@ from unittest.mock import Mock, MagicMock
 from pathlib import Path
 
 from armadillo.test_management.selector import (
-    TestSelector, TestFilter, FilterCriteria, SelectionResult,
+    Selector, Filter, FilterCriteria, SelectionResult,
     FilterType, FilterOperation,
     create_marker_selector, create_pattern_selector, create_suite_selector
 )
@@ -40,8 +40,8 @@ class TestFilterCriteria:
         assert criteria.pattern.search("other_test") is None
 
 
-class TestTestFilter:
-    """Test TestFilter functionality."""
+class TestFilterFunctionality:
+    """Test Filter functionality."""
 
     def setup_method(self):
         """Set up test environment."""
@@ -53,7 +53,7 @@ class TestTestFilter:
     def test_marker_filter_matching(self):
         """Test marker-based filtering."""
         criteria = FilterCriteria(FilterType.MARKER, FilterOperation.INCLUDE, "slow")
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
 
         # Mock marker presence
         self.mock_test_item.get_closest_marker.return_value = Mock()  # Marker exists
@@ -65,7 +65,7 @@ class TestTestFilter:
     def test_pattern_filter_matching(self):
         """Test pattern-based filtering."""
         criteria = FilterCriteria(FilterType.PATTERN, FilterOperation.INCLUDE, "*auth*")
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
 
         # Should match both test name and nodeid containing 'auth'
         assert filter_obj.matches(self.mock_test_item) is True
@@ -78,7 +78,7 @@ class TestTestFilter:
     def test_tag_filter_matching(self):
         """Test tag-based filtering."""
         criteria = FilterCriteria(FilterType.TAG, FilterOperation.INCLUDE, "auth")
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
 
         # Mock test function with tags
         mock_function = Mock()
@@ -94,7 +94,7 @@ class TestTestFilter:
     def test_path_filter_matching(self):
         """Test path-based filtering."""
         criteria = FilterCriteria(FilterType.PATH, FilterOperation.INCLUDE, "*/auth/*")
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
 
         assert filter_obj.matches(self.mock_test_item) is True
 
@@ -129,12 +129,12 @@ class TestSelectionResult:
         assert result.selection_rate == 0.0
 
 
-class TestTestSelector:
-    """Test TestSelector functionality."""
+class TestSelectorFunctionality:
+    """Test Selector functionality."""
 
     def setup_method(self):
         """Set up test environment."""
-        self.selector = TestSelector()
+        self.selector = Selector()
 
         # Create mock test items
         self.test_items = []
@@ -344,7 +344,7 @@ class TestErrorHandling:
 
     def test_malformed_pattern(self):
         """Test handling of malformed regex patterns."""
-        selector = TestSelector()
+        selector = Selector()
 
         # This should not crash, even with a complex pattern
         selector.add_pattern_filter("[invalid regex", FilterOperation.INCLUDE)
@@ -362,7 +362,7 @@ class TestErrorHandling:
 
     def test_missing_test_attributes(self):
         """Test handling of test items with missing attributes."""
-        selector = TestSelector()
+        selector = Selector()
         selector.add_pattern_filter("*test*", FilterOperation.INCLUDE)
 
         # Mock test with missing attributes
@@ -381,7 +381,7 @@ class TestIntegrationScenarios:
 
     def test_typical_dev_workflow(self):
         """Test typical developer workflow filters."""
-        selector = TestSelector()
+        selector = Selector()
 
         # Developer wants to run auth tests, but not slow ones
         selector.add_pattern_filter("*auth*", FilterOperation.INCLUDE)
@@ -412,7 +412,7 @@ class TestIntegrationScenarios:
 
     def test_ci_workflow(self):
         """Test CI/CD pipeline filter patterns."""
-        selector = TestSelector()
+        selector = Selector()
 
         # CI wants all tests except flaky and nightly ones
         selector.add_marker_filter("flaky", FilterOperation.EXCLUDE)

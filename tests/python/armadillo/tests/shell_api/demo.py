@@ -11,7 +11,7 @@ from pathlib import Path
 # Add armadillo to path for demo
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from armadillo.test_management import TestSuiteOrganizer, create_marker_selector
+from armadillo.test_management import SuiteOrganizer, create_marker_selector
 from .suite import setup_shell_api_tests
 
 

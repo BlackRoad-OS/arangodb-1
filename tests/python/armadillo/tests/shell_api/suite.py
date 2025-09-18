@@ -8,19 +8,19 @@ from pathlib import Path
 from typing import List
 
 from armadillo.test_management import (
-    TestSuiteOrganizer, TestSuite, SuiteConfig, SuitePriority,
-    TestSelector, FilterOperation, create_pattern_selector
+    SuiteOrganizer, Suite, SuiteConfig, SuitePriority,
+    Selector, FilterOperation, create_pattern_selector
 )
 
 
-def create_shell_api_suite() -> TestSuite:
+def create_shell_api_suite() -> Suite:
     """Create the shell_api test suite.
 
     This mirrors the JavaScript shell_api test suite which runs tests from:
     tests/js/client/shell/api
 
     Returns:
-        Configured TestSuite for shell API tests
+        Configured Suite for shell API tests
     """
     config = SuiteConfig(
         name="shell_api",
@@ -57,17 +57,17 @@ def create_shell_api_suite() -> TestSuite:
         include_patterns=["**/shell_api/**"]
     )
 
-    suite = TestSuite(config=config, selector=selector)
+    suite = Suite(config=config, selector=selector)
     return suite
 
 
-def create_shell_api_organizer() -> TestSuiteOrganizer:
+def create_shell_api_organizer() -> SuiteOrganizer:
     """Create a test suite organizer for shell API tests.
 
     Returns:
-        Configured TestSuiteOrganizer with shell API suites
+        Configured SuiteOrganizer with shell API suites
     """
-    organizer = TestSuiteOrganizer()
+    organizer = SuiteOrganizer()
 
     # Add main shell API suite
     shell_api_suite = create_shell_api_suite()
@@ -95,7 +95,7 @@ def create_shell_api_organizer() -> TestSuiteOrganizer:
         include_patterns=["**/test_statistics.py"]
     )
 
-    statistics_suite = TestSuite(config=statistics_config, selector=statistics_selector)
+    statistics_suite = Suite(config=statistics_config, selector=statistics_selector)
 
     # Add as child of main shell API suite
     shell_api_suite.add_child(statistics_suite)
@@ -127,14 +127,14 @@ def get_shell_api_test_paths() -> List[Path]:
 
 
 # Convenience function for quick test suite creation
-def setup_shell_api_tests() -> TestSuiteOrganizer:
+def setup_shell_api_tests() -> SuiteOrganizer:
     """Set up and configure shell API test suite.
 
     This is the main entry point for setting up shell API tests
     in the Armadillo framework.
 
     Returns:
-        Ready-to-use TestSuiteOrganizer with shell API tests configured
+        Ready-to-use SuiteOrganizer with shell API tests configured
     """
     organizer = create_shell_api_organizer()
 

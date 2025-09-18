@@ -79,13 +79,13 @@ class SelectionResult:
         return (self.selected_count / self.total_collected) * 100
 
 
-class TestFilter:
+class Filter:
     """Individual test filter with matching logic."""
 
     def __init__(self, criteria: FilterCriteria):
         self.criteria = criteria
         self.match_count = 0
-        self.logger = get_logger(f"{__name__}.TestFilter")
+        self.logger = get_logger(f"{__name__}.Filter")
 
     def matches(self, test_item: PytestItem) -> bool:
         """Check if test item matches this filter."""
@@ -172,7 +172,7 @@ class TestFilter:
         return False
 
 
-class TestSelector:
+class Selector:
     """Advanced test selector with multiple filtering capabilities."""
 
     def __init__(self, logger_factory=None):
@@ -186,10 +186,10 @@ class TestSelector:
         else:
             self.logger = get_logger(__name__)
 
-        self.filters: List[TestFilter] = []
+        self.filters: List[Filter] = []
         self.custom_filters: List[Callable[[PytestItem], bool]] = []
 
-    def add_marker_filter(self, marker: str, operation: FilterOperation) -> 'TestSelector':
+    def add_marker_filter(self, marker: str, operation: FilterOperation) -> 'Selector':
         """Add marker-based filter.
 
         Args:
@@ -200,13 +200,13 @@ class TestSelector:
             Self for chaining
         """
         criteria = FilterCriteria(FilterType.MARKER, operation, marker)
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
         self.filters.append(filter_obj)
 
         self.logger.debug(f"Added marker filter: {operation.value} '{marker}'")
         return self
 
-    def add_pattern_filter(self, pattern: str, operation: FilterOperation) -> 'TestSelector':
+    def add_pattern_filter(self, pattern: str, operation: FilterOperation) -> 'Selector':
         """Add pattern-based filter for test names.
 
         Args:
@@ -217,13 +217,13 @@ class TestSelector:
             Self for chaining
         """
         criteria = FilterCriteria(FilterType.PATTERN, operation, pattern)
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
         self.filters.append(filter_obj)
 
         self.logger.debug(f"Added pattern filter: {operation.value} '{pattern}'")
         return self
 
-    def add_tag_filter(self, tag: str, operation: FilterOperation) -> 'TestSelector':
+    def add_tag_filter(self, tag: str, operation: FilterOperation) -> 'Selector':
         """Add tag-based filter.
 
         Args:
@@ -234,13 +234,13 @@ class TestSelector:
             Self for chaining
         """
         criteria = FilterCriteria(FilterType.TAG, operation, tag)
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
         self.filters.append(filter_obj)
 
         self.logger.debug(f"Added tag filter: {operation.value} '{tag}'")
         return self
 
-    def add_path_filter(self, path_pattern: str, operation: FilterOperation) -> 'TestSelector':
+    def add_path_filter(self, path_pattern: str, operation: FilterOperation) -> 'Selector':
         """Add path-based filter for test file paths.
 
         Args:
@@ -251,14 +251,14 @@ class TestSelector:
             Self for chaining
         """
         criteria = FilterCriteria(FilterType.PATH, operation, path_pattern)
-        filter_obj = TestFilter(criteria)
+        filter_obj = Filter(criteria)
         self.filters.append(filter_obj)
 
         self.logger.debug(f"Added path filter: {operation.value} '{path_pattern}'")
         return self
 
     def add_custom_filter(self, filter_func: Callable[[PytestItem], bool],
-                         operation: FilterOperation = FilterOperation.INCLUDE) -> 'TestSelector':
+                         operation: FilterOperation = FilterOperation.INCLUDE) -> 'Selector':
         """Add custom filter function.
 
         Args:
@@ -401,7 +401,7 @@ class TestSelector:
 
         return summary
 
-    def clear_filters(self) -> 'TestSelector':
+    def clear_filters(self) -> 'Selector':
         """Clear all configured filters.
 
         Returns:
@@ -416,7 +416,7 @@ class TestSelector:
 # Convenience functions for common filter patterns
 def create_marker_selector(include_markers: List[str] = None,
                           exclude_markers: List[str] = None,
-                          require_markers: List[str] = None) -> TestSelector:
+                          require_markers: List[str] = None) -> Selector:
     """Create a test selector with marker-based filters.
 
     Args:
@@ -425,9 +425,9 @@ def create_marker_selector(include_markers: List[str] = None,
         require_markers: Markers that must be present (AND logic)
 
     Returns:
-        Configured TestSelector
+        Configured Selector
     """
-    selector = TestSelector()
+    selector = Selector()
 
     for marker in include_markers or []:
         selector.add_marker_filter(marker, FilterOperation.INCLUDE)
@@ -442,7 +442,7 @@ def create_marker_selector(include_markers: List[str] = None,
 
 
 def create_pattern_selector(include_patterns: List[str] = None,
-                           exclude_patterns: List[str] = None) -> TestSelector:
+                           exclude_patterns: List[str] = None) -> Selector:
     """Create a test selector with pattern-based filters.
 
     Args:
@@ -450,9 +450,9 @@ def create_pattern_selector(include_patterns: List[str] = None,
         exclude_patterns: Name patterns to exclude
 
     Returns:
-        Configured TestSelector
+        Configured Selector
     """
-    selector = TestSelector()
+    selector = Selector()
 
     for pattern in include_patterns or []:
         selector.add_pattern_filter(pattern, FilterOperation.INCLUDE)
@@ -463,13 +463,13 @@ def create_pattern_selector(include_patterns: List[str] = None,
     return selector
 
 
-def create_suite_selector(suite_name: str) -> TestSelector:
+def create_suite_selector(suite_name: str) -> Selector:
     """Create a test selector for a specific test suite.
 
     Args:
         suite_name: Name of the test suite
 
     Returns:
-        Configured TestSelector
+        Configured Selector
     """
-    return TestSelector().add_tag_filter(suite_name, FilterOperation.REQUIRE)
+    return Selector().add_tag_filter(suite_name, FilterOperation.REQUIRE)
