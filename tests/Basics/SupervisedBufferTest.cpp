@@ -527,6 +527,8 @@ TEST(SupervisedBufferTest, StealWithMemoryAccounting) {
     std::size_t capBefore = supervisedBuffer.capacity();
 
     uint8_t* stolen = supervisedBuffer.stealWithMemoryAccounting(owningScope);
+    // get the builder's ptr back to start
+    builder.clear();
 
     // bytes still accounted so the memory accounted in the
     // monitor is the same
