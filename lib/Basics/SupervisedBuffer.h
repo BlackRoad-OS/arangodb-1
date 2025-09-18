@@ -28,7 +28,6 @@ class SupervisedBuffer : public Buffer<uint8_t> {
       return nullptr;
     }
     _usageScope.revert();
-    owningScope.increase(tracked);
     uint8_t* ptr = Buffer<uint8_t>::steal();
     // _usageScope.increase(this->capacity());
     return ptr;
