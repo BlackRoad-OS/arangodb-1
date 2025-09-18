@@ -37,12 +37,10 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     TRI_ASSERT(false)
         << "raw steal() call not permitted in Supervised Buffer, please use "
            "stealWithMemoryAccounting(ResourceUsageScope& )";
-    /*
+
     uint8_t* ptr = Buffer<uint8_t>::steal();
     _usageScope.revert();
     return ptr;
-*/
-    return nullptr;  // signal error to never leak unaccount
   }
 
  private:
