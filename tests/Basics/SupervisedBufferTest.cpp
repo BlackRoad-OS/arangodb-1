@@ -436,6 +436,7 @@ TEST(SupervisedBufferTest, EnforceMemoryLimitOnGrowth) {
       threw = true;
       EXPECT_EQ(TRI_ERROR_RESOURCE_LIMIT, ex.code());
     }
+    builder.close();
     EXPECT_TRUE(threw);
   }
   ASSERT_EQ(monitor.current(), 0);
