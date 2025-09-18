@@ -27,7 +27,7 @@ TEST(SupervisedBufferTest, AccountsMemoryLargeAndSmallValuesNormalBuffer) {
       builder.close();
 
       ASSERT_EQ(monitor.current(), 0);
-      ASSERT_GE(builder.size(), 1024U);
+      ASSERT_GE(builder.size(), 1024);
       largeValue = AqlValue{builder.slice(), builder.size()};
       monitor.increaseMemoryUsage(largeValue.memoryUsage());
       ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
@@ -452,7 +452,7 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
     // no growth expected yet
     for (int i = 0; i < 8; ++i) {
       builder.add(Value("ab"));
-      ASSERT_GE(monitor.current(), builder.size());
+      ASSERT_GE(monitor.current(), builder.bufferRef().size());
     }
 
     // add more items until the buffer grows twice
@@ -466,7 +466,7 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
       std::size_t capAfter = supervisedBuffer.capacity();
       std::size_t monitorAfter = monitor.current();
 
-      ASSERT_GE(monitorAfter, builder.size());
+      ASSERT_GE(monitorAfter, builder.bufferRef().size());
 
       if (capAfter > capBefore) {
         std::size_t capDiff = capAfter - capBefore;
@@ -488,7 +488,7 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
     builder.openArray();
     for (int i = 0; i < 16; ++i) {
       builder.add(Value("abcde"));
-      ASSERT_GE(monitor.current(), builder.size());
+      ASSERT_GE(monitor.current(), builder.bufferRef().size());
       ASSERT_EQ(monitor.current(), maintainedMonitorCurrent);
     }
     builder.close();
