@@ -16,9 +16,11 @@ class SupervisedBuffer : public Buffer<uint8_t> {
   }
 
   uint8_t* stealWithMemoryAccounting(ResourceUsageScope& owningScope) noexcept {
-    owningScope.increase(_usageScope.trackedAndSteal());
+    std::size_t tracked = _usageScope.tracked();
+    _usageScope.revert();
+    owningScope.increase(tracked);
     uint8_t* ptr = Buffer<uint8_t>::steal();
-    _usageScope.increase(this->capacity());
+    // _usageScope.increase(this->capacity());
     return ptr;
   }
 
