@@ -79,7 +79,6 @@ TEST(SupervisedBufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
       ASSERT_GE(builder.size(), 1024U);
       ASSERT_GE(monitor.current(), builder.size());  // capacity >= size
       largeValue = AqlValue{builder.slice(), builder.size()};
-      // buffer accounted already; now also account the AqlValue
       monitor.increaseMemoryUsage(largeValue.memoryUsage());
       ASSERT_GE(monitor.current(), builder.size() + largeValue.memoryUsage());
     }
@@ -103,7 +102,6 @@ TEST(SupervisedBufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
       builder.add(Value(1));  // inline in AqlValue
       builder.close();
 
-      // tiny write should not force a capacity grow; monitor unchanged
       ASSERT_EQ(monitor.current(), before);
 
       smallValue = AqlValue{builder.slice(), builder.size()};
@@ -393,7 +391,6 @@ TEST(SupervisedBufferTest, AccountCapacityGrowAndClear) {
     // current tracks capacity, which must be >= payload size
     ASSERT_GE(monitor.current(), builder.size());
 
-    // current usage snapshot
     std::size_t snapshot = monitor.current();
 
     // recycle but don't deallocate
@@ -453,8 +450,6 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
     builder.openArray();
 
     // no growth expected yet
-    std::size_t lastCapacity = supervisedBuffer.capacity();
-    std::size_t lastMonitorCurrent = monitor.current();
     for (int i = 0; i < 8; ++i) {
       builder.add(Value("ab"));
       ASSERT_GE(monitor.current(), builder.size());
@@ -463,17 +458,23 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
     // add more items until the buffer grows twice
     int growths = 0;
     for (int i = 0; i < 512 && growths < 2; ++i) {
+      std::size_t capBefore = supervisedBuffer.capacity();
+      std::size_t monitorBefore = monitor.current();
+
       builder.add(Value("abcdefghijklmnopqrstuvwxyz"));
-      if (supervisedBuffer.capacity() > lastCapacity) {
-        ASSERT_GT(monitor.current(), lastMonitorCurrent);  // monitor increased
-        ASSERT_GE(monitor.current(), builder.size());
-        lastCapacity = supervisedBuffer.capacity();
-        lastMonitorCurrent = monitor.current();
+
+      std::size_t capAfter = supervisedBuffer.capacity();
+      std::size_t monitorAfter = monitor.current();
+
+      ASSERT_GE(monitorAfter, builder.size());
+
+      if (capAfter > capBefore) {
+        std::size_t capDiff = capAfter - capBefore;
+        ASSERT_EQ(monitorAfter, monitorBefore + capDiff);
         ++growths;
-      } else {
-        ASSERT_GE(monitor.current(), builder.size());
       }
     }
+    ASSERT_GE(growths, 2);
     ASSERT_GE(growths, 2);
     builder.close();
     ASSERT_GE(monitor.current(), builder.size());
@@ -511,23 +512,23 @@ TEST(SupervisedBufferTest, StealWithMemoryAccounting) {
     // the local inline capacity is 192 bytes
     std::size_t localCap = supervisedBuffer.capacity();
 
-    // Force growth beyond local capacity
+    // force growth beyond local capacity
     builder.openArray();
     for (int i = 0; i < 64; ++i) {
       builder.add(Value(std::string(256, 'a')));
     }
     builder.close();
 
-    // buffer grew, so it allocated on the heap
+    // buffer grew, so it allocated
     ASSERT_GT(supervisedBuffer.capacity(), localCap);
 
-    // Snapshot total and buffer capacity immediately before stealing
+    // total and buffer capacity immediately before stealing
     std::size_t beforeTotal = monitor.current();
     std::size_t capBefore = supervisedBuffer.capacity();
 
     uint8_t* stolen = supervisedBuffer.stealWithMemoryAccounting(owningScope);
 
-    // ownership moved, bytes still accounted so the memory accounted in the
+    // bytes still accounted so the memory accounted in the
     // monitor is the same
     ASSERT_EQ(monitor.current(), beforeTotal);
 
