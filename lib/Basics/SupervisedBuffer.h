@@ -17,6 +17,17 @@ class SupervisedBuffer : public Buffer<uint8_t> {
 
   uint8_t* stealWithMemoryAccounting(ResourceUsageScope& owningScope) noexcept {
     std::size_t tracked = _usageScope.tracked();
+    if (tracked == 0) {
+      TRI_ASSERT(false) << "stealWithMemoryAccounting requires buffer to have "
+                           "heap allocated memory";
+      return nullptr;
+    }
+    _usageScope.revert();
+    try {
+      owningScope.increase(tracked);  // may throw on limit
+    } catch (...) {
+      return nullptr;
+    }
     _usageScope.revert();
     owningScope.increase(tracked);
     uint8_t* ptr = Buffer<uint8_t>::steal();
@@ -28,9 +39,12 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     TRI_ASSERT(false)
         << "raw steal() call not permitted in Supervised Buffer, please use "
            "stealWithMemoryAccounting(ResourceUsageScope& )";
+    /*
     uint8_t* ptr = Buffer<uint8_t>::steal();
     _usageScope.revert();
     return ptr;
+*/
+    return nullptr;  // signal error to never leak unaccount
   }
 
  private:
