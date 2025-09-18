@@ -83,25 +83,35 @@ class TestServerHealthChecker:
             response_time=0.2,
             details={"version": "3.9.0"}
         )
-        mock_asyncio_run.return_value = expected_status
-
-        # Suppress coroutine warnings during mocking
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
+        
+        # Mock asyncio.run to return expected status without awaiting coroutine
+        def mock_run(coro):
+            # Close the coroutine to prevent "never awaited" warning
+            coro.close()
+            return expected_status
+        
+        mock_asyncio_run.side_effect = mock_run
+        result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
 
         assert result == expected_status
         mock_asyncio_run.assert_called_once()
 
-    @patch('asyncio.run', side_effect=Exception("Async error"))
+    @patch('asyncio.run')
     def test_check_health_exception_handling(self, mock_asyncio_run):
         """Test health check exception handling."""
+        # Mock asyncio.run to raise exception without awaiting coroutine
+        def mock_run(coro):
+            # Close the coroutine to prevent "never awaited" warning
+            coro.close()
+            raise Exception("Async error")
+        
+        mock_asyncio_run.side_effect = mock_run
         result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
 
         assert result.is_healthy is False
         assert "Health check error: Async error" in result.error_message
         assert result.response_time >= 0
+        mock_asyncio_run.assert_called_once()
 
     # NOTE: Async health check tests are skipped due to conflicts with global socket mocking
     # in unit test environment. Real async health checking is covered by integration tests.
@@ -114,17 +124,22 @@ class TestServerHealthChecker:
         assert callable(self.health_checker.check_readiness)
         assert callable(self.health_checker.check_health)
 
-    def test_health_checker_integration_with_dependencies(self):
+    @patch('asyncio.run')
+    def test_health_checker_integration_with_dependencies(self, mock_asyncio_run):
         """Test health checker integration with injected dependencies."""
         # Test logger integration
         result = self.health_checker.check_readiness("test_server", "http://localhost:8529")
         # Logger should be called (either success or failure)
         assert self.mock_logger.debug.called
 
-        # Test auth provider integration - suppress coroutine warnings
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            self.health_checker.check_health("http://localhost:8529")
-        # Auth provider should be accessed during health check
-        # (This is tested more thoroughly in async tests)
+        # Test auth provider integration with proper mocking
+        mock_status = HealthStatus(is_healthy=True, response_time=0.1)
+        
+        def mock_run(coro):
+            # Close the coroutine to prevent "never awaited" warning
+            coro.close()
+            return mock_status
+        
+        mock_asyncio_run.side_effect = mock_run
+        result = self.health_checker.check_health("http://localhost:8529")
+        assert result == mock_status
