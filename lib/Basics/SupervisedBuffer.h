@@ -41,11 +41,6 @@ class SupervisedBuffer : public Buffer<uint8_t> {
 
   uint8_t* stealWithMemoryAccounting(ResourceUsageScope& owningScope) noexcept {
     std::size_t tracked = _usageScope.tracked();
-    if (tracked == 0) {
-      TRI_ASSERT(false) << "stealWithMemoryAccounting requires buffer to have "
-                           "heap allocated memory";
-      return nullptr;
-    }
     // first add the tracked bytes to the owning scope. if this throws, do
     // nothing
     try {
@@ -53,13 +48,12 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     } catch (...) {
       return nullptr;
     }
+    // remove the same amount from the buffer's scope, keeping the global
+    // monitor constant, before stealing, in case it throws
+    _usageScope.decrease(tracked);
     // steal the underlying buffer, detaches the heap allocation and resets
     // capacity to the inline value
-
     uint8_t* ptr = Buffer<uint8_t>::steal();
-    // remove the same amount from the buffer's scope, keeping the global
-    // monitor constant
-    _usageScope.decrease(tracked);
     return ptr;
   }
 
