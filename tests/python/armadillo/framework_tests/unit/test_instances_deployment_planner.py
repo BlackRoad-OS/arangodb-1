@@ -174,6 +174,10 @@ class TestStandardDeploymentPlanner:
             assert coordinator.args["cluster.my-address"] == f"tcp://127.0.0.1:{expected_port}"
             assert coordinator.args["cluster.agency-endpoint"] == "tcp://127.0.0.1:8529"
             assert coordinator.args["server.authentication"] == "false"
+            
+            # Check Foxx service configuration (matches JS framework)
+            assert coordinator.args["foxx.force-update-on-startup"] == "true"
+            assert coordinator.args["cluster.default-replication-factor"] == "2"
 
         # Check coordination endpoints
         expected_endpoints = ["http://127.0.0.1:8531", "http://127.0.0.1:8532"]

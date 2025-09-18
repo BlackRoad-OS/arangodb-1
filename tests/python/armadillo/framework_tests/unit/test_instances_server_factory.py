@@ -147,6 +147,10 @@ class TestStandardServerFactory:
         # We can't directly access it, but we can verify the server was created successfully
         assert server.server_id == "server_0"
         assert server.config.args["custom"] == "arg"
+        
+        # Verify that data_dir and log_file from ServerConfig are preserved
+        assert server.data_dir == Path("/fake/data")
+        assert server.log_file == Path("/fake/log")
         assert server.config.args["memory"] == "1G"
         assert server.config.memory_limit_mb == 512
         assert server.config.startup_timeout == 45.0

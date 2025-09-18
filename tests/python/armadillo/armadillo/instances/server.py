@@ -77,9 +77,7 @@ class ArangoServer:
             self.app_dir = self.base_dir / "apps"
             self.log_file = self.base_dir / "arangodb.log"
 
-        # Ensure directories exist
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.app_dir.mkdir(parents=True, exist_ok=True)
+        # Note: Directories will be created when server starts, not during construction
 
         # Server configuration
         self.config = config
@@ -126,6 +124,10 @@ class ArangoServer:
 
         try:
             with timeout_scope(effective_timeout, f"start_server_{self.server_id}"):
+                # Ensure directories exist before starting server
+                self.data_dir.mkdir(parents=True, exist_ok=True)
+                self.app_dir.mkdir(parents=True, exist_ok=True)
+
                 # Build command line
                 command = self._build_command()
 

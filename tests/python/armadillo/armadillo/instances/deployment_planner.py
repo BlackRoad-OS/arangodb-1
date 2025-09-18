@@ -82,9 +82,9 @@ class StandardDeploymentPlanner:
         agent_endpoints = self._create_agents(plan, deployment_id, cluster_config)
         plan.agency_endpoints = agent_endpoints
 
-        # Add agency endpoints to all agents (point to first agent only, like shell script)
+        # Add agency endpoints to all agents (all endpoints, like JS framework)
         for server in plan.get_agents():
-            server.args["agency.endpoint"] = agent_endpoints[0]
+            server.args["agency.endpoint"] = agent_endpoints.copy()
 
         # Create database servers
         self._create_dbservers(plan, deployment_id, cluster_config, agent_endpoints)
