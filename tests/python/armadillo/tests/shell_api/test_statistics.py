@@ -6,32 +6,12 @@ Tests the /_admin/statistics* endpoints
 
 import pytest
 import time
-from typing import Dict, Any
 
 import requests
-from arango import ArangoClient, ArangoError
 
 
 class TestStatisticsAPI:
     """Test suite for ArangoDB statistics API endpoints - deployment agnostic."""
-
-    @pytest.fixture(scope="function")
-    def arango_client(self, arango_deployment):
-        """Get ArangoDB client connected to test deployment (single server or coordinator)."""
-        server = arango_deployment  # Works with both single server and cluster coordinator
-
-        # Create client using the server's endpoint
-        client = ArangoClient(hosts=server.endpoint)
-
-        # Connect to system database for admin endpoints
-        db = client.db('_system')
-        return db
-
-    @pytest.fixture(scope="function")
-    def base_url(self, arango_deployment):
-        """Get base URL for HTTP requests to any deployment."""
-        server = arango_deployment  # Works with both single server and cluster coordinator
-        return server.endpoint
 
     def test_statistics_description_correct_endpoint(self, base_url):
         """Test /_admin/statistics-description endpoint returns 200."""
