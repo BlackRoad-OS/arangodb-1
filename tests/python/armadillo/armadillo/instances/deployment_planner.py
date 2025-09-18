@@ -148,6 +148,8 @@ class StandardDeploymentPlanner:
                     "cluster.my-address": f"tcp://127.0.0.1:{port}",
                     "cluster.agency-endpoint": agent_endpoints[0],
                     "server.authentication": "false",
+                    "foxx.force-update-on-startup": "true",  # Wait for Foxx services to be ready
+                    "cluster.default-replication-factor": "2",
                 }
             )
             plan.servers.append(coordinator_config)

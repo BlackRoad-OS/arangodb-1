@@ -505,8 +505,8 @@ class InstanceManager:
     def _start_cluster(self) -> None:
         """Start cluster deployment in proper sequence: agents -> wait -> dbservers -> coordinators."""
         logger.info("Starting cluster servers in sequence")
-        
-        # 1. Start agents first  
+
+        # 1. Start agents first
         logger.info("Starting agents...")
         agent_futures = []
         for server_id, server in self._servers.items():
@@ -582,11 +582,11 @@ class InstanceManager:
 
         import requests
         start_time = time.time()
-        
+
         # Get all agents
-        agents = [(server_id, server) for server_id, server in self._servers.items() 
+        agents = [(server_id, server) for server_id, server in self._servers.items()
                  if server.role == ServerRole.AGENT]
-        
+
         iteration = 0
         while time.time() - start_time < timeout:
             iteration += 1
@@ -594,25 +594,25 @@ class InstanceManager:
                 have_config = 0
                 have_leader = 0
                 leader_id = None
-                
+
                 logger.debug(f"Agency check iteration {iteration}")
-                
+
                 # Check each agent for leadership and configuration
                 for server_id, server in agents:
                     try:
                         logger.debug(f"Checking agent {server_id} at {server.endpoint}")
                         response = requests.get(f"{server.endpoint}/_api/agency/config", timeout=2.0)
                         logger.debug(f"Agent {server_id} response: {response.status_code}")
-                        
+
                         if response.status_code == 200:
                             config = response.json()
                             logger.debug(f"Agent {server_id} config keys: {list(config.keys())}")
-                            
+
                             # Check for leadership (like JS lastAcked check)
                             if 'lastAcked' in config:
                                 have_leader += 1
                                 logger.debug(f"Agent {server_id} has leadership")
-                            
+
                             # Check for configuration (like JS leaderId check)
                             if 'leaderId' in config and config['leaderId'] != "":
                                 have_config += 1
@@ -631,14 +631,14 @@ class InstanceManager:
                         # Agent not ready yet
                         logger.debug(f"Agent {server_id} not responding: {e}")
                         pass
-                
+
                 logger.debug(f"Agency status: have_leader={have_leader}, have_config={have_config}, need_config={len(agents)}")
-                
+
                 # Check if agency is fully ready (like JavaScript condition)
                 if have_leader >= 1 and have_config == len(agents):
                     logger.info("Agency is ready!")
                     return
-                    
+
             except Exception as e:
                 logger.debug(f"Agency check exception: {e}")
                 pass
@@ -646,7 +646,7 @@ class InstanceManager:
             # Log progress every 10 iterations to avoid spam
             if iteration % 10 == 0:
                 logger.info(f"Still waiting for agency (iteration {iteration})")
-                
+
             time.sleep(0.5)
 
         raise AgencyError("Agency did not become ready within timeout")
@@ -662,11 +662,11 @@ class InstanceManager:
         import requests
         start_time = time.time()
         count = 0
-        
+
         while time.time() - start_time < timeout:
             count += 1
             all_ready = True
-            
+
             for server_id, server in self._servers.items():
                 try:
                     # Choose endpoint based on server role (like JavaScript logic)
@@ -678,9 +678,9 @@ class InstanceManager:
                         # Use /_api/version for agents and dbservers (like JS)
                         url = f"{server.endpoint}/_api/version"
                         method = 'POST'
-                    
+
                     response = requests.request(method, url, timeout=2.0)
-                    
+
                     if response.status_code == 200:
                         logger.debug(f"Server {server_id} ({server.role.value}) is ready")
                         continue
@@ -693,24 +693,24 @@ class InstanceManager:
                                 continue
                         except:
                             pass
-                    
+
                     # Server not ready
                     all_ready = False
                     logger.debug(f"Server {server_id} not ready yet (status: {response.status_code})")
-                    
+
                 except Exception as e:
                     # Server not responding
                     all_ready = False
                     logger.debug(f"Server {server_id} not responding: {e}")
-                    
+
             if all_ready:
                 logger.info("All cluster nodes are ready!")
                 return
-                
+
             # Avoid log spam - only log every 10 iterations
             if count % 10 == 0:
                 logger.info(f"Still waiting for cluster readiness (attempt {count})...")
-                
+
             time.sleep(0.5)
 
         raise ClusterError(f"Cluster did not become ready within {timeout} seconds")
