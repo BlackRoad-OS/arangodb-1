@@ -48,12 +48,14 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     } catch (...) {
       return nullptr;
     }
-    // remove the same amount from the buffer's scope, keeping the global
-    // monitor constant, before stealing, in case it throws
-    _usageScope.decrease(tracked);
     // steal the underlying buffer, detaches the heap allocation and resets
     // capacity to the inline value
     uint8_t* ptr = Buffer<uint8_t>::steal();
+    // remove the same amount from the buffer's scope, keeping the global
+    // monitor constant
+    _usageScope.decrease(
+        tracked - this->capacity());  // maintain the _local value that the
+                                      // buffer has now after stealing
     return ptr;
   }
 
