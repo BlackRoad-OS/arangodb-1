@@ -78,6 +78,10 @@ class ArmadilloConfig:
     work_dir: Optional[Path] = None
     verbose: int = 0
 
+    # Test execution configuration
+    log_level: str = "INFO"
+    compact_mode: bool = False
+
 
 # Result types for test execution
 @dataclass

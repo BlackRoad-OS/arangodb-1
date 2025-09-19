@@ -32,13 +32,13 @@ class ArmadilloPlugin:
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
         # Configure third-party logging early to prevent noise
-        import os
         import logging
 
-        # Get log level from environment variable (set by CLI)
-        log_level = os.environ.get('ARMADILLO_LOG_LEVEL', 'WARNING').upper()
+        # Get configuration from centralized config system
+        from ..core.config import get_config
+        framework_config = get_config()
 
-        if log_level != 'DEBUG':
+        if framework_config.log_level != 'DEBUG':
             # Silence noisy third-party libraries unless explicitly debugging
             logging.getLogger('faker').setLevel(logging.WARNING)
             logging.getLogger('urllib3').setLevel(logging.WARNING)
@@ -46,12 +46,9 @@ class ArmadilloPlugin:
             logging.getLogger('asyncio').setLevel(logging.WARNING)
             logging.getLogger('aiohttp').setLevel(logging.WARNING)
 
-        # Store deployment mode for auto-detect fixtures
-        deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single')
-        self._deployment_mode = deployment_mode
-
-        # Store whether we're in compact mode for later use
-        self._compact_mode = os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() == 'true'
+        # Store configuration for use in fixtures
+        self._deployment_mode = framework_config.deployment_mode.value
+        self._compact_mode = framework_config.compact_mode
 
         # Register custom markers
         config.addinivalue_line(
@@ -314,10 +311,13 @@ def arango_deployment():
     Returns the appropriate server/coordinator endpoint regardless of whether
     we're running single server or cluster mode.
     """
-    import os
-    deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single_server')
+    from ..core.config import get_config
+    from ..core.types import DeploymentMode
 
-    if deployment_mode == 'cluster':
+    framework_config = get_config()
+    deployment_mode = framework_config.deployment_mode
+
+    if deployment_mode == DeploymentMode.CLUSTER:
         # Use cluster fixture and return coordinator for client connections
         logger.info("Auto-detecting cluster deployment for tests")
         cluster_manager = _plugin._get_or_create_cluster()
@@ -604,31 +604,35 @@ def pytest_sessionstart(session):
     atexit.register(_emergency_cleanup)
 
     # Start ArangoDB deployment BEFORE any tests run
-    import os
-    deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single_server')
+    from ..core.config import get_config
+    from ..core.types import DeploymentMode
 
-    logger.info(f"Starting {deployment_mode} deployment for test session...")
+    framework_config = get_config()
+    deployment_mode = framework_config.deployment_mode
+
+    logger.info(f"Starting {deployment_mode.value} deployment for test session...")
     try:
-        if deployment_mode == 'cluster':
+        if deployment_mode == DeploymentMode.CLUSTER:
             _plugin._get_or_create_cluster()
             logger.info("Cluster deployment ready for tests")
         else:
             _plugin._get_or_create_single_server()
             logger.info("Single server deployment ready for tests")
     except Exception as e:
-        logger.error(f"Failed to start {deployment_mode} deployment: {e}")
+        logger.error(f"Failed to start {deployment_mode.value} deployment: {e}")
         raise
 
     # Initialize reporter for verbose output (default) unless compact mode is enabled
-    if os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() != 'true':
+    if not framework_config.compact_mode:
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionstart(session)
 
 
 def _is_verbose_output_enabled():
     """Check if verbose output is enabled (default) or compact mode is requested."""
-    import os
-    return os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() != 'true'
+    from ..core.config import get_config
+    framework_config = get_config()
+    return not framework_config.compact_mode
 
 
 @pytest.hookimpl(trylast=True)

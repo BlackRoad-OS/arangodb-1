@@ -185,7 +185,9 @@ class ConfigManager:
             keep_instances_on_failure=False,
             bin_dir=None,
             work_dir=None,
-            verbose=0
+            verbose=0,
+            log_level="INFO",
+            compact_mode=False
         )
 
     def _load_from_file(self, config_file: Path) -> Dict[str, Any]:

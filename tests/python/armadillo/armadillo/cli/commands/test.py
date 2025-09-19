@@ -103,17 +103,19 @@ def run(
         import os
         from ...core.log import LogManager
 
-        # Set environment variables for pytest plugin to read
-        os.environ['ARMADILLO_LOG_LEVEL'] = log_level.upper()
-        os.environ['ARMADILLO_COMPACT_MODE'] = 'true' if compact else 'false'
+        # Configure framework using centralized config system
+        from armadillo.core.config import load_config
+        from armadillo.core.types import DeploymentMode
 
-        # Set deployment mode
-        if cluster:
-            os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'cluster'
-        elif single_server:
-            os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'single_server'
-        else:
-            os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'single_server'  # default
+        # Determine deployment mode
+        deployment_mode = DeploymentMode.CLUSTER if cluster else DeploymentMode.SINGLE_SERVER
+
+        # Load configuration with CLI overrides
+        config = load_config(
+            deployment_mode=deployment_mode,
+            log_level=log_level.upper(),
+            compact_mode=compact
+        )
 
         log_manager = LogManager()
         log_manager.configure(level=log_level.upper(), enable_console=True)
