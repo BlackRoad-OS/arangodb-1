@@ -49,8 +49,8 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     // didn't happen
     try {
       tracked = _usageScope.tracked();
-      owningScope.increase(tracked);
       _usageScope.decrease(tracked);
+      owningScope.increase(tracked);
     } catch (...) {
       throw;
     }
