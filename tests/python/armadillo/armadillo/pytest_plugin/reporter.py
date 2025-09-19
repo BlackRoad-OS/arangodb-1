@@ -6,10 +6,9 @@ Provides detailed verbose output with timestamps, test phases, and comprehensive
 import sys
 import time
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict
 import pytest
 from _pytest.reports import TestReport
-from _pytest.runner import CallInfo
 
 from ..core.log import get_logger
 

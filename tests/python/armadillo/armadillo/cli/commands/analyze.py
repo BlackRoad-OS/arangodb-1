@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 
 import typer
 from rich.console import Console

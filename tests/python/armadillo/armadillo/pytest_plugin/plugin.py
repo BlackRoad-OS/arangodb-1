@@ -4,7 +4,6 @@ import pytest
 import asyncio
 import atexit
 from typing import Generator, Optional, Dict, Any, List
-from pathlib import Path
 
 from ..core.config import load_config, get_config
 from ..core.log import configure_logging, get_logger, log_test_event, set_log_context, clear_log_context

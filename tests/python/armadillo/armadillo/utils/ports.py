@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..core.errors import NetworkError
 from ..core.log import get_logger
-from .filesystem import atomic_write, read_text, safe_remove
+from .filesystem import atomic_write, read_text
 
 logger = get_logger(__name__)
 

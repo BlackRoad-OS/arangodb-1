@@ -4,12 +4,11 @@ import time
 import threading
 import signal
 import asyncio
-from typing import Optional, Dict, Any, Callable, Union
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from contextlib import contextmanager, asynccontextmanager
-from concurrent.futures import Future
 
-from .errors import TimeoutError, DeadlineExceededError, WatchdogTimeoutError
+from .errors import TimeoutError, DeadlineExceededError
 from .log import get_logger
 
 logger = get_logger(__name__)

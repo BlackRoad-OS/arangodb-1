@@ -5,7 +5,6 @@ from pathlib import Path
 
 from ..core.log import get_logger
 from .resource_pool import PortPool, ManagedPortPool, create_isolated_port_pool, create_ephemeral_port_pool
-from .ports import PortManager, PortAllocator
 
 logger = get_logger(__name__)
 

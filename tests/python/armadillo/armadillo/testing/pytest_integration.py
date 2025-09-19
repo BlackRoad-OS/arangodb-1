@@ -2,7 +2,6 @@
 
 import pytest
 from typing import Generator
-from pathlib import Path
 
 from .test_context import (
     IsolatedTestContext,

@@ -1,12 +1,12 @@
 """Deployment planning for ArangoDB multi-server setups."""
 
 from typing import Optional, List, Protocol
-from pathlib import Path
 
 from ..core.types import DeploymentMode, ServerRole, ServerConfig, ClusterConfig
 from ..core.log import Logger
 from ..utils.ports import PortAllocator
 from ..utils.filesystem import server_dir
+from .deployment_plan import DeploymentPlan
 
 
 class DeploymentPlanner(Protocol):
@@ -46,8 +46,6 @@ class StandardDeploymentPlanner:
         Raises:
             ValueError: If deployment mode is not supported
         """
-        from ..instances.manager import DeploymentPlan  # Avoid circular import
-
         plan = DeploymentPlan(deployment_mode=mode)
 
         if mode == DeploymentMode.SINGLE_SERVER:
@@ -57,7 +55,7 @@ class StandardDeploymentPlanner:
         else:
             raise ValueError(f"Unsupported deployment mode: {mode}")
 
-        self._logger.info(f"Created deployment plan: {mode.value} with {len(plan.servers)} servers")
+        self._logger.info("Created deployment plan: %s with %s servers", mode.value, len(plan.servers))
         return plan
 
     def _plan_single_server(self, plan: 'DeploymentPlan', deployment_id: str) -> None:

@@ -3,7 +3,7 @@
 import tempfile
 import threading
 import atexit
-from typing import Optional, Dict, Any, List, Protocol, ContextManager
+from typing import Optional, Dict, List, Protocol, ContextManager
 from pathlib import Path
 from contextlib import contextmanager
 

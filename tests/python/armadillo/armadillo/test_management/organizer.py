@@ -9,7 +9,7 @@ import re
 import pytest
 from pytest import Item as PytestItem
 
-from .selector import Selector, FilterOperation, create_marker_selector, create_pattern_selector
+from .selector import Selector, create_marker_selector, create_pattern_selector
 from ..core.log import get_logger
 
 logger = get_logger(__name__)

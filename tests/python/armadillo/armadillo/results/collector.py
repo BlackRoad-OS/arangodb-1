@@ -8,7 +8,7 @@ from pathlib import Path
 from ..core.types import ExecutionResult, SuiteExecutionResults, ExecutionOutcome
 from ..core.errors import ResultProcessingError
 from ..core.log import get_logger
-from ..utils.codec import get_codec, to_json_string
+from ..utils.codec import to_json_string
 from ..utils.filesystem import atomic_write
 
 logger = get_logger(__name__)
@@ -186,7 +186,6 @@ class ResultCollector:
 
     def _export_junit(self, results: SuiteExecutionResults, file_path: Path) -> None:
         """Export results as JUnit XML."""
-        import xml.etree.ElementTree as ET
         from xml.dom import minidom
 
         # Create root testsuite element

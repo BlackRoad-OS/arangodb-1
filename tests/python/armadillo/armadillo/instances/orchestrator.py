@@ -3,12 +3,10 @@
 import asyncio
 import aiohttp
 import time
-from typing import Dict, List, Optional, Set, Any, Callable, Union
-from pathlib import Path
+from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, field
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import json
+from concurrent.futures import ThreadPoolExecutor
 
 from ..core.types import (
     DeploymentMode, ServerRole, ClusterConfig,
@@ -22,7 +20,7 @@ from ..core.log import get_logger
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.config import get_config
 from ..utils.auth import get_auth_provider
-from .manager import InstanceManager, get_instance_manager
+from .manager import get_instance_manager
 from .server import ArangoServer
 
 logger = get_logger(__name__)

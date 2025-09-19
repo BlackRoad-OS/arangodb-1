@@ -2,11 +2,10 @@
 
 import threading
 import atexit
-from typing import Set, List, Optional, Dict, Any, Protocol, TypeVar, Generic, ContextManager
+from typing import Set, List, Optional, Dict, Any, Protocol, TypeVar, Generic
 from contextlib import contextmanager
 from pathlib import Path
 
-from ..core.errors import NetworkError
 from ..core.log import get_logger
 from .ports import PortManager
 

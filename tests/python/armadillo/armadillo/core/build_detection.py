@@ -3,7 +3,7 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 from .log import get_logger
 
 logger = get_logger(__name__)

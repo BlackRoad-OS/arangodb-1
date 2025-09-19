@@ -4,7 +4,7 @@ import fnmatch
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Set, Optional, Pattern, Callable, Any, Union
+from typing import List, Dict, Optional, Pattern, Callable, Any
 from pathlib import Path
 
 import pytest

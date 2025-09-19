@@ -1,7 +1,7 @@
 """Data codec abstraction with JSON implementation and future VPack support."""
 
 import json
-from typing import Any, Protocol, runtime_checkable, Union
+from typing import Any, Protocol, runtime_checkable
 from datetime import datetime
 from pathlib import Path
 

@@ -166,7 +166,6 @@ def run(
         # Add parallel execution if requested
         if parallel:
             try:
-                import pytest_xdist
                 pytest_args.extend(["-n", str(max_workers or "auto")])
             except ImportError:
                 console.print("[yellow]pytest-xdist not installed, running sequentially[/yellow]")

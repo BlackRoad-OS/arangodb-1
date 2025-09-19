@@ -2,17 +2,14 @@
 
 import logging
 import threading
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Union, Protocol
 from pathlib import Path
 from contextlib import contextmanager
 
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.text import Text
-from rich.theme import Theme
 
-from .log import StructuredFormatter, ArmadilloRichHandler, LogContext
+from .log_formatters import StructuredFormatter, ArmadilloRichHandler, LogContext
 
 
 class LoggerFactory(Protocol):
@@ -221,7 +218,7 @@ def log_process_event(logger: logging.Logger, event: str, pid: Optional[int] = N
     if pid is not None:
         extra['pid'] = pid
     extra.update(kwargs)
-    logger.info(f"Process {event}", extra=extra)
+    logger.info("Process %s", event, extra=extra)
 
 
 def log_server_event(logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs) -> None:
@@ -230,7 +227,7 @@ def log_server_event(logger: logging.Logger, event: str, server_id: Optional[str
     if server_id is not None:
         extra['server_id'] = server_id
     extra.update(kwargs)
-    logger.info(f"Server {event}", extra=extra)
+    logger.info("Server %s", event, extra=extra)
 
 
 def log_test_event(logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs) -> None:
@@ -239,4 +236,4 @@ def log_test_event(logger: logging.Logger, event: str, test_name: Optional[str] 
     if test_name is not None:
         extra['test_name'] = test_name
     extra.update(kwargs)
-    logger.info(f"Test {event}", extra=extra)
+    logger.info("Test %s", event, extra=extra)

@@ -3,12 +3,12 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, Union, Type, TypeVar, Protocol
+from typing import Dict, Any, Optional, Type, TypeVar, Protocol
 from dataclasses import dataclass, fields
 
 from .types import ArmadilloConfig, DeploymentMode, ClusterConfig, MonitoringConfig
 from .errors import ConfigurationError, PathError
-from .build_detection import detect_build_directory, validate_build_directory
+from .build_detection import detect_build_directory
 
 T = TypeVar('T')
 
@@ -283,7 +283,6 @@ class ConfigManager:
 
     def _is_unit_test_context(self) -> bool:
         """Check if we're running in a unit test context where build detection should be skipped."""
-        import sys
         import inspect
 
         # Check call stack for unit test patterns - this is most reliable

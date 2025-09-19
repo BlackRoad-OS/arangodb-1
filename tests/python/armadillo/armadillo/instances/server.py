@@ -3,7 +3,7 @@
 import asyncio
 import time
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, List
 from dataclasses import dataclass
 
 import aiohttp
@@ -17,7 +17,7 @@ from ..core.config import get_config, ConfigProvider
 from ..core.process import start_supervised_process, stop_supervised_process, is_process_running, ProcessInfo
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
-from ..utils.filesystem import server_dir, atomic_write
+from ..utils.filesystem import server_dir
 from ..utils.ports import allocate_port, release_port, PortAllocator
 from ..utils.auth import get_auth_provider
 from .command_builder import CommandBuilder, ServerCommandBuilder

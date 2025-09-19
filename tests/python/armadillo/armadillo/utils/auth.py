@@ -3,12 +3,11 @@
 import time
 import jwt
 import base64
-from typing import Dict, Optional, Any, List, Union
-from datetime import datetime, timezone
+from typing import Dict, Optional, Any, List
 
-from ..core.errors import JWTError, AuthenticationError
+from ..core.errors import JWTError
 from ..core.log import get_logger
-from .crypto import generate_secret, register_nonce, is_nonce_used
+from .crypto import generate_secret
 
 logger = get_logger(__name__)
 
