@@ -44,9 +44,11 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     // the buffer's usage scope is gonna account for 0 bytes now and give the
     // value it accounted for to the owning scope, so the amount of memory that
     // the buffer allocated which was accounted by its scope is now gonna be
-    // accounted by the owning scope. If it throws when we increase the owning
-    // scope, we don't need to increase _usageScope again, because decrease
-    // didn't happen
+    // accounted by the owning scope.
+    // We do not have an atomic operation here, so we will first decrease on current scope
+    // and hand it over to the new scope. We did not do it the other way round, as this would double
+    // the reported memory for a short time, which could cause an perfectly fine operation to OOM.
+    // The memory is never used twice.
     try {
       tracked = _usageScope.tracked();
       _usageScope.decrease(tracked);
