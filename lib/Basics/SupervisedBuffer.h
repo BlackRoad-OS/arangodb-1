@@ -54,6 +54,10 @@ class SupervisedBuffer : public Buffer<uint8_t> {
       _usageScope.decrease(tracked);
       owningScope.increase(tracked);
     } catch (...) {
+      // We need to fix the accounting back to the old scope, as we did not perform the move.
+      // This is a highly unlikely situation, where in the non-atomic switch of memory ownership someone
+      // allocates memory, which causes the increase to break.
+      _usageScope.increase(tracked);
       throw;
     }
     // steal the underlying buffer, detaches the heap allocation and resets
