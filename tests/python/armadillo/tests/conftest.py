@@ -23,7 +23,7 @@ from armadillo.pytest_plugin.plugin import (
 
 
 # Common fixtures for all test suites
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def arango_client(arango_deployment):
     """Get ArangoDB client connected to test deployment (single server or coordinator).
 
@@ -43,7 +43,7 @@ def arango_client(arango_deployment):
     return db
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def base_url(arango_deployment):
     """Get base URL for HTTP requests to any deployment.
 

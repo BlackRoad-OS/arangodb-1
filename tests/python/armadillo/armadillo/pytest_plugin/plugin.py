@@ -603,8 +603,23 @@ def pytest_sessionstart(session):
     # Register emergency cleanup at exit
     atexit.register(_emergency_cleanup)
 
-    # Initialize reporter for verbose output (default) unless compact mode is enabled
+    # Start ArangoDB deployment BEFORE any tests run
     import os
+    deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single_server')
+
+    logger.info(f"Starting {deployment_mode} deployment for test session...")
+    try:
+        if deployment_mode == 'cluster':
+            _plugin._get_or_create_cluster()
+            logger.info("Cluster deployment ready for tests")
+        else:
+            _plugin._get_or_create_single_server()
+            logger.info("Single server deployment ready for tests")
+    except Exception as e:
+        logger.error(f"Failed to start {deployment_mode} deployment: {e}")
+        raise
+
+    # Initialize reporter for verbose output (default) unless compact mode is enabled
     if os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() != 'true':
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionstart(session)
