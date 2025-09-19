@@ -477,7 +477,6 @@ TEST(SupervisedBufferTest, MultipleGrowsAndRecycle) {
       }
     }
     ASSERT_GE(growths, 2);
-    ASSERT_GE(growths, 2);
     builder.close();
     ASSERT_GE(monitor.current(), builder.size());
 
