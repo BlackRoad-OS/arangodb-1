@@ -76,11 +76,13 @@ TEST(SupervisedBufferTest, AccountsMemoryLargeAndSmallValuesSupervisedBuffer) {
       builder.add(Value(std::string(1024, 'a')));
       builder.close();
 
-      ASSERT_GE(builder.size(), 1024U);
+      ASSERT_GE(builder.size(), 1024);
       ASSERT_GE(monitor.current(), builder.size());  // capacity >= size
       largeValue = AqlValue{builder.slice(), builder.size()};
       monitor.increaseMemoryUsage(largeValue.memoryUsage());
       ASSERT_GE(monitor.current(), builder.size() + largeValue.memoryUsage());
+      ASSERT_EQ(monitor.current(),
+                supervisedBuffer.capacity() + largeValue.memoryUsage());
     }
     // now only AqlValue is accounted
     ASSERT_EQ(monitor.current(), largeValue.memoryUsage());
@@ -429,11 +431,11 @@ TEST(SupervisedBufferTest, EnforceMemoryLimitOnGrowth) {
       for (int i = 0; i < 4096; ++i) {
         builder.add(Value("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));  // 32 bytes
       }
+      builder.close();  // only close if we didn't hit the limit
     } catch (arangodb::basics::Exception const& ex) {
       threw = true;
       EXPECT_EQ(TRI_ERROR_RESOURCE_LIMIT, ex.code());
     }
-    builder.close();
     EXPECT_TRUE(threw);
   }
   ASSERT_EQ(monitor.current(), 0);
@@ -525,6 +527,7 @@ TEST(SupervisedBufferTest, StealWithMemoryAccounting) {
     // total and buffer capacity immediately before stealing
     std::size_t beforeTotal = monitor.current();
     std::size_t capBefore = supervisedBuffer.capacity();
+    ASSERT_EQ(beforeTotal, capBefore);
 
     uint8_t* stolen = supervisedBuffer.stealWithMemoryAccounting(owningScope);
     // get the builder's ptr back to start
@@ -532,7 +535,7 @@ TEST(SupervisedBufferTest, StealWithMemoryAccounting) {
 
     // bytes still accounted so the memory accounted in the
     // monitor is the same
-    ASSERT_EQ(monitor.current(), beforeTotal);
+    ASSERT_EQ(monitor.current(), beforeTotal + localCap);
 
     // buffer returned to its local inline capacity after steal
     ASSERT_EQ(supervisedBuffer.capacity(), localCap);
@@ -554,11 +557,102 @@ TEST(SupervisedBufferTest, StealWithMemoryAccounting) {
     builder.add(Value("abcde"));
     builder.close();
     ASSERT_EQ(supervisedBuffer.capacity(), localCap);
-    ASSERT_EQ(monitor.current(), beforeTotal);
+    ASSERT_EQ(monitor.current(), beforeTotal + localCap);
 
     // frees the stolen memory
     velocypack_free(stolen);
   }
 
   ASSERT_EQ(monitor.current(), 0);
+}
+
+TEST(SupervisedBufferTest, StealWithLocalValueTracked) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+
+  ResourceUsageScope owningScope(monitor);
+  SupervisedBuffer supervisedBuffer(monitor);
+
+  // grow beyond inline storage
+  Builder builder(supervisedBuffer);
+  builder.openArray();
+  for (int i = 0; i < 64; ++i) {
+    builder.add(Value(std::string(256, 'a')));
+  }
+  builder.close();
+
+  // expected tracked usage before steal
+  std::size_t trackedBefore = monitor.current();
+  ASSERT_EQ(trackedBefore, supervisedBuffer.capacity());
+
+  // steal and reset builder
+  uint8_t* ptr = supervisedBuffer.stealWithMemoryAccounting(owningScope);
+  builder.clear();
+
+  // After steal, monitor should now account for the inline value + bytes
+  // allocated that are now tracked by owning scope
+  ASSERT_EQ(monitor.current(),
+            owningScope.tracked() + supervisedBuffer.capacity())
+      << "buffer should account its inline (192) bytes + allocated bytes after "
+         "steal";
+
+  // monitor should remain unchanged
+  builder.openArray();
+  builder.add(Value(1));
+  builder.add(Value(2));
+  builder.close();
+  ASSERT_EQ(monitor.current(),
+            owningScope.tracked() + supervisedBuffer.capacity());
+
+  velocypack_free(ptr);
+  owningScope.revert();
+  ASSERT_EQ(monitor.current(), supervisedBuffer.capacity());
+}
+
+TEST(SupervisedBufferTest, GrowStealAndGrowAgainAccounting) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+
+  ResourceUsageScope owningScope(monitor);
+  SupervisedBuffer supervisedBuffer(monitor);
+  auto capLocal = supervisedBuffer.capacity();
+  ASSERT_EQ(owningScope.tracked(), 0);
+  ASSERT_EQ(monitor.current(), capLocal);
+
+  // grow once
+  Builder builder(supervisedBuffer);
+  builder.openArray();
+  for (int i = 0; i < 64; ++i) {
+    builder.add(Value(std::string(256, 'b')));
+  }
+  builder.close();
+
+  // capacity and monitor usage
+  std::size_t capBefore = supervisedBuffer.capacity();
+  std::size_t monitorBefore = monitor.current();
+  ASSERT_EQ(monitorBefore, capBefore);
+  ASSERT_EQ(owningScope.tracked(), 0);
+
+  // steal the dynamic allocation
+  uint8_t* ptr = supervisedBuffer.stealWithMemoryAccounting(owningScope);
+  ASSERT_EQ(capLocal, supervisedBuffer.capacity());
+  ASSERT_EQ(monitor.current(), capBefore + capLocal);
+  ASSERT_EQ(owningScope.tracked(), capBefore);
+  builder.clear();
+
+  // grow again to trigger allocation on heap
+  builder.openArray();
+  for (int i = 0; i < 32; ++i) {
+    builder.add(Value(std::string(300, 'c')));
+  }
+  builder.close();
+
+  // Now capacity > 192 again; monitor should reflect the full dynamic capacity
+  ASSERT_GT(supervisedBuffer.capacity(), capLocal);
+  ASSERT_EQ(monitor.current(),
+            supervisedBuffer.capacity() + owningScope.tracked());
+
+  velocypack_free(ptr);
+  owningScope.revert();
+  ASSERT_EQ(monitor.current(), supervisedBuffer.capacity());
 }

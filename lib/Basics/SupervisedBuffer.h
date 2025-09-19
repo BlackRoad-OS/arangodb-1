@@ -39,23 +39,28 @@ class SupervisedBuffer : public Buffer<uint8_t> {
     _usageScope.increase(this->capacity());
   }
 
-  uint8_t* stealWithMemoryAccounting(ResourceUsageScope& owningScope) noexcept {
-    std::size_t tracked = _usageScope.tracked();
-    // first add the tracked bytes to the owning scope. if this throws, do
-    // nothing
+  uint8_t* stealWithMemoryAccounting(ResourceUsageScope& owningScope) {
+    std::size_t tracked = 0;
+    // the buffer's usage scope is gonna account for 0 bytes now and give the
+    // value it accounted for to the owning scope, so the amount of memory that
+    // the buffer allocated which was accounted by its scope is now gonna be
+    // accounted by the owning scope. If it throws when we increase the owning
+    // scope, we don't need to increase _usageScope again, because decrease
+    // didn't happen
     try {
+      tracked = _usageScope.tracked();
       owningScope.increase(tracked);
+      _usageScope.decrease(tracked);
     } catch (...) {
-      return nullptr;
+      throw;
     }
     // steal the underlying buffer, detaches the heap allocation and resets
     // capacity to the inline value
     uint8_t* ptr = Buffer<uint8_t>::steal();
-    // remove the same amount from the buffer's scope, keeping the global
-    // monitor constant
-    _usageScope.decrease(
-        tracked - this->capacity());  // maintain the _local value that the
-                                      // buffer has now after stealing
+
+    // maintain the _local value that the buffer has now after stealing (192
+    // bytes)
+    _usageScope.increase(this->capacity());
     return ptr;
   }
 
