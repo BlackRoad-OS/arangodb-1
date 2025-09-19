@@ -50,7 +50,12 @@ class ArmadilloPlugin:
         self._deployment_mode = framework_config.deployment_mode.value
         self._compact_mode = framework_config.compact_mode
 
-        # Register custom markers
+        # Register markers
+        self._register_markers(config)
+
+
+    def _register_markers(self, config: pytest.Config) -> None:
+        """Register custom markers for Armadillo tests."""
         config.addinivalue_line(
             "markers", "arango_single: Requires single ArangoDB server"
         )
@@ -638,6 +643,7 @@ def _is_verbose_output_enabled():
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """Clean up all resources at the end of test session."""
+
     logger.debug("Starting pytest plugin cleanup")
 
     try:

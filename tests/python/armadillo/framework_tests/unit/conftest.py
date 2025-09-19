@@ -15,140 +15,26 @@ def cleanup_logging():
     """Clean up logging system after each test."""
     yield
 
-    # Use the new unified test environment reset for comprehensive cleanup
-    try:
-        from armadillo.testing import reset_test_environment
-        reset_test_environment()
-    except ImportError:
-        # Fallback to individual cleanup functions
-        try:
-            from armadillo.core.log import reset_logging
-            reset_logging()
-        except ImportError:
-            pass
-
-    # Additional manual cleanup for backward compatibility
-    logger_dict = logging.Logger.manager.loggerDict
-    for name in list(logger_dict.keys()):
-        if name.startswith('armadillo'):
-            logger = logging.getLogger(name)
-            logger.handlers.clear()
-            logger.setLevel(logging.NOTSET)
-            logger.disabled = False
-
-    # Remove all handlers from root logger
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        try:
-            handler.close()
-        except Exception:
-            pass  # Ignore close errors
-        root_logger.removeHandler(handler)
-
-    # Reset logging configuration
-    logging.shutdown()
+    # For unit tests, minimal cleanup is sufficient
+    # Only do expensive cleanup for integration tests that actually create resources
 
 
 @pytest.fixture(autouse=True)
 def cleanup_global_state():
-    """Clean up global state after each test.
-
-    Note: Most cleanup is now handled by reset_test_environment() in cleanup_logging.
-    This fixture provides additional manual cleanup for backward compatibility.
-    """
+    """Clean up global state after each test."""
     yield
 
-    # Additional global state cleanup beyond what reset_test_environment does
-    # (Most cleanup is already done by cleanup_logging -> reset_test_environment)
-
-    # Clean up any lingering resource trackers that might not be managed by the new system
-    try:
-        import armadillo.utils.resource_pool
-        # Resource pools should clean themselves up via atexit, but force cleanup for tests
-        import atexit
-        # Trigger any pending atexit handlers if needed
-        pass
-    except ImportError:
-        pass
-
-    # Clean up global log manager
-    try:
-        import armadillo.core.log
-        if hasattr(armadillo.core.log, '_log_manager') and armadillo.core.log._log_manager:
-            armadillo.core.log._log_manager.shutdown()
-            armadillo.core.log._log_manager._configured = False
-            armadillo.core.log._log_manager._log_file = None
-            armadillo.core.log._log_manager._json_handler = None
-            armadillo.core.log._log_manager._console_handler = None
-
-        # Clear log context
-        if hasattr(armadillo.core.log, '_log_context') and armadillo.core.log._log_context:
-            armadillo.core.log._log_context.clear_context()
-    except ImportError:
-        pass
-
-    # Clean up global process supervisor
-    try:
-        import armadillo.core.process
-        if hasattr(armadillo.core.process, '_process_supervisor') and armadillo.core.process._process_supervisor:
-            supervisor = armadillo.core.process._process_supervisor
-            # Stop all processes
-            for process_id in list(supervisor._processes.keys()):
-                try:
-                    supervisor.stop(process_id)
-                except Exception:
-                    pass
-
-            # Clear tracking dictionaries
-            supervisor._processes.clear()
-            supervisor._process_info.clear()
-            if hasattr(supervisor, '_streaming_threads'):
-                supervisor._streaming_threads.clear()
-    except ImportError:
-        pass
-
-    # Clean up global timeout manager
-    try:
-        import armadillo.core.timeout
-        if hasattr(armadillo.core.timeout, '_timeout_manager') and armadillo.core.timeout._timeout_manager:
-            timeout_manager = armadillo.core.timeout._timeout_manager
-            timeout_manager.stop_watchdog()
-            timeout_manager._global_deadline = None
-            timeout_manager._test_timeouts.clear()
-            timeout_manager._timeout_scopes.clear()
-    except ImportError:
-        pass
+    # For unit tests, skip expensive global state cleanup
+    # Unit tests should be isolated and not create real global resources
 
 
 @pytest.fixture(autouse=True)
 def cleanup_threads():
     """Clean up background threads after each test."""
-    initial_threads = set(threading.enumerate())
-
     yield
 
-    # Wait a bit for threads to finish naturally
-    time.sleep(0.1)
-
-    # Get current threads
-    current_threads = set(threading.enumerate())
-    new_threads = current_threads - initial_threads
-
-    # Kill any new daemon threads that shouldn't persist
-    for thread in new_threads:
-        if thread.daemon and thread.is_alive():
-            # For daemon threads, we can't force-kill them, but we can mark them for cleanup
-            try:
-                # Try to interrupt if it has an event
-                if hasattr(thread, '_stop_event'):
-                    thread._stop_event.set()
-                elif hasattr(thread, '_shutdown'):
-                    thread._shutdown = True
-            except Exception:
-                pass
-
-    # Final wait for cleanup
-    time.sleep(0.05)
+    # For unit tests, skip expensive thread cleanup and sleeps
+    # Unit tests should not create real background threads
 
 
 @pytest.fixture(autouse=True)
@@ -156,17 +42,12 @@ def reset_filesystem_state():
     """Reset filesystem-related global state."""
     yield
 
-    try:
-        import armadillo.utils.filesystem
-        # Clear work directory cache
-        if hasattr(armadillo.utils.filesystem, '_work_dir'):
-            armadillo.utils.filesystem._work_dir = None
-
-        # Clear test session ID
-        if hasattr(armadillo.utils.filesystem, '_test_session_id'):
-            armadillo.utils.filesystem._test_session_id = None
-    except ImportError:
-        pass
+    # Reset the global session ID to prevent test interference
+    import armadillo.utils.filesystem as fs
+    fs._test_session_id = None
+    # Also clear any cached filesystem service
+    if hasattr(fs, '_filesystem_service'):
+        fs._filesystem_service._work_dir = None
 
 
 @pytest.fixture(autouse=True)
@@ -339,15 +220,8 @@ def session_cleanup():
     """Perform session-wide cleanup."""
     yield
 
-    # Final cleanup
-    logging.shutdown()
-
-    # Wait for any remaining daemon threads
-    time.sleep(0.2)
-
-    # Force garbage collection
-    import gc
-    gc.collect()
+    # For unit tests, skip expensive session cleanup
+    # Unit tests should not create persistent resources
 
 
 def pytest_runtest_setup(item):

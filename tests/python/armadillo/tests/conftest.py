@@ -1,25 +1,15 @@
 """Pytest configuration for Armadillo integration tests.
 
-This module configures pytest to use the real Armadillo framework fixtures
-for starting and managing ArangoDB servers.
-
-The actual fixtures are provided by the Armadillo pytest plugin.
+This module provides common fixtures that depend on the Armadillo pytest plugin.
+The plugin fixtures (arango_single_server, arango_cluster, etc.) are provided directly
+by the plugin and don't need to be imported here.
 """
 
 import pytest
 from arango import ArangoClient
 
-# Import the real Armadillo pytest plugin
-from armadillo.pytest_plugin.plugin import (
-    arango_single_server,
-    arango_single_server_function,
-    arango_cluster,
-    arango_cluster_function,
-    arango_coordinators,
-    arango_dbservers,
-    arango_agents,
-    arango_orchestrator,
-)
+# Note: Plugin fixtures like arango_single_server, arango_cluster, etc. are automatically
+# available when the plugin is loaded via pytest.ini or command line (-p armadillo.pytest_plugin.plugin)
 
 
 # Common fixtures for all test suites

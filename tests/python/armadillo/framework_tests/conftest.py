@@ -71,25 +71,27 @@ def mock_logger():
         yield logger
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def reset_global_state():
-    """Reset global state between tests."""
-    # Reset any global instances that might interfere with tests
-    from armadillo.core import config, time
-    from armadillo.utils import codec, ports, auth, crypto
+    """Reset global state between tests. Not autouse - only used when needed."""
+    # For unit tests, we need minimal setup and teardown to avoid expensive operations
 
-    # Clear any cached instances
-    config._config_manager._config = None
-    time._timeout_manager = time.TimeoutManager()
+    # Import only what we need to avoid expensive module loading
+    from armadillo.core import config
+    from armadillo.core.types import ArmadilloConfig, DeploymentMode
 
-    # Reset codec manager
-    codec._codec_manager = codec.CodecManager()
+    # Set a lightweight test config that skips expensive operations
+    test_config = ArmadilloConfig(
+        deployment_mode=DeploymentMode.SINGLE_SERVER,
+        temp_dir=Path("/tmp/armadillo_test"),
+        test_timeout=30.0,
+        log_level="WARNING",  # Reduce noise
+        compact_mode=False,
+        bin_dir=None  # Skip build detection
+    )
+    config._config_manager._config = test_config
 
-    # Reset other global state as needed
     yield
 
-    # Cleanup after test
-    try:
-        time.stop_watchdog()
-    except:
-        pass
+    # Minimal cleanup - avoid expensive operations like watchdog thread joins
+    # Unit tests should not need complex cleanup

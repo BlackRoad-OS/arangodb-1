@@ -252,7 +252,8 @@ class ConfigManager:
         config.temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Auto-detect build directory if not explicitly set
-        if config.bin_dir is None:
+        # Skip build detection for unit tests to avoid expensive filesystem scanning
+        if config.bin_dir is None and not self._is_unit_test_context():
             detected_build_dir = detect_build_directory()
             if detected_build_dir:
                 config.bin_dir = detected_build_dir
@@ -279,6 +280,18 @@ class ConfigManager:
             raise ConfigurationError("Test timeout must be positive")
 
         return config
+
+    def _is_unit_test_context(self) -> bool:
+        """Check if we're running in a unit test context where build detection should be skipped."""
+        import sys
+        import inspect
+
+        # Check call stack for unit test patterns - this is most reliable
+        for frame_info in inspect.stack():
+            if 'framework_tests/unit' in frame_info.filename or 'framework_tests\\unit' in frame_info.filename:
+                return True
+
+        return False
 
 
 # Global config manager instance

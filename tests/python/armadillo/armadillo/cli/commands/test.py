@@ -132,6 +132,9 @@ def run(
         # Build pytest command
         pytest_args = ["python", "-m", "pytest"]
 
+        # Load Armadillo plugin explicitly (no longer auto-registered)
+        pytest_args.extend(["-p", "armadillo.pytest_plugin.plugin"])
+
         # Add minimal quiet flags to reduce pytest noise while preserving our reporter
         if not compact:
             pytest_args.extend(["-q", "--tb=no"])  # Single quiet to minimize pytest output
@@ -139,8 +142,6 @@ def run(
         # Add test paths
         for path in test_paths:
             pytest_args.append(str(path))
-
-        # Armadillo plugin is automatically loaded via entry point in pyproject.toml
 
         # Add server output visibility option
         if show_output:
