@@ -15,6 +15,7 @@ from ..instances.manager import InstanceManager, get_instance_manager
 from ..instances.orchestrator import ClusterOrchestrator, get_cluster_orchestrator
 from ..utils.crypto import random_id
 from ..utils.filesystem import set_test_session_id, clear_test_session, cleanup_work_dir
+from .reporter import get_armadillo_reporter
 
 logger = get_logger(__name__)
 
@@ -48,6 +49,9 @@ class ArmadilloPlugin:
         # Store deployment mode for auto-detect fixtures
         deployment_mode = os.environ.get('ARMADILLO_DEPLOYMENT_MODE', 'single')
         self._deployment_mode = deployment_mode
+
+        # Store whether we're in compact mode for later use
+        self._compact_mode = os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() == 'true'
 
         # Register custom markers
         config.addinivalue_line(
@@ -599,6 +603,18 @@ def pytest_sessionstart(session):
     # Register emergency cleanup at exit
     atexit.register(_emergency_cleanup)
 
+    # Initialize reporter for verbose output (default) unless compact mode is enabled
+    import os
+    if os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() != 'true':
+        reporter = get_armadillo_reporter()
+        reporter.pytest_sessionstart(session)
+
+
+def _is_verbose_output_enabled():
+    """Check if verbose output is enabled (default) or compact mode is requested."""
+    import os
+    return os.environ.get('ARMADILLO_COMPACT_MODE', 'false').lower() != 'true'
+
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
@@ -628,6 +644,83 @@ def pytest_sessionfinish(session, exitstatus):
             stop_watchdog()
         except Exception as e:
             logger.debug(f"Error stopping watchdog: {e}")
+
+    # Generate reporter output for verbose mode (default) unless compact mode is enabled
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_sessionfinish(session, exitstatus)
+
+
+# Reporter hooks for verbose output (default unless compact mode is enabled)
+def pytest_collection_modifyitems(items):
+    """Handle collection completion."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_collection_modifyitems(items)
+
+
+def pytest_runtest_logstart(nodeid, location):
+    """Handle test run start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_logstart(nodeid, location)
+
+
+def pytest_runtest_setup(item):
+    """Handle test setup start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_setup(item)
+
+
+def pytest_runtest_call(item):
+    """Handle test call start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_call(item)
+
+
+def pytest_runtest_teardown(item):
+    """Handle test teardown start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_teardown(item)
+
+
+def pytest_runtest_logreport(report):
+    """Handle test report."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_logreport(report)
+
+
+# Override pytest hooks to suppress default output when verbose mode is active
+def pytest_report_teststatus(report, config):
+    """Override test status reporting to suppress pytest's progress dots and status."""
+    if _is_verbose_output_enabled():
+        # Return proper status with empty visual indicators to suppress dots but keep test counting
+        if report.when == "call":
+            if report.passed:
+                return ("passed", "", "")  # Status but no visual indicator
+            elif report.failed:
+                return ("failed", "", "")  # Status but no visual indicator
+            elif report.skipped:
+                return ("skipped", "", "")  # Status but no visual indicator
+        # For setup/teardown phases, return empty to avoid any output
+        return ("", "", "")
+    # In compact mode, allow default behavior by returning None (use pytest's default)
+    return None
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Override terminal summary - print our summary AFTER all cleanup is complete."""
+    if _is_verbose_output_enabled():
+        # Print our summary after pytest's cleanup is complete (only if not already printed)
+        reporter = get_armadillo_reporter()
+        if not reporter.summary_printed:
+            reporter.print_final_summary()
+            reporter.summary_printed = True
+    # In compact mode, allow default behavior by not implementing anything
 
 
 def _cleanup_all_deployments():

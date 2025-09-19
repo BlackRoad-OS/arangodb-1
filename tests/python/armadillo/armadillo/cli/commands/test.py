@@ -86,6 +86,12 @@ def run(
         "WARNING",
         "--log-level",
         help="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
+    ),
+    compact: bool = typer.Option(
+        False,
+        "--compact",
+        "-c",
+        help="Use compact pytest-style output instead of detailed verbose output"
     )
 ):
     """Run tests with ArangoDB instances."""
@@ -99,8 +105,9 @@ def run(
 
         # Set environment variables for pytest plugin to read
         os.environ['ARMADILLO_LOG_LEVEL'] = log_level.upper()
+        os.environ['ARMADILLO_COMPACT_MODE'] = 'true' if compact else 'false'
 
-        # Set deployment mode  
+        # Set deployment mode
         if cluster:
             os.environ['ARMADILLO_DEPLOYMENT_MODE'] = 'cluster'
         elif single_server:
@@ -122,6 +129,10 @@ def run(
 
         # Build pytest command
         pytest_args = ["python", "-m", "pytest"]
+
+        # Add minimal quiet flags to reduce pytest noise while preserving our reporter
+        if not compact:
+            pytest_args.extend(["-q", "--tb=no"])  # Single quiet to minimize pytest output
 
         # Add test paths
         for path in test_paths:

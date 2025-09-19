@@ -26,10 +26,10 @@ from armadillo.pytest_plugin.plugin import (
 @pytest.fixture(scope="function")
 def arango_client(arango_deployment):
     """Get ArangoDB client connected to test deployment (single server or coordinator).
-    
+
     Args:
         arango_deployment: The ArangoDB deployment (single server or cluster coordinator)
-        
+
     Returns:
         ArangoDatabase: Connected to _system database for admin endpoints
     """
@@ -46,10 +46,10 @@ def arango_client(arango_deployment):
 @pytest.fixture(scope="function")
 def base_url(arango_deployment):
     """Get base URL for HTTP requests to any deployment.
-    
+
     Args:
         arango_deployment: The ArangoDB deployment (single server or cluster coordinator)
-        
+
     Returns:
         str: Base URL for HTTP requests (e.g., "http://127.0.0.1:8529")
     """
