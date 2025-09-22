@@ -359,40 +359,22 @@ class InstanceManager:
         start_time = time.time()
 
         try:
-            # Check all servers
-            unhealthy_servers = []
-            total_response_time = 0.0
-
-            for server_id, server in self._servers.items():
-                try:
-                    health = server.health_check_sync(timeout=timeout / len(self._servers))
-                    total_response_time += health.response_time
-
-                    if not health.is_healthy:
-                        unhealthy_servers.append(f"{server_id}: {health.error_message}")
-
-                except (OSError, TimeoutError, HealthCheckError) as e:
-                    unhealthy_servers.append(f"{server_id}: {str(e)}")
-
+            # Collect health data from all servers
+            unhealthy_servers, total_response_time = self._collect_server_health_data(timeout)
+            
+            # Calculate metrics
             elapsed_time = time.time() - start_time
             avg_response_time = total_response_time / len(self._servers) if self._servers else 0.0
-
-            if unhealthy_servers:
+            
+            # Determine overall health and update state
+            is_healthy = len(unhealthy_servers) == 0
+            self._is_healthy = is_healthy
+            
+            if is_healthy:
+                return self._create_health_status(True, avg_response_time)
+            else:
                 error_msg = f"Unhealthy servers: {', '.join(unhealthy_servers)}"
-                self._is_healthy = False
-                return HealthStatus(
-                    is_healthy=False,
-                    response_time=elapsed_time,
-                    error_message=error_msg,
-                    details={"unhealthy_count": len(unhealthy_servers), "total_count": len(self._servers)}
-                )
-
-            self._is_healthy = True
-            return HealthStatus(
-                is_healthy=True,
-                response_time=avg_response_time,
-                details={"server_count": len(self._servers)}
-            )
+                return self._create_health_status(False, elapsed_time, error_msg, unhealthy_servers)
 
         except Exception as e:
             self._is_healthy = False
@@ -744,6 +726,60 @@ class InstanceManager:
             time.sleep(0.5)
         
         raise ClusterError(f"Cluster did not become ready within {timeout} seconds")
+
+    def _collect_server_health_data(self, timeout: float) -> Tuple[List[str], float]:
+        """Collect health data from all servers.
+        
+        Args:
+            timeout: Total timeout to distribute among servers
+            
+        Returns:
+            Tuple of (unhealthy_servers, total_response_time)
+        """
+        unhealthy_servers = []
+        total_response_time = 0.0
+        per_server_timeout = timeout / len(self._servers) if self._servers else timeout
+        
+        for server_id, server in self._servers.items():
+            try:
+                health = server.health_check_sync(timeout=per_server_timeout)
+                total_response_time += health.response_time
+                
+                if not health.is_healthy:
+                    unhealthy_servers.append(f"{server_id}: {health.error_message}")
+                    
+            except (OSError, TimeoutError, HealthCheckError) as e:
+                unhealthy_servers.append(f"{server_id}: {str(e)}")
+                
+        return unhealthy_servers, total_response_time
+
+    def _create_health_status(self, is_healthy: bool, response_time: float, 
+                             error_message: str = "", unhealthy_servers: List[str] = None) -> HealthStatus:
+        """Create a HealthStatus object with appropriate details.
+        
+        Args:
+            is_healthy: Whether the deployment is healthy
+            response_time: Response time for the check
+            error_message: Error message if unhealthy
+            unhealthy_servers: List of unhealthy server descriptions
+            
+        Returns:
+            Configured HealthStatus object
+        """
+        if is_healthy:
+            return HealthStatus(
+                is_healthy=True,
+                response_time=response_time,
+                details={"server_count": len(self._servers)}
+            )
+        else:
+            details = {"unhealthy_count": len(unhealthy_servers or []), "total_count": len(self._servers)}
+            return HealthStatus(
+                is_healthy=False,
+                response_time=response_time,
+                error_message=error_message,
+                details=details
+            )
 
     def _verify_deployment_health(self) -> None:
         """Verify that all servers in deployment are healthy."""
