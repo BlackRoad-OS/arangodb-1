@@ -226,7 +226,7 @@ class ClusterOrchestrator:
                             'healthy': False,
                             'error': str(e)
                         }
-            logger.info('Health check completed: %s (%s% healthy)', report['overall_health'], report['health_percentage'])
+            logger.info('Health check completed: %s (%s%% healthy)', report['overall_health'], report['health_percentage'])
             return report
 
     async def wait_for_cluster_ready(self, timeout: float=300.0, min_healthy_percentage: float=80.0) -> None:
@@ -242,7 +242,7 @@ class ClusterOrchestrator:
         """
         timeout = clamp_timeout(timeout, 'cluster_ready')
         with timeout_scope(timeout, f'wait_ready_{self.deployment_id}'):
-            logger.info('Waiting for cluster to become ready (min %s% healthy)', min_healthy_percentage)
+            logger.info('Waiting for cluster to become ready (min %s%% healthy)', min_healthy_percentage)
             start_time = time.time()
             last_log_time = start_time
             while True:
@@ -252,11 +252,11 @@ class ClusterOrchestrator:
                         health_pct = self._cluster_state.cluster_health_percentage()
                         current_time = time.time()
                         if current_time - last_log_time >= 10.0:
-                            logger.info('Cluster health: %s% (target: %s%)', health_pct, min_healthy_percentage)
+                            logger.info('Cluster health: %s%% (target: %s%%)', health_pct, min_healthy_percentage)
                             last_log_time = current_time
                         if health_pct >= min_healthy_percentage and self._cluster_state.is_agency_healthy() and (len(self._cluster_state.get_healthy_coordinators()) > 0) and (len(self._cluster_state.get_healthy_dbservers()) > 0):
                             elapsed = time.time() - start_time
-                            logger.info('Cluster is ready (%s% healthy) after %ss', health_pct, elapsed)
+                            logger.info('Cluster is ready (%s%% healthy) after %ss', health_pct, elapsed)
                             return
                 except Exception as e:
                     logger.debug('Error checking cluster state: %s', e)

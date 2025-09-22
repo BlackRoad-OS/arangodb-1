@@ -39,7 +39,7 @@ class ManagerDependencies:
     server_factory: ServerFactory
 
     @classmethod
-    def create_defaults(cls, _deployment_id: str,
+    def create_defaults(cls, deployment_id: str, 
                        config: Optional[ConfigProvider] = None,
                        custom_logger: Optional[Logger] = None,
                        port_allocator: Optional[PortAllocator] = None) -> 'ManagerDependencies':
@@ -166,7 +166,7 @@ class InstanceManager:
             if self.state.status.is_deployed:
                 self.shutdown_deployment()
         finally:
-            self._executor.shutdown(wait=True)
+            self._threading.executor.shutdown(wait=True)
 
     def create_deployment_plan(
         self,
@@ -184,9 +184,9 @@ class InstanceManager:
         """
         # Use default cluster config if none provided for cluster mode
         if mode == DeploymentMode.CLUSTER and cluster_config is None:
-            cluster_config = self.config.cluster
+            cluster_config = self._deps.config.cluster
 
-        plan = self.state.deployment_planner.create_deployment_plan(
+        plan = self._deps.deployment_planner.create_deployment_plan(
             deployment_id=self.deployment_id,
             mode=mode,
             cluster_config=cluster_config
@@ -253,7 +253,7 @@ class InstanceManager:
         if not self.state.deployment_plan:
             raise ServerError("No deployment plan available")
 
-        self.state.servers = self._server_factory.create_server_instances(
+        self.state.servers = self._deps.server_factory.create_server_instances(
             self.state.deployment_plan.servers
         )
 
@@ -281,7 +281,7 @@ class InstanceManager:
             for server_id in shutdown_order:
                 if server_id in self.state.servers:
                     server = self.state.servers[server_id]
-                    future = self._executor.submit(self._shutdown_server, server, 30.0)
+                    future = self._threading.executor.submit(self._shutdown_server, server, 30.0)
                     futures.append((server_id, future))
 
             # Wait for all shutdowns to complete
@@ -489,7 +489,7 @@ class InstanceManager:
 
     def is_deployed(self) -> bool:
         """Check if deployment is active."""
-        return self._is_deployed
+        return self.state.status.is_deployed
 
     def is_healthy(self) -> bool:
         """Check if deployment is healthy."""
@@ -658,7 +658,7 @@ class InstanceManager:
         futures = []
         for server_id, server in servers_to_start:
             logger.info("Starting %s %s", role_name, server_id)
-            future = self._executor.submit(server.start, timeout)
+            future = self._threading.executor.submit(server.start, timeout)
             futures.append((server_id, future))
 
         # Wait for all servers to complete startup
@@ -896,7 +896,7 @@ class InstanceManager:
     def _release_ports(self) -> None:
         """Release all allocated ports."""
         try:
-            self.port_manager.release_all()
+            self._deps.port_manager.release_all()
         except Exception as e:
             logger.warning("Error releasing ports: %s", e)
 

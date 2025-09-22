@@ -262,7 +262,7 @@ class Selector:
                 excluded_tests.append(test_item)
         selection_summary = {'total_collected': len(collected_tests), 'selected': len(selected_tests), 'excluded': len(excluded_tests), 'filters_applied': len(self.filters) + len(self.custom_filters)}
         result = SelectionResult(selected_tests=selected_tests, excluded_tests=excluded_tests, total_collected=len(collected_tests), selection_summary=selection_summary, filter_stats=filter_stats)
-        self.logger.info('Test selection complete: %s/%s selected (%s%)', result.selected_count, result.total_collected, result.selection_rate)
+        self.logger.info('Test selection complete: %s/%s selected (%s%%)', result.selected_count, result.total_collected, result.selection_rate)
         return result
 
     def _should_include_test(self, test_item: PytestItem, filter_stats: Dict[str, Dict[str, int]]) -> bool:

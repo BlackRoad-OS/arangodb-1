@@ -62,8 +62,8 @@ class TestArangoServerBasic:
         mock_port_allocator.allocate_port.return_value = 8529
         mock_port_allocator.release_port = Mock()
 
-        server1 = ArangoServer("test1", ServerRole.SINGLE, 8531, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
-        server2 = ArangoServer("test2", ServerRole.SINGLE, 8532, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
+        server1 = ArangoServer("test1", role=ServerRole.SINGLE, port=8531, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
+        server2 = ArangoServer("test2", role=ServerRole.SINGLE, port=8532, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
 
         assert server1.endpoint == "http://127.0.0.1:8531"
         assert server2.endpoint == "http://127.0.0.1:8532"
@@ -87,7 +87,7 @@ class TestArangoServerBasic:
         mock_port_allocator.allocate_port.return_value = 8529
         mock_port_allocator.release_port = Mock()
 
-        server = ArangoServer("test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
+        server = ArangoServer("test", role=ServerRole.SINGLE, port=8529, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
 
         assert server.is_running() is False
 
@@ -158,8 +158,8 @@ class TestArangoServerLifecycle:
         # Set up server as if it was started
         from armadillo.core.process import ProcessInfo
         from pathlib import Path
-        self.server._process_info = ProcessInfo(pid=12345, command=["test"], start_time=123.0, working_dir=Path("/tmp"), env={})
-        self.server._is_running = True
+        self.server._runtime.process_info = ProcessInfo(pid=12345, command=["test"], start_time=123.0, working_dir=Path("/tmp"), env={})
+        self.server._runtime.is_running = True
 
         self.server.stop()
 
@@ -169,13 +169,13 @@ class TestArangoServerLifecycle:
         """Test stopping server that wasn't started doesn't crash."""
         self.server.stop()
         # Should not crash
-        assert self.server._process_info is None
+        assert self.server._runtime.process_info is None
 
     @patch('armadillo.instances.server.is_process_running')
     def test_is_running_with_process_id(self, mock_is_running):
         """Test is_running delegates to process supervisor."""
         mock_is_running.return_value = True
-        self.server._is_running = True
+        self.server._runtime.is_running = True
 
         assert self.server.is_running() is True
         # Note: The actual implementation checks _is_running flag, not process supervisor
@@ -209,7 +209,7 @@ class TestArangoServerConfiguration:
         from armadillo.instances.command_builder import ServerCommandBuilder
         command_builder = ServerCommandBuilder(config_provider=mock_config, logger=mock_logger)
 
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529,
+        self.server = ArangoServer("test", role=ServerRole.SINGLE, port=8529,
                                   config_provider=mock_config,
                                   logger=mock_logger,
                                   port_allocator=mock_port_allocator,
@@ -271,7 +271,7 @@ class TestArangoServerErrorHandling:
         mock_health_checker = Mock()
         mock_health_checker.check_readiness.return_value = True
 
-        self.server = ArangoServer("test", ServerRole.SINGLE, 8529,
+        self.server = ArangoServer("test", role=ServerRole.SINGLE, port=8529,
                                   config_provider=mock_config,
                                   logger=mock_logger,
                                   port_allocator=mock_port_allocator,
@@ -295,22 +295,22 @@ class TestArangoServerErrorHandling:
 
         from armadillo.core.process import ProcessInfo
         from pathlib import Path
-        self.server._process_info = ProcessInfo(pid=12345, command=["test"], start_time=123.0, working_dir=Path("/tmp"), env={})
-        self.server._is_running = True
+        self.server._runtime.process_info = ProcessInfo(pid=12345, command=["test"], start_time=123.0, working_dir=Path("/tmp"), env={})
+        self.server._runtime.is_running = True
 
         # Should raise ServerShutdownError but still clean up
         with pytest.raises(ServerShutdownError):
             self.server.stop()
 
         # But should still clean up state in finally block
-        assert self.server._is_running is False
-        assert self.server._process_info is None
+        assert self.server._runtime.is_running is False
+        assert self.server._runtime.process_info is None
 
     def test_invalid_port_type(self):
         """Test that invalid port types are caught."""
         with pytest.raises((TypeError, ValueError)):
             # This should be caught by the strict type validation
-            ArangoServer("test", ServerRole.SINGLE, "not_a_port")
+            ArangoServer("test", role=ServerRole.SINGLE, port="not_a_port")
 
 
 class TestArangoServerIntegration:
@@ -334,7 +334,7 @@ class TestArangoServerIntegration:
         # Create mock logger
         mock_logger = Mock()
 
-        server = ArangoServer("lifecycle_test", ServerRole.SINGLE, 8529, config_provider=mock_config, logger=mock_logger)
+        server = ArangoServer("lifecycle_test", role=ServerRole.SINGLE, port=8529, config_provider=mock_config, logger=mock_logger)
 
         # Mock successful start
         mock_start.return_value = Mock(pid=12345)

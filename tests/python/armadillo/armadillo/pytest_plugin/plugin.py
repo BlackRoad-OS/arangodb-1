@@ -179,7 +179,7 @@ def pytest_runtest_call(item: pytest.Item) -> None:
 @pytest.fixture(scope='session')
 def arango_single_server() -> Generator[ArangoServer, None, None]:
     """Provide a single ArangoDB server for testing."""
-    server = ArangoServer('test_single_server', ServerRole.SINGLE)
+    server = ArangoServer('test_single_server', role=ServerRole.SINGLE)
     try:
         logger.info('Starting session single server')
         server.start(timeout=60.0)
@@ -236,7 +236,7 @@ def _get_or_create_cluster(self) -> 'InstanceManager':
 def _get_or_create_single_server(self) -> ArangoServer:
     """Get or create session single server."""
     if 'single' not in self._session_servers:
-        server = ArangoServer('test_single_server', ServerRole.SINGLE)
+        server = ArangoServer('test_single_server', role=ServerRole.SINGLE)
         logger.info('Starting session single server')
         server.start(timeout=60.0)
         health = server.health_check_sync(timeout=10.0)
@@ -252,7 +252,7 @@ ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server."""
     server_id = f'test_func_{random_id(8)}'
-    server = ArangoServer(server_id, ServerRole.SINGLE)
+    server = ArangoServer(server_id, role=ServerRole.SINGLE)
     try:
         logger.info('Starting function server %s', server_id)
         server.start(timeout=30.0)
@@ -359,31 +359,13 @@ def pytest_collection_modifyitems(config, items):
         if any((word in item.name.lower() for word in ['perf', 'benchmark', 'timing'])):
             item.add_marker(pytest.mark.performance)
 
-def pytest_runtest_setup(item):
-    """Enhanced test setup with marker-based logic."""
-    if item.get_closest_marker('slow'):
-        if not item.config.getoption('--runslow', default=False):
-            pytest.skip('need --runslow option to run slow tests')
-    if item.get_closest_marker('stress_test'):
-        if not item.config.getoption('--stress', default=False):
-            pytest.skip('need --stress option to run stress tests')
-    if item.get_closest_marker('flaky'):
-        if not item.config.getoption('--flaky', default=False):
-            pytest.skip('need --flaky option to run flaky tests')
 
 def pytest_addoption(parser):
     """Add custom command line options."""
     parser.addoption('--runslow', action='store_true', default=False, help='run slow tests')
     parser.addoption('--stress', action='store_true', default=False, help='run stress tests')
     parser.addoption('--flaky', action='store_true', default=False, help='run flaky tests')
-    parser.addoption(
-        '--deployment-mode',
-        action='store',
-        default='single',
-        choices=['single',
-        'cluster'],
-        help='default deployment mode for tests'
-    )
+    parser.addoption('--deployment-mode', action='store', default='single', choices=['single', 'cluster'], help='default deployment mode for tests')
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):
@@ -438,35 +420,6 @@ def pytest_sessionfinish(session, exitstatus):
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionfinish(session, exitstatus)
 
-def pytest_collection_modifyitems(items):
-    """Handle collection completion."""
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_collection_modifyitems(items)
-
-def pytest_runtest_logstart(nodeid, location):
-    """Handle test run start."""
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_logstart(nodeid, location)
-
-def pytest_runtest_setup(item):
-    """Handle test setup start."""
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_setup(item)
-
-def pytest_runtest_call(item):
-    """Handle test call start."""
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_call(item)
-
-def pytest_runtest_teardown(item):
-    """Handle test teardown start."""
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_teardown(item)
 
 def pytest_runtest_logreport(report):
     """Handle test report."""
