@@ -6,7 +6,7 @@ from armadillo.core.errors import (
     ArmadilloError, ConfigurationError, EnvironmentError,
     ProcessError, ProcessStartupError, ProcessTimeoutError, ProcessCrashError,
     ServerError, ServerStartupError, ServerShutdownError, HealthCheckError,
-    NetworkError, ConnectionError, AuthenticationError, JWTError, NonceReplayError,
+    NetworkError, ServerConnectionError, AuthenticationError, JWTError, NonceReplayError,
     CodecError, SerializationError, DeserializationError,
     FilesystemError, PathError, AtomicWriteError,
     ExecutionError, ExecutionTimeoutError, SetupError, TeardownError,

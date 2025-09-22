@@ -83,8 +83,8 @@ class NetworkError(ArmadilloError):
     pass
 
 
-class ConnectionError(NetworkError):
-    """Connection establishment failed."""
+class ServerConnectionError(NetworkError):
+    """Server connection establishment failed."""
     pass
 
 

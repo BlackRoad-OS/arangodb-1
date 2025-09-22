@@ -1,16 +1,17 @@
 """ArangoDB server instance wrapper with lifecycle management and health monitoring."""
 
 import asyncio
+import builtins
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List
-from dataclasses import dataclass
 
 import aiohttp
 
 from ..core.types import ServerRole, ServerConfig, HealthStatus, ServerStats
 from ..core.errors import (
-    ServerStartupError, ServerShutdownError, ConnectionError
+    ServerStartupError, ServerShutdownError
 )
 from ..core.config import get_config, ConfigProvider
 from ..core.process import start_supervised_process, stop_supervised_process, is_process_running, ProcessInfo, get_process_stats
@@ -137,7 +138,7 @@ class ArangoServer:
                     command,
                     cwd=repository_root,
                     startup_timeout=effective_timeout,
-                    readiness_check=lambda: self._check_readiness(),
+                    readiness_check=self._check_readiness,
                     inherit_console=True  # ArangoDB writes directly to console - no buffering delays
                 )
 
@@ -171,7 +172,7 @@ class ArangoServer:
             # Release allocated port
             self._release_port(self.port)
 
-    def restart(self, wait_ready: bool = True, timeout: float = 30.0) -> None:
+    def restart(self, timeout: float = 30.0) -> None:
         """Restart the ArangoDB server."""
         log_server_event(self._logger, "restarting", server_id=self.server_id)
 
@@ -217,12 +218,12 @@ class ArangoServer:
                             response_time=response_time,
                             details=details
                         )
-                    else:
-                        return HealthStatus(
-                            is_healthy=False,
-                            response_time=response_time,
-                            error_message=f"HTTP {response.status}: {response.reason}"
-                        )
+                    
+                    return HealthStatus(
+                        is_healthy=False,
+                        response_time=response_time,
+                        error_message=f"HTTP {response.status}: {response.reason}"
+                    )
 
         except asyncio.TimeoutError:
             response_time = time.time() - start_time
@@ -231,7 +232,7 @@ class ArangoServer:
                 response_time=response_time,
                 error_message=f"Health check timed out after {timeout}s"
             )
-        except (aiohttp.ClientError, OSError, ConnectionError) as e:
+        except (aiohttp.ClientError, OSError, builtins.ConnectionError) as e:
             response_time = time.time() - start_time
             return HealthStatus(
                 is_healthy=False,
@@ -255,7 +256,7 @@ class ArangoServer:
         try:
             return asyncio.run(self.get_stats())
         except (asyncio.TimeoutError, RuntimeError, OSError) as e:
-            logger.debug(f"Stats error for {self.server_id}: {e}")
+            logger.debug("Stats error for %s: %s", self.server_id, e)
             return None
 
     async def get_stats(self) -> Optional[ServerStats]:
@@ -284,7 +285,7 @@ class ArangoServer:
                             additional_metrics=stats_data
                         )
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-            logger.debug(f"Failed to get server stats: {e}")
+            logger.debug("Failed to get server stats: %s", e)
             return None
 
     def get_info(self) -> ArangoServerInfo:
@@ -322,7 +323,7 @@ class ArangoServer:
             if self.server_id and is_process_running(self.server_id):
                 stop_supervised_process(self.server_id, graceful=False, timeout=5.0)
         except (ProcessLookupError, OSError, TimeoutError) as e:
-            logger.debug(f"Cleanup error for {self.server_id}: {e}")
+            logger.debug("Cleanup error for %s: %s", self.server_id, e)
 
         self._is_running = False
         self._process_info = None

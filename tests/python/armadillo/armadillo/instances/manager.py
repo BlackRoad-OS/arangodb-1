@@ -361,15 +361,15 @@ class InstanceManager:
         try:
             # Collect health data from all servers
             unhealthy_servers, total_response_time = self._collect_server_health_data(timeout)
-            
+
             # Calculate metrics
             elapsed_time = time.time() - start_time
             avg_response_time = total_response_time / len(self._servers) if self._servers else 0.0
-            
+
             # Determine overall health and update state
             is_healthy = len(unhealthy_servers) == 0
             self._is_healthy = is_healthy
-            
+
             if is_healthy:
                 return self._create_health_status(True, avg_response_time)
             else:
@@ -629,10 +629,10 @@ class InstanceManager:
 
     def _get_server_readiness_endpoint(self, server: ArangoServer) -> Tuple[str, str]:
         """Get the appropriate readiness check endpoint for a server.
-        
+
         Args:
             server: Server to check
-            
+
         Returns:
             Tuple of (url, method) for readiness check
         """
@@ -645,18 +645,18 @@ class InstanceManager:
 
     def _check_server_readiness(self, server_id: str, server: ArangoServer) -> bool:
         """Check if a single server is ready.
-        
+
         Args:
             server_id: Server identifier
             server: Server instance
-            
+
         Returns:
             True if server is ready, False otherwise
         """
         try:
             url, method = self._get_server_readiness_endpoint(server)
             response = requests.request(method, url, timeout=2.0)
-            
+
             if response.status_code == 200:
                 logger.debug("Server %s (%s) is ready", server_id, server.role.value)
                 return True
@@ -665,11 +665,11 @@ class InstanceManager:
                 if self._is_service_api_disabled_error(response):
                     logger.debug("Service API disabled on %s, continuing", server_id)
                     return True
-                    
+
             # Server not ready
             logger.debug("Server %s not ready yet (status: %s)", server_id, response.status_code)
             return False
-            
+
         except Exception as e:
             # Server not responding
             logger.debug("Server %s not responding: %s", server_id, e)
@@ -677,10 +677,10 @@ class InstanceManager:
 
     def _is_service_api_disabled_error(self, response) -> bool:
         """Check if response indicates service API is disabled.
-        
+
         Args:
             response: HTTP response object
-            
+
         Returns:
             True if this is a service API disabled error
         """
@@ -692,7 +692,7 @@ class InstanceManager:
 
     def _check_all_servers_ready(self) -> bool:
         """Check if all servers in the cluster are ready.
-        
+
         Returns:
             True if all servers are ready, False otherwise
         """
@@ -708,61 +708,61 @@ class InstanceManager:
             timeout: Maximum time to wait (10 minutes like JS framework)
         """
         logger.info("Waiting for all cluster nodes to become ready")
-        
+
         start_time = time.time()
         count = 0
-        
+
         while time.time() - start_time < timeout:
             count += 1
-            
+
             if self._check_all_servers_ready():
                 logger.info("All cluster nodes are ready!")
                 return
-                
+
             # Avoid log spam - only log every 10 iterations
             if count % 10 == 0:
                 logger.info("Still waiting for cluster readiness (attempt %s)...", count)
-                
+
             time.sleep(0.5)
-        
+
         raise ClusterError(f"Cluster did not become ready within {timeout} seconds")
 
     def _collect_server_health_data(self, timeout: float) -> Tuple[List[str], float]:
         """Collect health data from all servers.
-        
+
         Args:
             timeout: Total timeout to distribute among servers
-            
+
         Returns:
             Tuple of (unhealthy_servers, total_response_time)
         """
         unhealthy_servers = []
         total_response_time = 0.0
         per_server_timeout = timeout / len(self._servers) if self._servers else timeout
-        
+
         for server_id, server in self._servers.items():
             try:
                 health = server.health_check_sync(timeout=per_server_timeout)
                 total_response_time += health.response_time
-                
+
                 if not health.is_healthy:
                     unhealthy_servers.append(f"{server_id}: {health.error_message}")
-                    
+
             except (OSError, TimeoutError, HealthCheckError) as e:
                 unhealthy_servers.append(f"{server_id}: {str(e)}")
-                
+
         return unhealthy_servers, total_response_time
 
-    def _create_health_status(self, is_healthy: bool, response_time: float, 
+    def _create_health_status(self, is_healthy: bool, response_time: float,
                              error_message: str = "", unhealthy_servers: List[str] = None) -> HealthStatus:
         """Create a HealthStatus object with appropriate details.
-        
+
         Args:
             is_healthy: Whether the deployment is healthy
             response_time: Response time for the check
             error_message: Error message if unhealthy
             unhealthy_servers: List of unhealthy server descriptions
-            
+
         Returns:
             Configured HealthStatus object
         """
