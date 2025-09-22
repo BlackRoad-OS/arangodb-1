@@ -25,7 +25,7 @@ from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.auth import get_auth_provider
 from .deployment_plan import DeploymentPlan
 
-logger = get_logger(__name__)
+_module_logger = get_logger(__name__)
 
 
 
@@ -138,7 +138,7 @@ class InstanceManager:
         timeout = clamp_timeout(timeout, "deployment")
 
         with timeout_scope(timeout, f"deploy_servers_{self.deployment_id}"):
-            logger.info("Starting deployment of %s servers", len(plan.servers))
+            _module_logger.info("Starting deployment of %s servers", len(plan.servers))
             self._startup_time = time.time()
 
             try:
@@ -160,10 +160,10 @@ class InstanceManager:
                 self._is_healthy = True
 
                 deployment_time = time.time() - self._startup_time
-                logger.info("Deployment completed successfully in %.2fs", deployment_time)
+                _module_logger.info("Deployment completed successfully in %.2fs", deployment_time)
 
             except Exception as e:
-                logger.error("Deployment failed: %s", e)
+                _module_logger.error("Deployment failed: %s", e)
                 # Try to cleanup partial deployment
                 try:
                     self.shutdown_deployment()
@@ -187,14 +187,14 @@ class InstanceManager:
             timeout: Maximum time to wait for shutdown
         """
         if not self._is_deployed:
-            logger.debug("No deployment to shutdown")
+            _module_logger.debug("No deployment to shutdown")
             return
 
         timeout = clamp_timeout(timeout, "shutdown")
         self._shutdown_time = time.time()
 
         with timeout_scope(timeout, f"shutdown_deployment_{self.deployment_id}"):
-            logger.info("Shutting down deployment with %s servers", len(self._servers))
+            _module_logger.info("Shutting down deployment with %s servers", len(self._servers))
 
             # Shutdown in reverse order
             shutdown_order = list(reversed(self._startup_order))
@@ -212,13 +212,13 @@ class InstanceManager:
             for server_id, future in futures:
                 try:
                     future.result(timeout=30.0)
-                    logger.debug("Server %s shutdown completed", server_id)
+                    _module_logger.debug("Server %s shutdown completed", server_id)
                 except (TimeoutError, OSError, ServerShutdownError) as e:
-                    logger.error("Failed to shutdown server %s: %s", server_id, e)
+                    _module_logger.error("Failed to shutdown server %s: %s", server_id, e)
                     failed_shutdowns.append(server_id)
 
             if failed_shutdowns:
-                logger.warning("Some servers failed to shutdown cleanly: %s", failed_shutdowns)
+                _module_logger.warning("Some servers failed to shutdown cleanly: %s", failed_shutdowns)
 
             # Release allocated ports
             self._release_ports()
@@ -231,7 +231,7 @@ class InstanceManager:
             self._is_healthy = False
 
             shutdown_time = time.time() - self._shutdown_time
-            logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
+            _module_logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
 
     def _shutdown_server(self, server: 'ArangoServer', timeout: float = 30.0) -> None:
         """Shutdown a single server instance with bulletproof termination.
@@ -252,26 +252,26 @@ class InstanceManager:
                 if hasattr(server, '_process_info') and server._process_info:
                     stop_supervised_process(server.server_id, graceful=True, timeout=timeout)
                 else:
-                    logger.warning("Server %s has no process info - may already be stopped", server.server_id)
+                    _module_logger.warning("Server %s has no process info - may already be stopped", server.server_id)
 
             log_server_event(logger, "stopped", server_id=server.server_id)
-            logger.debug("Server %s shutdown completed successfully", server.server_id)
+            _module_logger.debug("Server %s shutdown completed successfully", server.server_id)
 
         except Exception as e:
             log_server_event(logger, "stop_failed", server_id=server.server_id, error=str(e))
-            logger.error("Failed to shutdown server %s: %s", server.server_id, e)
+            _module_logger.error("Failed to shutdown server %s: %s", server.server_id, e)
 
             # Try emergency force kill if graceful shutdown failed
             try:
-                logger.warning("Attempting emergency force kill of server %s", server.server_id)
+                _module_logger.warning("Attempting emergency force kill of server %s", server.server_id)
                 if hasattr(server, '_process_info') and server._process_info:
                     stop_supervised_process(server.server_id, graceful=False, timeout=5.0)
-                    logger.info("Emergency force kill of server %s succeeded", server.server_id)
+                    _module_logger.info("Emergency force kill of server %s succeeded", server.server_id)
                 else:
-                    logger.debug("Server %s has no process info for force kill", server.server_id)
+                    _module_logger.debug("Server %s has no process info for force kill", server.server_id)
 
             except Exception as force_e:
-                logger.error("CRITICAL: Emergency force kill failed for server %s: %s", server.server_id, force_e)
+                _module_logger.error("CRITICAL: Emergency force kill failed for server %s: %s", server.server_id, force_e)
                 # Don't re-raise - we want to continue shutting down other servers
 
             # Re-raise the original error for the caller to handle
@@ -283,7 +283,7 @@ class InstanceManager:
         Args:
             timeout: Maximum time for restart operation
         """
-        logger.info("Restarting deployment")
+        _module_logger.info("Restarting deployment")
 
         # Preserve current plan
         current_plan = self._deployment_plan
@@ -415,7 +415,7 @@ class InstanceManager:
                 server_stats = server.collect_stats()
                 stats[server_id] = server_stats
             except (OSError, ConnectionError, TimeoutError) as e:
-                logger.warning("Failed to collect stats from %s: %s", server_id, e)
+                _module_logger.warning("Failed to collect stats from %s: %s", server_id, e)
 
         return stats
 
@@ -473,22 +473,22 @@ class InstanceManager:
         server = list(self._servers.values())[0]
         server_id = list(self._servers.keys())[0]
 
-        logger.info("Starting single server %s", server_id)
+        _module_logger.info("Starting single server %s", server_id)
         server.start(timeout=60.0)
 
         self._startup_order.append(server_id)
-        logger.info("Single server %s started successfully", server_id)
+        _module_logger.info("Single server %s started successfully", server_id)
 
     def _start_cluster(self) -> None:
         """Start cluster deployment in proper sequence: agents -> wait -> dbservers -> coordinators."""
-        logger.info("Starting cluster servers in sequence")
+        _module_logger.info("Starting cluster servers in sequence")
 
         # 1. Start agents first
-        logger.info("Starting agents...")
+        _module_logger.info("Starting agents...")
         agent_futures = []
         for server_id, server in self._servers.items():
             if server.role == ServerRole.AGENT:
-                logger.info("Starting agent %s", server_id)
+                _module_logger.info("Starting agent %s", server_id)
                 future = self._executor.submit(server.start, 60.0)
                 agent_futures.append((server_id, future))
 
@@ -497,21 +497,21 @@ class InstanceManager:
             try:
                 future.result(timeout=60.0)
                 self._startup_order.append(server_id)
-                logger.info("Agent %s started successfully", server_id)
+                _module_logger.info("Agent %s started successfully", server_id)
             except Exception as e:
                 raise ServerStartupError(f"Failed to start agent {server_id}: {e}") from e
 
         # 2. Wait for agency to become ready
-        logger.info("Waiting for agency to become ready...")
+        _module_logger.info("Waiting for agency to become ready...")
         self._wait_for_agency_ready()
-        logger.info("Agency is ready!")
+        _module_logger.info("Agency is ready!")
 
         # 3. Start database servers
-        logger.info("Starting database servers...")
+        _module_logger.info("Starting database servers...")
         dbserver_futures = []
         for server_id, server in self._servers.items():
             if server.role == ServerRole.DBSERVER:
-                logger.info("Starting database server %s", server_id)
+                _module_logger.info("Starting database server %s", server_id)
                 future = self._executor.submit(server.start, 60.0)
                 dbserver_futures.append((server_id, future))
 
@@ -520,16 +520,16 @@ class InstanceManager:
             try:
                 future.result(timeout=60.0)
                 self._startup_order.append(server_id)
-                logger.info("Database server %s started successfully", server_id)
+                _module_logger.info("Database server %s started successfully", server_id)
             except Exception as e:
                 raise ServerStartupError(f"Failed to start database server {server_id}: {e}") from e
 
         # 4. Start coordinators
-        logger.info("Starting coordinators...")
+        _module_logger.info("Starting coordinators...")
         coordinator_futures = []
         for server_id, server in self._servers.items():
             if server.role == ServerRole.COORDINATOR:
-                logger.info("Starting coordinator %s", server_id)
+                _module_logger.info("Starting coordinator %s", server_id)
                 future = self._executor.submit(server.start, 60.0)
                 coordinator_futures.append((server_id, future))
 
@@ -538,16 +538,16 @@ class InstanceManager:
             try:
                 future.result(timeout=60.0)
                 self._startup_order.append(server_id)
-                logger.info("Coordinator %s started successfully", server_id)
+                _module_logger.info("Coordinator %s started successfully", server_id)
             except Exception as e:
                 raise ServerStartupError(f"Failed to start coordinator {server_id}: {e}") from e
 
-        logger.info("All cluster servers started successfully")
+        _module_logger.info("All cluster servers started successfully")
 
         # 5. Final readiness check
-        logger.info("Performing final cluster readiness check...")
+        _module_logger.info("Performing final cluster readiness check...")
         self._wait_for_cluster_ready()
-        logger.info("Cluster is fully ready!")
+        _module_logger.info("Cluster is fully ready!")
 
     def _wait_for_agency_ready(self, timeout: float = 30.0) -> None:
         """Wait for agency to become ready - matches JavaScript detectAgencyAlive logic.
@@ -555,7 +555,7 @@ class InstanceManager:
         Args:
             timeout: Maximum time to wait
         """
-        logger.info("Waiting for agency to become ready")
+        _module_logger.info("Waiting for agency to become ready")
 
         start_time = time.time()
 
@@ -571,57 +571,57 @@ class InstanceManager:
                 have_leader = 0
                 leader_id = None
 
-                logger.debug("Agency check iteration %s", iteration)
+                _module_logger.debug("Agency check iteration %s", iteration)
 
                 # Check each agent for leadership and configuration
                 for server_id, server in agents:
                     try:
-                        logger.debug("Checking agent %s at %s", server_id, server.endpoint)
+                        _module_logger.debug("Checking agent %s at %s", server_id, server.endpoint)
                         response = requests.get(f"{server.endpoint}/_api/agency/config", timeout=2.0)
-                        logger.debug("Agent %s response: %s", server_id, response.status_code)
+                        _module_logger.debug("Agent %s response: %s", server_id, response.status_code)
 
                         if response.status_code == 200:
                             config = response.json()
-                            logger.debug("Agent %s config keys: %s", server_id, list(config.keys()))
+                            _module_logger.debug("Agent %s config keys: %s", server_id, list(config.keys()))
 
                             # Check for leadership (like JS lastAcked check)
                             if 'lastAcked' in config:
                                 have_leader += 1
-                                logger.debug("Agent %s has leadership", server_id)
+                                _module_logger.debug("Agent %s has leadership", server_id)
 
                             # Check for configuration (like JS leaderId check)
                             if 'leaderId' in config and config['leaderId'] != "":
                                 have_config += 1
-                                logger.debug("Agent %s has leaderId: %s", server_id, config['leaderId'])
+                                _module_logger.debug("Agent %s has leaderId: %s", server_id, config['leaderId'])
                                 if leader_id is None:
                                     leader_id = config['leaderId']
                                 elif leader_id != config['leaderId']:
                                     # Agents disagree on leader - reset
-                                    logger.debug("Agent %s disagrees on leader: %s vs %s", server_id, config['leaderId'], leader_id)
+                                    _module_logger.debug("Agent %s disagrees on leader: %s vs %s", server_id, config['leaderId'], leader_id)
                                     have_leader = 0
                                     have_config = 0
                                     break
                         else:
-                            logger.debug("Agent %s not ready: %s", server_id, response.status_code)
+                            _module_logger.debug("Agent %s not ready: %s", server_id, response.status_code)
                     except (requests.RequestException, OSError, TimeoutError) as e:
                         # Agent not ready yet
-                        logger.debug("Agent %s not responding: %s", server_id, e)
+                        _module_logger.debug("Agent %s not responding: %s", server_id, e)
                         pass
 
-                logger.debug("Agency status: have_leader=%s, have_config=%s, need_config=%s", have_leader, have_config, len(agents))
+                _module_logger.debug("Agency status: have_leader=%s, have_config=%s, need_config=%s", have_leader, have_config, len(agents))
 
                 # Check if agency is fully ready (like JavaScript condition)
                 if have_leader >= 1 and have_config == len(agents):
-                    logger.info("Agency is ready!")
+                    _module_logger.info("Agency is ready!")
                     return
 
             except (requests.RequestException, OSError, TimeoutError) as e:
-                logger.debug("Agency check exception: %s", e)
+                _module_logger.debug("Agency check exception: %s", e)
                 pass
 
             # Log progress every 10 iterations to avoid spam
             if iteration % 10 == 0:
-                logger.info("Still waiting for agency (iteration %s)", iteration)
+                _module_logger.info("Still waiting for agency (iteration %s)", iteration)
 
             time.sleep(0.5)
 
@@ -633,7 +633,7 @@ class InstanceManager:
         Args:
             timeout: Maximum time to wait (10 minutes like JS framework)
         """
-        logger.info("Waiting for all cluster nodes to become ready")
+        _module_logger.info("Waiting for all cluster nodes to become ready")
 
         start_time = time.time()
         count = 0
@@ -657,34 +657,34 @@ class InstanceManager:
                     response = requests.request(method, url, timeout=2.0)
 
                     if response.status_code == 200:
-                        logger.debug("Server %s (%s) is ready", server_id, server.role.value)
+                        _module_logger.debug("Server %s (%s) is ready", server_id, server.role.value)
                         continue
                     elif response.status_code == 403:
                         # Service API might be disabled (like JS error handling)
                         try:
                             error_body = response.json()
                             if error_body.get('errorNum') == 1931:  # ERROR_SERVICE_API_DISABLED
-                                logger.debug("Service API disabled on %s, continuing", server_id)
+                                _module_logger.debug("Service API disabled on %s, continuing", server_id)
                                 continue
                         except:
                             pass
 
                     # Server not ready
                     all_ready = False
-                    logger.debug("Server %s not ready yet (status: %s)", server_id, response.status_code)
+                    _module_logger.debug("Server %s not ready yet (status: %s)", server_id, response.status_code)
 
                 except Exception as e:
                     # Server not responding
                     all_ready = False
-                    logger.debug("Server %s not responding: %s", server_id, e)
+                    _module_logger.debug("Server %s not responding: %s", server_id, e)
 
             if all_ready:
-                logger.info("All cluster nodes are ready!")
+                _module_logger.info("All cluster nodes are ready!")
                 return
 
             # Avoid log spam - only log every 10 iterations
             if count % 10 == 0:
-                logger.info("Still waiting for cluster readiness (attempt %s)...", count)
+                _module_logger.info("Still waiting for cluster readiness (attempt %s)...", count)
 
             time.sleep(0.5)
 
@@ -692,13 +692,13 @@ class InstanceManager:
 
     def _verify_deployment_health(self) -> None:
         """Verify that all servers in deployment are healthy."""
-        logger.info("Verifying deployment health")
+        _module_logger.info("Verifying deployment health")
 
         health = self.check_deployment_health(timeout=30.0)
         if not health.is_healthy:
             raise HealthCheckError(f"Deployment health verification failed: {health.error_message}")
 
-        logger.info("Deployment health verification passed")
+        _module_logger.info("Deployment health verification passed")
 
     def _shutdown_server(self, server: ArangoServer, timeout: float) -> None:
         """Shutdown a single server.
@@ -711,7 +711,7 @@ class InstanceManager:
             if server.is_running():
                 server.stop(timeout=timeout)
         except Exception as e:
-            logger.error("Error shutting down server %s: %s", server.server_id, e)
+            _module_logger.error("Error shutting down server %s: %s", server.server_id, e)
             raise
 
     def _release_ports(self) -> None:
@@ -719,7 +719,7 @@ class InstanceManager:
         try:
             self.port_manager.release_all()
         except Exception as e:
-            logger.warning("Error releasing ports: %s", e)
+            _module_logger.warning("Error releasing ports: %s", e)
 
 
 # Global instance manager registry
@@ -750,6 +750,6 @@ def cleanup_instance_managers() -> None:
                 if manager.is_deployed():
                     manager.shutdown_deployment()
             except Exception as e:
-                logger.error("Error during manager cleanup: %s", e)
+                _module_logger.error("Error during manager cleanup: %s", e)
 
         _instance_managers.clear()
