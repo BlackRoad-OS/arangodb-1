@@ -1,5 +1,6 @@
 """Shared logging formatters and context management."""
 
+import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -93,7 +94,6 @@ class StructuredFormatter(logging.Formatter):
             if context:
                 log_entry['context'] = context
 
-        import json
         return json.dumps(log_entry, default=str)
 
 

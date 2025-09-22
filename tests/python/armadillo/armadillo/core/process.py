@@ -4,11 +4,11 @@ import signal
 import subprocess
 import threading
 import time
-import psutil
 from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+import psutil
 from .errors import ProcessError, ProcessStartupError, ProcessTimeoutError, ProcessCrashError, TimeoutError as ArmadilloTimeoutError
 from .time import clamp_timeout, timeout_scope
 from .log import get_logger, log_process_event
@@ -40,7 +40,13 @@ class ProcessExecutor:
     def __init__(self) -> None:
         self._executor = ThreadPoolExecutor(thread_name_prefix='ProcessExecutor')
 
-    def run(self, command: List[str], cwd: Optional[Path]=None, env: Optional[Dict[str, str]]=None, timeout: Optional[float]=None, input_data: Optional[str]=None, capture_output: bool=True) -> ProcessResult:
+    def run(self,
+            command: List[str],
+            cwd: Optional[Path] = None,
+            env: Optional[Dict[str, str]] = None,
+            timeout: Optional[float] = None,
+            input_data: Optional[str] = None,
+            capture_output: bool = True) -> ProcessResult:
         """Execute a command with timeout enforcement."""
         effective_timeout = clamp_timeout(timeout, f'process:{command[0]}')
         start_time = time.time()
@@ -162,7 +168,17 @@ class ProcessSupervisor:
                 stdout_config = subprocess.PIPE
                 stderr_config = subprocess.STDOUT
                 use_streaming = True
-            process = subprocess.Popen(command, cwd=cwd, env=env, stdout=stdout_config, stderr=stderr_config, text=True if use_streaming else None, bufsize=1 if use_streaming else -1, universal_newlines=True if use_streaming else None, start_new_session=True)
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                env=env,
+                stdout=stdout_config,
+                stderr=stderr_config,
+                text=True if use_streaming else None,
+                bufsize=1 if use_streaming else -1,
+                universal_newlines=True if use_streaming else None,
+                start_new_session=True
+            )
             process_info = ProcessInfo(pid=process.pid, command=command, start_time=time.time(), working_dir=cwd or Path.cwd(), env=env or {})
             self._processes[process_id] = process
             self._process_info[process_id] = process_info

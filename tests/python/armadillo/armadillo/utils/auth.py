@@ -1,8 +1,8 @@
 """Authentication utilities for secure communication with ArangoDB."""
 import time
-import jwt
 import base64
 from typing import Dict, Optional, Any, List
+import jwt
 from ..core.errors import JWTError
 from ..core.log import get_logger
 from .crypto import generate_secret

@@ -15,23 +15,22 @@ class ArmadilloError(Exception):
 # Configuration and Setup Errors
 class ConfigurationError(ArmadilloError):
     """Error in framework configuration."""
-    pass
 
 
 class EnvironmentError(ArmadilloError):
     """Error in environment setup or detection."""
-    pass
+
 
 
 # Process and Instance Management Errors
 class ProcessError(ArmadilloError):
     """Base class for process-related errors."""
-    pass
+
 
 
 class ProcessStartupError(ProcessError):
     """Error during process startup."""
-    pass
+
 
 
 class ProcessTimeoutError(ProcessError):
@@ -55,17 +54,17 @@ class ProcessCrashError(ProcessError):
 # Server and Instance Errors
 class ServerError(ArmadilloError):
     """Base class for ArangoDB server-related errors."""
-    pass
+
 
 
 class ServerStartupError(ServerError):
     """Error starting ArangoDB server."""
-    pass
+
 
 
 class ServerShutdownError(ServerError):
     """Error shutting down ArangoDB server."""
-    pass
+
 
 
 class HealthCheckError(ServerError):
@@ -80,66 +79,66 @@ class HealthCheckError(ServerError):
 
 class NetworkError(ArmadilloError):
     """Network-related error."""
-    pass
+
 
 
 class ServerConnectionError(NetworkError):
     """Server connection establishment failed."""
-    pass
+
 
 
 # Authentication and Security Errors
 class AuthenticationError(ArmadilloError):
     """Authentication-related error."""
-    pass
+
 
 
 class JWTError(AuthenticationError):
     """JWT token-related error."""
-    pass
+
 
 
 class NonceReplayError(AuthenticationError):
     """Nonce replay attack detected."""
-    pass
+
 
 
 # Data and Codec Errors
 class CodecError(ArmadilloError):
     """Data encoding/decoding error."""
-    pass
+
 
 
 class SerializationError(CodecError):
     """Data serialization error."""
-    pass
+
 
 
 class DeserializationError(CodecError):
     """Data deserialization error."""
-    pass
+
 
 
 # Filesystem and IO Errors
 class FilesystemError(ArmadilloError):
     """Filesystem operation error."""
-    pass
+
 
 
 class PathError(FilesystemError):
     """Path resolution or validation error."""
-    pass
+
 
 
 class AtomicWriteError(FilesystemError):
     """Atomic write operation failed."""
-    pass
+
 
 
 # Test Execution Errors
 class ExecutionError(ArmadilloError):
     """Error during test execution."""
-    pass
+
 
 
 class ExecutionTimeoutError(ExecutionError):
@@ -154,71 +153,71 @@ class ExecutionTimeoutError(ExecutionError):
 
 class SetupError(ExecutionError):
     """Error during test setup."""
-    pass
+
 
 
 class TeardownError(ExecutionError):
     """Error during test teardown."""
-    pass
+
 
 
 # Cluster and Agency Errors
 class ClusterError(ArmadilloError):
     """Cluster operation error."""
-    pass
+
 
 
 class AgencyError(ClusterError):
     """Agency consensus error."""
-    pass
+
 
 
 class LeaderElectionError(AgencyError):
     """Leader election failed."""
-    pass
+
 
 
 # Monitoring and Analysis Errors
 class MonitoringError(ArmadilloError):
     """Monitoring system error."""
-    pass
+
 
 
 class CrashAnalysisError(MonitoringError):
     """Crash analysis error."""
-    pass
+
 
 
 class GdbError(CrashAnalysisError):
     """GDB debugger error."""
-    pass
+
 
 
 class SanitizerError(MonitoringError):
     """Sanitizer report processing error."""
-    pass
+
 
 
 # Result Processing Errors
 class ResultProcessingError(ArmadilloError):
     """Result processing error."""
-    pass
+
 
 
 class ResultExportError(ResultProcessingError):
     """Result export error."""
-    pass
+
 
 
 class AnalysisError(ResultProcessingError):
     """Result analysis error."""
-    pass
+
 
 
 # Timeout Management Errors
 class TimeoutError(ArmadilloError):
     """Timeout management error."""
-    pass
+
 
 
 class DeadlineExceededError(TimeoutError):
@@ -243,7 +242,7 @@ class WatchdogTimeoutError(TimeoutError):
 # SUT Checker Errors
 class CheckerError(ArmadilloError):
     """SUT checker error."""
-    pass
+
 
 
 class InvariantViolationError(CheckerError):
@@ -258,21 +257,21 @@ class InvariantViolationError(CheckerError):
 
 class ResourceLeakError(CheckerError):
     """Resource leak detected."""
-    pass
+
 
 
 # Plugin and Extension Errors
 class PluginError(ArmadilloError):
     """Plugin system error."""
-    pass
+
 
 
 class PluginLoadError(PluginError):
     """Plugin loading error."""
-    pass
+
 
 
 class FixtureError(PluginError):
     """Pytest fixture error."""
-    pass
+
 

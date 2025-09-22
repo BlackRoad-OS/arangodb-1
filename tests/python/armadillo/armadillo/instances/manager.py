@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Any, Tuple
 import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
-import requests
 from dataclasses import dataclass, field
+import requests
 
 from ..core.types import (
     DeploymentMode, ServerRole, ServerConfig, ClusterConfig,
@@ -703,7 +703,6 @@ class InstanceManager:
 
             except (requests.RequestException, OSError, TimeoutError) as e:
                 logger.debug("Agency check exception: %s", e)
-                pass
 
             # Log progress every 10 iterations to avoid spam
             if iteration % 10 == 0:

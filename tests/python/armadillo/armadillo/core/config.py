@@ -1,6 +1,7 @@
 """Configuration management with environment variable integration and validation."""
 
 import os
+import inspect
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Type, TypeVar, Protocol
@@ -283,8 +284,6 @@ class ConfigManager:
 
     def _is_unit_test_context(self) -> bool:
         """Check if we're running in a unit test context where build detection should be skipped."""
-        import inspect
-
         # Check call stack for unit test patterns - this is most reliable
         for frame_info in inspect.stack():
             if 'framework_tests/unit' in frame_info.filename or 'framework_tests\\unit' in frame_info.filename:
