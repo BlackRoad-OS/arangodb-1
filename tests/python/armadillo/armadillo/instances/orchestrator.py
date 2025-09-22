@@ -6,12 +6,13 @@ from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, field
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from ..core.types import DeploymentMode, ServerRole, ClusterConfig, HealthStatus, ServerStats, ArmadilloConfig
-from ..core.errors import ClusterError, AgencyError, LeaderElectionError, HealthCheckError, TimeoutError, NetworkError, ConnectionError
+from ..core.types import ServerRole
+from ..core.errors import ClusterError, AgencyError, HealthCheckError
 from ..core.log import get_logger
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.config import get_config
 from ..utils.auth import get_auth_provider
+from ..utils.crypto import random_id
 from .manager import get_instance_manager
 from .server import ArangoServer
 logger = get_logger(__name__)
@@ -150,7 +151,7 @@ class ClusterOrchestrator:
             return state
         except Exception as e:
             logger.error('Failed to update cluster state: %s', e)
-            raise ClusterError(f'Failed to update cluster state: {e}')
+            raise ClusterError(f'Failed to update cluster state: {e}') from e
 
     async def perform_cluster_health_check(self, detailed: bool=False, timeout: float=60.0) -> Dict[str, Any]:
         """Perform comprehensive cluster health check.
@@ -226,7 +227,6 @@ class ClusterOrchestrator:
         Returns:
             Cluster operation tracking object
         """
-        from ..utils.crypto import random_id
         operation_id = f'rolling_restart_{random_id(8)}'
         operation = ClusterOperation(operation_id=operation_id, operation_type='rolling_restart')
         try:
@@ -266,7 +266,7 @@ class ClusterOrchestrator:
             operation.end_time = time.time()
             operation.error_message = str(e)
             logger.error('Rolling restart failed: %s', e)
-            raise ClusterError(f'Rolling restart failed: {e}')
+            raise ClusterError(f'Rolling restart failed: {e}') from e
         finally:
             self._active_operations.pop(operation_id, None)
         return operation

@@ -10,11 +10,10 @@ import aiohttp
 
 from ..core.types import ServerRole, ServerConfig, HealthStatus, ServerStats
 from ..core.errors import (
-    ServerError, ServerStartupError, ServerShutdownError,
-    HealthCheckError, NetworkError, ConnectionError
+    ServerStartupError, ServerShutdownError, ConnectionError
 )
 from ..core.config import get_config, ConfigProvider
-from ..core.process import start_supervised_process, stop_supervised_process, is_process_running, ProcessInfo
+from ..core.process import start_supervised_process, stop_supervised_process, is_process_running, ProcessInfo, get_process_stats
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import server_dir
@@ -274,7 +273,6 @@ class ArangoServer:
                         stats_data = await response.json()
 
                         # Get process info for additional metrics
-                        from ..core.process import get_process_stats
                         process_stats = get_process_stats(self.server_id)
 
                         return ServerStats(

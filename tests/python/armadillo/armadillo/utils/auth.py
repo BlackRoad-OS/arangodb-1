@@ -47,8 +47,8 @@ class AuthProvider:
             payload = jwt.decode(token, self.secret, algorithms=[self.algorithm])
             logger.debug('Successfully verified JWT token')
             return payload
-        except jwt.ExpiredSignatureError:
-            raise JWTError('JWT token has expired')
+        except jwt.ExpiredSignatureError as e:
+            raise JWTError('JWT token has expired') from e
         except jwt.InvalidTokenError as e:
             raise JWTError(f'Invalid JWT token: {e}') from e
         except Exception as e:
@@ -232,7 +232,6 @@ class BasicAuthProvider:
 
     def get_auth_headers(self) -> Dict[str, str]:
         """Get basic auth headers."""
-        import base64
         auth_string = f'{self.username}:{self.password}'
         encoded = base64.b64encode(auth_string.encode()).decode()
         return {'Authorization': f'Basic {encoded}'}

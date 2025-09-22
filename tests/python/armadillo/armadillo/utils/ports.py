@@ -1,6 +1,7 @@
 """Port allocation and management utilities."""
 import socket
 import threading
+import time
 from typing import Set, Optional, List, Protocol
 from pathlib import Path
 from ..core.errors import NetworkError
@@ -171,7 +172,6 @@ def check_port_available(host: str, port: int) -> bool:
 
 def wait_for_port(host: str, port: int, timeout: float=30.0) -> bool:
     """Wait for a port to become available for connection."""
-    import time
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:

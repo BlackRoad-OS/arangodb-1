@@ -249,7 +249,6 @@ class ProcessSupervisor:
         except Exception as e:
             logger.error('Unexpected error stopping process %s: %s', process_id, e)
             log_process_event(logger, 'supervisor.stop_error', process_id=process_id, error=str(e))
-            import traceback
             logger.error('Stack trace: %s', traceback.format_exc())
         finally:
             self._cleanup_process(process_id)
@@ -512,9 +511,6 @@ def force_kill_by_pid(pid: int, timeout: float=5.0) -> bool:
     Returns:
         True if process was killed successfully, False otherwise
     """
-    import os
-    import signal
-    import time
     logger.warning('Emergency PID kill requested for PID %s', pid)
     try:
         try:
@@ -579,6 +575,5 @@ def kill_all_supervised_processes() -> None:
                 logger.debug('No supervised processes to kill')
     except Exception as e:
         logger.error('Error in emergency process tree kill: %s', e)
-        import traceback
         logger.error('Stack trace: %s', traceback.format_exc())
 _process_supervisor = ProcessSupervisor()

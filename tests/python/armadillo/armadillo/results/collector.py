@@ -1,5 +1,7 @@
 """Test result collection and aggregation."""
 import time
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,7 +73,7 @@ class ResultCollector:
                     logger.warning('Unknown export format: %s', format_name)
             except Exception as e:
                 logger.error('Failed to export %s: %s', format_name, e)
-                raise ResultProcessingError(f'Export failed for format {format_name}: {e}')
+                raise ResultProcessingError(f'Export failed for format {format_name}: {e}') from e
         logger.info('Exported results in %s formats to %s', len(exported_files), output_dir)
         return exported_files
 
@@ -102,7 +104,6 @@ class ResultCollector:
 
     def _export_junit(self, results: SuiteExecutionResults, file_path: Path) -> None:
         """Export results as JUnit XML."""
-        from xml.dom import minidom
         testsuite = ET.Element('testsuite')
         testsuite.set('name', 'ArmadilloTests')
         testsuite.set('tests', str(results.summary['total']))

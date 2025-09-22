@@ -150,8 +150,7 @@ class TestInstanceManagerDeployment:
             # If it throws an exception for no server, that's also acceptable behavior
             pass
 
-    @patch('armadillo.instances.manager.ensure_dir')
-    def test_create_deployment_plan_single_basic(self, mock_ensure_dir):
+    def test_create_deployment_plan_single_basic(self):
         """Test creating single server deployment plan."""
         from armadillo.core.types import ClusterConfig
 
@@ -166,8 +165,7 @@ class TestInstanceManagerDeployment:
             # Creation might fail due to missing dependencies, that's ok for this test
             pass
 
-    @patch('armadillo.instances.manager.ensure_dir')
-    def test_create_deployment_plan_cluster_basic(self, mock_ensure_dir):
+    def test_create_deployment_plan_cluster_basic(self):
         """Test creating cluster deployment plan."""
         from armadillo.core.types import ClusterConfig
 

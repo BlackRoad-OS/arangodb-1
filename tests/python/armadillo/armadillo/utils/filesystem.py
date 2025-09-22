@@ -75,10 +75,10 @@ class FilesystemService:
         """Read text file with proper error handling."""
         try:
             return Path(path).read_text(encoding=encoding)
-        except FileNotFoundError:
-            raise PathError(f'File not found: {path}')
-        except PermissionError:
-            raise FilesystemError(f'Permission denied reading {path}')
+        except FileNotFoundError as e:
+            raise PathError(f'File not found: {path}') from e
+        except PermissionError as e:
+            raise FilesystemError(f'Permission denied reading {path}') from e
         except UnicodeDecodeError as e:
             raise FilesystemError(f'Encoding error reading {path}: {e}')
         except Exception as e:

@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any
 import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import requests
 
 from ..core.types import (
     DeploymentMode, ServerRole, ServerConfig, ClusterConfig,
@@ -15,12 +16,12 @@ from ..core.errors import (
 )
 from ..core.log import get_logger, Logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
+from ..core.process import stop_supervised_process
 from .server import ArangoServer
 from .deployment_planner import DeploymentPlanner, StandardDeploymentPlanner
 from .server_factory import ServerFactory, StandardServerFactory
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
-from ..utils.filesystem import ensure_dir
 from ..utils.auth import get_auth_provider
 from .deployment_plan import DeploymentPlan
 
@@ -168,7 +169,7 @@ class InstanceManager:
                     self.shutdown_deployment()
                 except:
                     pass
-                raise ServerStartupError(f"Failed to deploy servers: {e}")
+                raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
     def _create_server_instances(self) -> None:
         """Create ArangoServer instances using injected server factory."""
@@ -248,7 +249,6 @@ class InstanceManager:
                 server.stop(timeout=timeout)
             else:
                 # Fallback: stop via process supervisor with graceful escalation
-                from ..core.process import stop_supervised_process
                 if hasattr(server, '_process_info') and server._process_info:
                     stop_supervised_process(server.server_id, graceful=True, timeout=timeout)
                 else:
@@ -264,7 +264,6 @@ class InstanceManager:
             # Try emergency force kill if graceful shutdown failed
             try:
                 logger.warning("Attempting emergency force kill of server %s", server.server_id)
-                from ..core.process import stop_supervised_process
                 if hasattr(server, '_process_info') and server._process_info:
                     stop_supervised_process(server.server_id, graceful=False, timeout=5.0)
                     logger.info("Emergency force kill of server %s succeeded", server.server_id)
@@ -500,7 +499,7 @@ class InstanceManager:
                 self._startup_order.append(server_id)
                 logger.info("Agent %s started successfully", server_id)
             except Exception as e:
-                raise ServerStartupError(f"Failed to start agent {server_id}: {e}")
+                raise ServerStartupError(f"Failed to start agent {server_id}: {e}") from e
 
         # 2. Wait for agency to become ready
         logger.info("Waiting for agency to become ready...")
@@ -523,7 +522,7 @@ class InstanceManager:
                 self._startup_order.append(server_id)
                 logger.info("Database server %s started successfully", server_id)
             except Exception as e:
-                raise ServerStartupError(f"Failed to start database server {server_id}: {e}")
+                raise ServerStartupError(f"Failed to start database server {server_id}: {e}") from e
 
         # 4. Start coordinators
         logger.info("Starting coordinators...")
@@ -541,7 +540,7 @@ class InstanceManager:
                 self._startup_order.append(server_id)
                 logger.info("Coordinator %s started successfully", server_id)
             except Exception as e:
-                raise ServerStartupError(f"Failed to start coordinator {server_id}: {e}")
+                raise ServerStartupError(f"Failed to start coordinator {server_id}: {e}") from e
 
         logger.info("All cluster servers started successfully")
 
@@ -558,7 +557,6 @@ class InstanceManager:
         """
         logger.info("Waiting for agency to become ready")
 
-        import requests
         start_time = time.time()
 
         # Get all agents
@@ -637,7 +635,6 @@ class InstanceManager:
         """
         logger.info("Waiting for all cluster nodes to become ready")
 
-        import requests
         start_time = time.time()
         count = 0
 
