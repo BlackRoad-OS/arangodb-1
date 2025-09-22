@@ -22,7 +22,7 @@ from ..utils.auth import get_auth_provider
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
 
-_module_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -255,7 +255,7 @@ class ArangoServer:
         try:
             return asyncio.run(self.get_stats())
         except (asyncio.TimeoutError, RuntimeError, OSError) as e:
-            _module_logger.debug(f"Stats error for {self.server_id}: {e}")
+            logger.debug(f"Stats error for {self.server_id}: {e}")
             return None
 
     async def get_stats(self) -> Optional[ServerStats]:
@@ -284,7 +284,7 @@ class ArangoServer:
                             additional_metrics=stats_data
                         )
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-            _module_logger.debug(f"Failed to get server stats: {e}")
+            logger.debug(f"Failed to get server stats: {e}")
             return None
 
     def get_info(self) -> ArangoServerInfo:
