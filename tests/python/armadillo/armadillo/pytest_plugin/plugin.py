@@ -27,7 +27,6 @@ class ArmadilloPlugin:
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
         import logging
-        from ..core.config import get_config
         framework_config = get_config()
         if framework_config.log_level != 'DEBUG':
             logging.getLogger('faker').setLevel(logging.WARNING)
@@ -63,7 +62,7 @@ class ArmadilloPlugin:
         logger.info('Armadillo pytest plugin configured with timeout=%.1fs', self._armadillo_config.test_timeout)
         self._maybe_start_session_servers(config)
 
-    def pytest_unconfigure(self, config: pytest.Config) -> None:
+    def pytest_unconfigure(self, _config: pytest.Config) -> None:
         """Clean up after pytest run."""
         logger.debug('Starting pytest plugin cleanup')
         deployments_to_clean = list(self._session_deployments.items())
@@ -98,7 +97,7 @@ class ArmadilloPlugin:
         stop_watchdog()
         logger.info('Armadillo pytest plugin unconfigured')
 
-    def _maybe_start_session_servers(self, config: pytest.Config) -> None:
+    def _maybe_start_session_servers(self, _config: pytest.Config) -> None:
         """Optionally pre-start session-scoped servers based on test collection.
 
         This method could analyze the collected tests and pre-start servers that
@@ -208,8 +207,6 @@ def arango_deployment():
     Returns the appropriate server/coordinator endpoint regardless of whether
     we're running single server or cluster mode.
     """
-    from ..core.config import get_config
-    from ..core.types import DeploymentMode
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
     if deployment_mode == DeploymentMode.CLUSTER:
@@ -229,7 +226,6 @@ def _get_or_create_cluster(self) -> 'InstanceManager':
         deployment_id = f'cluster_{random_id(8)}'
         manager = get_instance_manager(deployment_id)
         logger.info('Starting session cluster deployment %s', deployment_id)
-        from ..core.types import ClusterConfig, DeploymentMode
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
         manager.deploy_servers(timeout=300.0)
@@ -255,7 +251,6 @@ ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 @pytest.fixture(scope='function')
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server."""
-    from ..utils.crypto import random_id
     server_id = f'test_func_{random_id(8)}'
     server = ArangoServer(server_id, ServerRole.SINGLE)
     try:

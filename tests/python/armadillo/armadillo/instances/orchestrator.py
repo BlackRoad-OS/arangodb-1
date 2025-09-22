@@ -170,16 +170,62 @@ class ClusterOrchestrator:
             if not self._cluster_state:
                 raise ClusterError('Unable to determine cluster state')
             state = self._cluster_state
-            report = {'deployment_id': self.deployment_id, 'timestamp': time.time(), 'overall_health': 'healthy' if state.cluster_health_percentage() >= 80.0 else 'degraded', 'health_percentage': state.cluster_health_percentage(), 'agency': {'has_leader': state.is_agency_healthy(), 'leader': state.agency_leader, 'followers': state.agency_followers}, 'coordinators': {'total': len(state.coordinators), 'healthy': len(state.get_healthy_coordinators()), 'unhealthy': len(state.coordinators) - len(state.get_healthy_coordinators())}, 'dbservers': {'total': len(state.dbservers), 'healthy': len(state.get_healthy_dbservers()), 'unhealthy': len(state.dbservers) - len(state.get_healthy_dbservers())}, 'cluster_info': {'total_databases': state.total_databases, 'total_collections': state.total_collections, 'shard_distribution': state.shard_distribution}}
+            # Build comprehensive cluster health report
+            healthy_coordinators = state.get_healthy_coordinators()
+            healthy_dbservers = state.get_healthy_dbservers()
+            health_percentage = state.cluster_health_percentage()
+            
+            report = {
+                'deployment_id': self.deployment_id,
+                'timestamp': time.time(),
+                'overall_health': 'healthy' if health_percentage >= 80.0 else 'degraded',
+                'health_percentage': health_percentage,
+                'agency': {
+                    'has_leader': state.is_agency_healthy(),
+                    'leader': state.agency_leader,
+                    'followers': state.agency_followers
+                },
+                'coordinators': {
+                    'total': len(state.coordinators),
+                    'healthy': len(healthy_coordinators),
+                    'unhealthy': len(state.coordinators) - len(healthy_coordinators)
+                },
+                'dbservers': {
+                    'total': len(state.dbservers),
+                    'healthy': len(healthy_dbservers),
+                    'unhealthy': len(state.dbservers) - len(healthy_dbservers)
+                },
+                'cluster_info': {
+                    'total_databases': state.total_databases,
+                    'total_collections': state.total_collections,
+                    'shard_distribution': state.shard_distribution
+                }
+            }
             if detailed:
                 report['servers'] = {}
                 for server_id, server in self.instance_manager._servers.items():
                     try:
                         health = server.health_check_sync(timeout=5.0)
                         stats = server.collect_stats()
-                        report['servers'][server_id] = {'role': server.role.value, 'endpoint': server.endpoint, 'healthy': health.is_healthy, 'response_time': health.response_time, 'error_message': health.error_message, 'stats': {'memory_usage': stats.memory_usage, 'cpu_percent': stats.cpu_percent, 'uptime': stats.uptime} if stats else None}
+                        report['servers'][server_id] = {
+                            'role': server.role.value,
+                            'endpoint': server.endpoint,
+                            'healthy': health.is_healthy,
+                            'response_time': health.response_time,
+                            'error_message': health.error_message,
+                            'stats': {
+                                'memory_usage': stats.memory_usage,
+                                'cpu_percent': stats.cpu_percent,
+                                'uptime': stats.uptime
+                            } if stats else None
+                        }
                     except Exception as e:
-                        report['servers'][server_id] = {'role': server.role.value, 'endpoint': server.endpoint, 'healthy': False, 'error': str(e)}
+                        report['servers'][server_id] = {
+                            'role': server.role.value,
+                            'endpoint': server.endpoint,
+                            'healthy': False,
+                            'error': str(e)
+                        }
             logger.info('Health check completed: %s (%s% healthy)', report['overall_health'], report['health_percentage'])
             return report
 

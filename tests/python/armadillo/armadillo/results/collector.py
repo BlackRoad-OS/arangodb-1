@@ -49,13 +49,13 @@ class ResultCollector:
     def record_test(self, params: TestResultParams) -> None:
         """Record a test result directly."""
         result = ExecutionResult(
-            name=params.name, 
-            outcome=params.outcome, 
-            duration=params.timing.duration, 
-            setup_duration=params.timing.setup_duration, 
-            teardown_duration=params.timing.teardown_duration, 
-            error_message=params.error_message, 
-            failure_message=params.failure_message, 
+            name=params.name,
+            outcome=params.outcome,
+            duration=params.timing.duration,
+            setup_duration=params.timing.setup_duration,
+            teardown_duration=params.timing.teardown_duration,
+            error_message=params.error_message,
+            failure_message=params.failure_message,
             crash_info=params.crash_info
         )
         self.add_test_result(result)

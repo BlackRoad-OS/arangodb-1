@@ -165,9 +165,9 @@ class FilesystemService:
     @contextmanager
     def temp_file(self, suffix: str='', prefix: str='armadillo', text: bool=True):
         """Context manager for temporary files."""
-        temp_dir = self.temp_dir()
+        temp_directory = self.temp_dir()
         try:
-            with tempfile.NamedTemporaryFile(mode='w+t' if text else 'w+b', suffix=suffix, prefix=prefix, dir=temp_dir, delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(mode='w+t' if text else 'w+b', suffix=suffix, prefix=prefix, dir=temp_directory, delete=False) as tmp_file:
                 tmp_path = Path(tmp_file.name)
                 yield tmp_path
         finally:

@@ -59,30 +59,30 @@ def config():
     """Show current configuration."""
     from ..core.config import get_config
     try:
-        config = get_config()
+        current_config = get_config()
         table = Table(title='Armadillo Configuration')
         table.add_column('Setting', style='cyan')
         table.add_column('Value', style='green')
-        table.add_row('Deployment Mode', config.deployment_mode.value)
-        table.add_row('Test Timeout', f'{config.test_timeout}s')
-        table.add_row('Result Formats', ', '.join(config.result_formats))
-        if config.temp_dir:
-            table.add_row('Temp Directory', str(config.temp_dir))
-        if config.bin_dir:
-            table.add_row('Binary Directory', str(config.bin_dir))
-        if config.work_dir:
-            table.add_row('Work Directory', str(config.work_dir))
-        table.add_row('Keep Instances on Failure', str(config.keep_instances_on_failure))
-        table.add_row('Verbose Level', str(config.verbose))
-        if config.deployment_mode == DeploymentMode.CLUSTER:
-            table.add_row('Agents', str(config.cluster.agents))
-            table.add_row('DB Servers', str(config.cluster.dbservers))
-            table.add_row('Coordinators', str(config.cluster.coordinators))
-            table.add_row('Replication Factor', str(config.cluster.replication_factor))
-        table.add_row('Crash Analysis', str(config.monitoring.enable_crash_analysis))
-        table.add_row('GDB Debugging', str(config.monitoring.enable_gdb_debugging))
-        table.add_row('Memory Profiling', str(config.monitoring.enable_memory_profiling))
-        table.add_row('Network Monitoring', str(config.monitoring.enable_network_monitoring))
+        table.add_row('Deployment Mode', current_config.deployment_mode.value)
+        table.add_row('Test Timeout', f'{current_config.test_timeout}s')
+        table.add_row('Result Formats', ', '.join(current_config.result_formats))
+        if current_config.temp_dir:
+            table.add_row('Temp Directory', str(current_config.temp_dir))
+        if current_config.bin_dir:
+            table.add_row('Binary Directory', str(current_config.bin_dir))
+        if current_config.work_dir:
+            table.add_row('Work Directory', str(current_config.work_dir))
+        table.add_row('Keep Instances on Failure', str(current_config.keep_instances_on_failure))
+        table.add_row('Verbose Level', str(current_config.verbose))
+        if current_config.deployment_mode == DeploymentMode.CLUSTER:
+            table.add_row('Agents', str(current_config.cluster.agents))
+            table.add_row('DB Servers', str(current_config.cluster.dbservers))
+            table.add_row('Coordinators', str(current_config.cluster.coordinators))
+            table.add_row('Replication Factor', str(current_config.cluster.replication_factor))
+        table.add_row('Crash Analysis', str(current_config.monitoring.enable_crash_analysis))
+        table.add_row('GDB Debugging', str(current_config.monitoring.enable_gdb_debugging))
+        table.add_row('Memory Profiling', str(current_config.monitoring.enable_memory_profiling))
+        table.add_row('Network Monitoring', str(current_config.monitoring.enable_network_monitoring))
         console.print(table)
     except Exception as e:
         console.print(f'[red]Error getting configuration: {e}[/red]')

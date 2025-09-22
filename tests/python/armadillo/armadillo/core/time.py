@@ -63,7 +63,7 @@ class TimeoutManager:
         """Get timeout for a specific test."""
         return self._test_timeouts.get(test_name, default)
 
-    def clamp_timeout(self, requested_timeout: Optional[float], scope_name: str='operation') -> float:
+    def clamp_timeout(self, requested_timeout: Optional[float], _scope_name: str='operation') -> float:
         """Clamp a requested timeout to current scope constraints."""
         current_scope = self._get_current_scope()
         if current_scope:

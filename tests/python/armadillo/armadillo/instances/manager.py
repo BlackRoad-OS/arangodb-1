@@ -39,13 +39,13 @@ class ManagerDependencies:
     server_factory: ServerFactory
 
     @classmethod
-    def create_defaults(cls, deployment_id: str,
+    def create_defaults(cls, _deployment_id: str, 
                        config: Optional[ConfigProvider] = None,
-                       logger: Optional[Logger] = None,
+                       custom_logger: Optional[Logger] = None,
                        port_allocator: Optional[PortAllocator] = None) -> 'ManagerDependencies':
         """Create dependencies with sensible defaults."""
         final_config = config or get_config()
-        final_logger = logger or get_logger(__name__)
+        final_logger = custom_logger or get_logger(__name__)
         final_port_manager = port_allocator or get_port_manager()
 
         return cls(
@@ -119,7 +119,7 @@ class InstanceManager:
         """Initialize instance manager with composition-based design.
 
         Args:
-            deployment_id: Unique identifier for this deployment  
+            deployment_id: Unique identifier for this deployment
             dependencies: Composed dependencies object (recommended)
             **legacy_kwargs: Backward compatibility support for:
                 config_provider, logger, port_allocator, deployment_planner, server_factory
@@ -132,7 +132,7 @@ class InstanceManager:
         elif legacy_kwargs:
             # Legacy constructor style - extract from kwargs
             config_provider = legacy_kwargs.get('config_provider')
-            logger = legacy_kwargs.get('logger')
+            legacy_logger = legacy_kwargs.get('logger')
             port_allocator = legacy_kwargs.get('port_allocator')
             deployment_planner = legacy_kwargs.get('deployment_planner')
             server_factory = legacy_kwargs.get('server_factory')
@@ -140,7 +140,7 @@ class InstanceManager:
             self._deps = ManagerDependencies.create_defaults(
                 deployment_id=deployment_id,
                 config=config_provider,
-                logger=logger,
+                custom_logger=legacy_logger,
                 port_allocator=port_allocator
             )
             # Override with explicitly provided legacy parameters

@@ -53,7 +53,15 @@ class ProcessExecutor:
         logger.info('=========================')
         try:
             with timeout_scope(effective_timeout, f'process_exec_{command[0]}'):
-                process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE if input_data else None, stdout=subprocess.PIPE if capture_output else None, stderr=subprocess.PIPE if capture_output else None, text=True)
+                process = subprocess.Popen(
+                    command,
+                    cwd=cwd,
+                    env=env,
+                    stdin=subprocess.PIPE if input_data else None,
+                    stdout=subprocess.PIPE if capture_output else None,
+                    stderr=subprocess.PIPE if capture_output else None,
+                    text=True
+                )
                 try:
                     stdout, stderr = process.communicate(input=input_data, timeout=effective_timeout)
                     duration = time.time() - start_time
@@ -110,7 +118,14 @@ class ProcessSupervisor:
         except Exception as e:
             logger.error('Output streaming error for %s: %s', process_id, e, exc_info=True)
 
-    def start(self, process_id: str, command: List[str], cwd: Optional[Path]=None, env: Optional[Dict[str, str]]=None, startup_timeout: float=30.0, readiness_check: Optional[Callable[[], bool]]=None, inherit_console: bool=False) -> ProcessInfo:
+    def start(self,
+              process_id: str,
+              command: List[str],
+              cwd: Optional[Path] = None,
+              env: Optional[Dict[str, str]] = None,
+              startup_timeout: float = 30.0,
+              readiness_check: Optional[Callable[[], bool]] = None,
+              inherit_console: bool = False) -> ProcessInfo:
         """Start a supervised process.
 
         Args:

@@ -38,7 +38,7 @@ class ServerPaths:
     app_dir: Path
     log_file: Path
     config: Optional[ServerConfig] = None  # Store config for command building
-    
+
     @classmethod
     def from_config(cls, server_id: str, config: Optional[ServerConfig]) -> 'ServerPaths':
         """Create server paths from configuration."""
@@ -74,13 +74,13 @@ class ServerDependencies:
     auth_provider: 'AuthProvider'
 
     @classmethod
-    def create_defaults(cls, logger: Optional[Logger] = None,
+    def create_defaults(cls, custom_logger: Optional[Logger] = None,
                        port_allocator: Optional[PortAllocator] = None) -> 'ServerDependencies':
         """Create dependencies with sensible defaults."""
         config_provider = get_config()
-        logger_instance = logger or get_logger(__name__)
+        logger_instance = custom_logger or get_logger(__name__)
         auth_provider = get_auth_provider()
-
+        
         return cls(
             config_provider=config_provider,
             logger=logger_instance,
@@ -101,12 +101,12 @@ class ServerRuntimeState:
     """Runtime state for an ArangoDB server."""
     is_running: bool = False
     process_info: Optional[ProcessInfo] = None
-    
+
     def start(self, process_info: ProcessInfo) -> None:
         """Mark server as running with process info."""
         self.is_running = True
         self.process_info = process_info
-    
+
     def stop(self) -> None:
         """Mark server as stopped."""
         self.is_running = False
@@ -135,11 +135,11 @@ class ArangoServer:
                  dependencies: Optional[ServerDependencies] = None,
                  **legacy_kwargs) -> None:
         """Initialize ArangoDB server with composition-based design.
-        
+
         Args:
             server_id: Unique server identifier
             role: Server role (SINGLE, AGENT, DBSERVER, COORDINATOR)
-            port: Port number (auto-allocated if None)  
+            port: Port number (auto-allocated if None)
             dependencies: Injected dependencies (recommended approach)
             **legacy_kwargs: Backward compatibility support for:
                 config_provider, logger, port_allocator, command_builder, health_checker, config
@@ -162,11 +162,11 @@ class ArangoServer:
             command_builder = legacy_kwargs.get('command_builder')
             health_checker = legacy_kwargs.get('health_checker')
             config = legacy_kwargs.get('config')
-            
+
             final_config_provider = config_provider or get_config()
             final_logger = logger_param or get_logger(__name__)
             final_auth_provider = get_auth_provider()
-            
+
             self._deps = ServerDependencies(
                 config_provider=final_config_provider,
                 logger=final_logger,
@@ -191,10 +191,10 @@ class ArangoServer:
 
         # Extract config from legacy_kwargs for path setup
         config = legacy_kwargs.get('config') if legacy_kwargs else None
-        
+
         # Set up file system paths (which will store config if needed)
         self.paths = ServerPaths.from_config(server_id, config)
-        
+
         # Consolidated runtime state
         self._runtime = ServerRuntimeState()
 

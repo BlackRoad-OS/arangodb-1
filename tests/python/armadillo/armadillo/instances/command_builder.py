@@ -41,7 +41,14 @@ class ServerCommandBuilder:
             arangod_path = str(self._config_provider.bin_dir / 'arangod')
         else:
             arangod_path = 'arangod'
-        command = [arangod_path, '--configuration', self._get_config_file_for_role(params.role), '--define', f'TOP_DIR={repository_root}', '--server.endpoint', f'tcp://0.0.0.0:{params.port}', '--database.directory', str(params.data_dir), '--javascript.app-path', str(params.app_dir)]
+        command = [
+            arangod_path,
+            '--configuration', self._get_config_file_for_role(params.role),
+            '--define', f'TOP_DIR={repository_root}',
+            '--server.endpoint', f'tcp://0.0.0.0:{params.port}',
+            '--database.directory', str(params.data_dir),
+            '--javascript.app-path', str(params.app_dir)
+        ]
         if params.role == ServerRole.SINGLE:
             command.extend(['--server.storage-engine', 'rocksdb'])
         elif params.role == ServerRole.AGENT:

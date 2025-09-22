@@ -73,10 +73,26 @@ class StandardServerFactory:
         port_value = server_config.port
         if not isinstance(port_value, int):
             raise ServerError(f'Invalid port type for {server_id}: {type(port_value)} (expected int)')
-        minimal_config = MinimalConfig(args=server_config.args.copy(), memory_limit_mb=server_config.memory_limit_mb, startup_timeout=server_config.startup_timeout, data_dir=server_config.data_dir, log_file=server_config.log_file)
+        minimal_config = MinimalConfig(
+            args=server_config.args.copy(),
+            memory_limit_mb=server_config.memory_limit_mb,
+            startup_timeout=server_config.startup_timeout,
+            data_dir=server_config.data_dir,
+            log_file=server_config.log_file
+        )
         command_builder = self._create_command_builder()
         health_checker = self._create_health_checker()
-        server = ArangoServer(server_id=server_id, role=server_config.role, port=port_value, config=minimal_config, config_provider=self._config_provider, logger=self._logger, port_allocator=self._port_allocator, command_builder=command_builder, health_checker=health_checker)
+        server = ArangoServer(
+            server_id=server_id,
+            role=server_config.role,
+            port=port_value,
+            config_provider=self._config_provider,
+            logger=self._logger,
+            port_allocator=self._port_allocator,
+            command_builder=command_builder,
+            health_checker=health_checker,
+            config=minimal_config
+        )
         self._configure_server_post_creation(server, server_config)
         return server
 
