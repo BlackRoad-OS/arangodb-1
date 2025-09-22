@@ -372,9 +372,9 @@ class InstanceManager:
 
             if is_healthy:
                 return self._create_health_status(True, avg_response_time)
-            else:
-                error_msg = f"Unhealthy servers: {', '.join(unhealthy_servers)}"
-                return self._create_health_status(False, elapsed_time, error_msg, unhealthy_servers)
+            
+            error_msg = f"Unhealthy servers: {', '.join(unhealthy_servers)}"
+            return self._create_health_status(False, elapsed_time, error_msg, unhealthy_servers)
 
         except Exception as e:
             self._is_healthy = False
@@ -506,9 +506,9 @@ class InstanceManager:
                 config = response.json()
                 logger.debug("Agent %s config keys: %s", server_id, list(config.keys()))
                 return config
-            else:
-                logger.debug("Agent %s not ready: %s", server_id, response.status_code)
-                return None
+            
+            logger.debug("Agent %s not ready: %s", server_id, response.status_code)
+            return None
         except (requests.RequestException, OSError, TimeoutError) as e:
             logger.debug("Agent %s not responding: %s", server_id, e)
             return None
@@ -639,9 +639,9 @@ class InstanceManager:
         if server.role == ServerRole.COORDINATOR:
             # Use /_api/foxx for coordinators (like JS)
             return f"{server.endpoint}/_api/foxx", 'GET'
-        else:
-            # Use /_api/version for agents and dbservers (like JS)
-            return f"{server.endpoint}/_api/version", 'POST'
+        
+        # Use /_api/version for agents and dbservers (like JS)
+        return f"{server.endpoint}/_api/version", 'POST'
 
     def _check_server_readiness(self, server_id: str, server: ArangoServer) -> bool:
         """Check if a single server is ready.
@@ -660,7 +660,8 @@ class InstanceManager:
             if response.status_code == 200:
                 logger.debug("Server %s (%s) is ready", server_id, server.role.value)
                 return True
-            elif response.status_code == 403:
+            
+            if response.status_code == 403:
                 # Service API might be disabled (like JS error handling)
                 if self._is_service_api_disabled_error(response):
                     logger.debug("Service API disabled on %s, continuing", server_id)
@@ -772,14 +773,14 @@ class InstanceManager:
                 response_time=response_time,
                 details={"server_count": len(self._servers)}
             )
-        else:
-            details = {"unhealthy_count": len(unhealthy_servers or []), "total_count": len(self._servers)}
-            return HealthStatus(
-                is_healthy=False,
-                response_time=response_time,
-                error_message=error_message,
-                details=details
-            )
+        
+        details = {"unhealthy_count": len(unhealthy_servers or []), "total_count": len(self._servers)}
+        return HealthStatus(
+            is_healthy=False,
+            response_time=response_time,
+            error_message=error_message,
+            details=details
+        )
 
     def _verify_deployment_health(self) -> None:
         """Verify that all servers in deployment are healthy."""

@@ -218,7 +218,7 @@ class ArangoServer:
                             response_time=response_time,
                             details=details
                         )
-                    
+
                     return HealthStatus(
                         is_healthy=False,
                         response_time=response_time,
