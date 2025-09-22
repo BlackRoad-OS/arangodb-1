@@ -5,6 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import requests
+from dataclasses import dataclass, field
 
 from ..core.types import (
     DeploymentMode, ServerRole, ServerConfig, ClusterConfig,
@@ -27,57 +28,126 @@ from .deployment_plan import DeploymentPlan
 
 logger = get_logger(__name__)
 
+@dataclass
+class ManagerDependencies:
+    """Injectable dependencies for InstanceManager."""
+    config: ConfigProvider
+    logger: Logger
+    port_manager: PortAllocator
+    auth_provider: 'AuthProvider'
+    deployment_planner: DeploymentPlanner
+    server_factory: ServerFactory
+    
+    @classmethod
+    def create_defaults(cls, deployment_id: str, 
+                       config: Optional[ConfigProvider] = None,
+                       logger: Optional[Logger] = None,
+                       port_allocator: Optional[PortAllocator] = None) -> 'ManagerDependencies':
+        """Create dependencies with sensible defaults."""
+        final_config = config or get_config()
+        final_logger = logger or get_logger(__name__)
+        final_port_manager = port_allocator or get_port_manager()
+        
+        return cls(
+            config=final_config,
+            logger=final_logger,
+            port_manager=final_port_manager,
+            auth_provider=get_auth_provider(),
+            deployment_planner=StandardDeploymentPlanner(
+                port_allocator=final_port_manager,
+                logger=final_logger
+            ),
+            server_factory=StandardServerFactory(
+                config_provider=final_config,
+                logger=final_logger,
+                port_allocator=final_port_manager
+            )
+        )
 
+@dataclass
+class DeploymentState:
+    """Runtime state of a deployment."""
+    servers: Dict[str, ArangoServer] = field(default_factory=dict)
+    deployment_plan: Optional[DeploymentPlan] = None
+    startup_order: List[str] = field(default_factory=list)
+    shutdown_order: List[str] = field(default_factory=list)
+    is_deployed: bool = False
+    is_healthy: bool = False
+    startup_time: Optional[float] = None
+    shutdown_time: Optional[float] = None
+
+@dataclass 
+class ThreadingResources:
+    """Threading resources for parallel operations."""
+    executor: ThreadPoolExecutor
+    lock: threading.RLock
+    
+    @classmethod
+    def create_for_deployment(cls, deployment_id: str) -> 'ThreadingResources':
+        """Create threading resources for a deployment."""
+        return cls(
+            executor=ThreadPoolExecutor(
+                max_workers=10, 
+                thread_name_prefix=f"InstanceMgr-{deployment_id}"
+            ),
+            lock=threading.RLock()
+        )
+    
+    def cleanup(self) -> None:
+        """Clean up threading resources."""
+        self.executor.shutdown(wait=True)
 
 
 class InstanceManager:
     """Manages lifecycle of multiple ArangoDB server instances."""
 
-    def __init__(self, deployment_id: str, config_provider: Optional[ConfigProvider] = None, logger: Optional[Logger] = None, port_allocator: Optional[PortAllocator] = None, deployment_planner: Optional[DeploymentPlanner] = None, server_factory: Optional[ServerFactory] = None) -> None:
-        """Initialize instance manager.
+    def __init__(self, 
+                 deployment_id: str, 
+                 dependencies: Optional[ManagerDependencies] = None,
+                 # Legacy parameters for backward compatibility
+                 config_provider: Optional[ConfigProvider] = None, 
+                 logger: Optional[Logger] = None, 
+                 port_allocator: Optional[PortAllocator] = None, 
+                 deployment_planner: Optional[DeploymentPlanner] = None, 
+                 server_factory: Optional[ServerFactory] = None) -> None:
+        """Initialize instance manager with composition-based design.
 
         Args:
             deployment_id: Unique identifier for this deployment
+            dependencies: Composed dependencies object (recommended)
+            
+            Legacy parameters (deprecated, use dependencies instead):
             config_provider: Configuration provider (uses global config if None)
-            logger: Logger instance (uses global logger if None)
+            logger: Logger instance (uses global logger if None)  
             port_allocator: Port allocator (uses global manager if None)
             deployment_planner: Deployment planner (creates standard planner if None)
             server_factory: Server factory (creates standard factory if None)
         """
         self.deployment_id = deployment_id
-        self.config = config_provider or get_config()
-        self._logger = logger or get_logger(__name__)
-        self.port_manager = port_allocator or get_port_manager()
-        self.auth_provider = get_auth_provider()
-
-        # Create deployment planner with injected dependencies
-        self._deployment_planner = deployment_planner or StandardDeploymentPlanner(
-            port_allocator=self.port_manager,
-            logger=self._logger
-        )
-
-        # Create server factory with injected dependencies
-        self._server_factory = server_factory or StandardServerFactory(
-            config_provider=self.config,
-            logger=self._logger,
-            port_allocator=self.port_manager
-        )
-
-        # Instance state
-        self._servers: Dict[str, ArangoServer] = {}
-        self._deployment_plan: Optional[DeploymentPlan] = None
-        self._startup_order: List[str] = []
-        self._shutdown_order: List[str] = []
-
-        # Lifecycle state
-        self._is_deployed = False
-        self._is_healthy = False
-        self._startup_time: Optional[float] = None
-        self._shutdown_time: Optional[float] = None
-
-        # Threading
-        self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix=f"InstanceMgr-{deployment_id}")
-        self._lock = threading.RLock()
+        
+        # Initialize dependencies - handle both new and legacy styles
+        if dependencies is not None:
+            self._deps = dependencies
+        elif any(param is not None for param in [config_provider, logger, port_allocator, deployment_planner, server_factory]):
+            # Legacy constructor style
+            self._deps = ManagerDependencies.create_defaults(
+                deployment_id=deployment_id,
+                config=config_provider,
+                logger=logger,
+                port_allocator=port_allocator
+            )
+            # Override with explicitly provided legacy parameters
+            if deployment_planner is not None:
+                self._deps.deployment_planner = deployment_planner
+            if server_factory is not None:
+                self._deps.server_factory = server_factory
+        else:
+            # No parameters provided, use all defaults
+            self._deps = ManagerDependencies.create_defaults(deployment_id=deployment_id)
+        
+        # Initialize runtime state and threading resources
+        self.state = DeploymentState()
+        self._threading = ThreadingResources.create_for_deployment(deployment_id)
 
     def __enter__(self):
         """Context manager entry."""
@@ -372,7 +442,7 @@ class InstanceManager:
 
             if is_healthy:
                 return self._create_health_status(True, avg_response_time)
-            
+
             error_msg = f"Unhealthy servers: {', '.join(unhealthy_servers)}"
             return self._create_health_status(False, elapsed_time, error_msg, unhealthy_servers)
 
@@ -506,7 +576,7 @@ class InstanceManager:
                 config = response.json()
                 logger.debug("Agent %s config keys: %s", server_id, list(config.keys()))
                 return config
-            
+
             logger.debug("Agent %s not ready: %s", server_id, response.status_code)
             return None
         except (requests.RequestException, OSError, TimeoutError) as e:
@@ -639,7 +709,7 @@ class InstanceManager:
         if server.role == ServerRole.COORDINATOR:
             # Use /_api/foxx for coordinators (like JS)
             return f"{server.endpoint}/_api/foxx", 'GET'
-        
+
         # Use /_api/version for agents and dbservers (like JS)
         return f"{server.endpoint}/_api/version", 'POST'
 
@@ -660,7 +730,7 @@ class InstanceManager:
             if response.status_code == 200:
                 logger.debug("Server %s (%s) is ready", server_id, server.role.value)
                 return True
-            
+
             if response.status_code == 403:
                 # Service API might be disabled (like JS error handling)
                 if self._is_service_api_disabled_error(response):
@@ -773,7 +843,7 @@ class InstanceManager:
                 response_time=response_time,
                 details={"server_count": len(self._servers)}
             )
-        
+
         details = {"unhealthy_count": len(unhealthy_servers or []), "total_count": len(self._servers)}
         return HealthStatus(
             is_healthy=False,
