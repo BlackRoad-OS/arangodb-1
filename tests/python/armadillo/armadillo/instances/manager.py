@@ -213,7 +213,7 @@ class InstanceManager:
                 try:
                     future.result(timeout=30.0)
                     logger.debug("Server %s shutdown completed", server_id)
-                except Exception as e:
+                except (TimeoutError, OSError, ServerShutdownError) as e:
                     logger.error("Failed to shutdown server %s: %s", server_id, e)
                     failed_shutdowns.append(server_id)
 
@@ -371,7 +371,7 @@ class InstanceManager:
                     if not health.is_healthy:
                         unhealthy_servers.append(f"{server_id}: {health.error_message}")
 
-                except Exception as e:
+                except (OSError, TimeoutError, HealthCheckError) as e:
                     unhealthy_servers.append(f"{server_id}: {str(e)}")
 
             elapsed_time = time.time() - start_time
@@ -414,7 +414,7 @@ class InstanceManager:
             try:
                 server_stats = server.collect_stats()
                 stats[server_id] = server_stats
-            except Exception as e:
+            except (OSError, ConnectionError, TimeoutError) as e:
                 logger.warning("Failed to collect stats from %s: %s", server_id, e)
 
         return stats
@@ -603,7 +603,7 @@ class InstanceManager:
                                     break
                         else:
                             logger.debug("Agent %s not ready: %s", server_id, response.status_code)
-                    except Exception as e:
+                    except (requests.RequestException, OSError, TimeoutError) as e:
                         # Agent not ready yet
                         logger.debug("Agent %s not responding: %s", server_id, e)
                         pass
@@ -615,7 +615,7 @@ class InstanceManager:
                     logger.info("Agency is ready!")
                     return
 
-            except Exception as e:
+            except (requests.RequestException, OSError, TimeoutError) as e:
                 logger.debug("Agency check exception: %s", e)
                 pass
 

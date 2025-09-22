@@ -254,7 +254,7 @@ class ArangoServer:
         """Synchronous stats wrapper."""
         try:
             return asyncio.run(self.get_stats())
-        except Exception as e:
+        except (asyncio.TimeoutError, RuntimeError, OSError) as e:
             logger.debug(f"Stats error for {self.server_id}: {e}")
             return None
 
@@ -283,7 +283,7 @@ class ArangoServer:
                             uptime=time.time() - (self._process_info.start_time if self._process_info else 0),
                             additional_metrics=stats_data
                         )
-        except Exception as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logger.debug(f"Failed to get server stats: {e}")
             return None
 
@@ -321,7 +321,7 @@ class ArangoServer:
         try:
             if self.server_id and is_process_running(self.server_id):
                 stop_supervised_process(self.server_id, graceful=False, timeout=5.0)
-        except Exception as e:
+        except (ProcessLookupError, OSError, TimeoutError) as e:
             logger.debug(f"Cleanup error for {self.server_id}: {e}")
 
         self._is_running = False
