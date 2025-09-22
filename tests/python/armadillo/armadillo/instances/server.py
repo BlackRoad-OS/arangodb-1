@@ -130,7 +130,9 @@ class ArangoServer:
         # Initialize dependencies - handle both new and legacy parameter styles
         if dependencies is not None:
             self._deps = dependencies
-        elif any(param is not None for param in [config_provider, logger, port_allocator, command_builder, health_checker]):
+        elif any(param is not None for param in [
+            config_provider, logger, port_allocator, command_builder, health_checker
+        ]):
             # Legacy constructor - create dependencies from individual parameters
             final_config_provider = config_provider or get_config()
             final_logger = logger or get_logger(__name__)
@@ -220,7 +222,9 @@ class ArangoServer:
                                pid=self._process_info.pid)
 
         except (OSError, TimeoutError, ProcessLookupError) as e:
-            log_server_event(self._deps.logger, "start_failed", server_id=self.server_id, error=str(e))
+            log_server_event(
+                self._deps.logger, "start_failed", server_id=self.server_id, error=str(e)
+            )
             # Clean up on failure
             self._cleanup_on_failure()
             raise ServerStartupError(f"Failed to start server {self.server_id}: {e}") from e
@@ -237,7 +241,9 @@ class ArangoServer:
             stop_supervised_process(self.server_id, graceful=graceful, timeout=timeout)
             log_server_event(self._deps.logger, "stopped", server_id=self.server_id)
         except (OSError, ProcessLookupError, TimeoutError) as e:
-            log_server_event(self._deps.logger, "stop_failed", server_id=self.server_id, error=str(e))
+            log_server_event(
+                self._deps.logger, "stop_failed", server_id=self.server_id, error=str(e)
+            )
             raise ServerShutdownError(f"Failed to stop server {self.server_id}: {e}") from e
         finally:
             self._is_running = False
@@ -347,7 +353,8 @@ class ArangoServer:
                 headers = self._deps.auth_provider.get_auth_headers()
 
                 # Get basic server statistics
-                async with session.get(f"{self.endpoint}/_api/engine/stats", headers=headers) as response:
+                stats_url = f"{self.endpoint}/_api/engine/stats"
+                async with session.get(stats_url, headers=headers) as response:
                     if response.status == 200:
                         stats_data = await response.json()
 
@@ -359,7 +366,9 @@ class ArangoServer:
                             memory_usage=process_stats.memory_rss if process_stats else 0,
                             cpu_percent=process_stats.cpu_percent if process_stats else 0.0,
                             connection_count=stats_data.get('client_connections', 0),
-                            uptime=time.time() - (self._process_info.start_time if self._process_info else 0),
+                            uptime=time.time() - (
+                                self._process_info.start_time if self._process_info else 0
+                            ),
                             additional_metrics=stats_data
                         )
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:

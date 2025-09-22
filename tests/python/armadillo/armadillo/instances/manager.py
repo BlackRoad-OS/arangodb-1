@@ -128,7 +128,9 @@ class InstanceManager:
         # Initialize dependencies - handle both new and legacy styles
         if dependencies is not None:
             self._deps = dependencies
-        elif any(param is not None for param in [config_provider, logger, port_allocator, deployment_planner, server_factory]):
+        elif any(param is not None for param in [
+            config_provider, logger, port_allocator, deployment_planner, server_factory
+        ]):
             # Legacy constructor style
             self._deps = ManagerDependencies.create_defaults(
                 deployment_id=deployment_id,
@@ -320,9 +322,13 @@ class InstanceManager:
             else:
                 # Fallback: stop via process supervisor with graceful escalation
                 if hasattr(server, '_process_info') and server._process_info:
-                    stop_supervised_process(server.server_id, graceful=True, timeout=timeout)
+                    stop_supervised_process(
+                        server.server_id, graceful=True, timeout=timeout
+                    )
                 else:
-                    logger.warning("Server %s has no process info - may already be stopped", server.server_id)
+                    logger.warning(
+                        "Server %s has no process info - may already be stopped", server.server_id
+                    )
 
             log_server_event(logger, "stopped", server_id=server.server_id)
             logger.debug("Server %s shutdown completed successfully", server.server_id)
@@ -341,7 +347,10 @@ class InstanceManager:
                     logger.debug("Server %s has no process info for force kill", server.server_id)
 
             except Exception as force_e:
-                logger.error("CRITICAL: Emergency force kill failed for server %s: %s", server.server_id, force_e)
+                logger.error(
+                    "CRITICAL: Emergency force kill failed for server %s: %s", 
+                    server.server_id, force_e
+                )
                 # Don't re-raise - we want to continue shutting down other servers
 
             # Re-raise the original error for the caller to handle
@@ -532,7 +541,9 @@ class InstanceManager:
         logger.info("Single server %s started successfully", server_id)
 
     def _start_cluster(self) -> None:
-        """Start cluster deployment in proper sequence: agents -> wait -> dbservers -> coordinators."""
+        """Start cluster deployment in proper sequence: 
+        agents -> wait -> dbservers -> coordinators.
+        """
         logger.info("Starting cluster servers in sequence")
 
         # 1. Start agents first

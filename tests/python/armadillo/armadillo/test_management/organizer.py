@@ -229,7 +229,23 @@ class Suite:
 
     def summary(self) -> Dict[str, Any]:
         """Get a summary of this suite."""
-        return {'name': self.name, 'full_name': self.get_full_name(), 'status': self.status.value, 'test_count': self.test_count, 'total_tests': self.total_tests, 'passed': self.passed, 'failed': self.failed, 'skipped': self.skipped, 'errors': self.errors, 'success_rate': self.success_rate, 'duration': self.duration, 'priority': self.config.priority.value, 'tags': list(self.config.tags), 'children_count': len(self.children), 'has_parent': self.parent is not None}
+        return {
+            'name': self.name,
+            'full_name': self.get_full_name(),
+            'status': self.status.value,
+            'test_count': self.test_count,
+            'total_tests': self.total_tests,
+            'passed': self.passed,
+            'failed': self.failed,
+            'skipped': self.skipped,
+            'errors': self.errors,
+            'success_rate': self.success_rate,
+            'duration': self.duration,
+            'priority': self.config.priority.value,
+            'tags': list(self.config.tags),
+            'children_count': len(self.children),
+            'has_parent': self.parent is not None
+        }
 
 class SuiteOrganizer:
     """Organizes and manages test suites with hierarchy and dependencies."""
