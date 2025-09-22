@@ -1,10 +1,8 @@
 """Main pytest plugin for Armadillo framework integration."""
-
 import pytest
 import asyncio
 import atexit
 from typing import Generator, Optional, Dict, Any, List
-
 from ..core.config import load_config, get_config
 from ..core.log import configure_logging, get_logger, log_test_event, set_log_context, clear_log_context
 from ..core.time import set_global_deadline, stop_watchdog
@@ -15,9 +13,7 @@ from ..instances.orchestrator import ClusterOrchestrator, get_cluster_orchestrat
 from ..utils.crypto import random_id
 from ..utils.filesystem import set_test_session_id, clear_test_session, cleanup_work_dir
 from .reporter import get_armadillo_reporter
-
 logger = get_logger(__name__)
-
 
 class ArmadilloPlugin:
     """Main pytest plugin for Armadillo framework."""
@@ -30,150 +26,77 @@ class ArmadilloPlugin:
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
-        # Configure third-party logging early to prevent noise
         import logging
-
-        # Get configuration from centralized config system
         from ..core.config import get_config
         framework_config = get_config()
-
         if framework_config.log_level != 'DEBUG':
-            # Silence noisy third-party libraries unless explicitly debugging
             logging.getLogger('faker').setLevel(logging.WARNING)
             logging.getLogger('urllib3').setLevel(logging.WARNING)
             logging.getLogger('requests').setLevel(logging.WARNING)
             logging.getLogger('asyncio').setLevel(logging.WARNING)
             logging.getLogger('aiohttp').setLevel(logging.WARNING)
-
-        # Store configuration for use in fixtures
         self._deployment_mode = framework_config.deployment_mode.value
         self._compact_mode = framework_config.compact_mode
-
-        # Register markers
         self._register_markers(config)
-
 
     def _register_markers(self, config: pytest.Config) -> None:
         """Register custom markers for Armadillo tests."""
-        config.addinivalue_line(
-            "markers", "arango_single: Requires single ArangoDB server"
-        )
-        config.addinivalue_line(
-            "markers", "arango_cluster: Requires ArangoDB cluster"
-        )
-        config.addinivalue_line(
-            "markers", "slow: Long-running test (>30s expected)"
-        )
-        config.addinivalue_line(
-            "markers", "fast: Fast test (<5s expected)"
-        )
-        config.addinivalue_line(
-            "markers", "crash_test: Test involves intentional crashes"
-        )
-        config.addinivalue_line(
-            "markers", "stress_test: High-load stress test"
-        )
-        config.addinivalue_line(
-            "markers", "flaky: Test has known intermittent failures"
-        )
-        config.addinivalue_line(
-            "markers", "auth_required: Test requires authentication"
-        )
-        config.addinivalue_line(
-            "markers", "cluster_coordination: Tests cluster coordination features"
-        )
-        config.addinivalue_line(
-            "markers", "replication: Tests data replication"
-        )
-        config.addinivalue_line(
-            "markers", "sharding: Tests sharding functionality"
-        )
-        config.addinivalue_line(
-            "markers", "failover: Tests high availability and failover"
-        )
-        config.addinivalue_line(
-            "markers", "rta_suite: RTA test suite marker"
-        )
-        config.addinivalue_line(
-            "markers", "smoke_test: Basic smoke test"
-        )
-        config.addinivalue_line(
-            "markers", "regression: Regression test"
-        )
-        config.addinivalue_line(
-            "markers", "performance: Performance measurement test"
-        )
-
-        # Configure Armadillo framework
-        self._armadillo_config = load_config(
-            verbose=config.option.verbose,
-            # Add other CLI options as they become available
-        )
-
-        # Configure logging
-        configure_logging(
-            level="DEBUG" if config.option.verbose > 0 else "INFO",
-            enable_console=True,
-            enable_json=True,
-        )
-
-        # Set global test timeout
+        config.addinivalue_line('markers', 'arango_single: Requires single ArangoDB server')
+        config.addinivalue_line('markers', 'arango_cluster: Requires ArangoDB cluster')
+        config.addinivalue_line('markers', 'slow: Long-running test (>30s expected)')
+        config.addinivalue_line('markers', 'fast: Fast test (<5s expected)')
+        config.addinivalue_line('markers', 'crash_test: Test involves intentional crashes')
+        config.addinivalue_line('markers', 'stress_test: High-load stress test')
+        config.addinivalue_line('markers', 'flaky: Test has known intermittent failures')
+        config.addinivalue_line('markers', 'auth_required: Test requires authentication')
+        config.addinivalue_line('markers', 'cluster_coordination: Tests cluster coordination features')
+        config.addinivalue_line('markers', 'replication: Tests data replication')
+        config.addinivalue_line('markers', 'sharding: Tests sharding functionality')
+        config.addinivalue_line('markers', 'failover: Tests high availability and failover')
+        config.addinivalue_line('markers', 'rta_suite: RTA test suite marker')
+        config.addinivalue_line('markers', 'smoke_test: Basic smoke test')
+        config.addinivalue_line('markers', 'regression: Regression test')
+        config.addinivalue_line('markers', 'performance: Performance measurement test')
+        self._armadillo_config = load_config(verbose=config.option.verbose)
+        configure_logging(level='DEBUG' if config.option.verbose > 0 else 'INFO', enable_console=True, enable_json=True)
         set_global_deadline(self._armadillo_config.test_timeout)
-
-        logger.info("Armadillo pytest plugin configured with timeout=%.1fs",
-                   self._armadillo_config.test_timeout)
-
-        # Pre-start session-scoped servers if needed
+        logger.info('Armadillo pytest plugin configured with timeout=%.1fs', self._armadillo_config.test_timeout)
         self._maybe_start_session_servers(config)
 
     def pytest_unconfigure(self, config: pytest.Config) -> None:
         """Clean up after pytest run."""
-        logger.debug("Starting pytest plugin cleanup")
-
-        # Create a list of items to clean up to avoid modifying dicts during iteration
+        logger.debug('Starting pytest plugin cleanup')
         deployments_to_clean = list(self._session_deployments.items())
         orchestrators_to_clean = list(self._session_orchestrators.items())
         servers_to_clean = list(self._session_servers.items())
-
-        # Stop any remaining session deployments (safety net cleanup)
         for deployment_id, manager in deployments_to_clean:
             try:
                 if manager.is_deployed():
-                    logger.info(f"Plugin safety cleanup: shutting down deployment {deployment_id}")
+                    logger.info('Plugin safety cleanup: shutting down deployment %s', deployment_id)
                     manager.shutdown_deployment()
                 else:
-                    logger.debug(f"Deployment {deployment_id} already stopped")
+                    logger.debug('Deployment %s already stopped', deployment_id)
             except Exception as e:
-                logger.error(f"Error during plugin cleanup of deployment {deployment_id}: {e}")
-
-        # Stop any remaining session orchestrators (safety net cleanup)
+                logger.error('Error during plugin cleanup of deployment %s: %s', deployment_id, e)
         for orchestrator_id, orchestrator in orchestrators_to_clean:
             try:
-                logger.debug(f"Plugin safety cleanup: cleaning up orchestrator {orchestrator_id}")
-                # Orchestrators don't have explicit cleanup methods, just remove from tracking
+                logger.debug('Plugin safety cleanup: cleaning up orchestrator %s', orchestrator_id)
             except Exception as e:
-                logger.error(f"Error during plugin cleanup of orchestrator {orchestrator_id}: {e}")
-
-        # Stop any remaining session servers (safety net cleanup)
+                logger.error('Error during plugin cleanup of orchestrator %s: %s', orchestrator_id, e)
         for server_id, server in servers_to_clean:
             try:
                 if server.is_running():
-                    logger.info(f"Plugin safety cleanup: stopping server {server_id}")
+                    logger.info('Plugin safety cleanup: stopping server %s', server_id)
                     server.stop()
                 else:
-                    logger.debug(f"Server {server_id} already stopped")
+                    logger.debug('Server %s already stopped', server_id)
             except Exception as e:
-                logger.error(f"Error during plugin cleanup of server {server_id}: {e}")
-
-        # Clear tracking dictionaries
+                logger.error('Error during plugin cleanup of server %s: %s', server_id, e)
         self._session_deployments.clear()
         self._session_orchestrators.clear()
         self._session_servers.clear()
-
-        # Stop timeout watchdog
         stop_watchdog()
-
-        logger.info("Armadillo pytest plugin unconfigured")
+        logger.info('Armadillo pytest plugin unconfigured')
 
     def _maybe_start_session_servers(self, config: pytest.Config) -> None:
         """Optionally pre-start session-scoped servers based on test collection.
@@ -187,42 +110,30 @@ class ArmadilloPlugin:
         - Plugin tracks all session-scoped resources for safety net cleanup
         - Plugin cleanup only activates if fixtures fail to clean up properly
         """
-        logger.debug("Session server pre-start analysis complete")
+        logger.debug('Session server pre-start analysis complete')
 
     def pytest_sessionstart(self, session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
-        logger.debug("ArmadilloPlugin: Session start")
-
-        # Load configuration
+        logger.debug('ArmadilloPlugin: Session start')
         load_config()
-
-        # Configure logging
         configure_logging()
-
-        # Initialize session-specific resources
         set_test_session_id()
 
     def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
-        logger.debug(f"ArmadilloPlugin: Session finish with exit status {exitstatus}")
-
-        # Stop all session servers
+        logger.debug('ArmadilloPlugin: Session finish with exit status %s', exitstatus)
         for server_id, server in list(self._session_servers.items()):
             try:
-                logger.debug(f"Stopping session server {server_id}")
+                logger.debug('Stopping session server %s', server_id)
                 server.stop(timeout=30.0)
             except Exception as e:
-                logger.error(f"Error stopping session server {server_id}: {e}")
-
-        # Stop all session deployments (clusters)
+                logger.error('Error stopping session server %s: %s', server_id, e)
         for deployment_id, manager in list(self._session_deployments.items()):
             try:
-                logger.debug(f"Stopping session deployment {deployment_id}")
+                logger.debug('Stopping session deployment %s', deployment_id)
                 manager.destroy_all_servers(timeout=60.0)
             except Exception as e:
-                logger.error(f"Error stopping session deployment {deployment_id}: {e}")
-
-        # Clean up session resources
+                logger.error('Error stopping session deployment %s: %s', deployment_id, e)
         clear_test_session()
         cleanup_work_dir()
         stop_watchdog()
@@ -231,84 +142,66 @@ class ArmadilloPlugin:
         """Set up test execution environment."""
         test_name = item.nodeid
         set_log_context(test_name=test_name)
-        log_test_event(logger, "setup", test_name=test_name)
+        log_test_event(logger, 'setup', test_name=test_name)
 
     def pytest_runtest_teardown(self, item: pytest.Item, nextitem: Optional[pytest.Item]) -> None:
         """Clean up after test execution."""
         test_name = item.nodeid
-        log_test_event(logger, "teardown", test_name=test_name)
-
+        log_test_event(logger, 'teardown', test_name=test_name)
         if nextitem is None:
             clear_log_context()
 
     def pytest_runtest_call(self, item: pytest.Item) -> None:
         """Handle test execution."""
         test_name = item.nodeid
-        log_test_event(logger, "call", test_name=test_name)
-
-
-# Global plugin instance
+        log_test_event(logger, 'call', test_name=test_name)
 _plugin = ArmadilloPlugin()
-
 
 def pytest_configure(config: pytest.Config) -> None:
     """Plugin entry point."""
     _plugin.pytest_configure(config)
 
-
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Plugin cleanup entry point."""
     _plugin.pytest_unconfigure(config)
-
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Test setup entry point."""
     _plugin.pytest_runtest_setup(item)
 
-
 def pytest_runtest_teardown(item: pytest.Item, nextitem: Optional[pytest.Item]) -> None:
     """Test teardown entry point."""
     _plugin.pytest_runtest_teardown(item, nextitem)
-
 
 def pytest_runtest_call(item: pytest.Item) -> None:
     """Test call entry point."""
     _plugin.pytest_runtest_call(item)
 
-
-# Fixtures
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def arango_single_server() -> Generator[ArangoServer, None, None]:
     """Provide a single ArangoDB server for testing."""
-    server = ArangoServer("test_single_server", ServerRole.SINGLE)
-
+    server = ArangoServer('test_single_server', ServerRole.SINGLE)
     try:
-        logger.info("Starting session single server")
+        logger.info('Starting session single server')
         server.start(timeout=60.0)
-
-        # Verify server is healthy
         health = server.health_check_sync(timeout=10.0)
         if not health.is_healthy:
-            raise RuntimeError(f"Server health check failed: {health.error_message}")
-
-        logger.info(f"Session single server ready at {server.endpoint}")
-        _plugin._session_servers["single"] = server
+            raise RuntimeError(f'Server health check failed: {health.error_message}')
+        logger.info('Session single server ready at %s', server.endpoint)
+        _plugin._session_servers['single'] = server
         yield server
-
     finally:
-        logger.info("Stopping session single server")
+        logger.info('Stopping session single server')
         try:
             server.stop(timeout=30.0)
-            logger.debug("Session single server stopped successfully")
+            logger.debug('Session single server stopped successfully')
         except Exception as e:
-            logger.error(f"Error stopping session server: {e}")
+            logger.error('Error stopping session server: %s', e)
         finally:
-            # Always remove from plugin tracking, even if stop failed
-            _plugin._session_servers.pop("single", None)
-            logger.debug("Session single server removed from plugin tracking")
+            _plugin._session_servers.pop('single', None)
+            logger.debug('Session single server removed from plugin tracking')
 
-
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def arango_deployment():
     """Provide ArangoDB deployment based on CLI configuration - deployment agnostic.
 
@@ -317,177 +210,115 @@ def arango_deployment():
     """
     from ..core.config import get_config
     from ..core.types import DeploymentMode
-
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
-
     if deployment_mode == DeploymentMode.CLUSTER:
-        # Use cluster fixture and return coordinator for client connections
-        logger.info("Auto-detecting cluster deployment for tests")
+        logger.info('Auto-detecting cluster deployment for tests')
         cluster_manager = _plugin._get_or_create_cluster()
         coordinators = cluster_manager.get_servers_by_role(ServerRole.COORDINATOR)
         if not coordinators:
-            raise RuntimeError("No coordinators available in cluster")
-        return coordinators[0]  # Return first coordinator as entry point
+            raise RuntimeError('No coordinators available in cluster')
+        return coordinators[0]
     else:
-        # Use single server fixture
-        logger.info("Auto-detecting single server deployment for tests")
+        logger.info('Auto-detecting single server deployment for tests')
         return _plugin._get_or_create_single_server()
-
 
 def _get_or_create_cluster(self) -> 'InstanceManager':
     """Get or create session cluster deployment."""
-    if "cluster" not in self._session_deployments:
-        deployment_id = f"cluster_{random_id(8)}"
+    if 'cluster' not in self._session_deployments:
+        deployment_id = f'cluster_{random_id(8)}'
         manager = get_instance_manager(deployment_id)
-
-        logger.info(f"Starting session cluster deployment {deployment_id}")
-
-        # Create cluster deployment plan
+        logger.info('Starting session cluster deployment %s', deployment_id)
         from ..core.types import ClusterConfig, DeploymentMode
-        cluster_config = ClusterConfig(
-            agents=3,
-            dbservers=2,
-            coordinators=1
-        )
+        cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
-
-        # Deploy cluster with proper sequencing (agents -> agency ready -> dbservers -> coordinators)
         manager.deploy_servers(timeout=300.0)
-
-        logger.info("Session cluster deployment ready")
-        self._session_deployments["cluster"] = manager
-
-    return self._session_deployments["cluster"]
-
+        logger.info('Session cluster deployment ready')
+        self._session_deployments['cluster'] = manager
+    return self._session_deployments['cluster']
 
 def _get_or_create_single_server(self) -> ArangoServer:
     """Get or create session single server."""
-    if "single" not in self._session_servers:
-        server = ArangoServer("test_single_server", ServerRole.SINGLE)
-
-        logger.info("Starting session single server")
+    if 'single' not in self._session_servers:
+        server = ArangoServer('test_single_server', ServerRole.SINGLE)
+        logger.info('Starting session single server')
         server.start(timeout=60.0)
-
-        # Verify server is healthy
         health = server.health_check_sync(timeout=10.0)
         if not health.is_healthy:
-            raise RuntimeError(f"Server health check failed: {health.error_message}")
-
-        logger.info(f"Session single server ready at {server.endpoint}")
-        self._session_servers["single"] = server
-
-    return self._session_servers["single"]
-
-
-# Add methods to plugin class
+            raise RuntimeError(f'Server health check failed: {health.error_message}')
+        logger.info('Session single server ready at %s', server.endpoint)
+        self._session_servers['single'] = server
+    return self._session_servers['single']
 ArmadilloPlugin._get_or_create_cluster = _get_or_create_cluster
 ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 
-
-@pytest.fixture(scope="function")
+@pytest.fixture(scope='function')
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server."""
     from ..utils.crypto import random_id
-
-    server_id = f"test_func_{random_id(8)}"
+    server_id = f'test_func_{random_id(8)}'
     server = ArangoServer(server_id, ServerRole.SINGLE)
-
     try:
-        logger.info(f"Starting function server {server_id}")
+        logger.info('Starting function server %s', server_id)
         server.start(timeout=30.0)
-
-        # Verify server is healthy
         health = server.health_check_sync(timeout=5.0)
         if not health.is_healthy:
-            raise RuntimeError(f"Server health check failed: {health.error_message}")
-
-        logger.info(f"Function server {server_id} ready at {server.endpoint}")
+            raise RuntimeError(f'Server health check failed: {health.error_message}')
+        logger.info('Function server %s ready at %s', server_id, server.endpoint)
         yield server
-
     finally:
-        logger.info(f"Stopping function server {server_id}")
+        logger.info('Stopping function server %s', server_id)
         try:
             server.stop(timeout=15.0)
         except Exception as e:
-            logger.error(f"Error stopping function server {server_id}: {e}")
+            logger.error('Error stopping function server %s: %s', server_id, e)
 
-
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def arango_cluster() -> Generator[InstanceManager, None, None]:
     """Provide a full ArangoDB cluster for testing."""
-    deployment_id = f"cluster_{random_id(8)}"
+    deployment_id = f'cluster_{random_id(8)}'
     manager = get_instance_manager(deployment_id)
-
     try:
-        logger.info(f"Starting session cluster deployment {deployment_id}")
-
-        # Create cluster deployment plan
-        cluster_config = ClusterConfig(
-            agents=3,
-            dbservers=2,
-            coordinators=1
-        )
+        logger.info('Starting session cluster deployment %s', deployment_id)
+        cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
-
-        # Deploy cluster with proper sequencing (agents -> agency ready -> dbservers -> coordinators)
         manager.deploy_servers(timeout=300.0)
-
-        logger.info(f"Session cluster deployment {deployment_id} ready")
-        # Register with plugin for tracking and safety cleanup
+        logger.info('Session cluster deployment %s ready', deployment_id)
         _plugin._session_deployments[deployment_id] = manager
-        logger.debug(f"Cluster deployment {deployment_id} registered with plugin")
-
+        logger.debug('Cluster deployment %s registered with plugin', deployment_id)
         yield manager
-
     finally:
-        logger.info(f"Stopping session cluster deployment {deployment_id}")
+        logger.info('Stopping session cluster deployment %s', deployment_id)
         try:
             manager.shutdown_deployment(timeout=120.0)
-            logger.debug(f"Cluster deployment {deployment_id} stopped successfully")
+            logger.debug('Cluster deployment %s stopped successfully', deployment_id)
         except Exception as e:
-            logger.error(f"Error stopping cluster deployment {deployment_id}: {e}")
+            logger.error('Error stopping cluster deployment %s: %s', deployment_id, e)
         finally:
-            # Always remove from plugin tracking, even if shutdown failed
             _plugin._session_deployments.pop(deployment_id, None)
-            logger.debug(f"Cluster deployment {deployment_id} removed from plugin tracking")
+            logger.debug('Cluster deployment %s removed from plugin tracking', deployment_id)
 
-
-@pytest.fixture(scope="function")
+@pytest.fixture(scope='function')
 def arango_cluster_function() -> Generator[InstanceManager, None, None]:
     """Provide a function-scoped ArangoDB cluster."""
-    deployment_id = f"cluster_func_{random_id(8)}"
+    deployment_id = f'cluster_func_{random_id(8)}'
     manager = get_instance_manager(deployment_id)
-
     try:
-        logger.info(f"Starting function cluster deployment {deployment_id}")
-
-        # Create minimal cluster for faster function-scoped tests
-        cluster_config = ClusterConfig(
-            agents=3,
-            dbservers=1,
-            coordinators=1
-        )
+        logger.info('Starting function cluster deployment %s', deployment_id)
+        cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)
         plan = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
-
-        # Deploy cluster
         manager.deploy_servers(timeout=180.0)
-
-        # Initialize cluster coordination
         orchestrator = get_cluster_orchestrator(deployment_id)
         asyncio.run(orchestrator.initialize_cluster_coordination(timeout=60.0))
         asyncio.run(orchestrator.wait_for_cluster_ready(timeout=90.0))
-
-        logger.info(f"Function cluster deployment {deployment_id} ready")
+        logger.info('Function cluster deployment %s ready', deployment_id)
         yield manager
-
     finally:
-        logger.info(f"Stopping function cluster deployment {deployment_id}")
+        logger.info('Stopping function cluster deployment %s', deployment_id)
         try:
             manager.shutdown_deployment(timeout=60.0)
         except Exception as e:
-            logger.error(f"Error stopping function cluster {deployment_id}: {e}")
-
+            logger.error('Error stopping function cluster %s: %s', deployment_id, e)
 
 @pytest.fixture
 def arango_orchestrator(arango_cluster) -> ClusterOrchestrator:
@@ -495,142 +326,88 @@ def arango_orchestrator(arango_cluster) -> ClusterOrchestrator:
     deployment_id = list(_plugin._session_orchestrators.keys())[0]
     return _plugin._session_orchestrators[deployment_id]
 
-
 @pytest.fixture
 def arango_coordinators(arango_cluster) -> List[ArangoServer]:
     """Provide list of coordinator servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.COORDINATOR)
-
 
 @pytest.fixture
 def arango_dbservers(arango_cluster) -> List[ArangoServer]:
     """Provide list of database servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.DBSERVER)
 
-
 @pytest.fixture
 def arango_agents(arango_cluster) -> List[ArangoServer]:
     """Provide list of agent servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.AGENT)
 
-
-# Marker-based automatic fixture selection
 def pytest_fixture_setup(fixturedef, request):
     """Automatic fixture setup based on markers."""
-    # Auto-provision server instances based on test markers
     if hasattr(request, 'node') and hasattr(request.node, 'iter_markers'):
-        # Check for cluster requirements
-        if any(marker.name == 'arango_cluster' for marker in request.node.iter_markers()):
-            logger.debug(f"Test {request.node.nodeid} requires cluster - using arango_cluster fixture")
-
-        # Check for single server requirements
-        elif any(marker.name == 'arango_single' for marker in request.node.iter_markers()):
-            logger.debug(f"Test {request.node.nodeid} requires single server - using arango_single_server fixture")
-
+        if any((marker.name == 'arango_cluster' for marker in request.node.iter_markers())):
+            logger.debug('Test %s requires cluster - using arango_cluster fixture', request.node.nodeid)
+        elif any((marker.name == 'arango_single' for marker in request.node.iter_markers())):
+            logger.debug('Test %s requires single server - using arango_single_server fixture', request.node.nodeid)
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on markers and configuration."""
-    # Apply default markers based on test patterns
     for item in items:
-        # Mark tests as slow if they use cluster fixtures
-        if any(fixture in ['arango_cluster', 'arango_cluster_function']
-               for fixture in getattr(item, 'fixturenames', [])):
+        if any((fixture in ['arango_cluster', 'arango_cluster_function'] for fixture in getattr(item, 'fixturenames', []))):
             item.add_marker(pytest.mark.slow)
-
-        # Mark tests as fast if they use function-scoped fixtures
-        elif any(fixture in ['arango_single_server_function']
-                 for fixture in getattr(item, 'fixturenames', [])):
+        elif any((fixture in ['arango_single_server_function'] for fixture in getattr(item, 'fixturenames', []))):
             item.add_marker(pytest.mark.fast)
-
-        # Auto-mark stress tests based on name patterns
         if 'stress' in item.name.lower() or 'load' in item.name.lower():
             item.add_marker(pytest.mark.stress_test)
             item.add_marker(pytest.mark.slow)
-
-        # Auto-mark crash tests
         if 'crash' in item.name.lower() or 'fail' in item.name.lower():
             item.add_marker(pytest.mark.crash_test)
-
-        # Auto-mark performance tests
-        if any(word in item.name.lower() for word in ['perf', 'benchmark', 'timing']):
+        if any((word in item.name.lower() for word in ['perf', 'benchmark', 'timing'])):
             item.add_marker(pytest.mark.performance)
-
 
 def pytest_runtest_setup(item):
     """Enhanced test setup with marker-based logic."""
-    # Skip slow tests unless explicitly requested
-    if item.get_closest_marker("slow"):
-        if not item.config.getoption("--runslow", default=False):
-            pytest.skip("need --runslow option to run slow tests")
-
-    # Skip stress tests in normal runs
-    if item.get_closest_marker("stress_test"):
-        if not item.config.getoption("--stress", default=False):
-            pytest.skip("need --stress option to run stress tests")
-
-    # Skip flaky tests unless explicitly requested
-    if item.get_closest_marker("flaky"):
-        if not item.config.getoption("--flaky", default=False):
-            pytest.skip("need --flaky option to run flaky tests")
-
+    if item.get_closest_marker('slow'):
+        if not item.config.getoption('--runslow', default=False):
+            pytest.skip('need --runslow option to run slow tests')
+    if item.get_closest_marker('stress_test'):
+        if not item.config.getoption('--stress', default=False):
+            pytest.skip('need --stress option to run stress tests')
+    if item.get_closest_marker('flaky'):
+        if not item.config.getoption('--flaky', default=False):
+            pytest.skip('need --flaky option to run flaky tests')
 
 def pytest_addoption(parser):
     """Add custom command line options."""
-    parser.addoption(
-        "--runslow", action="store_true", default=False,
-        help="run slow tests"
-    )
-    parser.addoption(
-        "--stress", action="store_true", default=False,
-        help="run stress tests"
-    )
-    parser.addoption(
-        "--flaky", action="store_true", default=False,
-        help="run flaky tests"
-    )
-    parser.addoption(
-        "--deployment-mode", action="store", default="single",
-        choices=["single", "cluster"],
-        help="default deployment mode for tests"
-    )
-
+    parser.addoption('--runslow', action='store_true', default=False, help='run slow tests')
+    parser.addoption('--stress', action='store_true', default=False, help='run stress tests')
+    parser.addoption('--flaky', action='store_true', default=False, help='run flaky tests')
+    parser.addoption('--deployment-mode', action='store', default='single', choices=['single', 'cluster'], help='default deployment mode for tests')
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):
     """Set up test session with isolated directories and register cleanup."""
-    logger.debug("Starting pytest plugin setup")
-
-    # Set up test session isolation
+    logger.debug('Starting pytest plugin setup')
     session_id = set_test_session_id()
-    logger.info(f"Test session started with ID: {session_id}")
-
-    # Register emergency cleanup at exit
+    logger.info('Test session started with ID: %s', session_id)
     atexit.register(_emergency_cleanup)
-
-    # Start ArangoDB deployment BEFORE any tests run
     from ..core.config import get_config
     from ..core.types import DeploymentMode
-
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
-
-    logger.info(f"Starting {deployment_mode.value} deployment for test session...")
+    logger.info('Starting %s deployment for test session...', deployment_mode.value)
     try:
         if deployment_mode == DeploymentMode.CLUSTER:
             _plugin._get_or_create_cluster()
-            logger.info("Cluster deployment ready for tests")
+            logger.info('Cluster deployment ready for tests')
         else:
             _plugin._get_or_create_single_server()
-            logger.info("Single server deployment ready for tests")
+            logger.info('Single server deployment ready for tests')
     except Exception as e:
-        logger.error(f"Failed to start {deployment_mode.value} deployment: {e}")
+        logger.error('Failed to start %s deployment: %s', deployment_mode.value, e)
         raise
-
-    # Initialize reporter for verbose output (default) unless compact mode is enabled
     if not framework_config.compact_mode:
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionstart(session)
-
 
 def _is_verbose_output_enabled():
     """Check if verbose output is enabled (default) or compact mode is requested."""
@@ -638,50 +415,32 @@ def _is_verbose_output_enabled():
     framework_config = get_config()
     return not framework_config.compact_mode
 
-
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """Clean up all resources at the end of test session."""
-
-    logger.debug("Starting pytest plugin cleanup")
-
+    logger.debug('Starting pytest plugin cleanup')
     try:
-        # Force cleanup of any remaining deployments
         _cleanup_all_deployments()
-
-        # Force cleanup of any remaining processes
         _cleanup_all_processes()
-
-        # Clean up work directories
         cleanup_work_dir()
-
-        # Clear test session
         clear_test_session()
-
-        logger.info("Armadillo pytest plugin cleanup completed")
-
+        logger.info('Armadillo pytest plugin cleanup completed')
     except Exception as e:
-        logger.error(f"Error during pytest plugin cleanup: {e}")
+        logger.error('Error during pytest plugin cleanup: %s', e)
     finally:
-        # Stop the timeout watchdog
         try:
             stop_watchdog()
         except Exception as e:
-            logger.debug(f"Error stopping watchdog: {e}")
-
-    # Generate reporter output for verbose mode (default) unless compact mode is enabled
+            logger.debug('Error stopping watchdog: %s', e)
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionfinish(session, exitstatus)
 
-
-# Reporter hooks for verbose output (default unless compact mode is enabled)
 def pytest_collection_modifyitems(items):
     """Handle collection completion."""
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_collection_modifyitems(items)
-
 
 def pytest_runtest_logstart(nodeid, location):
     """Handle test run start."""
@@ -689,13 +448,11 @@ def pytest_runtest_logstart(nodeid, location):
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_logstart(nodeid, location)
 
-
 def pytest_runtest_setup(item):
     """Handle test setup start."""
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_setup(item)
-
 
 def pytest_runtest_call(item):
     """Handle test call start."""
@@ -703,13 +460,11 @@ def pytest_runtest_call(item):
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_call(item)
 
-
 def pytest_runtest_teardown(item):
     """Handle test teardown start."""
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_teardown(item)
-
 
 def pytest_runtest_logreport(report):
     """Handle test report."""
@@ -717,137 +472,100 @@ def pytest_runtest_logreport(report):
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_logreport(report)
 
-
-# Override pytest hooks to suppress default output when verbose mode is active
 def pytest_report_teststatus(report, config):
     """Override test status reporting to suppress pytest's progress dots and status."""
     if _is_verbose_output_enabled():
-        # Return proper status with empty visual indicators to suppress dots but keep test counting
-        if report.when == "call":
+        if report.when == 'call':
             if report.passed:
-                return ("passed", "", "")  # Status but no visual indicator
+                return ('passed', '', '')
             elif report.failed:
-                return ("failed", "", "")  # Status but no visual indicator
+                return ('failed', '', '')
             elif report.skipped:
-                return ("skipped", "", "")  # Status but no visual indicator
-        # For setup/teardown phases, return empty to avoid any output
-        return ("", "", "")
-    # In compact mode, allow default behavior by returning None (use pytest's default)
+                return ('skipped', '', '')
+        return ('', '', '')
     return None
-
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
     if _is_verbose_output_enabled():
-        # Print our summary after pytest's cleanup is complete (only if not already printed)
         reporter = get_armadillo_reporter()
         if not reporter.summary_printed:
             reporter.print_final_summary()
             reporter.summary_printed = True
-    # In compact mode, allow default behavior by not implementing anything
-
 
 def _cleanup_all_deployments():
     """Emergency cleanup of all tracked deployments with bulletproof shutdown."""
     if hasattr(_plugin, '_session_deployments'):
         deployments = list(_plugin._session_deployments.items())
-
         if deployments:
-            logger.warning(f"Emergency cleanup of {len(deployments)} deployments")
-
+            logger.warning('Emergency cleanup of %s deployments', len(deployments))
             for deployment_id, manager in deployments:
                 try:
-                    logger.info(f"Emergency shutdown of deployment: {deployment_id}")
-
-                    # Use shorter timeout for emergency cleanup - we need to be aggressive
+                    logger.info('Emergency shutdown of deployment: %s', deployment_id)
                     manager.shutdown_deployment(timeout=15.0)
-                    logger.debug(f"Deployment {deployment_id} shutdown completed")
-
+                    logger.debug('Deployment %s shutdown completed', deployment_id)
                 except Exception as e:
-                    logger.error(f"Failed emergency cleanup of deployment {deployment_id}: {e}")
-
-                    # Try to force kill processes directly if manager shutdown failed
+                    logger.error('Failed emergency cleanup of deployment %s: %s', deployment_id, e)
                     try:
-                        logger.warning(f"Attempting direct process cleanup for failed deployment {deployment_id}")
+                        logger.warning('Attempting direct process cleanup for failed deployment %s', deployment_id)
                         if hasattr(manager, '_servers'):
                             for server_id, server in manager._servers.items():
                                 try:
                                     if hasattr(server, '_process_info') and server._process_info:
                                         from ..core.process import _process_supervisor
                                         _process_supervisor.stop(server_id, graceful=False, timeout=5.0)
-                                        logger.debug(f"Force killed server {server_id}")
+                                        logger.debug('Force killed server %s', server_id)
                                 except Exception as server_e:
-                                    logger.error(f"Failed to force kill server {server_id}: {server_e}")
+                                    logger.error('Failed to force kill server %s: %s', server_id, server_e)
                     except Exception as force_e:
-                        logger.error(f"Failed direct process cleanup for deployment {deployment_id}: {force_e}")
-
-        # Always clear tracking, even if some shutdowns failed
+                        logger.error('Failed direct process cleanup for deployment %s: %s', deployment_id, force_e)
         _plugin._session_deployments.clear()
         _plugin._session_orchestrators.clear()
-        logger.info("Emergency deployment cleanup completed")
-
+        logger.info('Emergency deployment cleanup completed')
 
 def _cleanup_all_processes():
     """Emergency cleanup of all supervised processes with bulletproof termination."""
     try:
         from ..core.process import _process_supervisor
-
-        # Get all tracked processes
         if hasattr(_process_supervisor, '_processes'):
             process_ids = list(_process_supervisor._processes.keys())
-
             if process_ids:
-                logger.warning(f"Emergency cleanup of {len(process_ids)} processes: {process_ids}")
-
-                # First pass: Try graceful termination with short timeout
-                logger.info("Phase 1: Attempting graceful shutdown (SIGTERM, 3s timeout)")
+                logger.warning('Emergency cleanup of %s processes: %s', len(process_ids), process_ids)
+                logger.info('Phase 1: Attempting graceful shutdown (SIGTERM, 3s timeout)')
                 graceful_failed = []
-
                 for process_id in process_ids:
                     try:
                         _process_supervisor.stop(process_id, graceful=True, timeout=3.0)
-                        logger.debug(f"Process {process_id} terminated gracefully")
+                        logger.debug('Process %s terminated gracefully', process_id)
                     except Exception as e:
-                        logger.warning(f"Graceful termination failed for {process_id}: {e}")
+                        logger.warning('Graceful termination failed for %s: %s', process_id, e)
                         graceful_failed.append(process_id)
-
-                # Second pass: Force kill any remaining processes
                 if graceful_failed:
-                    logger.warning(f"Phase 2: Force killing {len(graceful_failed)} stubborn processes: {graceful_failed}")
-
+                    logger.warning('Phase 2: Force killing %s stubborn processes: %s', len(graceful_failed), graceful_failed)
                     for process_id in graceful_failed:
                         try:
                             _process_supervisor.stop(process_id, graceful=False, timeout=2.0)
-                            logger.debug(f"Process {process_id} force killed")
+                            logger.debug('Process %s force killed', process_id)
                         except Exception as e:
-                            logger.error(f"CRITICAL: Failed to force kill process {process_id}: {e}")
-                            # Continue with cleanup of other processes
-
-                logger.info("Emergency process cleanup completed")
-
+                            logger.error('CRITICAL: Failed to force kill process %s: %s', process_id, e)
+                logger.info('Emergency process cleanup completed')
     except Exception as e:
-        logger.error(f"Error during emergency process cleanup: {e}")
+        logger.error('Error during emergency process cleanup: %s', e)
         import traceback
-        logger.error(f"Stack trace: {traceback.format_exc()}")
-
+        logger.error('Stack trace: %s', traceback.format_exc())
 
 def _emergency_cleanup():
     """Emergency cleanup function registered with atexit."""
-    logger.warning("Emergency cleanup triggered via atexit")
+    logger.warning('Emergency cleanup triggered via atexit')
     try:
-        # Phase 1: Try normal cleanup
         _cleanup_all_deployments()
         _cleanup_all_processes()
-
-        # Phase 2: If anything is still running, use nuclear option
         try:
             from ..core.process import kill_all_supervised_processes
             kill_all_supervised_processes()
         except Exception as nuclear_e:
-            logger.error(f"Nuclear cleanup failed: {nuclear_e}")
-
+            logger.error('Nuclear cleanup failed: %s', nuclear_e)
     except Exception as e:
-        logger.error(f"Error in emergency cleanup: {e}")
+        logger.error('Error in emergency cleanup: %s', e)
         import traceback
-        logger.error(f"Emergency cleanup stack trace: {traceback.format_exc()}")
-
+        logger.error('Emergency cleanup stack trace: %s', traceback.format_exc())

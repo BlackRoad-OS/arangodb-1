@@ -132,7 +132,7 @@ class TestPortPoolTestFactory:
         """Test test factory creation."""
         assert self.factory._test_name == "my_test"
         assert self.factory._created_pools == []
-        self.mock_logger.debug.assert_called_with("Created PortPoolTestFactory for test: my_test")
+        self.mock_logger.debug.assert_called_with("Created PortPoolTestFactory for test: %s", "my_test")
 
     @patch('armadillo.utils.port_pool_factory.StandardPortPoolFactory.create_port_pool')
     def test_create_port_pool_with_test_prefix(self, mock_super_create):

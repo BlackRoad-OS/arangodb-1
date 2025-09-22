@@ -57,7 +57,10 @@ class TestStandardDeploymentPlanner:
 
         # Verify logger was called
         self.mock_logger.info.assert_called_once()
-        assert "Created deployment plan: single_server with 1 servers" in str(self.mock_logger.info.call_args)
+        # Check for lazy formatting: info('Created deployment plan: %s with %s servers', 'single_server', 1)
+        self.mock_logger.info.assert_called_with(
+            'Created deployment plan: %s with %s servers', 'single_server', 1
+        )
 
     def test_create_cluster_deployment_default_config(self):
         """Test creating cluster deployment with default configuration."""
@@ -174,7 +177,7 @@ class TestStandardDeploymentPlanner:
             assert coordinator.args["cluster.my-address"] == f"tcp://127.0.0.1:{expected_port}"
             assert coordinator.args["cluster.agency-endpoint"] == "tcp://127.0.0.1:8529"
             assert coordinator.args["server.authentication"] == "false"
-            
+
             # Check Foxx service configuration (matches JS framework)
             assert coordinator.args["foxx.force-update-on-startup"] == "true"
             assert coordinator.args["cluster.default-replication-factor"] == "2"

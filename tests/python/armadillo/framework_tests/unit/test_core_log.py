@@ -13,10 +13,12 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from armadillo.core.log import (
-    LogContext, StructuredFormatter, ArmadilloRichHandler, LogManager,
-    configure_logging, get_logger, shutdown_logging,
+    LogManager, configure_logging, get_logger, shutdown_logging,
     log_event, log_process_event, log_server_event, log_test_event,
     set_log_context, get_log_context, clear_log_context, log_context
+)
+from armadillo.core.log_formatters import (
+    LogContext, StructuredFormatter, ArmadilloRichHandler
 )
 
 
@@ -128,7 +130,7 @@ class TestStructuredFormatter:
         assert "timestamp" in log_data
         assert log_data["timestamp"].startswith("2009-02-13T23:31:30")
 
-    @patch('armadillo.core.log._log_context')
+    @patch('armadillo.core.log_formatters._log_context')
     def test_formatting_with_context(self, mock_context):
         """Test formatting with context."""
         mock_context.get_context.return_value = {"test_id": "test_123"}
@@ -442,7 +444,7 @@ class TestModuleLevelFunctions:
             'pid': 12345,
             'command': 'test_cmd'
         }
-        mock_logger.info.assert_called_once_with("Process started", extra=expected_extra)
+        mock_logger.info.assert_called_once_with("Process %s", "started", extra=expected_extra)
 
     def test_log_server_event_function(self):
         """Test log_server_event function."""
@@ -456,7 +458,7 @@ class TestModuleLevelFunctions:
             'server_id': 'server_1',
             'port': 8529
         }
-        mock_logger.info.assert_called_once_with("Server ready", extra=expected_extra)
+        mock_logger.info.assert_called_once_with("Server %s", "ready", extra=expected_extra)
 
     def test_log_test_event_function(self):
         """Test log_test_event function."""
@@ -470,7 +472,7 @@ class TestModuleLevelFunctions:
             'test_name': 'test_example',
             'duration': 1.23
         }
-        mock_logger.info.assert_called_once_with("Test passed", extra=expected_extra)
+        mock_logger.info.assert_called_once_with("Test %s", "passed", extra=expected_extra)
 
 
 class TestContextManagement:

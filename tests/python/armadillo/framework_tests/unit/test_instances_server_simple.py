@@ -282,7 +282,7 @@ class TestArangoServerErrorHandling:
     def test_start_process_failure(self, mock_start):
         """Test handling of process start failure."""
         from armadillo.core.errors import ProcessStartupError, ServerStartupError
-        mock_start.side_effect = ProcessStartupError("Failed to start")
+        mock_start.side_effect = OSError("Failed to start")
 
         with pytest.raises(ServerStartupError):
             self.server.start()
@@ -291,7 +291,7 @@ class TestArangoServerErrorHandling:
     def test_stop_process_failure_handled_gracefully(self, mock_stop):
         """Test stop handles process failure gracefully."""
         from armadillo.core.errors import ProcessError, ServerShutdownError
-        mock_stop.side_effect = ProcessError("Failed to stop")
+        mock_stop.side_effect = OSError("Failed to stop")
 
         from armadillo.core.process import ProcessInfo
         from pathlib import Path

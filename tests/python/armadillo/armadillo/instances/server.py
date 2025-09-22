@@ -146,7 +146,7 @@ class ArangoServer:
                 log_server_event(self._logger, "started", server_id=self.server_id,
                                pid=self._process_info.pid)
 
-        except Exception as e:
+        except (OSError, TimeoutError, ProcessLookupError) as e:
             log_server_event(self._logger, "start_failed", server_id=self.server_id, error=str(e))
             # Clean up on failure
             self._cleanup_on_failure()
@@ -163,7 +163,7 @@ class ArangoServer:
         try:
             stop_supervised_process(self.server_id, graceful=graceful, timeout=timeout)
             log_server_event(self._logger, "stopped", server_id=self.server_id)
-        except Exception as e:
+        except (OSError, ProcessLookupError, TimeoutError) as e:
             log_server_event(self._logger, "stop_failed", server_id=self.server_id, error=str(e))
             raise ServerShutdownError(f"Failed to stop server {self.server_id}: {e}") from e
         finally:
@@ -232,7 +232,7 @@ class ArangoServer:
                 response_time=response_time,
                 error_message=f"Health check timed out after {timeout}s"
             )
-        except Exception as e:
+        except (aiohttp.ClientError, OSError, ConnectionError) as e:
             response_time = time.time() - start_time
             return HealthStatus(
                 is_healthy=False,
@@ -244,7 +244,7 @@ class ArangoServer:
         """Synchronous health check wrapper."""
         try:
             return asyncio.run(self.health_check(timeout))
-        except Exception as e:
+        except (asyncio.TimeoutError, RuntimeError, OSError) as e:
             return HealthStatus(
                 is_healthy=False,
                 response_time=timeout,

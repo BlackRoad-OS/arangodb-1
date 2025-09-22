@@ -262,7 +262,7 @@ class TestLoggingEventFunctions:
             'command': 'test'
         }
         self.mock_logger.info.assert_called_once_with(
-            "Process started",
+            "Process %s", "started",
             extra=expected_extra
         )
 
@@ -275,7 +275,7 @@ class TestLoggingEventFunctions:
             'process_event': 'failed'
         }
         self.mock_logger.info.assert_called_once_with(
-            "Process failed",
+            "Process %s", "failed",
             extra=expected_extra
         )
 
@@ -290,7 +290,7 @@ class TestLoggingEventFunctions:
             'port': 8529
         }
         self.mock_logger.info.assert_called_once_with(
-            "Server startup",
+            "Server %s", "startup",
             extra=expected_extra
         )
 
@@ -303,7 +303,7 @@ class TestLoggingEventFunctions:
             'server_event': 'shutdown'
         }
         self.mock_logger.info.assert_called_once_with(
-            "Server shutdown",
+            "Server %s", "shutdown",
             extra=expected_extra
         )
 
@@ -318,7 +318,7 @@ class TestLoggingEventFunctions:
             'suite': 'integration'
         }
         self.mock_logger.info.assert_called_once_with(
-            "Test started",
+            "Test %s", "started",
             extra=expected_extra
         )
 
@@ -331,7 +331,7 @@ class TestLoggingEventFunctions:
             'test_event': 'completed'
         }
         self.mock_logger.info.assert_called_once_with(
-            "Test completed",
+            "Test %s", "completed",
             extra=expected_extra
         )
 

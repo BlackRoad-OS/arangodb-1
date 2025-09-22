@@ -54,7 +54,7 @@ class TestStandardServerFactory:
 
         # Verify debug logging
         self.mock_logger.debug.assert_called_with(
-            "Created server instance server_0 with role single on port 8529"
+            "Created server instance %s with role %s on port %s", "server_0", "single", 8529
         )
 
     def test_create_cluster_instances(self):
@@ -147,7 +147,7 @@ class TestStandardServerFactory:
         # We can't directly access it, but we can verify the server was created successfully
         assert server.server_id == "server_0"
         assert server.config.args["custom"] == "arg"
-        
+
         # Verify that data_dir and log_file from ServerConfig are preserved
         assert server.data_dir == Path("/fake/data")
         assert server.log_file == Path("/fake/log")

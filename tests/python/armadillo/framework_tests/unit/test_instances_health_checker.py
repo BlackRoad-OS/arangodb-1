@@ -45,7 +45,7 @@ class TestServerHealthChecker:
 
         assert result is False
         self.mock_logger.debug.assert_called_with(
-            "Readiness check failed for test_server: Process not running"
+            "Readiness check failed for %s: Process not running", "test_server"
         )
 
     @patch('armadillo.instances.health_checker.is_process_running', return_value=True)
@@ -62,7 +62,7 @@ class TestServerHealthChecker:
 
             assert result is False
             self.mock_logger.debug.assert_called_with(
-                "Readiness check failed for test_server: Connection failed"
+                "Readiness check failed for %s: %s", "test_server", "Connection failed"
             )
 
     @patch('armadillo.instances.health_checker.is_process_running', side_effect=Exception("Process check error"))
@@ -71,9 +71,11 @@ class TestServerHealthChecker:
         result = self.health_checker.check_readiness("test_server", "http://localhost:8529")
 
         assert result is False
-        self.mock_logger.debug.assert_called_with(
-            "Readiness check exception for test_server: Process check error"
-        )
+        # Check the lazy formatting call with the actual exception object
+        call_args = self.mock_logger.debug.call_args
+        assert call_args[0][0] == "Readiness check exception for %s: %s"
+        assert call_args[0][1] == "test_server"
+        assert str(call_args[0][2]) == "Process check error"
 
     @patch('asyncio.run')
     def test_check_health_success(self, mock_asyncio_run):

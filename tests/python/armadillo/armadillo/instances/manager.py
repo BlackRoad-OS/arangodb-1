@@ -20,6 +20,7 @@ from .deployment_planner import DeploymentPlanner, StandardDeploymentPlanner
 from .server_factory import ServerFactory, StandardServerFactory
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
+from ..utils.filesystem import ensure_dir
 from ..utils.auth import get_auth_provider
 from .deployment_plan import DeploymentPlan
 

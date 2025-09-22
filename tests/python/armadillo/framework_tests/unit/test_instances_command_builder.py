@@ -237,11 +237,18 @@ class TestServerCommandBuilder:
         # Should have called logger with command information
         self.mock_logger.info.assert_called()
 
-        # Check specific log messages
-        log_calls = [call.args[0] for call in self.mock_logger.info.call_args_list]
-        assert any(">>> ARANGOD COMMAND FOR test_logging <<<" in msg for msg in log_calls)
-        assert any(">>> END ARANGOD COMMAND <<<" in msg for msg in log_calls)
-        assert any("Command:" in msg for msg in log_calls)
+        # Check specific log messages (now with lazy formatting)
+        log_calls = self.mock_logger.info.call_args_list
+        # Check for format string and args separately
+        command_header_found = any(">>> ARANGOD COMMAND FOR %s <<<" == call.args[0] and
+                                 len(call.args) > 1 and call.args[1] == "test_logging"
+                                 for call in log_calls)
+        command_footer_found = any(">>> END ARANGOD COMMAND <<<" in call.args[0] for call in log_calls)
+        command_line_found = any("Command: %s" == call.args[0] for call in log_calls)
+
+        assert command_header_found, f"Expected command header not found in log calls: {[call.args for call in log_calls]}"
+        assert command_footer_found, f"Expected command footer not found in log calls: {[call.args for call in log_calls]}"
+        assert command_line_found, f"Expected command line not found in log calls: {[call.args for call in log_calls]}"
 
     def test_binary_path_fallback_when_no_bin_dir(self, setup_repo_structure):
         """Test fallback to 'arangod' in PATH when no bin_dir configured."""
