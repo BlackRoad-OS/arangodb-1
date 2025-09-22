@@ -511,7 +511,7 @@ class InstanceManager:
 
     def _check_agent_config(self, server_id: str, server: ArangoServer) -> Optional[Dict[str, Any]]:
         """Check configuration of a single agent.
-        
+
         Returns:
             Agent config dict if successful, None if agent not ready
         """
@@ -519,7 +519,7 @@ class InstanceManager:
             logger.debug("Checking agent %s at %s", server_id, server.endpoint)
             response = requests.get(f"{server.endpoint}/_api/agency/config", timeout=2.0)
             logger.debug("Agent %s response: %s", server_id, response.status_code)
-            
+
             if response.status_code == 200:
                 config = response.json()
                 logger.debug("Agent %s config keys: %s", server_id, list(config.keys()))
@@ -533,7 +533,7 @@ class InstanceManager:
 
     def _analyze_agency_status(self, agents: List[Tuple[str, ArangoServer]]) -> Tuple[int, int, bool]:
         """Analyze agency status across all agents.
-        
+
         Returns:
             Tuple of (have_leader, have_config, consensus_valid)
         """
@@ -541,22 +541,22 @@ class InstanceManager:
         have_leader = 0
         leader_id = None
         consensus_valid = True
-        
+
         for server_id, server in agents:
             config = self._check_agent_config(server_id, server)
             if not config:
                 continue
-                
+
             # Check for leadership (like JS lastAcked check)
             if 'lastAcked' in config:
                 have_leader += 1
                 logger.debug("Agent %s has leadership", server_id)
-            
+
             # Check for configuration (like JS leaderId check)
             if 'leaderId' in config and config['leaderId'] != "":
                 have_config += 1
                 logger.debug("Agent %s has leaderId: %s", server_id, config['leaderId'])
-                
+
                 if leader_id is None:
                     leader_id = config['leaderId']
                 elif leader_id != config['leaderId']:
@@ -564,12 +564,12 @@ class InstanceManager:
                     logger.debug("Agent %s disagrees on leader: %s vs %s", server_id, config['leaderId'], leader_id)
                     consensus_valid = False
                     break
-                    
+
         return have_leader, have_config, consensus_valid
 
     def _start_servers_by_role(self, role: ServerRole, timeout: float = 60.0) -> None:
         """Start all servers of a specific role in parallel.
-        
+
         Args:
             role: Server role to start
             timeout: Timeout for each server startup
@@ -577,20 +577,20 @@ class InstanceManager:
         role_name = role.value
         servers_to_start = [(server_id, server) for server_id, server in self._servers.items()
                            if server.role == role]
-        
+
         if not servers_to_start:
             logger.debug("No %s servers to start", role_name)
             return
-            
+
         logger.info("Starting %s servers...", role_name)
-        
+
         # Start all servers of this role in parallel
         futures = []
         for server_id, server in servers_to_start:
             logger.info("Starting %s %s", role_name, server_id)
             future = self._executor.submit(server.start, timeout)
             futures.append((server_id, future))
-        
+
         # Wait for all servers to complete startup
         for server_id, future in futures:
             try:
@@ -607,43 +607,117 @@ class InstanceManager:
             timeout: Maximum time to wait
         """
         logger.info("Waiting for agency to become ready")
-        
+
         start_time = time.time()
         agents = self._get_agents()
         iteration = 0
-        
+
         while time.time() - start_time < timeout:
             iteration += 1
-            
+
             try:
                 logger.debug("Agency check iteration %s", iteration)
-                
+
                 have_leader, have_config, consensus_valid = self._analyze_agency_status(agents)
-                
+
                 if not consensus_valid:
                     # Reset and try again if agents disagree
                     have_leader = 0
                     have_config = 0
-                    
-                logger.debug("Agency status: have_leader=%s, have_config=%s, need_config=%s", 
+
+                logger.debug("Agency status: have_leader=%s, have_config=%s, need_config=%s",
                            have_leader, have_config, len(agents))
-                
+
                 # Check if agency is fully ready (like JavaScript condition)
                 if have_leader >= 1 and have_config == len(agents):
                     logger.info("Agency is ready!")
                     return
-                    
+
             except (requests.RequestException, OSError, TimeoutError) as e:
                 logger.debug("Agency check exception: %s", e)
                 pass
-            
+
             # Log progress every 10 iterations to avoid spam
             if iteration % 10 == 0:
                 logger.info("Still waiting for agency (iteration %s)", iteration)
-            
+
             time.sleep(0.5)
-        
+
         raise AgencyError("Agency did not become ready within timeout")
+
+    def _get_server_readiness_endpoint(self, server: ArangoServer) -> Tuple[str, str]:
+        """Get the appropriate readiness check endpoint for a server.
+        
+        Args:
+            server: Server to check
+            
+        Returns:
+            Tuple of (url, method) for readiness check
+        """
+        if server.role == ServerRole.COORDINATOR:
+            # Use /_api/foxx for coordinators (like JS)
+            return f"{server.endpoint}/_api/foxx", 'GET'
+        else:
+            # Use /_api/version for agents and dbservers (like JS)
+            return f"{server.endpoint}/_api/version", 'POST'
+
+    def _check_server_readiness(self, server_id: str, server: ArangoServer) -> bool:
+        """Check if a single server is ready.
+        
+        Args:
+            server_id: Server identifier
+            server: Server instance
+            
+        Returns:
+            True if server is ready, False otherwise
+        """
+        try:
+            url, method = self._get_server_readiness_endpoint(server)
+            response = requests.request(method, url, timeout=2.0)
+            
+            if response.status_code == 200:
+                logger.debug("Server %s (%s) is ready", server_id, server.role.value)
+                return True
+            elif response.status_code == 403:
+                # Service API might be disabled (like JS error handling)
+                if self._is_service_api_disabled_error(response):
+                    logger.debug("Service API disabled on %s, continuing", server_id)
+                    return True
+                    
+            # Server not ready
+            logger.debug("Server %s not ready yet (status: %s)", server_id, response.status_code)
+            return False
+            
+        except Exception as e:
+            # Server not responding
+            logger.debug("Server %s not responding: %s", server_id, e)
+            return False
+
+    def _is_service_api_disabled_error(self, response) -> bool:
+        """Check if response indicates service API is disabled.
+        
+        Args:
+            response: HTTP response object
+            
+        Returns:
+            True if this is a service API disabled error
+        """
+        try:
+            error_body = response.json()
+            return error_body.get('errorNum') == 1931  # ERROR_SERVICE_API_DISABLED
+        except:
+            return False
+
+    def _check_all_servers_ready(self) -> bool:
+        """Check if all servers in the cluster are ready.
+        
+        Returns:
+            True if all servers are ready, False otherwise
+        """
+        for server_id, server in self._servers.items():
+            if not self._check_server_readiness(server_id, server):
+                return False
+        return True
 
     def _wait_for_cluster_ready(self, timeout: float = 600.0) -> None:
         """Wait for all cluster nodes to become ready - matches JavaScript checkClusterAlive logic.
@@ -652,60 +726,23 @@ class InstanceManager:
             timeout: Maximum time to wait (10 minutes like JS framework)
         """
         logger.info("Waiting for all cluster nodes to become ready")
-
+        
         start_time = time.time()
         count = 0
-
+        
         while time.time() - start_time < timeout:
             count += 1
-            all_ready = True
-
-            for server_id, server in self._servers.items():
-                try:
-                    # Choose endpoint based on server role (like JavaScript logic)
-                    if server.role == ServerRole.COORDINATOR:
-                        # Use /_api/foxx for coordinators (like JS)
-                        url = f"{server.endpoint}/_api/foxx"
-                        method = 'GET'
-                    else:
-                        # Use /_api/version for agents and dbservers (like JS)
-                        url = f"{server.endpoint}/_api/version"
-                        method = 'POST'
-
-                    response = requests.request(method, url, timeout=2.0)
-
-                    if response.status_code == 200:
-                        logger.debug("Server %s (%s) is ready", server_id, server.role.value)
-                        continue
-                    elif response.status_code == 403:
-                        # Service API might be disabled (like JS error handling)
-                        try:
-                            error_body = response.json()
-                            if error_body.get('errorNum') == 1931:  # ERROR_SERVICE_API_DISABLED
-                                logger.debug("Service API disabled on %s, continuing", server_id)
-                                continue
-                        except:
-                            pass
-
-                    # Server not ready
-                    all_ready = False
-                    logger.debug("Server %s not ready yet (status: %s)", server_id, response.status_code)
-
-                except Exception as e:
-                    # Server not responding
-                    all_ready = False
-                    logger.debug("Server %s not responding: %s", server_id, e)
-
-            if all_ready:
+            
+            if self._check_all_servers_ready():
                 logger.info("All cluster nodes are ready!")
                 return
-
+                
             # Avoid log spam - only log every 10 iterations
             if count % 10 == 0:
                 logger.info("Still waiting for cluster readiness (attempt %s)...", count)
-
+                
             time.sleep(0.5)
-
+        
         raise ClusterError(f"Cluster did not become ready within {timeout} seconds")
 
     def _verify_deployment_health(self) -> None:
