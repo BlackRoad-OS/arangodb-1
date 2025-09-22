@@ -72,7 +72,7 @@ class StandardDeploymentPlanner:
         plan.servers.append(server_config)
         plan.coordination_endpoints.append(f"http://127.0.0.1:{port}")
 
-    def _plan_cluster(self, plan: 'DeploymentPlan', deployment_id: str, 
+    def _plan_cluster(self, plan: 'DeploymentPlan', deployment_id: str,
                     cluster_config: Optional[ClusterConfig]) -> None:
         """Plan cluster deployment with agents, dbservers, and coordinators."""
         if not cluster_config:
@@ -96,7 +96,7 @@ class StandardDeploymentPlanner:
         )
         plan.coordination_endpoints = coordinator_endpoints
 
-    def _create_agents(self, plan: 'DeploymentPlan', deployment_id: str, 
+    def _create_agents(self, plan: 'DeploymentPlan', deployment_id: str,
                      cluster_config: ClusterConfig) -> List[str]:
         """Create agent server configurations."""
         agent_endpoints = []
@@ -138,7 +138,7 @@ class StandardDeploymentPlanner:
             )
             plan.servers.append(dbserver_config)
 
-    def _create_coordinators(self, plan: 'DeploymentPlan', deployment_id: str, 
+    def _create_coordinators(self, plan: 'DeploymentPlan', deployment_id: str,
                            cluster_config: ClusterConfig, agent_endpoints: List[str]) -> List[str]:
         """Create coordinator server configurations."""
         coordinator_endpoints = []

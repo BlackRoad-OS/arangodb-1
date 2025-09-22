@@ -5,12 +5,30 @@ from xml.dom import minidom
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
+from dataclasses import dataclass
 from ..core.types import ExecutionResult, SuiteExecutionResults, ExecutionOutcome
 from ..core.errors import ResultProcessingError
 from ..core.log import get_logger
 from ..utils.codec import to_json_string
 from ..utils.filesystem import atomic_write
 logger = get_logger(__name__)
+
+@dataclass
+class TestTiming:
+    """Timing information for a test."""
+    duration: float
+    setup_duration: float = 0.0
+    teardown_duration: float = 0.0
+
+@dataclass
+class TestResultParams:
+    """Parameters for recording a test result."""
+    name: str
+    outcome: ExecutionOutcome
+    timing: TestTiming
+    error_message: Optional[str] = None
+    failure_message: Optional[str] = None
+    crash_info: Optional[Dict[str, Any]] = None
 
 class ResultCollector:
     """Collects and aggregates test results."""
@@ -28,9 +46,18 @@ class ResultCollector:
         self.tests.append(result)
         logger.debug('Added test result: %s -> %s', result.name, result.outcome.value)
 
-    def record_test(self, name: str, outcome: ExecutionOutcome, duration: float, setup_duration: float=0.0, teardown_duration: float=0.0, error_message: Optional[str]=None, failure_message: Optional[str]=None, crash_info: Optional[Dict[str, Any]]=None) -> None:
+    def record_test(self, params: TestResultParams) -> None:
         """Record a test result directly."""
-        result = ExecutionResult(name=name, outcome=outcome, duration=duration, setup_duration=setup_duration, teardown_duration=teardown_duration, error_message=error_message, failure_message=failure_message, crash_info=crash_info)
+        result = ExecutionResult(
+            name=params.name, 
+            outcome=params.outcome, 
+            duration=params.timing.duration, 
+            setup_duration=params.timing.setup_duration, 
+            teardown_duration=params.timing.teardown_duration, 
+            error_message=params.error_message, 
+            failure_message=params.failure_message, 
+            crash_info=params.crash_info
+        )
         self.add_test_result(result)
 
     def set_metadata(self, **metadata: Any) -> None:
@@ -158,7 +185,20 @@ def get_result_collector() -> ResultCollector:
 
 def record_test_result(name: str, outcome: ExecutionOutcome, duration: float, **kwargs) -> None:
     """Record a test result using global collector."""
-    get_result_collector().record_test(name, outcome, duration, **kwargs)
+    timing = TestTiming(
+        duration=duration,
+        setup_duration=kwargs.get('setup_duration', 0.0),
+        teardown_duration=kwargs.get('teardown_duration', 0.0)
+    )
+    params = TestResultParams(
+        name=name,
+        outcome=outcome,
+        timing=timing,
+        error_message=kwargs.get('error_message'),
+        failure_message=kwargs.get('failure_message'),
+        crash_info=kwargs.get('crash_info')
+    )
+    get_result_collector().record_test(params)
 
 def finalize_results() -> SuiteExecutionResults:
     """Finalize results using global collector."""
