@@ -484,22 +484,7 @@ class InstanceManager:
         logger.info("Starting cluster servers in sequence")
 
         # 1. Start agents first
-        logger.info("Starting agents...")
-        agent_futures = []
-        for server_id, server in self._servers.items():
-            if server.role == ServerRole.AGENT:
-                logger.info("Starting agent %s", server_id)
-                future = self._executor.submit(server.start, 60.0)
-                agent_futures.append((server_id, future))
-
-        # Wait for all agents to start
-        for server_id, future in agent_futures:
-            try:
-                future.result(timeout=60.0)
-                self._startup_order.append(server_id)
-                logger.info("Agent %s started successfully", server_id)
-            except Exception as e:
-                raise ServerStartupError(f"Failed to start agent {server_id}: {e}") from e
+        self._start_servers_by_role(ServerRole.AGENT)
 
         # 2. Wait for agency to become ready
         logger.info("Waiting for agency to become ready...")
@@ -507,40 +492,10 @@ class InstanceManager:
         logger.info("Agency is ready!")
 
         # 3. Start database servers
-        logger.info("Starting database servers...")
-        dbserver_futures = []
-        for server_id, server in self._servers.items():
-            if server.role == ServerRole.DBSERVER:
-                logger.info("Starting database server %s", server_id)
-                future = self._executor.submit(server.start, 60.0)
-                dbserver_futures.append((server_id, future))
-
-        # Wait for all database servers to start
-        for server_id, future in dbserver_futures:
-            try:
-                future.result(timeout=60.0)
-                self._startup_order.append(server_id)
-                logger.info("Database server %s started successfully", server_id)
-            except Exception as e:
-                raise ServerStartupError(f"Failed to start database server {server_id}: {e}") from e
+        self._start_servers_by_role(ServerRole.DBSERVER)
 
         # 4. Start coordinators
-        logger.info("Starting coordinators...")
-        coordinator_futures = []
-        for server_id, server in self._servers.items():
-            if server.role == ServerRole.COORDINATOR:
-                logger.info("Starting coordinator %s", server_id)
-                future = self._executor.submit(server.start, 60.0)
-                coordinator_futures.append((server_id, future))
-
-        # Wait for all coordinators to start
-        for server_id, future in coordinator_futures:
-            try:
-                future.result(timeout=60.0)
-                self._startup_order.append(server_id)
-                logger.info("Coordinator %s started successfully", server_id)
-            except Exception as e:
-                raise ServerStartupError(f"Failed to start coordinator {server_id}: {e}") from e
+        self._start_servers_by_role(ServerRole.COORDINATOR)
 
         logger.info("All cluster servers started successfully")
 
@@ -611,6 +566,39 @@ class InstanceManager:
                     break
                     
         return have_leader, have_config, consensus_valid
+
+    def _start_servers_by_role(self, role: ServerRole, timeout: float = 60.0) -> None:
+        """Start all servers of a specific role in parallel.
+        
+        Args:
+            role: Server role to start
+            timeout: Timeout for each server startup
+        """
+        role_name = role.value
+        servers_to_start = [(server_id, server) for server_id, server in self._servers.items()
+                           if server.role == role]
+        
+        if not servers_to_start:
+            logger.debug("No %s servers to start", role_name)
+            return
+            
+        logger.info("Starting %s servers...", role_name)
+        
+        # Start all servers of this role in parallel
+        futures = []
+        for server_id, server in servers_to_start:
+            logger.info("Starting %s %s", role_name, server_id)
+            future = self._executor.submit(server.start, timeout)
+            futures.append((server_id, future))
+        
+        # Wait for all servers to complete startup
+        for server_id, future in futures:
+            try:
+                future.result(timeout=timeout)
+                self._startup_order.append(server_id)
+                logger.info("%s %s started successfully", role_name.title(), server_id)
+            except Exception as e:
+                raise ServerStartupError(f"Failed to start {role_name} {server_id}: {e}") from e
 
     def _wait_for_agency_ready(self, timeout: float = 30.0) -> None:
         """Wait for agency to become ready - matches JavaScript detectAgencyAlive logic.
