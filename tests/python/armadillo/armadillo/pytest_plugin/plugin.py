@@ -376,7 +376,14 @@ def pytest_addoption(parser):
     parser.addoption('--runslow', action='store_true', default=False, help='run slow tests')
     parser.addoption('--stress', action='store_true', default=False, help='run stress tests')
     parser.addoption('--flaky', action='store_true', default=False, help='run flaky tests')
-    parser.addoption('--deployment-mode', action='store', default='single', choices=['single', 'cluster'], help='default deployment mode for tests')
+    parser.addoption(
+        '--deployment-mode',
+        action='store',
+        default='single',
+        choices=['single',
+        'cluster'],
+        help='default deployment mode for tests'
+    )
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):

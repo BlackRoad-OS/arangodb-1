@@ -39,7 +39,7 @@ class ManagerDependencies:
     server_factory: ServerFactory
 
     @classmethod
-    def create_defaults(cls, _deployment_id: str, 
+    def create_defaults(cls, _deployment_id: str,
                        config: Optional[ConfigProvider] = None,
                        custom_logger: Optional[Logger] = None,
                        port_allocator: Optional[PortAllocator] = None) -> 'ManagerDependencies':
@@ -136,7 +136,7 @@ class InstanceManager:
             port_allocator = legacy_kwargs.get('port_allocator')
             deployment_planner = legacy_kwargs.get('deployment_planner')
             server_factory = legacy_kwargs.get('server_factory')
-            
+
             self._deps = ManagerDependencies.create_defaults(
                 deployment_id=deployment_id,
                 config=config_provider,
@@ -448,7 +448,9 @@ class InstanceManager:
 
             # Calculate metrics
             elapsed_time = time.time() - start_time
-            avg_response_time = total_response_time / len(self.state.servers) if self.state.servers else 0.0
+            avg_response_time = (
+                total_response_time / len(self.state.servers) if self.state.servers else 0.0
+            )
 
             # Determine overall health and update state
             is_healthy = len(unhealthy_servers) == 0

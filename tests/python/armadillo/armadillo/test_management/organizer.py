@@ -399,7 +399,13 @@ class SuiteOrganizer:
                 path_groups[parent_dir].append(test)
         for dir_name, tests in path_groups.items():
             if len(tests) >= 2:
-                config = SuiteConfig(name=f'{dir_name}_suite', description=f'Tests from {dir_name} directory', tags={dir_name, 'path_based', 'auto_generated'})
+                config = SuiteConfig(
+        name=f'{dir_name}_suite',
+        description=f'Tests from {dir_name} directory',
+        tags={dir_name,
+        'path_based',
+        'auto_generated'}
+    )
                 selector = Selector()
                 suite = Suite(config=config, selector=selector, tests=tests)
                 self.add_suite(suite)
@@ -537,7 +543,15 @@ class SuiteOrganizer:
         for suite in self.suites.values():
             depth = len(suite.get_path())
             max_depth = max(max_depth, depth)
-        return {'total_suites': total_suites, 'total_tests': total_tests, 'root_suites': root_suites_count, 'max_hierarchy_depth': max_depth, 'status_distribution': status_counts, 'priority_distribution': priority_counts, 'has_dependencies': any((suite.config.depends_on for suite in self.suites.values())), 'has_conflicts': any((suite.config.conflicts_with for suite in self.suites.values())), 'execution_order_calculated': bool(self.execution_order)}
+        return {'total_suites': total_suites,
+            'total_tests': total_tests,
+            'root_suites': root_suites_count,
+            'max_hierarchy_depth': max_depth,
+            'status_distribution': status_counts,
+            'priority_distribution': priority_counts,
+            'has_dependencies': any((suite.config.depends_on for suite in self.suites.values())),
+            'has_conflicts': any((suite.config.conflicts_with for suite in self.suites.values())),
+            'execution_order_calculated': bool(self.execution_order)}
 
     def export_summary(self) -> Dict[str, Any]:
         """Export a comprehensive summary of all suites.
@@ -545,13 +559,21 @@ class SuiteOrganizer:
         Returns:
             Dictionary containing complete suite information
         """
-        return {'statistics': self.get_statistics(), 'execution_order': self.calculate_execution_order(), 'validation_errors': self.validate_dependencies(), 'suites': {name: suite.summary() for name, suite in self.suites.items()}, 'hierarchy': self._build_hierarchy_tree()}
+        return {'statistics': self.get_statistics(),
+            'execution_order': self.calculate_execution_order(),
+            'validation_errors': self.validate_dependencies(),
+            'suites': {name: suite.summary() for name,
+            suite in self.suites.items()},
+            'hierarchy': self._build_hierarchy_tree()}
 
     def _build_hierarchy_tree(self) -> Dict[str, Any]:
         """Build a tree representation of suite hierarchy."""
 
         def build_tree(suite: Suite) -> Dict[str, Any]:
-            return {'name': suite.name, 'test_count': suite.test_count, 'status': suite.status.value, 'children': [build_tree(child) for child in suite.children]}
+            return {'name': suite.name,
+            'test_count': suite.test_count,
+            'status': suite.status.value,
+            'children': [build_tree(child) for child in suite.children]}
         return {'roots': [build_tree(suite) for suite in self.root_suites]}
 
 def create_marker_suite(name: str, marker: str, description: str='') -> Suite:

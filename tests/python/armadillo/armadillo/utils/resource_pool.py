@@ -112,7 +112,8 @@ class ResourceTracker:
             resource_type: Type of resource to clean up
         """
         with self._lock:
-            if resource_type in self._allocated_resources and resource_type in self._cleanup_callbacks:
+            if resource_type in self._allocated_resources and
+            resource_type in self._cleanup_callbacks:
                 resources = self._allocated_resources[resource_type]
                 if resources:
                     try:
@@ -245,7 +246,11 @@ def create_isolated_port_pool(name: str, base_port: int=8529, max_ports: int=100
     Returns:
         Isolated port pool with automatic cleanup
     """
-    return ManagedPortPool(base_port=base_port, max_ports=max_ports, name=name, enable_persistence=True, work_dir=work_dir)
+    return ManagedPortPool(base_port=base_port,
+            max_ports=max_ports,
+            name=name,
+            enable_persistence=True,
+            work_dir=work_dir)
 
 def create_ephemeral_port_pool(name: str='', base_port: int=8529, max_ports: int=1000) -> ManagedPortPool:
     """Create an ephemeral port pool (no persistence).
@@ -258,4 +263,8 @@ def create_ephemeral_port_pool(name: str='', base_port: int=8529, max_ports: int
     Returns:
         Ephemeral port pool with automatic cleanup
     """
-    return ManagedPortPool(base_port=base_port, max_ports=max_ports, name=name, enable_persistence=False, work_dir=None)
+    return ManagedPortPool(base_port=base_port,
+            max_ports=max_ports,
+            name=name,
+            enable_persistence=False,
+            work_dir=None)

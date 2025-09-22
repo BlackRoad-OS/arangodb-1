@@ -80,7 +80,7 @@ class ServerDependencies:
         config_provider = get_config()
         logger_instance = custom_logger or get_logger(__name__)
         auth_provider = get_auth_provider()
-        
+
         return cls(
             config_provider=config_provider,
             logger=logger_instance,
@@ -394,7 +394,8 @@ class ArangoServer:
                             cpu_percent=process_stats.cpu_percent if process_stats else 0.0,
                             connection_count=stats_data.get('client_connections', 0),
                             uptime=time.time() - (
-                                self._runtime.process_info.start_time if self._runtime.process_info else 0
+                                self._runtime.process_info.start_time 
+                                if self._runtime.process_info else 0
                             ),
                             additional_metrics=stats_data
                         )

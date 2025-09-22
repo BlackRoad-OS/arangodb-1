@@ -40,13 +40,16 @@ class ProcessExecutor:
     def __init__(self) -> None:
         self._executor = ThreadPoolExecutor(thread_name_prefix='ProcessExecutor')
 
-    def run(self,
+    def run(
+        self,
             command: List[str],
             cwd: Optional[Path] = None,
-            env: Optional[Dict[str, str]] = None,
+            env: Optional[Dict[str,
+        str]] = None,
             timeout: Optional[float] = None,
             input_data: Optional[str] = None,
-            capture_output: bool = True) -> ProcessResult:
+            capture_output: bool = True
+    ) -> ProcessResult:
         """Execute a command with timeout enforcement."""
         effective_timeout = clamp_timeout(timeout, f'process:{command[0]}')
         start_time = time.time()
@@ -60,6 +63,7 @@ class ProcessExecutor:
         try:
             with timeout_scope(effective_timeout, f'process_exec_{command[0]}'):
                 process = subprocess.Popen(
+        
                     command,
                     cwd=cwd,
                     env=env,
@@ -67,7 +71,8 @@ class ProcessExecutor:
                     stdout=subprocess.PIPE if capture_output else None,
                     stderr=subprocess.PIPE if capture_output else None,
                     text=True
-                )
+                
+    )
                 try:
                     stdout, stderr = process.communicate(input=input_data, timeout=effective_timeout)
                     duration = time.time() - start_time
@@ -82,10 +87,20 @@ class ProcessExecutor:
                     log_process_event(logger, 'exec.timeout', duration=duration)
                     process.kill()
                     stdout, stderr = process.communicate()
-                    raise ProcessTimeoutError(f'Command {command[0]} timed out after {effective_timeout}s', timeout=effective_timeout, details={'command': command, 'duration': duration})
+                    raise ProcessTimeoutError(
+        f'Command {command[0]} timed out after {effective_timeout}s',
+        timeout=effective_timeout,
+        details={'command': command,
+        'duration': duration}
+    )
         except ArmadilloTimeoutError as e:
             duration = time.time() - start_time
-            raise ProcessTimeoutError(f'Command {command[0]} exceeded deadline', timeout=effective_timeout, details={'command': command, 'duration': duration}) from e
+            raise ProcessTimeoutError(
+        f'Command {command[0]} exceeded deadline',
+        timeout=effective_timeout,
+        details={'command': command,
+        'duration': duration}
+    ) from e
         except Exception as e:
             duration = time.time() - start_time
             log_process_event(logger, 'exec.error', duration=duration, error=str(e))
@@ -124,14 +139,18 @@ class ProcessSupervisor:
         except Exception as e:
             logger.error('Output streaming error for %s: %s', process_id, e, exc_info=True)
 
-    def start(self,
+    def start(
+        self,
               process_id: str,
               command: List[str],
               cwd: Optional[Path] = None,
-              env: Optional[Dict[str, str]] = None,
+              env: Optional[Dict[str,
+        str]] = None,
               startup_timeout: float = 30.0,
-              readiness_check: Optional[Callable[[], bool]] = None,
-              inherit_console: bool = False) -> ProcessInfo:
+              readiness_check: Optional[Callable[[],
+        bool]] = None,
+              inherit_console: bool = False
+    ) -> ProcessInfo:
         """Start a supervised process.
 
         Args:
@@ -169,6 +188,7 @@ class ProcessSupervisor:
                 stderr_config = subprocess.STDOUT
                 use_streaming = True
             process = subprocess.Popen(
+        
                 command,
                 cwd=cwd,
                 env=env,
@@ -178,7 +198,8 @@ class ProcessSupervisor:
                 bufsize=1 if use_streaming else -1,
                 universal_newlines=True if use_streaming else None,
                 start_new_session=True
-            )
+            
+    )
             process_info = ProcessInfo(pid=process.pid, command=command, start_time=time.time(), working_dir=cwd or Path.cwd(), env=env or {})
             self._processes[process_id] = process
             self._process_info[process_id] = process_info
@@ -325,7 +346,12 @@ class ProcessSupervisor:
         try:
             ps_process = psutil.Process(process_info.pid)
             memory_info = ps_process.memory_info()
-            return ProcessStats(pid=process_info.pid, memory_rss=memory_info.rss, memory_vms=memory_info.vms, cpu_percent=ps_process.cpu_percent(), num_threads=ps_process.num_threads(), status=ps_process.status())
+            return ProcessStats(pid=process_info.pid,
+            memory_rss=memory_info.rss,
+            memory_vms=memory_info.vms,
+            cpu_percent=ps_process.cpu_percent(),
+            num_threads=ps_process.num_threads(),
+            status=ps_process.status())
         except psutil.NoSuchProcess:
             return None
 
@@ -374,7 +400,11 @@ class ProcessSupervisor:
         if not process:
             logger.warning('No process found for streaming: %s', process_id)
             return
-        streaming_thread = threading.Thread(target=self._stream_output, args=(process_id, process), name=f'OutputStreamer-{process_id}', daemon=True)
+        streaming_thread = threading.Thread(target=self._stream_output,
+            args=(process_id,
+            process),
+            name=f'OutputStreamer-{process_id}',
+            daemon=True)
         self._streaming_threads[process_id] = streaming_thread
         streaming_thread.start()
 
