@@ -102,7 +102,7 @@ class ResourceTracker:
                         logger.info('ResourceTracker[%s]: Cleaning up %s %s resources', self._name, len(resources_list), resource_type)
                         cleanup_func(resources_list)
                         resources.clear()
-                    except Exception as e:
+                    except (RuntimeError, OSError, ValueError) as e:
                         logger.error('ResourceTracker[%s]: Failed to cleanup %s resources: %s', self._name, resource_type, e)
 
     def cleanup_type(self, resource_type: str) -> None:
@@ -122,7 +122,7 @@ class ResourceTracker:
                         logger.info('ResourceTracker[%s]: Cleaning up %s %s resources', self._name, len(resources_list), resource_type)
                         cleanup_func(resources_list)
                         resources.clear()
-                    except Exception as e:
+                    except (RuntimeError, OSError, ValueError) as e:
                         logger.error('ResourceTracker[%s]: Failed to cleanup %s resources: %s', self._name, resource_type, e)
 
 class PortPool:

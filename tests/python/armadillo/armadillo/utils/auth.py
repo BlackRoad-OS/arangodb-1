@@ -69,7 +69,7 @@ class AuthProvider:
             payload = jwt.decode(token, self.secret, algorithms=[self.algorithm])
             exp = payload.get('exp', 0)
             return time.time() >= exp
-        except Exception:
+        except (jwt.InvalidTokenError, JWTError):
             return True
 
     def get_token_claims(self, token: str) -> Optional[Dict[str, Any]]:
@@ -77,7 +77,7 @@ class AuthProvider:
         try:
             payload = jwt.decode(token, options={'verify_signature': False})
             return payload
-        except Exception as e:
+        except (jwt.InvalidTokenError, JWTError) as e:
             logger.debug('Failed to decode token claims: %s', e)
             return None
 

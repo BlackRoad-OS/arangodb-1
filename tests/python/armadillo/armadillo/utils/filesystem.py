@@ -63,11 +63,11 @@ class FilesystemService:
                 os.fsync(tmp_file.fileno())
             tmp_path.replace(path)
             logger.debug('Atomically wrote %s %s to %s', len(data), 'bytes' if is_binary else 'chars', path)
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             if 'tmp_path' in locals() and tmp_path.exists():
                 try:
                     tmp_path.unlink()
-                except Exception:
+                except (OSError, PermissionError):
                     pass
             raise AtomicWriteError(f'Failed to atomically write to {path}: {e}') from e
 
@@ -81,7 +81,7 @@ class FilesystemService:
             raise FilesystemError(f'Permission denied reading {path}') from e
         except UnicodeDecodeError as e:
             raise FilesystemError(f'Encoding error reading {path}: {e}')
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             raise FilesystemError(f'Error reading {path}: {e}') from e
 
     def read_bytes(self, path: Path) -> bytes:
@@ -92,7 +92,7 @@ class FilesystemService:
             raise PathError(f'File not found: {path}')
         except PermissionError:
             raise FilesystemError(f'Permission denied reading {path}')
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             raise FilesystemError(f'Error reading {path}: {e}') from e
 
     def ensure_dir(self, path: Path) -> Path:
@@ -103,7 +103,7 @@ class FilesystemService:
             return path
         except PermissionError:
             raise FilesystemError(f'Permission denied creating directory {path}')
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             raise FilesystemError(f'Error creating directory {path}: {e}') from e
 
     def safe_remove(self, path: Path) -> bool:
@@ -118,7 +118,7 @@ class FilesystemService:
                 return True
             else:
                 return False
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             logger.warning('Failed to remove %s: %s', path, e)
             return False
 
@@ -137,7 +137,7 @@ class FilesystemService:
             raise PathError(f'Source file not found: {src}')
         except PermissionError:
             raise FilesystemError(f'Permission denied copying from {src} to {dst}')
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             raise FilesystemError(f'Error copying {src} to {dst}: {e}') from e
 
     def get_size(self, path: Path) -> int:
@@ -146,7 +146,7 @@ class FilesystemService:
             return Path(path).stat().st_size
         except FileNotFoundError:
             raise PathError(f'File not found: {path}')
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             raise FilesystemError(f'Error getting size of {path}: {e}') from e
 
     def list_files(self, directory: Path, pattern: str='*', recursive: bool=False) -> list[Path]:
@@ -159,7 +159,7 @@ class FilesystemService:
                 return list(directory.rglob(pattern))
             else:
                 return list(directory.glob(pattern))
-        except Exception as e:
+        except (OSError, PermissionError, FileNotFoundError) as e:
             raise FilesystemError(f'Error listing files in {directory}: {e}') from e
 
     @contextmanager
@@ -174,7 +174,7 @@ class FilesystemService:
             if tmp_path.exists():
                 try:
                     tmp_path.unlink()
-                except Exception as e:
+                except (OSError, PermissionError, FileNotFoundError) as e:
                     logger.warning('Failed to clean up temp file %s: %s', tmp_path, e)
 
     def cleanup_work_dir(self) -> None:
@@ -183,7 +183,7 @@ class FilesystemService:
             try:
                 shutil.rmtree(self._work_dir)
                 logger.info('Cleaned up work directory: %s', self._work_dir)
-            except Exception as e:
+            except (OSError, PermissionError, FileNotFoundError) as e:
                 logger.error('Failed to clean up work directory %s: %s', self._work_dir, e)
 _filesystem_service = FilesystemService()
 
