@@ -7,6 +7,8 @@ from unittest.mock import patch, mock_open
 
 from armadillo.results.collector import (
     ResultCollector,
+    TestResultParams,
+    TestTiming,
     get_result_collector,
     record_test_result,
     finalize_results,
@@ -62,14 +64,18 @@ class ExecutionResultCollector:
         """Test recording test result directly."""
         collector = ResultCollector()
 
-        collector.record_test(
-            name="test_direct",
-            outcome=ExecutionOutcome.FAILED,
+        timing = TestTiming(
             duration=2.5,
             setup_duration=0.1,
             teardown_duration=0.05,
+        )
+        params = TestResultParams(
+            name="test_direct",
+            outcome=ExecutionOutcome.FAILED,
+            timing=timing,
             failure_message="Assertion failed",
         )
+        collector.record_test(params)
 
         assert len(collector.tests) == 1
         result = collector.tests[0]
@@ -395,16 +401,20 @@ class ExecutionResultCollectorEdgeCases:
 
         crash_info = {"signal": 11, "backtrace": "..."}
 
-        collector.record_test(
-            name="complex_test",
-            outcome=ExecutionOutcome.CRASHED,
+        timing = TestTiming(
             duration=5.0,
             setup_duration=1.0,
             teardown_duration=0.5,
+        )
+        params = TestResultParams(
+            name="complex_test",
+            outcome=ExecutionOutcome.CRASHED,
+            timing=timing,
             error_message="Segmentation fault",
             failure_message="Process crashed",
             crash_info=crash_info,
         )
+        collector.record_test(params)
 
         results = collector.finalize_results()
 
@@ -434,12 +444,14 @@ class ExecutionResultCollectorEdgeCases:
         """Test handling Unicode in test names and messages."""
         collector = ResultCollector()
 
-        collector.record_test(
+        timing = TestTiming(duration=1.0)
+        params = TestResultParams(
             name="test_unicode_你好",
             outcome=ExecutionOutcome.FAILED,
-            duration=1.0,
+            timing=timing,
             failure_message="Failed with 🚫 emoji and 世界 characters",
         )
+        collector.record_test(params)
 
         results = collector.finalize_results()
 

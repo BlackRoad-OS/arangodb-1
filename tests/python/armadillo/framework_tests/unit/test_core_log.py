@@ -215,6 +215,7 @@ class TestStructuredFormatter:
         """Test formatting with exception information."""
         mock_context.get_context.return_value = {}
 
+        exc_info = None
         try:
             raise ValueError("Test exception")
         except ValueError:

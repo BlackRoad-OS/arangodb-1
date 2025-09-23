@@ -226,7 +226,7 @@ class TestInstanceManagerMockIntegration:
             self.manager._create_server_instances()
 
             # If successful, server should have been created
-            assert len(self.manager._servers) >= 0  # Should have attempted creation
+            assert len(self.manager.state.servers) >= 0  # Should have attempted creation
         except Exception:
             # If it fails for other reasons, that's acceptable
             pass
