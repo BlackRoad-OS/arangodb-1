@@ -92,14 +92,14 @@ class ConfigLoader:
         if target_type == int:
             try:
                 return int(value)
-            except ValueError:
-                raise ConfigurationError(f"Invalid integer value: {value}")
+            except ValueError as e:
+                raise ConfigurationError(f"Invalid integer value: {value}") from e
 
         if target_type == float:
             try:
                 return float(value)
-            except ValueError:
-                raise ConfigurationError(f"Invalid float value: {value}")
+            except ValueError as e:
+                raise ConfigurationError(f"Invalid float value: {value}") from e
 
         # Handle Path types
         if target_type == Path or target_type == Optional[Path]:
@@ -109,9 +109,9 @@ class ConfigLoader:
         if hasattr(target_type, '__members__'):
             try:
                 return target_type(value)
-            except ValueError:
+            except ValueError as e:
                 valid_values = list(target_type.__members__.keys())
-                raise ConfigurationError(f"Invalid enum value '{value}'. Valid values: {valid_values}")
+                raise ConfigurationError(f"Invalid enum value '{value}'. Valid values: {valid_values}") from e
 
         # Handle lists (comma-separated)
         if hasattr(target_type, '__origin__') and target_type.__origin__ == list:
@@ -194,7 +194,7 @@ class ConfigManager:
                 else:
                     raise ConfigurationError(f"Unsupported config file format: {config_file.suffix}")
         except Exception as e:
-            raise ConfigurationError(f"Failed to load config file {config_file}: {e}")
+            raise ConfigurationError(f"Failed to load config file {config_file}: {e}") from e
 
     def _merge_configs(self, base: ArmadilloConfig, overrides: Dict[str, Any]) -> ArmadilloConfig:
         """Merge configuration dictionaries."""

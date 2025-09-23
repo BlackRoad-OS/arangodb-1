@@ -78,12 +78,12 @@ class ProcessExecutor:
                     else:
                         log_process_event(logger, 'exec.failed', return_code=process.returncode, duration=duration)
                     return result
-                except subprocess.TimeoutExpired:
+                except subprocess.TimeoutExpired as e:
                     duration = time.time() - start_time
                     log_process_event(logger, 'exec.timeout', duration=duration)
                     process.kill()
                     stdout, stderr = process.communicate()
-                    raise ProcessTimeoutError(f'Command {command[0]} timed out after {effective_timeout}s', timeout=effective_timeout, details={'command': command, 'duration': duration})
+                    raise ProcessTimeoutError(f'Command {command[0]} timed out after {effective_timeout}s', timeout=effective_timeout, details={'command': command, 'duration': duration}) from e
         except ArmadilloTimeoutError as e:
             duration = time.time() - start_time
             raise ProcessTimeoutError(f'Command {command[0]} exceeded deadline', timeout=effective_timeout, details={'command': command, 'duration': duration}) from e

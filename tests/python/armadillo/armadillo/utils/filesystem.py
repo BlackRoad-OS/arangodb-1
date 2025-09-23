@@ -80,7 +80,7 @@ class FilesystemService:
         except PermissionError as e:
             raise FilesystemError(f'Permission denied reading {path}') from e
         except UnicodeDecodeError as e:
-            raise FilesystemError(f'Encoding error reading {path}: {e}')
+            raise FilesystemError(f'Encoding error reading {path}: {e}') from e
         except OSError as e:
             raise FilesystemError(f'Error reading {path}: {e}') from e
 
@@ -88,10 +88,10 @@ class FilesystemService:
         """Read binary file with proper error handling."""
         try:
             return Path(path).read_bytes()
-        except FileNotFoundError:
-            raise PathError(f'File not found: {path}')
-        except PermissionError:
-            raise FilesystemError(f'Permission denied reading {path}')
+        except FileNotFoundError as e:
+            raise PathError(f'File not found: {path}') from e
+        except PermissionError as e:
+            raise FilesystemError(f'Permission denied reading {path}') from e
         except OSError as e:
             raise FilesystemError(f'Error reading {path}: {e}') from e
 
@@ -101,8 +101,8 @@ class FilesystemService:
             path = Path(path)
             path.mkdir(parents=True, exist_ok=True)
             return path
-        except PermissionError:
-            raise FilesystemError(f'Permission denied creating directory {path}')
+        except PermissionError as e:
+            raise FilesystemError(f'Permission denied creating directory {path}') from e
         except OSError as e:
             raise FilesystemError(f'Error creating directory {path}: {e}') from e
 
@@ -133,10 +133,10 @@ class FilesystemService:
             else:
                 shutil.copy(src, dst)
             logger.debug('Copied %s to %s', src, dst)
-        except FileNotFoundError:
-            raise PathError(f'Source file not found: {src}')
-        except PermissionError:
-            raise FilesystemError(f'Permission denied copying from {src} to {dst}')
+        except FileNotFoundError as e:
+            raise PathError(f'Source file not found: {src}') from e
+        except PermissionError as e:
+            raise FilesystemError(f'Permission denied copying from {src} to {dst}') from e
         except OSError as e:
             raise FilesystemError(f'Error copying {src} to {dst}: {e}') from e
 
@@ -144,8 +144,8 @@ class FilesystemService:
         """Get file size in bytes."""
         try:
             return Path(path).stat().st_size
-        except FileNotFoundError:
-            raise PathError(f'File not found: {path}')
+        except FileNotFoundError as e:
+            raise PathError(f'File not found: {path}') from e
         except OSError as e:
             raise FilesystemError(f'Error getting size of {path}: {e}') from e
 
