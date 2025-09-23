@@ -326,7 +326,7 @@ class InstanceManager:
                 server.stop(timeout=timeout)
             else:
                 # Fallback: stop via process supervisor with graceful escalation
-                if hasattr(server, '_process_info') and server._process_info:
+                if server.is_running():
                     stop_supervised_process(
                         server.server_id, graceful=True, timeout=timeout
                     )
@@ -345,7 +345,7 @@ class InstanceManager:
             # Try emergency force kill if graceful shutdown failed
             try:
                 logger.warning("Attempting emergency force kill of server %s", server.server_id)
-                if hasattr(server, '_process_info') and server._process_info:
+                if server.is_running():
                     stop_supervised_process(server.server_id, graceful=False, timeout=5.0)
                     logger.info("Emergency force kill of server %s succeeded", server.server_id)
                 else:
@@ -403,6 +403,14 @@ class InstanceManager:
             server for server in self.state.servers.values()
             if server.role == role
         ]
+
+    def get_all_servers(self) -> Dict[str, ArangoServer]:
+        """Get all servers as a dictionary.
+
+        Returns:
+            Dictionary mapping server IDs to server instances
+        """
+        return dict(self.state.servers)
 
     def get_coordination_endpoints(self) -> List[str]:
         """Get coordination endpoints (coordinators or single server).

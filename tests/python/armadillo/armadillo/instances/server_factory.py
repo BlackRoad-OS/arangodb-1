@@ -108,4 +108,5 @@ class StandardServerFactory:
         """Configure server after creation with deployment-specific settings."""
         server.data_dir = server_config.data_dir
         server.log_file = server_config.log_file
-        server._server_config = server_config
+        # Store config in paths for command building
+        server.paths.config = server_config

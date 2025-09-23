@@ -203,7 +203,7 @@ class ClusterOrchestrator:
             }
             if detailed:
                 report['servers'] = {}
-                for server_id, server in self.instance_manager._servers.items():
+                for server_id, server in self.instance_manager.get_all_servers().items():
                     try:
                         health = server.health_check_sync(timeout=5.0)
                         stats = server.collect_stats()
@@ -287,7 +287,7 @@ class ClusterOrchestrator:
                     for role in server_roles:
                         target_servers.extend(self.instance_manager.get_servers_by_role(role))
                 else:
-                    target_servers = list(self.instance_manager._servers.values())
+                    target_servers = list(self.instance_manager.get_all_servers().values())
                 operation.target_servers = [s.server_id for s in target_servers]
                 restart_order = []
                 restart_order.extend([s for s in target_servers if s.role == ServerRole.DBSERVER])
@@ -422,7 +422,7 @@ class ClusterOrchestrator:
 
     async def _update_server_health(self, state: ClusterState) -> None:
         """Update server health information."""
-        for server_id, server in self.instance_manager._servers.items():
+        for server_id, server in self.instance_manager.get_all_servers().items():
             try:
                 if server.is_running():
                     health = server.health_check_sync(timeout=2.0)
@@ -462,7 +462,7 @@ class ClusterOrchestrator:
             await asyncio.sleep(1.0)
         raise HealthCheckError(f'Server {server.server_id} did not become healthy within timeout')
 
-    def _cancel_all_operations(self) -> None:
+    def cancel_all_operations(self) -> None:
         """Cancel all active operations."""
         with self._lock:
             for operation in self._active_operations.values():
@@ -470,6 +470,10 @@ class ClusterOrchestrator:
                     operation.status = 'cancelled'
                     operation.end_time = time.time()
             logger.info('Cancelled %s active operations', len(self._active_operations))
+
+    def _cancel_all_operations(self) -> None:
+        """Cancel all active operations (deprecated - use cancel_all_operations)."""
+        self.cancel_all_operations()
 _cluster_orchestrators: Dict[str, ClusterOrchestrator] = {}
 _orchestrator_lock = threading.Lock()
 
@@ -492,7 +496,7 @@ def cleanup_cluster_orchestrators() -> None:
     with _orchestrator_lock:
         for orchestrator in _cluster_orchestrators.values():
             try:
-                orchestrator._cancel_all_operations()
+                orchestrator.cancel_all_operations()
             except (RuntimeError, OSError) as e:
                 logger.error('Error during orchestrator cleanup: %s', e)
         _cluster_orchestrators.clear()
