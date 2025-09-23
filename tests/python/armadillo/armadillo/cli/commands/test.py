@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 test_app = typer.Typer(help='Execute tests')
 
 @test_app.command()
-def run(test_paths: List[str]=typer.Argument(help='Test paths to execute'), cluster: bool=typer.Option(False, '--cluster', help='Use cluster deployment'), single_server: bool=typer.Option(True, '--single-server', help='Use single server deployment'), timeout: Optional[float]=typer.Option(None, '--timeout', help='Test timeout in seconds'), output_dir: Path=typer.Option(Path('./test-results'), '--output-dir', '-o', help='Output directory for results'), formats: List[str]=typer.Option(['junit', 'json'], '--format', help='Result output formats'), build_dir: Optional[Path]=typer.Option(None, '--build-dir', '-b', help='ArangoDB build directory (auto-detected if not specified)'), keep_instances_on_failure: bool=typer.Option(False, '--keep-instances-on-failure', help='Keep instances running on test failure'), parallel: bool=typer.Option(False, '--parallel', help='Run tests in parallel'), max_workers: Optional[int]=typer.Option(None, '--max-workers', help='Maximum parallel workers'), show_output: bool=typer.Option(False, '--show-output', '-s', help='Show ArangoDB server output during tests (disables pytest capture)'), extra_args: Optional[List[str]]=typer.Option(None, '--pytest-arg', help='Additional arguments to pass to pytest'), log_level: str=typer.Option('WARNING', '--log-level', help='Framework logging level (DEBUG, INFO, WARNING, ERROR)'), compact: bool=typer.Option(False, '--compact', '-c', help='Use compact pytest-style output instead of detailed verbose output')):
+def run(test_paths: List[str]=typer.Argument(help='Test paths to execute'), cluster: bool=typer.Option(False, '--cluster', help='Use cluster deployment instead of single server'), timeout: Optional[float]=typer.Option(None, '--timeout', help='Test timeout in seconds per test'), output_dir: Path=typer.Option(Path('./test-results'), '--output-dir', '-o', help='Output directory for results'), formats: List[str]=typer.Option(['junit', 'json'], '--format', help='Result output formats'), build_dir: Optional[Path]=typer.Option(None, '--build-dir', '-b', help='ArangoDB build directory (auto-detected if not specified)'), keep_instances_on_failure: bool=typer.Option(False, '--keep-instances-on-failure', help='Keep instances running on test failure for debugging'), parallel: bool=typer.Option(False, '--parallel', help='Run tests in parallel'), max_workers: Optional[int]=typer.Option(None, '--max-workers', help='Maximum parallel workers'), show_output: bool=typer.Option(False, '--show-output', '-s', help='Show ArangoDB server output during tests (disables pytest capture)'), extra_args: Optional[List[str]]=typer.Option(None, '--pytest-arg', help='Additional arguments to pass to pytest'), log_level: str=typer.Option('WARNING', '--log-level', help='Framework logging level (DEBUG, INFO, WARNING, ERROR)'), compact: bool=typer.Option(False, '--compact', '-c', help='Use compact pytest-style output instead of detailed verbose output')):
     """Run tests with ArangoDB instances."""
     try:
         config = get_config()
@@ -38,6 +38,19 @@ def run(test_paths: List[str]=typer.Argument(help='Test paths to execute'), clus
             pytest_args.append(str(path))
         if show_output:
             pytest_args.append('-s')
+        
+        # Implement timeout functionality
+        if timeout:
+            pytest_args.extend(['--timeout', str(timeout)])
+            
+        # Implement keep-instances-on-failure by setting environment variable
+        # that the pytest plugin can check
+        if keep_instances_on_failure:
+            os.environ['ARMADILLO_KEEP_INSTANCES_ON_FAILURE'] = '1'
+            console.print('[yellow]🔧 Instances will be kept running on test failure for debugging[/yellow]')
+        else:
+            os.environ.pop('ARMADILLO_KEEP_INSTANCES_ON_FAILURE', None)
+            
         if extra_args:
             pytest_args.extend(extra_args)
         output_dir.mkdir(parents=True, exist_ok=True)

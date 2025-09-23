@@ -111,14 +111,14 @@ class ArmadilloPlugin:
         """
         logger.debug('Session server pre-start analysis complete')
 
-    def pytest_sessionstart(self, session: pytest.Session) -> None:
+    def pytest_sessionstart(self, _session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
         logger.debug('ArmadilloPlugin: Session start')
         load_config()
         configure_logging()
         set_test_session_id()
 
-    def pytest_sessionfinish(self, session: pytest.Session, exitstatus: int) -> None:
+    def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug('ArmadilloPlugin: Session finish with exit status %s', exitstatus)
         for server_id, server in list(self._session_servers.items()):
@@ -318,8 +318,10 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
 @pytest.fixture
 def arango_orchestrator(arango_cluster) -> ClusterOrchestrator:
     """Provide cluster orchestrator for advanced cluster operations."""
-    deployment_id = list(_plugin._session_orchestrators.keys())[0]
-    return _plugin._session_orchestrators[deployment_id]
+    # Use the cluster's deployment_id to get the proper orchestrator
+    # instead of relying on global state lookup
+    from ..instances.orchestrator import get_cluster_orchestrator
+    return get_cluster_orchestrator(arango_cluster.deployment_id)
 
 @pytest.fixture
 def arango_coordinators(arango_cluster) -> List[ArangoServer]:
@@ -336,7 +338,7 @@ def arango_agents(arango_cluster) -> List[ArangoServer]:
     """Provide list of agent servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.AGENT)
 
-def pytest_fixture_setup(fixturedef, request):
+def pytest_fixture_setup(_fixturedef, request):
     """Automatic fixture setup based on markers."""
     if hasattr(request, 'node') and hasattr(request.node, 'iter_markers'):
         if any((marker.name == 'arango_cluster' for marker in request.node.iter_markers())):
@@ -344,7 +346,7 @@ def pytest_fixture_setup(fixturedef, request):
         elif any((marker.name == 'arango_single' for marker in request.node.iter_markers())):
             logger.debug('Test %s requires single server - using arango_single_server fixture', request.node.nodeid)
 
-def pytest_collection_modifyitems(config, items):
+def pytest_collection_modifyitems(_config, items):
     """Modify test collection based on markers and configuration."""
     for item in items:
         if any((fixture in ['arango_cluster', 'arango_cluster_function'] for fixture in getattr(item, 'fixturenames', []))):
@@ -427,7 +429,7 @@ def pytest_runtest_logreport(report):
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_logreport(report)
 
-def pytest_report_teststatus(report, config):
+def pytest_report_teststatus(report, _config):
     """Override test status reporting to suppress pytest's progress dots and status."""
     if _is_verbose_output_enabled():
         if report.when == 'call':
@@ -440,7 +442,7 @@ def pytest_report_teststatus(report, config):
         return ('', '', '')
     return None
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
+def pytest_terminal_summary(_terminalreporter, _exitstatus, _config):
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()

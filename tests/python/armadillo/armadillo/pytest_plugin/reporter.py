@@ -94,12 +94,12 @@ class ArmadilloReporter:
             return test_name
         return nodeid.split("::")[-1]
 
-    def pytest_sessionstart(self, session):
+    def pytest_sessionstart(self, _session):
         """Handle session start."""
         self.session_start_time = time.time()
         # Don't print session start here - will be handled by file processing
 
-    def pytest_runtest_logstart(self, nodeid, location):
+    def pytest_runtest_logstart(self, nodeid, _location):
         """Handle test run start."""
         suite_name = self._get_suite_name(nodeid)
         test_name = self._get_test_name(nodeid)
@@ -218,7 +218,7 @@ class ArmadilloReporter:
             sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {len(file_items)} tests from {self._colorize(suite_name, Colors.BOLD)} (setUpAll: 0ms)\n")
             sys.stderr.flush()
 
-    def pytest_sessionfinish(self, session, exitstatus):
+    def pytest_sessionfinish(self, _session, exitstatus):
         """Handle session finish - store data for later summary."""
         # Don't print summary here - it will be printed by pytest_terminal_summary
         # which runs after all cleanup is complete
@@ -233,7 +233,7 @@ class ArmadilloReporter:
         # Print suite summaries using sys.stderr to bypass pytest's output capture
         for suite_name, test_count in self.suite_test_counts.items():
             sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(suite_name, Colors.BOLD)} ran (tearDownAll: 0ms)\n")
-        
+
         # Print final summary
         current_time = time.time()
         total_time = int((current_time - self.session_start_time) * 1000)
