@@ -5,7 +5,7 @@ import inspect
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, Type, TypeVar, Protocol
-from dataclasses import dataclass, fields
+from dataclasses import fields
 
 from .types import ArmadilloConfig, DeploymentMode, ClusterConfig, MonitoringConfig
 from .errors import ConfigurationError, PathError

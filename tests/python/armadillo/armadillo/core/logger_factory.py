@@ -6,8 +6,6 @@ from typing import Any, Dict, Optional, Union, Protocol
 from pathlib import Path
 from contextlib import contextmanager
 
-from rich.console import Console
-from rich.logging import RichHandler
 
 from .log_formatters import StructuredFormatter, ArmadilloRichHandler, LogContext
 

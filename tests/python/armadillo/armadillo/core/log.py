@@ -1,12 +1,9 @@
 """Structured logging system with JSON output and rich terminal formatting."""
 
-import sys
-import json
 import logging
 from typing import Any, Dict, Optional, Union, Protocol
 from pathlib import Path
 
-from rich.logging import RichHandler
 
 from .log_formatters import StructuredFormatter, ArmadilloRichHandler, _log_context
 

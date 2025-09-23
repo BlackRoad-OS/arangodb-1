@@ -1,5 +1,4 @@
 """Result analysis CLI commands - Phase 1 scaffold."""
-import sys
 from pathlib import Path
 from typing import List, Dict, Any
 import typer

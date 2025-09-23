@@ -4,8 +4,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Dict, Optional, Pattern, Callable, Any
-from pathlib import Path
-import pytest
 from pytest import Item as PytestItem
 from ..core.log import get_logger
 logger = get_logger(__name__)

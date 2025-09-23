@@ -6,7 +6,7 @@ import asyncio
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from contextlib import contextmanager, asynccontextmanager
-from .errors import TimeoutError, DeadlineExceededError
+from .errors import DeadlineExceededError
 from .log import get_logger
 logger = get_logger(__name__)
 

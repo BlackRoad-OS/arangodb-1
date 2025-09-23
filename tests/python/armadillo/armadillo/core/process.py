@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import psutil
-from .errors import ProcessError, ProcessStartupError, ProcessTimeoutError, ProcessCrashError, TimeoutError as ArmadilloTimeoutError
+from .errors import ProcessError, ProcessStartupError, ProcessTimeoutError, TimeoutError as ArmadilloTimeoutError
 from .time import clamp_timeout, timeout_scope
 from .log import get_logger, log_process_event
 from .types import ProcessStats

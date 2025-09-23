@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 import requests
 
 from ..core.types import (
-    DeploymentMode, ServerRole, ServerConfig, ClusterConfig,
-    HealthStatus, ServerStats, ArmadilloConfig
+    DeploymentMode, ServerRole, ClusterConfig,
+    HealthStatus, ServerStats
 )
 from ..core.errors import (
     ServerError, ClusterError, ServerStartupError, ServerShutdownError,
