@@ -135,14 +135,14 @@ class IsolatedLogManager:
         if self._json_handler:
             try:
                 self._json_handler.close()
-            except Exception:
+            except (OSError, RuntimeError):
                 pass  # Ignore handler close errors
             self._json_handler = None
 
         if self._console_handler:
             try:
                 self._console_handler.close()
-            except Exception:
+            except (OSError, RuntimeError):
                 pass  # Ignore handler close errors
             self._console_handler = None
 

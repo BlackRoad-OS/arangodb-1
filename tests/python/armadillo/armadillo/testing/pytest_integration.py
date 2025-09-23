@@ -93,7 +93,7 @@ def reset_test_state():
     # Reset global state after test
     try:
         reset_test_environment()
-    except Exception:
+    except (RuntimeError, OSError):
         # Ignore errors during cleanup - tests should still pass
         pass
 
@@ -108,7 +108,7 @@ def cleanup_test_session():
         factory = get_test_environment_factory()
         factory.cleanup_all()
         reset_test_environment()
-    except Exception:
+    except (RuntimeError, OSError):
         # Ignore errors during final cleanup
         pass
 

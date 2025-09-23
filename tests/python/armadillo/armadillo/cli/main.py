@@ -84,7 +84,7 @@ def config():
         table.add_row('Memory Profiling', str(current_config.monitoring.enable_memory_profiling))
         table.add_row('Network Monitoring', str(current_config.monitoring.enable_network_monitoring))
         console.print(table)
-    except Exception as e:
+    except (ValueError, OSError) as e:
         console.print(f'[red]Error getting configuration: {e}[/red]')
         raise typer.Exit(1)
 
@@ -95,7 +95,7 @@ def cli_main():
     except KeyboardInterrupt:
         console.print('\n[yellow]Interrupted by user[/yellow]')
         sys.exit(130)
-    except Exception as e:
+    except (RuntimeError, OSError, ValueError, ImportError) as e:
         logger.error('Unexpected error: %s', e)
         console.print(f'[red]Unexpected error: {e}[/red]')
         sys.exit(1)

@@ -114,7 +114,7 @@ class LogManager:
         for handler in root_logger.handlers[:]:
             try:
                 handler.close()
-            except Exception:
+            except (OSError, RuntimeError):
                 pass  # Ignore handler close errors
             root_logger.removeHandler(handler)
 
