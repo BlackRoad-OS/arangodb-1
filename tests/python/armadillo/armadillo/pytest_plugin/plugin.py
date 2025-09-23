@@ -126,13 +126,13 @@ class ArmadilloPlugin:
             try:
                 logger.debug('Stopping session server %s', server_id)
                 server.stop(timeout=30.0)
-            except Exception as e:
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error('Error stopping session server %s: %s', server_id, e)
         for deployment_id, manager in list(self._session_deployments.items()):
             try:
                 logger.debug('Stopping session deployment %s', deployment_id)
                 manager.destroy_all_servers(timeout=60.0)
-            except Exception as e:
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error('Error stopping session deployment %s: %s', deployment_id, e)
         clear_test_session()
         cleanup_work_dir()
@@ -195,7 +195,7 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
         try:
             server.stop(timeout=30.0)
             logger.debug('Session single server stopped successfully')
-        except Exception as e:
+        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.error('Error stopping session server: %s', e)
         finally:
             _plugin._session_servers.pop('single', None)
@@ -266,7 +266,7 @@ def arango_single_server_function() -> Generator[ArangoServer, None, None]:
         logger.info('Stopping function server %s', server_id)
         try:
             server.stop(timeout=15.0)
-        except Exception as e:
+        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.error('Error stopping function server %s: %s', server_id, e)
 
 @pytest.fixture(scope='session')
@@ -288,7 +288,7 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
         try:
             manager.shutdown_deployment(timeout=120.0)
             logger.debug('Cluster deployment %s stopped successfully', deployment_id)
-        except Exception as e:
+        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.error('Error stopping cluster deployment %s: %s', deployment_id, e)
         finally:
             _plugin._session_deployments.pop(deployment_id, None)
@@ -313,7 +313,7 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
         logger.info('Stopping function cluster deployment %s', deployment_id)
         try:
             manager.shutdown_deployment(timeout=60.0)
-        except Exception as e:
+        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.error('Error stopping function cluster %s: %s', deployment_id, e)
 
 @pytest.fixture
@@ -389,7 +389,7 @@ def pytest_sessionstart(session):
         else:
             _plugin._get_or_create_single_server()
             logger.info('Single server deployment ready for tests')
-    except Exception as e:
+    except (OSError, ProcessLookupError, RuntimeError, ImportError, AttributeError) as e:
         logger.error('Failed to start %s deployment: %s', deployment_mode.value, e)
         raise
     if not framework_config.compact_mode:
@@ -412,12 +412,12 @@ def pytest_sessionfinish(session, exitstatus):
         cleanup_work_dir()
         clear_test_session()
         logger.info('Armadillo pytest plugin cleanup completed')
-    except Exception as e:
+    except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
         logger.error('Error during pytest plugin cleanup: %s', e)
     finally:
         try:
             stop_watchdog()
-        except Exception as e:
+        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.debug('Error stopping watchdog: %s', e)
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
@@ -462,7 +462,7 @@ def _cleanup_all_deployments():
                     logger.info('Emergency shutdown of deployment: %s', deployment_id)
                     manager.shutdown_deployment(timeout=15.0)
                     logger.debug('Deployment %s shutdown completed', deployment_id)
-                except Exception as e:
+                except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                     logger.error('Failed emergency cleanup of deployment %s: %s', deployment_id, e)
                     try:
                         logger.warning('Attempting direct process cleanup for failed deployment %s', deployment_id)
@@ -473,9 +473,9 @@ def _cleanup_all_deployments():
                                         from ..core.process import _process_supervisor
                                         _process_supervisor.stop(server_id, graceful=False, timeout=5.0)
                                         logger.debug('Force killed server %s', server_id)
-                                except Exception as server_e:
+                                except (OSError, ProcessLookupError) as server_e:
                                     logger.error('Failed to force kill server %s: %s', server_id, server_e)
-                    except Exception as force_e:
+                    except (OSError, ProcessLookupError, AttributeError) as force_e:
                         logger.error('Failed direct process cleanup for deployment %s: %s', deployment_id, force_e)
         _plugin._session_deployments.clear()
         _plugin._session_orchestrators.clear()
@@ -495,7 +495,7 @@ def _cleanup_all_processes():
                     try:
                         _process_supervisor.stop(process_id, graceful=True, timeout=3.0)
                         logger.debug('Process %s terminated gracefully', process_id)
-                    except Exception as e:
+                    except (OSError, ProcessLookupError) as e:
                         logger.warning('Graceful termination failed for %s: %s', process_id, e)
                         graceful_failed.append(process_id)
                 if graceful_failed:
@@ -504,10 +504,10 @@ def _cleanup_all_processes():
                         try:
                             _process_supervisor.stop(process_id, graceful=False, timeout=2.0)
                             logger.debug('Process %s force killed', process_id)
-                        except Exception as e:
+                        except (OSError, ProcessLookupError) as e:
                             logger.error('CRITICAL: Failed to force kill process %s: %s', process_id, e)
                 logger.info('Emergency process cleanup completed')
-    except Exception as e:
+    except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
         logger.error('Error during emergency process cleanup: %s', e)
         import traceback
         logger.error('Stack trace: %s', traceback.format_exc())
@@ -521,9 +521,9 @@ def _emergency_cleanup():
         try:
             from ..core.process import kill_all_supervised_processes
             kill_all_supervised_processes()
-        except Exception as nuclear_e:
+        except (OSError, ProcessLookupError, AttributeError, RuntimeError) as nuclear_e:
             logger.error('Nuclear cleanup failed: %s', nuclear_e)
-    except Exception as e:
+    except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
         logger.error('Error in emergency cleanup: %s', e)
         import traceback
         logger.error('Emergency cleanup stack trace: %s', traceback.format_exc())
