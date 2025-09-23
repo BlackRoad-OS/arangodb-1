@@ -1,5 +1,6 @@
 """Test context system for isolated testing environments."""
 
+import shutil
 import tempfile
 import threading
 import atexit
@@ -162,8 +163,6 @@ class IsolatedTestContext:
                 pass
             if self._owns_work_dir and hasattr(self, "_temp_dir"):
                 try:
-                    import shutil
-
                     shutil.rmtree(self._temp_dir, ignore_errors=True)
                 except (OSError, PermissionError):
                     pass

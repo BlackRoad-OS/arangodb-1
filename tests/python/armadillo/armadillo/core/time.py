@@ -1,5 +1,6 @@
 """Layered timeout management with global deadlines, per-test timeouts, and watchdog enforcement."""
 
+import os
 import time
 import threading
 import signal
@@ -185,8 +186,6 @@ class TimeoutManager:
         except (ImportError, AttributeError, OSError):
             pass
         try:
-            import os
-
             os.kill(os.getpid(), signal.SIGTERM)
             time.sleep(2.0)
             os.kill(os.getpid(), signal.SIGKILL)

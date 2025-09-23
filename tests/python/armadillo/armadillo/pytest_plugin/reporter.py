@@ -3,6 +3,7 @@
 Provides detailed verbose output with timestamps, test phases, and comprehensive timing information.
 """
 
+import os
 import sys
 import time
 from datetime import datetime
@@ -29,8 +30,6 @@ class Colors:
     @staticmethod
     def is_color_supported():
         """Check if terminal supports colors."""
-        import os
-
         return hasattr(os.sys.stderr, "isatty") and os.sys.stderr.isatty()
 
 

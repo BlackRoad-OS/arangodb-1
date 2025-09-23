@@ -1,5 +1,6 @@
 """Test execution CLI commands."""
 
+import os
 import sys
 import subprocess
 from pathlib import Path
@@ -8,7 +9,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from ...core.config import get_config
-from ...core.log import get_logger
+from ...core.log import get_logger, LogManager
+from ...core.types import DeploymentMode
 
 console = Console()
 logger = get_logger(__name__)
@@ -72,10 +74,7 @@ def run(
     """Run tests with ArangoDB instances."""
     try:
         config = get_config()
-        import os
-        from ...core.log import LogManager
         from armadillo.core.config import load_config
-        from armadillo.core.types import DeploymentMode
 
         deployment_mode = (
             DeploymentMode.CLUSTER if cluster else DeploymentMode.SINGLE_SERVER

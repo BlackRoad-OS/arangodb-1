@@ -1,5 +1,6 @@
 """Result analysis CLI commands - Phase 1 scaffold."""
 
+import json
 from pathlib import Path
 from typing import List, Dict, Any
 import typer
@@ -192,6 +193,4 @@ def _display_plain_summary(results: Dict[str, Any]) -> None:
 
 def _display_json_summary(results: Dict[str, Any]) -> None:
     """Display JSON summary."""
-    import json
-
     print(json.dumps(results, indent=2, default=str))

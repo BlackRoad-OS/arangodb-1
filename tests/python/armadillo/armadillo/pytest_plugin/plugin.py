@@ -1,8 +1,10 @@
 """Main pytest plugin for Armadillo framework integration."""
 
-import pytest
 import asyncio
 import atexit
+import logging
+import pytest
+import traceback
 from typing import Generator, Optional, Dict, Any, List
 from ..core.config import load_config, get_config
 from ..core.log import (
@@ -35,8 +37,6 @@ class ArmadilloPlugin:
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
-        import logging
-
         framework_config = get_config()
         if framework_config.log_level != "DEBUG":
             logging.getLogger("faker").setLevel(logging.WARNING)
@@ -670,8 +670,6 @@ def _cleanup_all_processes():
                 logger.info("Emergency process cleanup completed")
     except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
         logger.error("Error during emergency process cleanup: %s", e)
-        import traceback
-
         logger.error("Stack trace: %s", traceback.format_exc())
 
 
@@ -689,6 +687,4 @@ def _emergency_cleanup():
             logger.error("Nuclear cleanup failed: %s", nuclear_e)
     except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
         logger.error("Error in emergency cleanup: %s", e)
-        import traceback
-
         logger.error("Emergency cleanup stack trace: %s", traceback.format_exc())
