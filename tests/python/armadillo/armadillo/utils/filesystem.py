@@ -237,7 +237,6 @@ def set_test_session_id(session_id: Optional[str]=None) -> str:
         session_id = str(uuid.uuid4())[:8]
     _test_session_id = session_id
     logger.info('Set test session ID: %s', session_id)
-    global _filesystem_service
     _filesystem_service._work_dir = None
     return session_id
 
@@ -249,6 +248,5 @@ def clear_test_session() -> None:
     """Clear the test session ID and reset to shared directories."""
     global _test_session_id
     _test_session_id = None
-    global _filesystem_service
     _filesystem_service._work_dir = None
     logger.info('Cleared test session ID')

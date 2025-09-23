@@ -285,20 +285,6 @@ class ProcessSupervisor:
         finally:
             self._cleanup_process(process_id)
 
-    def _cleanup_process(self, process_id: str) -> None:
-        """Clean up process resources and tracking."""
-        try:
-            if process_id in self._processes:
-                self._processes.pop(process_id)
-                logger.debug('Removed process %s from tracking', process_id)
-            if process_id in self._process_info:
-                self._process_info.pop(process_id)
-                logger.debug('Removed process info for %s', process_id)
-            if process_id in self._streaming_threads:
-                thread = self._streaming_threads.pop(process_id)
-                logger.debug('Cleaned up streaming thread for %s', process_id)
-        except (KeyError, RuntimeError, AttributeError) as e:
-            logger.error('Error cleaning up process %s: %s', process_id, e)
 
     def is_running(self, process_id: str) -> bool:
         """Check if process is running."""
@@ -421,14 +407,16 @@ class ProcessSupervisor:
 
     def _cleanup_process(self, process_id: str) -> None:
         """Clean up process resources."""
-        self._processes.pop(process_id, None)
-        self._process_info.pop(process_id, None)
+        if self._processes.pop(process_id, None):
+            logger.debug('Removed process %s from tracking', process_id)
+        if self._process_info.pop(process_id, None):
+            logger.debug('Removed process info for %s', process_id)
         streaming_thread = self._streaming_threads.pop(process_id, None)
-        if streaming_thread and streaming_thread.is_alive():
-            pass
+        if streaming_thread:
+            logger.debug('Cleaned up streaming thread for %s', process_id)
         monitor_thread = self._monitoring_threads.pop(process_id, None)
-        if monitor_thread and monitor_thread.is_alive():
-            pass
+        if monitor_thread:
+            logger.debug('Cleaned up monitoring thread for %s', process_id)
 _process_executor = ProcessExecutor()
 _process_supervisor = ProcessSupervisor()
 
