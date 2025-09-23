@@ -1,2 +1,1 @@
 """Instance management components."""
-

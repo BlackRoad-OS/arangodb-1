@@ -7,8 +7,15 @@ from pathlib import Path
 from unittest.mock import patch, mock_open, Mock
 
 from armadillo.utils.filesystem import (
-    FilesystemService, work_dir, server_dir, temp_dir,
-    atomic_write, read_text, read_bytes, ensure_dir, safe_remove
+    FilesystemService,
+    work_dir,
+    server_dir,
+    temp_dir,
+    atomic_write,
+    read_text,
+    read_bytes,
+    ensure_dir,
+    safe_remove,
 )
 from armadillo.core.errors import FilesystemError, PathError, AtomicWriteError
 
@@ -26,7 +33,7 @@ class TestFilesystemService:
         """Test work directory creation and caching."""
         service = FilesystemService()
 
-        with patch('armadillo.utils.filesystem.derive_sub_tmp', return_value=temp_dir):
+        with patch("armadillo.utils.filesystem.derive_sub_tmp", return_value=temp_dir):
             work_dir1 = service.work_dir()
             work_dir2 = service.work_dir()
 
@@ -37,7 +44,7 @@ class TestFilesystemService:
         """Test work directory from configuration."""
         service = FilesystemService()
 
-        with patch('armadillo.utils.filesystem.get_config') as mock_config:
+        with patch("armadillo.utils.filesystem.get_config") as mock_config:
             mock_config.return_value.work_dir = temp_dir
 
             work_dir = service.work_dir()
@@ -49,7 +56,7 @@ class TestFilesystemService:
         """Test server directory creation."""
         service = FilesystemService()
 
-        with patch.object(service, 'work_dir', return_value=temp_dir):
+        with patch.object(service, "work_dir", return_value=temp_dir):
             server_dir = service.server_dir("test_server")
 
             assert server_dir == temp_dir / "servers" / "test_server"
@@ -59,8 +66,8 @@ class TestFilesystemService:
         """Test temporary directory creation."""
         service = FilesystemService()
 
-        with patch('armadillo.utils.filesystem.derive_sub_tmp', return_value=temp_dir):
-            with patch('tempfile.mkdtemp') as mock_mkdtemp:
+        with patch("armadillo.utils.filesystem.derive_sub_tmp", return_value=temp_dir):
+            with patch("tempfile.mkdtemp") as mock_mkdtemp:
                 mock_mkdtemp.return_value = str(temp_dir / "temp_123")
 
                 result = service.temp_dir("test")
@@ -102,7 +109,7 @@ class TestFilesystemService:
         assert target_file.read_text() == content
         assert target_file.parent.exists()
 
-    @patch('tempfile.NamedTemporaryFile')
+    @patch("tempfile.NamedTemporaryFile")
     def test_atomic_write_failure_cleanup(self, mock_temp_file, temp_dir):
         """Test atomic write cleans up on failure."""
         service = FilesystemService()
@@ -124,7 +131,7 @@ class TestFilesystemService:
         test_file = temp_dir / "test.txt"
         content = "Test content with üñíçödé"
 
-        test_file.write_text(content, encoding='utf-8')
+        test_file.write_text(content, encoding="utf-8")
 
         result = service.read_text(test_file)
         assert result == content
@@ -143,7 +150,9 @@ class TestFilesystemService:
         test_file = temp_dir / "restricted.txt"
         test_file.write_text("content")
 
-        with patch('pathlib.Path.read_text', side_effect=PermissionError("Access denied")):
+        with patch(
+            "pathlib.Path.read_text", side_effect=PermissionError("Access denied")
+        ):
             with pytest.raises(FilesystemError, match="Permission denied"):
                 service.read_text(test_file)
 
@@ -153,7 +162,7 @@ class TestFilesystemService:
         test_file = temp_dir / "binary.txt"
 
         # Write binary data that can't be decoded as UTF-8
-        test_file.write_bytes(b'\xff\xfe\x00\x00')
+        test_file.write_bytes(b"\xff\xfe\x00\x00")
 
         with pytest.raises(FilesystemError, match="Encoding error"):
             service.read_text(test_file)
@@ -162,7 +171,7 @@ class TestFilesystemService:
         """Test successful binary file reading."""
         service = FilesystemService()
         test_file = temp_dir / "test.bin"
-        content = b'\x00\x01\x02\x03\xff\xfe\xfd'
+        content = b"\x00\x01\x02\x03\xff\xfe\xfd"
 
         test_file.write_bytes(content)
 
@@ -203,7 +212,7 @@ class TestFilesystemService:
         """Test ensure directory with permission error."""
         service = FilesystemService()
 
-        with patch('pathlib.Path.mkdir', side_effect=PermissionError("Access denied")):
+        with patch("pathlib.Path.mkdir", side_effect=PermissionError("Access denied")):
             with pytest.raises(FilesystemError, match="Permission denied"):
                 service.ensure_dir(temp_dir / "restricted")
 
@@ -245,7 +254,7 @@ class TestFilesystemService:
         test_file = temp_dir / "test.txt"
         test_file.write_text("content")
 
-        with patch('pathlib.Path.unlink', side_effect=OSError("Permission denied")):
+        with patch("pathlib.Path.unlink", side_effect=OSError("Permission denied")):
             result = service.safe_remove(test_file)
 
             assert result is False
@@ -287,7 +296,7 @@ class TestFilesystemService:
 
         src_file.write_text("content")
 
-        with patch('shutil.copy2') as mock_copy2:
+        with patch("shutil.copy2") as mock_copy2:
             service.copy_file(src_file, dst_file, preserve_metadata=True)
             mock_copy2.assert_called_once_with(src_file, dst_file)
 
@@ -299,7 +308,7 @@ class TestFilesystemService:
 
         src_file.write_text("content")
 
-        with patch('shutil.copy') as mock_copy:
+        with patch("shutil.copy") as mock_copy:
             service.copy_file(src_file, dst_file, preserve_metadata=False)
             mock_copy.assert_called_once_with(src_file, dst_file)
 
@@ -322,7 +331,7 @@ class TestFilesystemService:
 
         size = service.get_size(test_file)
 
-        assert size == len(content.encode('utf-8'))
+        assert size == len(content.encode("utf-8"))
 
     def test_get_size_file_not_found(self, temp_dir):
         """Test getting size of non-existent file."""
@@ -366,14 +375,16 @@ class TestFilesystemService:
         service = FilesystemService()
         nonexistent_dir = temp_dir / "nonexistent"
 
-        with pytest.raises(FilesystemError, match="Error listing files|Directory not found"):
+        with pytest.raises(
+            FilesystemError, match="Error listing files|Directory not found"
+        ):
             service.list_files(nonexistent_dir)
 
     def test_temp_file_context_manager(self, temp_dir):
         """Test temporary file context manager."""
         service = FilesystemService()
 
-        with patch.object(service, 'temp_dir', return_value=temp_dir):
+        with patch.object(service, "temp_dir", return_value=temp_dir):
             with service.temp_file(suffix=".txt", prefix="test") as temp_file:
                 assert temp_file.exists()
                 assert temp_file.suffix == ".txt"
@@ -400,7 +411,7 @@ class TestGlobalFilesystemFunctions:
 
     def test_global_work_dir(self):
         """Test global work_dir function."""
-        with patch('armadillo.utils.filesystem._filesystem_service') as mock_service:
+        with patch("armadillo.utils.filesystem._filesystem_service") as mock_service:
             mock_service.work_dir.return_value = Path("/tmp/work")
 
             result = work_dir()
@@ -410,7 +421,7 @@ class TestGlobalFilesystemFunctions:
 
     def test_global_server_dir(self):
         """Test global server_dir function."""
-        with patch('armadillo.utils.filesystem._filesystem_service') as mock_service:
+        with patch("armadillo.utils.filesystem._filesystem_service") as mock_service:
             mock_service.server_dir.return_value = Path("/tmp/servers/test")
 
             result = server_dir("test")
@@ -420,7 +431,7 @@ class TestGlobalFilesystemFunctions:
 
     def test_global_temp_dir(self):
         """Test global temp_dir function."""
-        with patch('armadillo.utils.filesystem._filesystem_service') as mock_service:
+        with patch("armadillo.utils.filesystem._filesystem_service") as mock_service:
             mock_service.temp_dir.return_value = Path("/tmp/temp123")
 
             result = temp_dir("prefix")

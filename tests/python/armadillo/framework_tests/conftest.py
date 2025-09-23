@@ -29,7 +29,7 @@ def mock_config():
         test_timeout=60.0,
         temp_dir=Path("/tmp/test_armadillo"),
         keep_instances_on_failure=False,
-        verbose=0
+        verbose=0,
     )
 
 
@@ -37,13 +37,13 @@ def mock_config():
 def isolated_environment(temp_dir):
     """Provide an isolated environment for tests."""
     # Mock environment variables
-    with patch.dict('os.environ', {}, clear=True):
+    with patch.dict("os.environ", {}, clear=True):
         # Set test temp directory
-        with patch('armadillo.core.config.get_config') as mock_get_config:
+        with patch("armadillo.core.config.get_config") as mock_get_config:
             mock_get_config.return_value = ArmadilloConfig(
                 deployment_mode=DeploymentMode.SINGLE_SERVER,
                 temp_dir=temp_dir,
-                test_timeout=30.0
+                test_timeout=30.0,
             )
             yield temp_dir
 
@@ -58,14 +58,14 @@ def mock_process():
     mock_popen.communicate.return_value = ("stdout", "stderr")
     mock_popen.wait.return_value = 0
 
-    with patch('subprocess.Popen', return_value=mock_popen):
+    with patch("subprocess.Popen", return_value=mock_popen):
         yield mock_popen
 
 
 @pytest.fixture
 def mock_logger():
     """Mock logger for testing."""
-    with patch('armadillo.core.log.get_logger') as mock_get_logger:
+    with patch("armadillo.core.log.get_logger") as mock_get_logger:
         logger = Mock()
         mock_get_logger.return_value = logger
         yield logger
@@ -87,7 +87,7 @@ def reset_global_state():
         test_timeout=30.0,
         log_level="WARNING",  # Reduce noise
         compact_mode=False,
-        bin_dir=None  # Skip build detection
+        bin_dir=None,  # Skip build detection
     )
     config._config_manager._config = test_config
 

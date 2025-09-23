@@ -38,12 +38,14 @@ class IsolatedLogManager:
         self._context = LogContext()
         self._lock = threading.RLock()
 
-    def configure(self,
-                  level: Union[int, str] = logging.INFO,
-                  log_file: Optional[Path] = None,
-                  enable_json: bool = True,
-                  enable_console: bool = True,
-                  console_level: Optional[Union[int, str]] = None) -> None:
+    def configure(
+        self,
+        level: Union[int, str] = logging.INFO,
+        log_file: Optional[Path] = None,
+        enable_json: bool = True,
+        enable_console: bool = True,
+        console_level: Optional[Union[int, str]] = None,
+    ) -> None:
         """Configure this logging instance."""
         with self._lock:
             # Allow reconfiguration for test isolation
@@ -56,16 +58,16 @@ class IsolatedLogManager:
                 self._log_file.parent.mkdir(parents=True, exist_ok=True)
 
                 self._json_handler = logging.FileHandler(self._log_file)
-                self._json_handler.setFormatter(StructuredFormatter(include_context=True))
+                self._json_handler.setFormatter(
+                    StructuredFormatter(include_context=True)
+                )
                 self._json_handler.setLevel(level)
 
             # Configure console logging
             if enable_console:
                 console_level = console_level or level
                 self._console_handler = ArmadilloRichHandler(
-                    show_time=True,
-                    show_path=False,
-                    markup=True
+                    show_time=True, show_path=False, markup=True
                 )
                 self._console_handler.setLevel(console_level)
 
@@ -148,13 +150,15 @@ class IsolatedLogManager:
 class StandardLoggerFactory:
     """Standard implementation of LoggerFactory using IsolatedLogManager."""
 
-    def __init__(self,
-                 namespace: Optional[str] = None,
-                 level: Union[int, str] = logging.INFO,
-                 log_file: Optional[Path] = None,
-                 enable_json: bool = True,
-                 enable_console: bool = True,
-                 console_level: Optional[Union[int, str]] = None) -> None:
+    def __init__(
+        self,
+        namespace: Optional[str] = None,
+        level: Union[int, str] = logging.INFO,
+        log_file: Optional[Path] = None,
+        enable_json: bool = True,
+        enable_console: bool = True,
+        console_level: Optional[Union[int, str]] = None,
+    ) -> None:
         """Initialize standard logger factory.
 
         Args:
@@ -171,7 +175,7 @@ class StandardLoggerFactory:
             log_file=log_file,
             enable_json=enable_json,
             enable_console=enable_console,
-            console_level=console_level
+            console_level=console_level,
         )
 
     def create_logger(self, name: str) -> logging.Logger:
@@ -205,31 +209,37 @@ class StandardLoggerFactory:
 # Utility functions for logging events with factory-created loggers
 def log_event(logger: logging.Logger, event_type: str, message: str, **kwargs) -> None:
     """Log a structured event with context."""
-    logger.info(message, extra={'event_type': event_type, **kwargs})
+    logger.info(message, extra={"event_type": event_type, **kwargs})
 
 
-def log_process_event(logger: logging.Logger, event: str, pid: Optional[int] = None, **kwargs) -> None:
+def log_process_event(
+    logger: logging.Logger, event: str, pid: Optional[int] = None, **kwargs
+) -> None:
     """Log a process-related event."""
-    extra = {'event_type': 'process', 'process_event': event}
+    extra = {"event_type": "process", "process_event": event}
     if pid is not None:
-        extra['pid'] = pid
+        extra["pid"] = pid
     extra.update(kwargs)
     logger.info("Process %s", event, extra=extra)
 
 
-def log_server_event(logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs) -> None:
+def log_server_event(
+    logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs
+) -> None:
     """Log a server-related event."""
-    extra = {'event_type': 'server', 'server_event': event}
+    extra = {"event_type": "server", "server_event": event}
     if server_id is not None:
-        extra['server_id'] = server_id
+        extra["server_id"] = server_id
     extra.update(kwargs)
     logger.info("Server %s", event, extra=extra)
 
 
-def log_test_event(logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs) -> None:
+def log_test_event(
+    logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs
+) -> None:
     """Log a test-related event."""
-    extra = {'event_type': 'test', 'test_event': event}
+    extra = {"event_type": "test", "test_event": event}
     if test_name is not None:
-        extra['test_name'] = test_name
+        extra["test_name"] = test_name
     extra.update(kwargs)
     logger.info("Test %s", event, extra=extra)

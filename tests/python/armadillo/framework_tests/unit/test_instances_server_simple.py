@@ -18,9 +18,7 @@ class TestArangoServerBasic:
     def test_server_can_be_created(self):
         """Test ArangoServer can be instantiated."""
         server = ArangoServer(
-            server_id="test_server",
-            role=ServerRole.SINGLE,
-            port=8529
+            server_id="test_server", role=ServerRole.SINGLE, port=8529
         )
 
         assert server is not None
@@ -31,14 +29,15 @@ class TestArangoServerBasic:
 
     def test_server_with_different_roles(self):
         """Test server creation with different roles."""
-        roles = [ServerRole.SINGLE, ServerRole.COORDINATOR, ServerRole.DBSERVER, ServerRole.AGENT]
+        roles = [
+            ServerRole.SINGLE,
+            ServerRole.COORDINATOR,
+            ServerRole.DBSERVER,
+            ServerRole.AGENT,
+        ]
 
         for role in roles:
-            server = ArangoServer(
-                server_id=f"test_{role.value}",
-                role=role,
-                port=8530
-            )
+            server = ArangoServer(server_id=f"test_{role.value}", role=role, port=8530)
 
             assert server.role == role
             assert server.endpoint == "http://127.0.0.1:8530"
@@ -62,8 +61,22 @@ class TestArangoServerBasic:
         mock_port_allocator.allocate_port.return_value = 8529
         mock_port_allocator.release_port = Mock()
 
-        server1 = ArangoServer("test1", role=ServerRole.SINGLE, port=8531, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
-        server2 = ArangoServer("test2", role=ServerRole.SINGLE, port=8532, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
+        server1 = ArangoServer(
+            "test1",
+            role=ServerRole.SINGLE,
+            port=8531,
+            config_provider=mock_config,
+            logger=mock_logger,
+            port_allocator=mock_port_allocator,
+        )
+        server2 = ArangoServer(
+            "test2",
+            role=ServerRole.SINGLE,
+            port=8532,
+            config_provider=mock_config,
+            logger=mock_logger,
+            port_allocator=mock_port_allocator,
+        )
 
         assert server1.endpoint == "http://127.0.0.1:8531"
         assert server2.endpoint == "http://127.0.0.1:8532"
@@ -87,7 +100,14 @@ class TestArangoServerBasic:
         mock_port_allocator.allocate_port.return_value = 8529
         mock_port_allocator.release_port = Mock()
 
-        server = ArangoServer("test", role=ServerRole.SINGLE, port=8529, config_provider=mock_config, logger=mock_logger, port_allocator=mock_port_allocator)
+        server = ArangoServer(
+            "test",
+            role=ServerRole.SINGLE,
+            port=8529,
+            config_provider=mock_config,
+            logger=mock_logger,
+            port_allocator=mock_port_allocator,
+        )
 
         assert server.is_running() is False
 
@@ -116,7 +136,10 @@ class TestArangoServerLifecycle:
 
         # Create mock command builder
         self.mock_command_builder = Mock()
-        self.mock_command_builder.build_command.return_value = ["/fake/bin/arangod", "--test-arg"]
+        self.mock_command_builder.build_command.return_value = [
+            "/fake/bin/arangod",
+            "--test-arg",
+        ]
         self.mock_command_builder.get_repository_root.return_value = Path("/fake/repo")
 
         # Create mock health checker
@@ -131,12 +154,12 @@ class TestArangoServerLifecycle:
             logger=self.mock_logger,
             port_allocator=self.mock_port_allocator,
             command_builder=self.mock_command_builder,
-            health_checker=self.mock_health_checker
+            health_checker=self.mock_health_checker,
         )
 
-    @patch('armadillo.instances.server.start_supervised_process')
-    @patch('armadillo.instances.server.is_process_running', return_value=True)
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch("armadillo.instances.server.start_supervised_process")
+    @patch("armadillo.instances.server.is_process_running", return_value=True)
+    @patch("pathlib.Path.exists", return_value=True)
     def test_start_server_calls_process(self, mock_exists, mock_is_running, mock_start):
         """Test server start calls process supervisor."""
         mock_start.return_value = Mock(pid=12345)
@@ -152,13 +175,20 @@ class TestArangoServerLifecycle:
         process_id = call_args[0][0]
         assert "test_server" in process_id or "arangod" in process_id
 
-    @patch('armadillo.instances.server.stop_supervised_process')
+    @patch("armadillo.instances.server.stop_supervised_process")
     def test_stop_server_calls_process(self, mock_stop):
         """Test server stop calls process supervisor."""
         # Set up server as if it was started
         from armadillo.core.process import ProcessInfo
         from pathlib import Path
-        self.server._runtime.process_info = ProcessInfo(pid=12345, command=["test"], start_time=123.0, working_dir=Path("/tmp"), env={})
+
+        self.server._runtime.process_info = ProcessInfo(
+            pid=12345,
+            command=["test"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
         self.server._runtime.is_running = True
 
         self.server.stop()
@@ -171,7 +201,7 @@ class TestArangoServerLifecycle:
         # Should not crash
         assert self.server._runtime.process_info is None
 
-    @patch('armadillo.instances.server.is_process_running')
+    @patch("armadillo.instances.server.is_process_running")
     def test_is_running_with_process_id(self, mock_is_running):
         """Test is_running delegates to process supervisor."""
         mock_is_running.return_value = True
@@ -207,15 +237,22 @@ class TestArangoServerConfiguration:
 
         # Use real command builder for configuration tests
         from armadillo.instances.command_builder import ServerCommandBuilder
-        command_builder = ServerCommandBuilder(config_provider=mock_config, logger=mock_logger)
 
-        self.server = ArangoServer("test", role=ServerRole.SINGLE, port=8529,
-                                  config_provider=mock_config,
-                                  logger=mock_logger,
-                                  port_allocator=mock_port_allocator,
-                                  command_builder=command_builder)
+        command_builder = ServerCommandBuilder(
+            config_provider=mock_config, logger=mock_logger
+        )
 
-    @patch('pathlib.Path.exists', return_value=True)
+        self.server = ArangoServer(
+            "test",
+            role=ServerRole.SINGLE,
+            port=8529,
+            config_provider=mock_config,
+            logger=mock_logger,
+            port_allocator=mock_port_allocator,
+            command_builder=command_builder,
+        )
+
+    @patch("pathlib.Path.exists", return_value=True)
     def test_build_command_returns_list(self, mock_exists):
         """Test command building returns a list."""
         command = self.server._build_command()
@@ -225,7 +262,7 @@ class TestArangoServerConfiguration:
         # First element should be the arangod executable
         assert "arangod" in command[0]
 
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch("pathlib.Path.exists", return_value=True)
     def test_build_command_contains_basic_params(self, mock_exists):
         """Test command contains basic parameters."""
         command = self.server._build_command()
@@ -264,38 +301,54 @@ class TestArangoServerErrorHandling:
 
         # Create mock command builder
         mock_command_builder = Mock()
-        mock_command_builder.build_command.return_value = ["/fake/bin/arangod", "--test-arg"]
+        mock_command_builder.build_command.return_value = [
+            "/fake/bin/arangod",
+            "--test-arg",
+        ]
         mock_command_builder.get_repository_root.return_value = Path("/fake/repo")
 
         # Create mock health checker
         mock_health_checker = Mock()
         mock_health_checker.check_readiness.return_value = True
 
-        self.server = ArangoServer("test", role=ServerRole.SINGLE, port=8529,
-                                  config_provider=mock_config,
-                                  logger=mock_logger,
-                                  port_allocator=mock_port_allocator,
-                                  command_builder=mock_command_builder,
-                                  health_checker=mock_health_checker)
+        self.server = ArangoServer(
+            "test",
+            role=ServerRole.SINGLE,
+            port=8529,
+            config_provider=mock_config,
+            logger=mock_logger,
+            port_allocator=mock_port_allocator,
+            command_builder=mock_command_builder,
+            health_checker=mock_health_checker,
+        )
 
-    @patch('armadillo.instances.server.start_supervised_process')
+    @patch("armadillo.instances.server.start_supervised_process")
     def test_start_process_failure(self, mock_start):
         """Test handling of process start failure."""
         from armadillo.core.errors import ProcessStartupError, ServerStartupError
+
         mock_start.side_effect = OSError("Failed to start")
 
         with pytest.raises(ServerStartupError):
             self.server.start()
 
-    @patch('armadillo.instances.server.stop_supervised_process')
+    @patch("armadillo.instances.server.stop_supervised_process")
     def test_stop_process_failure_handled_gracefully(self, mock_stop):
         """Test stop handles process failure gracefully."""
         from armadillo.core.errors import ProcessError, ServerShutdownError
+
         mock_stop.side_effect = OSError("Failed to stop")
 
         from armadillo.core.process import ProcessInfo
         from pathlib import Path
-        self.server._runtime.process_info = ProcessInfo(pid=12345, command=["test"], start_time=123.0, working_dir=Path("/tmp"), env={})
+
+        self.server._runtime.process_info = ProcessInfo(
+            pid=12345,
+            command=["test"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
         self.server._runtime.is_running = True
 
         # Should raise ServerShutdownError but still clean up
@@ -316,11 +369,13 @@ class TestArangoServerErrorHandling:
 class TestArangoServerIntegration:
     """Test basic integration scenarios."""
 
-    @patch('armadillo.instances.server.start_supervised_process')
-    @patch('armadillo.instances.server.stop_supervised_process')
-    @patch('armadillo.instances.server.is_process_running')
-    @patch('pathlib.Path.exists', return_value=True)
-    def test_full_lifecycle_workflow(self, mock_exists, mock_is_running, mock_stop, mock_start):
+    @patch("armadillo.instances.server.start_supervised_process")
+    @patch("armadillo.instances.server.stop_supervised_process")
+    @patch("armadillo.instances.server.is_process_running")
+    @patch("pathlib.Path.exists", return_value=True)
+    def test_full_lifecycle_workflow(
+        self, mock_exists, mock_is_running, mock_stop, mock_start
+    ):
         """Test complete start->check->stop workflow."""
         # Create mock config provider
         mock_config = Mock()
@@ -334,7 +389,13 @@ class TestArangoServerIntegration:
         # Create mock logger
         mock_logger = Mock()
 
-        server = ArangoServer("lifecycle_test", role=ServerRole.SINGLE, port=8529, config_provider=mock_config, logger=mock_logger)
+        server = ArangoServer(
+            "lifecycle_test",
+            role=ServerRole.SINGLE,
+            port=8529,
+            config_provider=mock_config,
+            logger=mock_logger,
+        )
 
         # Mock successful start
         mock_start.return_value = Mock(pid=12345)

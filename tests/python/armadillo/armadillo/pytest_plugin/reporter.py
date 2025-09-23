@@ -13,22 +13,24 @@ from ..core.log import get_logger
 
 logger = get_logger(__name__)
 
+
 # ANSI color codes for output formatting
 class Colors:
-    GREEN = '\033[32m'
-    RED = '\033[31m'
-    BLUE = '\033[34m'
-    CYAN = '\033[36m'
-    YELLOW = '\033[33m'
-    MAGENTA = '\033[35m'
-    WHITE = '\033[37m'
-    BOLD = '\033[1m'
-    RESET = '\033[0m'
+    GREEN = "\033[32m"
+    RED = "\033[31m"
+    BLUE = "\033[34m"
+    CYAN = "\033[36m"
+    YELLOW = "\033[33m"
+    MAGENTA = "\033[35m"
+    WHITE = "\033[37m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
 
     @staticmethod
     def is_color_supported():
         """Check if terminal supports colors."""
         import os
+
         return hasattr(os.sys.stderr, "isatty") and os.sys.stderr.isatty()
 
 
@@ -90,7 +92,9 @@ class ArmadilloReporter:
                 test_name = test_name.replace("test_", "test_testing_")
                 test_name = test_name.replace("_endpoint", "_cmd")
                 test_name = test_name.replace("_wrong", "_wrong")
-                test_name = test_name.replace("async_request_statistics_counting", "async_requests_")
+                test_name = test_name.replace(
+                    "async_request_statistics_counting", "async_requests_"
+                )
             return test_name
         return nodeid.split("::")[-1]
 
@@ -112,16 +116,16 @@ class ArmadilloReporter:
         # Initialize test timing
         if test_name not in self.test_times:
             self.test_times[test_name] = {
-                'setup': 0.0,
-                'call': 0.0,
-                'teardown': 0.0,
-                'start': time.time()
+                "setup": 0.0,
+                "call": 0.0,
+                "teardown": 0.0,
+                "start": time.time(),
             }
 
         # Print [ RUN ] message here - this hook may not be captured like pytest_runtest_call
         run_msg = f"{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
         try:
-            with open('/dev/tty', 'w') as tty:
+            with open("/dev/tty", "w") as tty:
                 tty.write(run_msg)
                 tty.flush()
         except (OSError, IOError):
@@ -133,18 +137,18 @@ class ArmadilloReporter:
         """Handle test setup start."""
         test_name = self._get_test_name(item.nodeid)
         if test_name in self.test_times:
-            self.test_times[test_name]['setup_start'] = time.time()
+            self.test_times[test_name]["setup_start"] = time.time()
 
     def pytest_runtest_call(self, item):
         """Handle test call start."""
         test_name = self._get_test_name(item.nodeid)
         if test_name in self.test_times:
             # Calculate setup time
-            if 'setup_start' in self.test_times[test_name]:
-                self.test_times[test_name]['setup'] = (
-                    time.time() - self.test_times[test_name]['setup_start']
+            if "setup_start" in self.test_times[test_name]:
+                self.test_times[test_name]["setup"] = (
+                    time.time() - self.test_times[test_name]["setup_start"]
                 ) * 1000  # Convert to milliseconds
-            self.test_times[test_name]['call_start'] = time.time()
+            self.test_times[test_name]["call_start"] = time.time()
 
         # [ RUN ] message now printed in pytest_runtest_logstart to avoid capture issues
 
@@ -153,11 +157,11 @@ class ArmadilloReporter:
         test_name = self._get_test_name(item.nodeid)
         if test_name in self.test_times:
             # Calculate call time
-            if 'call_start' in self.test_times[test_name]:
-                self.test_times[test_name]['call'] = (
-                    time.time() - self.test_times[test_name]['call_start']
+            if "call_start" in self.test_times[test_name]:
+                self.test_times[test_name]["call"] = (
+                    time.time() - self.test_times[test_name]["call_start"]
                 ) * 1000  # Convert to milliseconds
-            self.test_times[test_name]['teardown_start'] = time.time()
+            self.test_times[test_name]["teardown_start"] = time.time()
 
     def pytest_runtest_logreport(self, report: TestReport):
         """Handle test report."""
@@ -166,32 +170,46 @@ class ArmadilloReporter:
             suite_name = self._get_suite_name(report.nodeid)
 
             # Calculate teardown time
-            if test_name in self.test_times and 'teardown_start' in self.test_times[test_name]:
-                self.test_times[test_name]['teardown'] = (
-                    time.time() - self.test_times[test_name]['teardown_start']
+            if (
+                test_name in self.test_times
+                and "teardown_start" in self.test_times[test_name]
+            ):
+                self.test_times[test_name]["teardown"] = (
+                    time.time() - self.test_times[test_name]["teardown_start"]
                 ) * 1000  # Convert to milliseconds
 
             # Print test result
             if report.outcome == "passed":
                 self.passed_tests += 1
-                setup_time = int(self.test_times.get(test_name, {}).get('setup', 0))
-                call_time = int(self.test_times.get(test_name, {}).get('call', 0))
-                teardown_time = int(self.test_times.get(test_name, {}).get('teardown', 0))
+                setup_time = int(self.test_times.get(test_name, {}).get("setup", 0))
+                call_time = int(self.test_times.get(test_name, {}).get("call", 0))
+                teardown_time = int(
+                    self.test_times.get(test_name, {}).get("teardown", 0)
+                )
 
                 # Use sys.stderr to bypass pytest's output capture
-                sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
-                               f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: {teardown_time}ms)\n")
+                sys.stderr.write(
+                    f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
+                    f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: {teardown_time}ms)\n"
+                )
                 sys.stderr.flush()
             else:
                 self.failed_tests += 1
-                sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[     FAILED ]', Colors.RED)} {test_name}\n")
+                sys.stderr.write(
+                    f"{self._get_timestamp()} {self._colorize('[     FAILED ]', Colors.RED)} {test_name}\n"
+                )
                 sys.stderr.flush()
 
-            self.suite_test_counts[suite_name] = self.suite_test_counts.get(suite_name, 0) + 1
+            self.suite_test_counts[suite_name] = (
+                self.suite_test_counts.get(suite_name, 0) + 1
+            )
             self.total_tests += 1
 
             # Check if this was the last test - if so, print summary immediately
-            if self.total_tests == self.expected_total_tests and not self.summary_printed:
+            if (
+                self.total_tests == self.expected_total_tests
+                and not self.summary_printed
+            ):
                 self.print_final_summary()
                 self.summary_printed = True
 
@@ -214,8 +232,12 @@ class ArmadilloReporter:
         # Print file information using sys.stderr to bypass pytest's output capture
         for file_path, file_items in files.items():
             suite_name = self._get_suite_name(file_items[0].nodeid)
-            sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} {self._colorize('armadillo:', Colors.BOLD)} Trying {file_path} ... 1\n")
-            sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {len(file_items)} tests from {self._colorize(suite_name, Colors.BOLD)} (setUpAll: 0ms)\n")
+            sys.stderr.write(
+                f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} {self._colorize('armadillo:', Colors.BOLD)} Trying {file_path} ... 1\n"
+            )
+            sys.stderr.write(
+                f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {len(file_items)} tests from {self._colorize(suite_name, Colors.BOLD)} (setUpAll: 0ms)\n"
+            )
             sys.stderr.flush()
 
     def pytest_sessionfinish(self, _session, exitstatus):
@@ -232,16 +254,22 @@ class ArmadilloReporter:
 
         # Print suite summaries using sys.stderr to bypass pytest's output capture
         for suite_name, test_count in self.suite_test_counts.items():
-            sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(suite_name, Colors.BOLD)} ran (tearDownAll: 0ms)\n")
+            sys.stderr.write(
+                f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(suite_name, Colors.BOLD)} ran (tearDownAll: 0ms)\n"
+            )
 
         # Print final summary
         current_time = time.time()
         total_time = int((current_time - self.session_start_time) * 1000)
         summary_color = Colors.GREEN if self.failed_tests == 0 else Colors.RED
         status_text = "PASSED" if self.failed_tests == 0 else "FAILED"
-        sys.stderr.write(f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n")
-        sys.stderr.write(f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} Ran: {self.total_tests} tests "
-                        f"({self._colorize(f'{self.passed_tests} passed', Colors.GREEN)}, {self._colorize(f'{self.failed_tests} failed', Colors.RED if self.failed_tests > 0 else Colors.GREEN)}) ({total_time}ms total)\n")
+        sys.stderr.write(
+            f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n"
+        )
+        sys.stderr.write(
+            f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} Ran: {self.total_tests} tests "
+            f"({self._colorize(f'{self.passed_tests} passed', Colors.GREEN)}, {self._colorize(f'{self.failed_tests} failed', Colors.RED if self.failed_tests > 0 else Colors.GREEN)}) ({total_time}ms total)\n"
+        )
         sys.stderr.flush()
 
 

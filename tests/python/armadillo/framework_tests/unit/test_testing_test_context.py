@@ -9,10 +9,14 @@ from unittest.mock import Mock, patch, call
 import pytest
 
 from armadillo.testing.test_context import (
-    IsolatedTestContext, EnvironmentTestFactory,
-    create_test_context, temp_test_context,
-    cleanup_test_context, cleanup_all_test_contexts,
-    reset_test_environment, get_test_environment_factory
+    IsolatedTestContext,
+    EnvironmentTestFactory,
+    create_test_context,
+    temp_test_context,
+    cleanup_test_context,
+    cleanup_all_test_contexts,
+    reset_test_environment,
+    get_test_environment_factory,
 )
 
 
@@ -31,9 +35,7 @@ class TestIsolatedTestContext:
     def test_context_creation(self):
         """Test basic context creation."""
         context = IsolatedTestContext(
-            test_name=self.test_name,
-            enable_persistence=False,
-            cleanup_on_exit=False
+            test_name=self.test_name, enable_persistence=False, cleanup_on_exit=False
         )
 
         try:
@@ -51,9 +53,7 @@ class TestIsolatedTestContext:
             work_dir = Path(temp_dir)
 
             context = IsolatedTestContext(
-                test_name=self.test_name,
-                work_dir=work_dir,
-                cleanup_on_exit=False
+                test_name=self.test_name, work_dir=work_dir, cleanup_on_exit=False
             )
 
             try:
@@ -65,10 +65,7 @@ class TestIsolatedTestContext:
 
     def test_logger_creation(self):
         """Test logger creation within context."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         try:
             logger = context.create_logger("test_logger")
@@ -79,10 +76,7 @@ class TestIsolatedTestContext:
 
     def test_port_pool_creation(self):
         """Test port pool creation within context."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         try:
             pool = context.create_port_pool("test_pool")
@@ -96,10 +90,7 @@ class TestIsolatedTestContext:
 
     def test_temp_logger_context_manager(self):
         """Test temporary logger context manager."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         try:
             with context.temp_logger("temp_logger") as logger:
@@ -113,13 +104,10 @@ class TestIsolatedTestContext:
 
     def test_temp_port_pool_context_manager(self):
         """Test temporary port pool context manager."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         try:
-            with patch.object(context, 'create_port_pool') as mock_create:
+            with patch.object(context, "create_port_pool") as mock_create:
                 mock_pool = Mock()
                 mock_create.return_value = mock_pool
 
@@ -133,10 +121,7 @@ class TestIsolatedTestContext:
 
     def test_cleanup_callbacks(self):
         """Test custom cleanup callbacks."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         callback_mock = Mock()
         context.add_cleanup_callback(callback_mock)
@@ -148,10 +133,7 @@ class TestIsolatedTestContext:
 
     def test_cleanup_callback_exceptions(self):
         """Test that cleanup continues even if callbacks raise exceptions."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         failing_callback = Mock(side_effect=Exception("Callback failed"))
         successful_callback = Mock()
@@ -168,10 +150,7 @@ class TestIsolatedTestContext:
 
     def test_double_cleanup_safe(self):
         """Test that double cleanup is safe."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=False
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=False)
 
         # First cleanup
         context.cleanup()
@@ -179,13 +158,10 @@ class TestIsolatedTestContext:
         # Second cleanup should be safe
         context.cleanup()
 
-    @patch('armadillo.testing.test_context.atexit.register')
+    @patch("armadillo.testing.test_context.atexit.register")
     def test_atexit_registration(self, mock_atexit):
         """Test that atexit cleanup is registered when requested."""
-        context = IsolatedTestContext(
-            test_name=self.test_name,
-            cleanup_on_exit=True
-        )
+        context = IsolatedTestContext(test_name=self.test_name, cleanup_on_exit=True)
 
         try:
             # Should register cleanup on atexit
@@ -195,14 +171,8 @@ class TestIsolatedTestContext:
 
     def test_context_isolation(self):
         """Test that different contexts are properly isolated."""
-        context1 = IsolatedTestContext(
-            test_name="context1",
-            cleanup_on_exit=False
-        )
-        context2 = IsolatedTestContext(
-            test_name="context2",
-            cleanup_on_exit=False
-        )
+        context1 = IsolatedTestContext(test_name="context1", cleanup_on_exit=False)
+        context2 = IsolatedTestContext(test_name="context2", cleanup_on_exit=False)
 
         try:
             # Should have different work directories
@@ -226,7 +196,7 @@ class TestIsolatedTestContext:
                 test_name=self.test_name,
                 work_dir=work_dir,
                 enable_persistence=True,
-                cleanup_on_exit=False
+                cleanup_on_exit=False,
             )
 
             try:
@@ -337,7 +307,7 @@ class TestEnvironmentTestFactory:
         assert context1._cleaned_up
         assert context2._cleaned_up
 
-    @patch('armadillo.testing.test_context.atexit.register')
+    @patch("armadillo.testing.test_context.atexit.register")
     def test_atexit_registration(self, mock_atexit):
         """Test that factory registers atexit cleanup."""
         factory = EnvironmentTestFactory()
@@ -429,8 +399,8 @@ class TestModuleFunctions:
         assert factory is not None
         assert isinstance(factory, EnvironmentTestFactory)
 
-    @patch('armadillo.core.log.reset_logging')
-    @patch('armadillo.utils.ports.reset_port_manager')
+    @patch("armadillo.core.log.reset_logging")
+    @patch("armadillo.utils.ports.reset_port_manager")
     def test_reset_test_environment(self, mock_reset_port, mock_reset_log):
         """Test reset_test_environment function."""
         # Create some contexts
@@ -509,15 +479,12 @@ class TestTestContextIntegration:
 
             # Create persistent context
             persistent_ctx = create_test_context(
-                "persistent_test",
-                work_dir=work_dir,
-                enable_persistence=True
+                "persistent_test", work_dir=work_dir, enable_persistence=True
             )
 
             # Create ephemeral context
             ephemeral_ctx = create_test_context(
-                "ephemeral_test",
-                enable_persistence=False
+                "ephemeral_test", enable_persistence=False
             )
 
             try:

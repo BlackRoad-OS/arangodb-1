@@ -5,15 +5,17 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 
 from armadillo.testing.pytest_integration import (
-    ContextTestManager, context_for_test,
-    create_test_environment, cleanup_test_environment
+    ContextTestManager,
+    context_for_test,
+    create_test_environment,
+    cleanup_test_environment,
 )
 
 
 class TestContextTestManager:
     """Test test context manager functionality."""
 
-    @patch('armadillo.testing.pytest_integration.get_test_environment_factory')
+    @patch("armadillo.testing.pytest_integration.get_test_environment_factory")
     def test_context_manager_creation(self, mock_get_factory):
         """Test context manager creation and basic functionality."""
         mock_factory = Mock()
@@ -26,8 +28,8 @@ class TestContextTestManager:
         assert manager._test_name == "test_context"
         assert manager._context is None
 
-    @patch('armadillo.testing.pytest_integration.get_test_environment_factory')
-    @patch('armadillo.testing.pytest_integration.reset_test_environment')
+    @patch("armadillo.testing.pytest_integration.get_test_environment_factory")
+    @patch("armadillo.testing.pytest_integration.reset_test_environment")
     def test_context_manager_enter_exit(self, mock_reset, mock_get_factory):
         """Test context manager enter and exit behavior."""
         mock_factory = Mock()
@@ -43,9 +45,7 @@ class TestContextTestManager:
         assert entered_context == mock_context
         assert manager._context == mock_context
         mock_factory.create_context.assert_called_once_with(
-            test_name="test_context",
-            cleanup_on_exit=False,
-            enable_persistence=True
+            test_name="test_context", cleanup_on_exit=False, enable_persistence=True
         )
 
         # Test __exit__
@@ -55,8 +55,8 @@ class TestContextTestManager:
         mock_factory.cleanup_context.assert_called_once_with("test_context")
         mock_reset.assert_called_once()
 
-    @patch('armadillo.testing.pytest_integration.get_test_environment_factory')
-    @patch('armadillo.testing.pytest_integration.reset_test_environment')
+    @patch("armadillo.testing.pytest_integration.get_test_environment_factory")
+    @patch("armadillo.testing.pytest_integration.reset_test_environment")
     def test_context_manager_with_exception(self, mock_reset, mock_get_factory):
         """Test context manager behavior when exception occurs."""
         mock_factory = Mock()
@@ -75,8 +75,8 @@ class TestContextTestManager:
         mock_factory.cleanup_context.assert_called_once_with("test_context")
         mock_reset.assert_called_once()
 
-    @patch('armadillo.testing.pytest_integration.get_test_environment_factory')
-    @patch('armadillo.testing.pytest_integration.reset_test_environment')
+    @patch("armadillo.testing.pytest_integration.get_test_environment_factory")
+    @patch("armadillo.testing.pytest_integration.reset_test_environment")
     def test_context_manager_as_context_manager(self, mock_reset, mock_get_factory):
         """Test using ContextTestManager as a context manager."""
         mock_factory = Mock()
@@ -94,16 +94,14 @@ class TestContextTestManager:
 
         # Should pass custom arguments
         mock_factory.create_context.assert_called_once_with(
-            test_name="test_context",
-            cleanup_on_exit=False,
-            custom_arg="value"
+            test_name="test_context", cleanup_on_exit=False, custom_arg="value"
         )
 
 
 class TestUtilityFunctions:
     """Test utility functions."""
 
-    @patch('armadillo.testing.pytest_integration.ContextTestManager')
+    @patch("armadillo.testing.pytest_integration.ContextTestManager")
     def test_context_for_test_function(self, mock_context_manager_class):
         """Test context_for_test function."""
         mock_manager = Mock()
@@ -113,12 +111,10 @@ class TestUtilityFunctions:
 
         assert result == mock_manager
         mock_context_manager_class.assert_called_once_with(
-            "test_name",
-            arg1="value1",
-            arg2="value2"
+            "test_name", arg1="value1", arg2="value2"
         )
 
-    @patch('armadillo.testing.pytest_integration.get_test_environment_factory')
+    @patch("armadillo.testing.pytest_integration.get_test_environment_factory")
     def test_create_test_environment(self, mock_get_factory):
         """Test create_test_environment function."""
         mock_factory = Mock()
@@ -130,12 +126,11 @@ class TestUtilityFunctions:
 
         assert result == mock_context
         mock_factory.create_context.assert_called_once_with(
-            "test_env",
-            custom_arg="value"
+            "test_env", custom_arg="value"
         )
 
-    @patch('armadillo.testing.pytest_integration.get_test_environment_factory')
-    @patch('armadillo.testing.pytest_integration.reset_test_environment')
+    @patch("armadillo.testing.pytest_integration.get_test_environment_factory")
+    @patch("armadillo.testing.pytest_integration.reset_test_environment")
     def test_cleanup_test_environment(self, mock_reset, mock_get_factory):
         """Test cleanup_test_environment function."""
         mock_factory = Mock()
@@ -187,28 +182,32 @@ class TestPytestFixtures:
         from armadillo.testing.pytest_integration import isolated_test_context
 
         # Should be a pytest fixture (shown in string representation)
-        assert 'pytest_fixture' in str(isolated_test_context) or callable(isolated_test_context)
+        assert "pytest_fixture" in str(isolated_test_context) or callable(
+            isolated_test_context
+        )
 
     def test_test_environment_fixture_properties(self):
         """Test test_environment fixture has correct properties."""
         from armadillo.testing.pytest_integration import test_environment
 
         # Should be a pytest fixture
-        assert 'pytest_fixture' in str(test_environment) or callable(test_environment)
+        assert "pytest_fixture" in str(test_environment) or callable(test_environment)
 
     def test_reset_test_state_fixture_properties(self):
         """Test reset_test_state fixture has correct properties."""
         from armadillo.testing.pytest_integration import reset_test_state
 
         # Should be a pytest fixture
-        assert 'pytest_fixture' in str(reset_test_state) or callable(reset_test_state)
+        assert "pytest_fixture" in str(reset_test_state) or callable(reset_test_state)
 
     def test_cleanup_test_session_fixture_properties(self):
         """Test cleanup_test_session fixture has correct properties."""
         from armadillo.testing.pytest_integration import cleanup_test_session
 
         # Should be a pytest fixture
-        assert 'pytest_fixture' in str(cleanup_test_session) or callable(cleanup_test_session)
+        assert "pytest_fixture" in str(cleanup_test_session) or callable(
+            cleanup_test_session
+        )
 
 
 class TestPytestConfiguration:
@@ -231,8 +230,11 @@ class TestPytestConfiguration:
 
         # Should add markers
         expected_calls = [
-            ('markers', 'isolated: mark test as requiring full isolation'),
-            ('markers', 'no_isolation: mark test as not requiring isolation (for performance)')
+            ("markers", "isolated: mark test as requiring full isolation"),
+            (
+                "markers",
+                "no_isolation: mark test as not requiring isolation (for performance)",
+            ),
         ]
 
         assert mock_config.addinivalue_line.call_count == 2
@@ -246,7 +248,10 @@ class TestIntegrationScenarios:
     def test_fixture_integration_properties(self):
         """Test that fixtures can be imported together without conflicts."""
         from armadillo.testing.pytest_integration import (
-            isolated_test_context, reset_test_state, test_environment, cleanup_test_session
+            isolated_test_context,
+            reset_test_state,
+            test_environment,
+            cleanup_test_session,
         )
 
         # All fixtures should be callable
@@ -256,14 +261,23 @@ class TestIntegrationScenarios:
         assert callable(cleanup_test_session)
 
         # All should be pytest fixtures
-        fixtures = [isolated_test_context, reset_test_state, test_environment, cleanup_test_session]
+        fixtures = [
+            isolated_test_context,
+            reset_test_state,
+            test_environment,
+            cleanup_test_session,
+        ]
         for fixture in fixtures:
-            assert 'pytest_fixture' in str(fixture) or callable(fixture)
+            assert "pytest_fixture" in str(fixture) or callable(fixture)
 
     def test_context_manager_integration(self):
         """Test context manager integration with real objects."""
-        with patch('armadillo.testing.pytest_integration.get_test_environment_factory') as mock_get_factory:
-            with patch('armadillo.testing.pytest_integration.reset_test_environment') as mock_reset:
+        with patch(
+            "armadillo.testing.pytest_integration.get_test_environment_factory"
+        ) as mock_get_factory:
+            with patch(
+                "armadillo.testing.pytest_integration.reset_test_environment"
+            ) as mock_reset:
                 mock_factory = Mock()
                 mock_context = Mock()
                 mock_factory.create_context.return_value = mock_context

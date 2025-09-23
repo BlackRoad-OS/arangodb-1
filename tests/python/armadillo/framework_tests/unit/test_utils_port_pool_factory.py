@@ -7,8 +7,10 @@ from unittest.mock import Mock, patch, call
 import pytest
 
 from armadillo.utils.port_pool_factory import (
-    StandardPortPoolFactory, PortPoolTestFactory,
-    create_port_pool_factory, create_test_port_pool_factory
+    StandardPortPoolFactory,
+    PortPoolTestFactory,
+    create_port_pool_factory,
+    create_test_port_pool_factory,
 )
 
 
@@ -31,7 +33,7 @@ class TestStandardPortPoolFactory:
 
     def test_factory_creation_without_logger_factory(self):
         """Test factory creation without logger factory."""
-        with patch('armadillo.utils.port_pool_factory.get_logger') as mock_get_logger:
+        with patch("armadillo.utils.port_pool_factory.get_logger") as mock_get_logger:
             mock_logger = Mock()
             mock_get_logger.return_value = mock_logger
 
@@ -40,7 +42,7 @@ class TestStandardPortPoolFactory:
             assert factory._logger_factory is None
             assert factory._logger == mock_logger
 
-    @patch('armadillo.utils.port_pool_factory.ManagedPortPool')
+    @patch("armadillo.utils.port_pool_factory.ManagedPortPool")
     def test_create_port_pool(self, mock_managed_pool_class):
         """Test creating a managed port pool."""
         mock_pool = Mock()
@@ -53,7 +55,7 @@ class TestStandardPortPoolFactory:
             base_port=9000,
             max_ports=500,
             work_dir=work_dir,
-            enable_persistence=True
+            enable_persistence=True,
         )
 
         mock_managed_pool_class.assert_called_once_with(
@@ -61,13 +63,13 @@ class TestStandardPortPoolFactory:
             max_ports=500,
             name="test_pool",
             enable_persistence=True,
-            work_dir=work_dir
+            work_dir=work_dir,
         )
 
         assert pool == mock_pool
         self.mock_logger.debug.assert_called()
 
-    @patch('armadillo.utils.port_pool_factory.create_isolated_port_pool')
+    @patch("armadillo.utils.port_pool_factory.create_isolated_port_pool")
     def test_create_isolated_pool(self, mock_create_isolated):
         """Test creating an isolated port pool."""
         mock_pool = Mock()
@@ -76,38 +78,28 @@ class TestStandardPortPoolFactory:
         work_dir = Path("/tmp/test")
 
         pool = self.factory.create_isolated_pool(
-            name="isolated_test",
-            base_port=9000,
-            max_ports=500,
-            work_dir=work_dir
+            name="isolated_test", base_port=9000, max_ports=500, work_dir=work_dir
         )
 
         mock_create_isolated.assert_called_once_with(
-            name="isolated_test",
-            base_port=9000,
-            max_ports=500,
-            work_dir=work_dir
+            name="isolated_test", base_port=9000, max_ports=500, work_dir=work_dir
         )
 
         assert pool == mock_pool
         self.mock_logger.debug.assert_called()
 
-    @patch('armadillo.utils.port_pool_factory.create_ephemeral_port_pool')
+    @patch("armadillo.utils.port_pool_factory.create_ephemeral_port_pool")
     def test_create_ephemeral_pool(self, mock_create_ephemeral):
         """Test creating an ephemeral port pool."""
         mock_pool = Mock()
         mock_create_ephemeral.return_value = mock_pool
 
         pool = self.factory.create_ephemeral_pool(
-            name="ephemeral_test",
-            base_port=9000,
-            max_ports=500
+            name="ephemeral_test", base_port=9000, max_ports=500
         )
 
         mock_create_ephemeral.assert_called_once_with(
-            name="ephemeral_test",
-            base_port=9000,
-            max_ports=500
+            name="ephemeral_test", base_port=9000, max_ports=500
         )
 
         assert pool == mock_pool
@@ -124,17 +116,18 @@ class TestPortPoolTestFactory:
         self.mock_logger_factory.create_logger.return_value = self.mock_logger
 
         self.factory = PortPoolTestFactory(
-            logger_factory=self.mock_logger_factory,
-            test_name="my_test"
+            logger_factory=self.mock_logger_factory, test_name="my_test"
         )
 
     def test_test_factory_creation(self):
         """Test test factory creation."""
         assert self.factory._test_name == "my_test"
         assert self.factory._created_pools == []
-        self.mock_logger.debug.assert_called_with("Created PortPoolTestFactory for test: %s", "my_test")
+        self.mock_logger.debug.assert_called_with(
+            "Created PortPoolTestFactory for test: %s", "my_test"
+        )
 
-    @patch('armadillo.utils.port_pool_factory.StandardPortPoolFactory.create_port_pool')
+    @patch("armadillo.utils.port_pool_factory.StandardPortPoolFactory.create_port_pool")
     def test_create_port_pool_with_test_prefix(self, mock_super_create):
         """Test creating pool with test prefix."""
         mock_pool = Mock()
@@ -144,7 +137,7 @@ class TestPortPoolTestFactory:
             name="my_pool",
             base_port=9000,
             max_ports=500,
-            enable_persistence=True  # Should be overridden to False
+            enable_persistence=True,  # Should be overridden to False
         )
 
         # Should call parent with test prefix and no persistence
@@ -153,13 +146,15 @@ class TestPortPoolTestFactory:
             base_port=9000,
             max_ports=500,
             work_dir=None,
-            enable_persistence=False  # Default to False for tests
+            enable_persistence=False,  # Default to False for tests
         )
 
         assert pool == mock_pool
         assert pool in self.factory._created_pools
 
-    @patch('armadillo.utils.port_pool_factory.StandardPortPoolFactory.create_isolated_pool')
+    @patch(
+        "armadillo.utils.port_pool_factory.StandardPortPoolFactory.create_isolated_pool"
+    )
     def test_create_isolated_pool_with_test_prefix(self, mock_super_create):
         """Test creating isolated pool with test prefix."""
         mock_pool = Mock()
@@ -168,17 +163,14 @@ class TestPortPoolTestFactory:
         work_dir = Path("/tmp/test")
 
         pool = self.factory.create_isolated_pool(
-            name="isolated_pool",
-            base_port=9000,
-            max_ports=500,
-            work_dir=work_dir
+            name="isolated_pool", base_port=9000, max_ports=500, work_dir=work_dir
         )
 
         mock_super_create.assert_called_once_with(
             name="test_my_test_isolated_pool",
             base_port=9000,
             max_ports=500,
-            work_dir=work_dir
+            work_dir=work_dir,
         )
 
         assert pool == mock_pool
@@ -268,8 +260,7 @@ class TestFactoryUtilityFunctions:
         mock_logger_factory = Mock()
 
         factory = create_test_port_pool_factory(
-            test_name="my_test",
-            logger_factory=mock_logger_factory
+            test_name="my_test", logger_factory=mock_logger_factory
         )
 
         assert isinstance(factory, PortPoolTestFactory)
@@ -294,9 +285,9 @@ class TestPortPoolFactoryProtocolCompliance:
 
     def test_protocol_methods_exist(self):
         """Test that all protocol methods exist."""
-        assert hasattr(self.factory, 'create_port_pool')
-        assert hasattr(self.factory, 'create_isolated_pool')
-        assert hasattr(self.factory, 'create_ephemeral_pool')
+        assert hasattr(self.factory, "create_port_pool")
+        assert hasattr(self.factory, "create_isolated_pool")
+        assert hasattr(self.factory, "create_ephemeral_pool")
 
         assert callable(self.factory.create_port_pool)
         assert callable(self.factory.create_isolated_pool)
@@ -308,17 +299,23 @@ class TestPortPoolFactoryProtocolCompliance:
 
         # Check create_port_pool signature
         sig = inspect.signature(self.factory.create_port_pool)
-        expected_params = ['name', 'base_port', 'max_ports', 'work_dir', 'enable_persistence']
+        expected_params = [
+            "name",
+            "base_port",
+            "max_ports",
+            "work_dir",
+            "enable_persistence",
+        ]
         assert all(param in sig.parameters for param in expected_params)
 
         # Check create_isolated_pool signature
         sig = inspect.signature(self.factory.create_isolated_pool)
-        expected_params = ['name', 'base_port', 'max_ports', 'work_dir']
+        expected_params = ["name", "base_port", "max_ports", "work_dir"]
         assert all(param in sig.parameters for param in expected_params)
 
         # Check create_ephemeral_pool signature
         sig = inspect.signature(self.factory.create_ephemeral_pool)
-        expected_params = ['name', 'base_port', 'max_ports']
+        expected_params = ["name", "base_port", "max_ports"]
         assert all(param in sig.parameters for param in expected_params)
 
 
@@ -333,6 +330,7 @@ class TestPortPoolFactoryIntegration:
     def teardown_method(self):
         """Clean up after test."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_create_real_managed_pool(self):
@@ -342,7 +340,7 @@ class TestPortPoolFactoryIntegration:
             base_port=59000,  # Use high port to avoid conflicts
             max_ports=50,
             work_dir=self.temp_dir,
-            enable_persistence=True
+            enable_persistence=True,
         )
 
         try:
@@ -361,9 +359,7 @@ class TestPortPoolFactoryIntegration:
 
         try:
             pool = test_factory.create_port_pool(
-                name="test_pool",
-                base_port=59100,
-                max_ports=50
+                name="test_pool", base_port=59100, max_ports=50
             )
 
             # Should be able to use the pool

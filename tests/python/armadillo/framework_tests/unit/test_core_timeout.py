@@ -6,9 +6,15 @@ import threading
 from unittest.mock import Mock, patch
 
 from armadillo.core.time import (
-    TimeoutScope, TimeoutManager,
-    set_global_deadline, set_test_timeout, get_test_timeout,
-    clamp_timeout, timeout_scope, stop_watchdog, get_timeout_status
+    TimeoutScope,
+    TimeoutManager,
+    set_global_deadline,
+    set_test_timeout,
+    get_test_timeout,
+    clamp_timeout,
+    timeout_scope,
+    stop_watchdog,
+    get_timeout_status,
 )
 from armadillo.core.errors import DeadlineExceededError, WatchdogTimeoutError
 
@@ -93,7 +99,7 @@ class TestTimeoutManager:
         """Test setting global deadline."""
         manager = TimeoutManager()
 
-        with patch.object(manager, '_start_watchdog') as mock_start:
+        with patch.object(manager, "_start_watchdog") as mock_start:
             manager.set_global_deadline(60.0)
 
             assert manager._global_deadline is not None
@@ -129,7 +135,9 @@ class TestTimeoutManager:
 
         # With global deadline
         manager.set_global_deadline(30.0)
-        assert manager.clamp_timeout(60.0) < 30.0  # Should be clamped to remaining global time
+        assert (
+            manager.clamp_timeout(60.0) < 30.0
+        )  # Should be clamped to remaining global time
         assert manager.clamp_timeout(10.0) == 10.0  # Should not be increased
 
     def test_timeout_scope_context_manager(self):
@@ -197,7 +205,7 @@ class TestTimeoutManager:
 
         # The test passes if we can start and stop without errors
 
-    @patch('time.time')
+    @patch("time.time")
     def test_global_deadline_exceeded(self, mock_time):
         """Test global deadline exceeded detection."""
         manager = TimeoutManager()
@@ -211,7 +219,7 @@ class TestTimeoutManager:
         # Simulate time passing beyond deadline
         mock_time.return_value = start_time + 35.0
 
-        with patch.object(manager, '_trigger_watchdog_timeout') as mock_trigger:
+        with patch.object(manager, "_trigger_watchdog_timeout") as mock_trigger:
             # This would normally be called by watchdog loop
             assert manager._global_deadline <= time.time()
             # In real scenario, watchdog would trigger timeout
@@ -221,20 +229,20 @@ class TestTimeoutManager:
         manager = TimeoutManager()
 
         status = manager.get_status()
-        assert 'current_time' in status
-        assert 'watchdog_active' in status
+        assert "current_time" in status
+        assert "watchdog_active" in status
 
         # With global deadline
         manager.set_global_deadline(60.0)
         status = manager.get_status()
-        assert 'global_deadline' in status
-        assert 'global_remaining' in status
+        assert "global_deadline" in status
+        assert "global_remaining" in status
 
         # With active scope
         with manager.timeout_scope(30.0, "test_scope"):
             status = manager.get_status()
-            assert 'current_scope' in status
-            assert status['current_scope']['name'] == "test_scope"
+            assert "current_scope" in status
+            assert status["current_scope"]["name"] == "test_scope"
 
 
 class TestGlobalTimeoutFunctions:
@@ -242,13 +250,13 @@ class TestGlobalTimeoutFunctions:
 
     def test_set_global_deadline_function(self):
         """Test global set_global_deadline function."""
-        with patch('armadillo.core.time._timeout_manager') as mock_manager:
+        with patch("armadillo.core.time._timeout_manager") as mock_manager:
             set_global_deadline(120.0)
             mock_manager.set_global_deadline.assert_called_once_with(120.0)
 
     def test_test_timeout_functions(self):
         """Test test timeout functions."""
-        with patch('armadillo.core.time._timeout_manager') as mock_manager:
+        with patch("armadillo.core.time._timeout_manager") as mock_manager:
             mock_manager.get_test_timeout.return_value = 300.0
 
             set_test_timeout("test_name", 300.0)
@@ -259,7 +267,7 @@ class TestGlobalTimeoutFunctions:
 
     def test_clamp_timeout_function(self):
         """Test global clamp_timeout function."""
-        with patch('armadillo.core.time._timeout_manager') as mock_manager:
+        with patch("armadillo.core.time._timeout_manager") as mock_manager:
             mock_manager.clamp_timeout.return_value = 30.0
 
             result = clamp_timeout(60.0, "test_op")
@@ -268,7 +276,7 @@ class TestGlobalTimeoutFunctions:
 
     def test_timeout_scope_function(self):
         """Test global timeout_scope function."""
-        with patch('armadillo.core.time._timeout_manager') as mock_manager:
+        with patch("armadillo.core.time._timeout_manager") as mock_manager:
             mock_context = Mock()
             mock_manager.timeout_scope.return_value = mock_context
 
@@ -278,18 +286,18 @@ class TestGlobalTimeoutFunctions:
 
     def test_stop_watchdog_function(self):
         """Test global stop_watchdog function."""
-        with patch('armadillo.core.time._timeout_manager') as mock_manager:
+        with patch("armadillo.core.time._timeout_manager") as mock_manager:
             stop_watchdog()
             mock_manager.stop_watchdog.assert_called_once()
 
     def test_get_timeout_status_function(self):
         """Test global get_timeout_status function."""
-        with patch('armadillo.core.time._timeout_manager') as mock_manager:
-            mock_manager.get_status.return_value = {'status': 'ok'}
+        with patch("armadillo.core.time._timeout_manager") as mock_manager:
+            mock_manager.get_status.return_value = {"status": "ok"}
 
             result = get_timeout_status()
             mock_manager.get_status.assert_called_once()
-            assert result == {'status': 'ok'}
+            assert result == {"status": "ok"}
 
 
 class TestTimeoutIntegration:

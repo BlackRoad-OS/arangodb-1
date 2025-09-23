@@ -19,10 +19,10 @@ class TestArmadilloPluginBasic:
         plugin = ArmadilloPlugin()
 
         assert plugin is not None
-        assert hasattr(plugin, '_session_servers')
-        assert hasattr(plugin, '_session_deployments')
-        assert hasattr(plugin, '_session_orchestrators')
-        assert hasattr(plugin, '_armadillo_config')
+        assert hasattr(plugin, "_session_servers")
+        assert hasattr(plugin, "_session_deployments")
+        assert hasattr(plugin, "_session_orchestrators")
+        assert hasattr(plugin, "_armadillo_config")
 
     def test_plugin_initial_state(self):
         """Test plugin initial state."""
@@ -42,9 +42,9 @@ class TestArmadilloPluginBasic:
 
         # Check that pytest hook methods exist
         expected_methods = [
-            'pytest_configure',
-            'pytest_sessionstart',
-            'pytest_sessionfinish'
+            "pytest_configure",
+            "pytest_sessionstart",
+            "pytest_sessionfinish",
         ]
 
         for method_name in expected_methods:
@@ -70,19 +70,27 @@ class TestArmadilloPluginConfiguration:
         assert mock_config.addinivalue_line.call_count >= 5
 
         # Check that some key markers were registered
-        call_args_list = [call[0] for call in mock_config.addinivalue_line.call_args_list]
+        call_args_list = [
+            call[0] for call in mock_config.addinivalue_line.call_args_list
+        ]
 
-        markers_registered = [args[1] for args in call_args_list if args[0] == "markers"]
-        marker_names = [marker.split(':')[0] for marker in markers_registered]
+        markers_registered = [
+            args[1] for args in call_args_list if args[0] == "markers"
+        ]
+        marker_names = [marker.split(":")[0] for marker in markers_registered]
 
-        expected_markers = ['arango_single', 'arango_cluster', 'slow', 'fast']
+        expected_markers = ["arango_single", "arango_cluster", "slow", "fast"]
         for expected in expected_markers:
-            assert any(expected in marker for marker in marker_names), f"Marker '{expected}' not registered"
+            assert any(
+                expected in marker for marker in marker_names
+            ), f"Marker '{expected}' not registered"
 
-    @patch('armadillo.pytest_plugin.plugin.load_config')
-    @patch('armadillo.pytest_plugin.plugin.configure_logging')
-    @patch('armadillo.pytest_plugin.plugin.set_test_session_id')
-    def test_pytest_sessionstart_basic(self, mock_set_session, mock_logging, mock_load_config):
+    @patch("armadillo.pytest_plugin.plugin.load_config")
+    @patch("armadillo.pytest_plugin.plugin.configure_logging")
+    @patch("armadillo.pytest_plugin.plugin.set_test_session_id")
+    def test_pytest_sessionstart_basic(
+        self, mock_set_session, mock_logging, mock_load_config
+    ):
         """Test pytest_sessionstart performs setup."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
@@ -94,10 +102,12 @@ class TestArmadilloPluginConfiguration:
         mock_logging.assert_called_once()
         mock_set_session.assert_called_once()
 
-    @patch('armadillo.pytest_plugin.plugin.cleanup_work_dir')
-    @patch('armadillo.pytest_plugin.plugin.clear_test_session')
-    @patch('armadillo.pytest_plugin.plugin.stop_watchdog')
-    def test_pytest_sessionfinish_basic(self, mock_stop_watchdog, mock_clear_session, mock_cleanup):
+    @patch("armadillo.pytest_plugin.plugin.cleanup_work_dir")
+    @patch("armadillo.pytest_plugin.plugin.clear_test_session")
+    @patch("armadillo.pytest_plugin.plugin.stop_watchdog")
+    def test_pytest_sessionfinish_basic(
+        self, mock_stop_watchdog, mock_clear_session, mock_cleanup
+    ):
         """Test pytest_sessionfinish performs cleanup."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
@@ -150,7 +160,7 @@ class TestArmadilloPluginSessionManagement:
 class TestArmadilloPluginErrorHandling:
     """Test plugin error handling."""
 
-    @patch('armadillo.pytest_plugin.plugin.load_config')
+    @patch("armadillo.pytest_plugin.plugin.load_config")
     def test_sessionstart_handles_config_error(self, mock_load_config):
         """Test sessionstart handles configuration errors gracefully."""
         plugin = ArmadilloPlugin()
@@ -164,7 +174,7 @@ class TestArmadilloPluginErrorHandling:
             # If it raises, that's also acceptable behavior
             pass
 
-    @patch('armadillo.pytest_plugin.plugin.cleanup_work_dir')
+    @patch("armadillo.pytest_plugin.plugin.cleanup_work_dir")
     def test_sessionfinish_handles_cleanup_error(self, mock_cleanup):
         """Test sessionfinish handles cleanup errors gracefully."""
         plugin = ArmadilloPlugin()
@@ -182,8 +192,8 @@ class TestArmadilloPluginErrorHandling:
 class TestArmadilloPluginIntegration:
     """Test plugin integration scenarios."""
 
-    @patch('armadillo.pytest_plugin.plugin.atexit.register')
-    @patch('armadillo.pytest_plugin.plugin.set_global_deadline')
+    @patch("armadillo.pytest_plugin.plugin.atexit.register")
+    @patch("armadillo.pytest_plugin.plugin.set_global_deadline")
     def test_emergency_cleanup_registration(self, mock_set_deadline, mock_atexit):
         """Test plugin registers emergency cleanup."""
         plugin = ArmadilloPlugin()
@@ -253,8 +263,10 @@ class TestArmadilloPluginMarkers:
             "slow",
             "fast",
             "crash_test",
-            "stress_test"
+            "stress_test",
         ]
 
         for marker_name in expected_marker_names:
-            assert marker_name in combined_markers, f"Expected marker '{marker_name}' not found"
+            assert (
+                marker_name in combined_markers
+            ), f"Expected marker '{marker_name}' not found"

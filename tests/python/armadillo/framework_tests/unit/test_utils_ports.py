@@ -10,9 +10,16 @@ from unittest.mock import Mock, patch, MagicMock, call
 from pathlib import Path
 
 from armadillo.utils.ports import (
-    PortManager, find_free_port, check_port_available, wait_for_port,
-    get_port_manager, allocate_port, allocate_ports, release_port, release_ports,
-    reset_port_manager
+    PortManager,
+    find_free_port,
+    check_port_available,
+    wait_for_port,
+    get_port_manager,
+    allocate_port,
+    allocate_ports,
+    release_port,
+    release_ports,
+    reset_port_manager,
 )
 from armadillo.core.errors import NetworkError
 
@@ -38,7 +45,7 @@ class TestPortManager:
         assert manager.base_port == 8529
         assert manager.max_ports == 1000
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_port_basic(self, mock_socket_class):
         """Test basic port allocation."""
         mock_socket = MagicMock()
@@ -49,9 +56,9 @@ class TestPortManager:
 
         assert port == 9000  # First available port
         assert port in self.manager.reserved_ports
-        mock_socket.bind.assert_called_with(('localhost', 9000))
+        mock_socket.bind.assert_called_with(("localhost", 9000))
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_preferred_port(self, mock_socket_class):
         """Test allocating preferred port."""
         mock_socket = MagicMock()
@@ -62,9 +69,9 @@ class TestPortManager:
 
         assert port == 9050
         assert 9050 in self.manager.reserved_ports
-        mock_socket.bind.assert_called_with(('localhost', 9050))
+        mock_socket.bind.assert_called_with(("localhost", 9050))
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_port_skip_unavailable(self, mock_socket_class):
         """Test port allocation skips unavailable ports."""
         mock_socket = MagicMock()
@@ -78,7 +85,7 @@ class TestPortManager:
         assert port == 9001  # Should skip 9000 and use 9001
         assert 9001 in self.manager.reserved_ports
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_port_exhausted(self, mock_socket_class):
         """Test port allocation when all ports are exhausted."""
         mock_socket = MagicMock()
@@ -88,7 +95,7 @@ class TestPortManager:
         with pytest.raises(NetworkError, match="No available ports in range"):
             self.manager.allocate_port()
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_multiple_ports(self, mock_socket_class):
         """Test allocating multiple consecutive ports."""
         mock_socket = MagicMock()
@@ -101,7 +108,7 @@ class TestPortManager:
         for port in ports:
             assert port in self.manager.reserved_ports
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_multiple_ports_with_gap(self, mock_socket_class):
         """Test allocating multiple ports when some are unavailable."""
         mock_socket = MagicMock()
@@ -121,7 +128,7 @@ class TestPortManager:
         for port in ports:
             assert port in self.manager.reserved_ports
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_allocate_multiple_ports_insufficient(self, mock_socket_class):
         """Test allocating multiple ports when insufficient consecutive ports."""
         # Create a small manager
@@ -154,13 +161,15 @@ class TestPortManager:
         # Manually add ports to test release
         self.manager.reserved_ports.update([9050, 9051, 9052])
 
-        self.manager.release_ports([9050, 9051, 9052, 9999])  # Include non-existent port
+        self.manager.release_ports(
+            [9050, 9051, 9052, 9999]
+        )  # Include non-existent port
 
         assert 9050 not in self.manager.reserved_ports
         assert 9051 not in self.manager.reserved_ports
         assert 9052 not in self.manager.reserved_ports
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_is_port_available_free(self, mock_socket_class):
         """Test checking if a free port is available."""
         mock_socket = MagicMock()
@@ -168,9 +177,9 @@ class TestPortManager:
         mock_socket.bind.return_value = None  # Port is free
 
         assert self.manager.is_port_available(9050) is True
-        mock_socket.bind.assert_called_with(('localhost', 9050))
+        mock_socket.bind.assert_called_with(("localhost", 9050))
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_is_port_available_in_use(self, mock_socket_class):
         """Test checking if an in-use port is available."""
         mock_socket = MagicMock()
@@ -204,7 +213,7 @@ class TestPortManager:
     def test_thread_safety(self):
         """Test thread safety of port allocation."""
         # This is a basic test - proper thread safety testing would be more complex
-        assert hasattr(self.manager, 'lock')
+        assert hasattr(self.manager, "lock")
         assert isinstance(self.manager.lock, threading.Lock)
 
 
@@ -215,7 +224,7 @@ class TestPortManagerPersistence:
         """Set up test environment."""
         self.manager = PortManager(base_port=9000, max_ports=100)
 
-    @patch('armadillo.utils.ports.atomic_write')
+    @patch("armadillo.utils.ports.atomic_write")
     def test_save_reservations(self, mock_atomic_write):
         """Test saving reservations to file."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -225,10 +234,12 @@ class TestPortManagerPersistence:
 
             self.manager._save_reservations()
 
-            mock_atomic_write.assert_called_once_with(reservation_file, "9001\n9002\n9003")
+            mock_atomic_write.assert_called_once_with(
+                reservation_file, "9001\n9002\n9003"
+            )
 
-    @patch('armadillo.utils.ports.read_text')
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch("armadillo.utils.ports.read_text")
+    @patch("pathlib.Path.exists", return_value=True)
     def test_load_reservations(self, mock_exists, mock_read_text):
         """Test loading reservations from file."""
         mock_read_text.return_value = "9001\n9003\n9002\n"
@@ -241,8 +252,8 @@ class TestPortManagerPersistence:
         assert 9002 in self.manager.reserved_ports
         assert 9003 in self.manager.reserved_ports
 
-    @patch('armadillo.utils.ports.read_text')
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch("armadillo.utils.ports.read_text")
+    @patch("pathlib.Path.exists", return_value=True)
     def test_load_empty_reservations(self, mock_exists, mock_read_text):
         """Test loading empty reservations file."""
         mock_read_text.return_value = ""
@@ -253,8 +264,8 @@ class TestPortManagerPersistence:
 
         assert len(self.manager.reserved_ports) == 0
 
-    @patch('armadillo.utils.ports.read_text')
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch("armadillo.utils.ports.read_text")
+    @patch("pathlib.Path.exists", return_value=True)
     def test_load_reservations_error_handling(self, mock_exists, mock_read_text):
         """Test error handling when loading reservations fails."""
         mock_read_text.side_effect = Exception("File read error")
@@ -266,7 +277,7 @@ class TestPortManagerPersistence:
 
         assert len(self.manager.reserved_ports) == 0
 
-    @patch('armadillo.utils.ports.atomic_write')
+    @patch("armadillo.utils.ports.atomic_write")
     def test_save_reservations_error_handling(self, mock_atomic_write):
         """Test error handling when saving reservations fails."""
         mock_atomic_write.side_effect = Exception("File write error")
@@ -283,7 +294,7 @@ class TestPortManagerPersistence:
 class TestUtilityFunctions:
     """Test module-level utility functions."""
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_find_free_port_success(self, mock_socket_class):
         """Test finding a free port."""
         mock_socket = MagicMock()
@@ -293,22 +304,26 @@ class TestUtilityFunctions:
         port = find_free_port(start_port=9000)
 
         assert port == 9000
-        mock_socket.bind.assert_called_with(('localhost', 9000))
+        mock_socket.bind.assert_called_with(("localhost", 9000))
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_find_free_port_skip_busy(self, mock_socket_class):
         """Test finding free port when first ports are busy."""
         mock_socket = MagicMock()
         mock_socket_class.return_value.__enter__.return_value = mock_socket
 
         # First two ports busy, third is free
-        mock_socket.bind.side_effect = [OSError("Port in use"), OSError("Port in use"), None]
+        mock_socket.bind.side_effect = [
+            OSError("Port in use"),
+            OSError("Port in use"),
+            None,
+        ]
 
         port = find_free_port(start_port=9000)
 
         assert port == 9002
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_find_free_port_exhausted(self, mock_socket_class):
         """Test finding free port when all are exhausted."""
         mock_socket = MagicMock()
@@ -318,7 +333,7 @@ class TestUtilityFunctions:
         with pytest.raises(NetworkError, match="No free port found in range"):
             find_free_port(start_port=9000, max_attempts=10)
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_check_port_available_free(self, mock_socket_class):
         """Test checking if port is available (not in use)."""
         mock_socket = MagicMock()
@@ -328,7 +343,7 @@ class TestUtilityFunctions:
         assert check_port_available("localhost", 9000) is True
         mock_socket.connect_ex.assert_called_with(("localhost", 9000))
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_check_port_available_in_use(self, mock_socket_class):
         """Test checking if port is in use."""
         mock_socket = MagicMock()
@@ -337,7 +352,7 @@ class TestUtilityFunctions:
 
         assert check_port_available("localhost", 9000) is False
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_check_port_available_error(self, mock_socket_class):
         """Test checking port availability handles errors."""
         mock_socket_class.side_effect = Exception("Socket error")
@@ -345,8 +360,8 @@ class TestUtilityFunctions:
         # Should assume available if can't check
         assert check_port_available("localhost", 9000) is True
 
-    @patch('socket.socket')
-    @patch('time.sleep')
+    @patch("socket.socket")
+    @patch("time.sleep")
     def test_wait_for_port_success(self, mock_sleep, mock_socket_class):
         """Test waiting for port to become available."""
         mock_socket = MagicMock()
@@ -358,9 +373,9 @@ class TestUtilityFunctions:
         assert result is True
         mock_socket.connect_ex.assert_called_with(("localhost", 9000))
 
-    @patch('socket.socket')
-    @patch('time.sleep')
-    @patch('time.time')
+    @patch("socket.socket")
+    @patch("time.sleep")
+    @patch("time.time")
     def test_wait_for_port_timeout(self, mock_time, mock_sleep, mock_socket_class):
         """Test waiting for port times out."""
         mock_socket = MagicMock()
@@ -374,10 +389,12 @@ class TestUtilityFunctions:
 
         assert result is False
 
-    @patch('socket.socket')
-    @patch('time.sleep')
-    @patch('time.time')
-    def test_wait_for_port_eventually_available(self, mock_time, mock_sleep, mock_socket_class):
+    @patch("socket.socket")
+    @patch("time.sleep")
+    @patch("time.time")
+    def test_wait_for_port_eventually_available(
+        self, mock_time, mock_sleep, mock_socket_class
+    ):
         """Test waiting for port that becomes available after some time."""
         mock_socket = MagicMock()
         mock_socket_class.return_value.__enter__.return_value = mock_socket
@@ -390,8 +407,8 @@ class TestUtilityFunctions:
 
         assert result is True
 
-    @patch('socket.socket')
-    @patch('time.sleep')
+    @patch("socket.socket")
+    @patch("time.sleep")
     def test_wait_for_port_handles_errors(self, mock_sleep, mock_socket_class):
         """Test wait_for_port handles socket errors gracefully."""
         mock_socket = MagicMock()
@@ -410,6 +427,7 @@ class TestGlobalPortManager:
     def setup_method(self):
         """Reset global port manager."""
         import armadillo.utils.ports
+
         armadillo.utils.ports._port_manager = None
 
     def test_get_port_manager_singleton(self):
@@ -436,7 +454,7 @@ class TestGlobalPortManager:
         assert manager1.base_port == 9500  # Should keep original parameters
         assert manager1.max_ports == 200
 
-    @patch('armadillo.utils.ports.get_port_manager')
+    @patch("armadillo.utils.ports.get_port_manager")
     def test_allocate_port_function(self, mock_get_port_manager):
         """Test module-level allocate_port function."""
         mock_manager = Mock()
@@ -448,7 +466,7 @@ class TestGlobalPortManager:
         assert port == 9050
         mock_manager.allocate_port.assert_called_once_with(9050)
 
-    @patch('armadillo.utils.ports.get_port_manager')
+    @patch("armadillo.utils.ports.get_port_manager")
     def test_allocate_ports_function(self, mock_get_port_manager):
         """Test module-level allocate_ports function."""
         mock_manager = Mock()
@@ -460,7 +478,7 @@ class TestGlobalPortManager:
         assert ports == [9050, 9051, 9052]
         mock_manager.allocate_ports.assert_called_once_with(3)
 
-    @patch('armadillo.utils.ports.get_port_manager')
+    @patch("armadillo.utils.ports.get_port_manager")
     def test_release_port_function(self, mock_get_port_manager):
         """Test module-level release_port function."""
         mock_manager = Mock()
@@ -470,7 +488,7 @@ class TestGlobalPortManager:
 
         mock_manager.release_port.assert_called_once_with(9050)
 
-    @patch('armadillo.utils.ports.get_port_manager')
+    @patch("armadillo.utils.ports.get_port_manager")
     def test_release_ports_function(self, mock_get_port_manager):
         """Test module-level release_ports function."""
         mock_manager = Mock()
@@ -502,7 +520,7 @@ class TestGlobalPortManager:
 class TestPortManagerIntegration:
     """Test PortManager integration scenarios."""
 
-    @patch('socket.socket')
+    @patch("socket.socket")
     def test_full_allocation_cycle(self, mock_socket_class):
         """Test complete port allocation and release cycle."""
         manager = PortManager(base_port=9000, max_ports=10)
@@ -538,12 +556,14 @@ class TestPortManagerIntegration:
         manager = PortManager(base_port=9000, max_ports=2)
 
         # Mock all ports as unavailable
-        with patch('socket.socket') as mock_socket_class:
+        with patch("socket.socket") as mock_socket_class:
             mock_socket = MagicMock()
             mock_socket_class.return_value.__enter__.return_value = mock_socket
             mock_socket.bind.side_effect = OSError("Port in use")
 
-            with pytest.raises(NetworkError, match="No available ports in range 9000-9002"):
+            with pytest.raises(
+                NetworkError, match="No available ports in range 9000-9002"
+            ):
                 manager.allocate_port()
 
 
@@ -558,7 +578,7 @@ class TestErrorHandling:
         assert manager.is_port_available(-1) is False
 
         # Test with very high port
-        with patch('socket.socket') as mock_socket_class:
+        with patch("socket.socket") as mock_socket_class:
             mock_socket = MagicMock()
             mock_socket_class.return_value.__enter__.return_value = mock_socket
             mock_socket.bind.side_effect = OSError("Invalid port")
@@ -570,7 +590,7 @@ class TestErrorHandling:
         manager = PortManager(base_port=9000, max_ports=10)
 
         # This is a basic test - proper concurrency testing would be more complex
-        with patch('socket.socket') as mock_socket_class:
+        with patch("socket.socket") as mock_socket_class:
             mock_socket = MagicMock()
             mock_socket_class.return_value.__enter__.return_value = mock_socket
             mock_socket.bind.return_value = None

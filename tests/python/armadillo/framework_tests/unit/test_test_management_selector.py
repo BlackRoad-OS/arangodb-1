@@ -5,9 +5,15 @@ from unittest.mock import Mock, MagicMock
 from pathlib import Path
 
 from armadillo.test_management.selector import (
-    Selector, Filter, FilterCriteria, SelectionResult,
-    FilterType, FilterOperation,
-    create_marker_selector, create_pattern_selector, create_suite_selector
+    Selector,
+    Filter,
+    FilterCriteria,
+    SelectionResult,
+    FilterType,
+    FilterOperation,
+    create_marker_selector,
+    create_pattern_selector,
+    create_suite_selector,
 )
 
 
@@ -25,14 +31,18 @@ class TestFilterCriteria:
 
     def test_pattern_criteria_with_glob(self):
         """Test pattern criteria with glob patterns."""
-        criteria = FilterCriteria(FilterType.PATTERN, FilterOperation.INCLUDE, "test_auth_*")
+        criteria = FilterCriteria(
+            FilterType.PATTERN, FilterOperation.INCLUDE, "test_auth_*"
+        )
 
         assert criteria.pattern is not None
         assert criteria.pattern.pattern  # Compiled regex exists
 
     def test_pattern_criteria_with_substring(self):
         """Test pattern criteria with simple substring."""
-        criteria = FilterCriteria(FilterType.PATTERN, FilterOperation.INCLUDE, "integration")
+        criteria = FilterCriteria(
+            FilterType.PATTERN, FilterOperation.INCLUDE, "integration"
+        )
 
         assert criteria.pattern is not None
         # Should match strings containing 'integration'
@@ -72,7 +82,9 @@ class TestFilterFunctionality:
 
         # Change to non-matching name
         self.mock_test_item.name = "test_collections_create"
-        self.mock_test_item.nodeid = "tests/collections/test_create.py::test_collections_create"
+        self.mock_test_item.nodeid = (
+            "tests/collections/test_create.py::test_collections_create"
+        )
         assert filter_obj.matches(self.mock_test_item) is False
 
     def test_tag_filter_matching(self):
@@ -100,7 +112,9 @@ class TestFilterFunctionality:
 
         # Change to non-matching path
         self.mock_test_item.fspath = Path("tests/collections/test_create.py")
-        self.mock_test_item.nodeid = "tests/collections/test_create.py::test_create_collection"
+        self.mock_test_item.nodeid = (
+            "tests/collections/test_create.py::test_create_collection"
+        )
         assert filter_obj.matches(self.mock_test_item) is False
 
 
@@ -151,7 +165,9 @@ class TestSelectorFunctionality:
         # Collections test without markers
         collections_test = Mock()
         collections_test.name = "test_create_collection"
-        collections_test.nodeid = "tests/collections/test_crud.py::test_create_collection"
+        collections_test.nodeid = (
+            "tests/collections/test_crud.py::test_create_collection"
+        )
         collections_test.fspath = Path("tests/collections/test_crud.py")
         collections_test.get_closest_marker = lambda name: None
         collections_test.iter_markers = lambda: [Mock(args=["collections"], kwargs={})]
@@ -160,9 +176,13 @@ class TestSelectorFunctionality:
         # Integration test with cluster marker
         integration_test = Mock()
         integration_test.name = "test_cluster_setup"
-        integration_test.nodeid = "tests/integration/test_cluster.py::test_cluster_setup"
+        integration_test.nodeid = (
+            "tests/integration/test_cluster.py::test_cluster_setup"
+        )
         integration_test.fspath = Path("tests/integration/test_cluster.py")
-        integration_test.get_closest_marker = lambda name: Mock() if name == "arango_cluster" else None
+        integration_test.get_closest_marker = lambda name: (
+            Mock() if name == "arango_cluster" else None
+        )
         integration_test.iter_markers = lambda: [Mock(args=["integration"], kwargs={})]
         self.test_items.append(integration_test)
 
@@ -246,10 +266,11 @@ class TestSelectorFunctionality:
 
     def test_filter_chaining(self):
         """Test fluent interface for filter chaining."""
-        result = (self.selector
-                  .add_marker_filter("slow", FilterOperation.EXCLUDE)
-                  .add_pattern_filter("*collection*", FilterOperation.INCLUDE)
-                  .select_tests(self.test_items))
+        result = (
+            self.selector.add_marker_filter("slow", FilterOperation.EXCLUDE)
+            .add_pattern_filter("*collection*", FilterOperation.INCLUDE)
+            .select_tests(self.test_items)
+        )
 
         # Should select collection tests that are not slow
         assert result.selected_count == 1
@@ -262,11 +283,11 @@ class TestSelectorFunctionality:
 
         summary = self.selector.get_filter_summary()
 
-        assert summary['total_filters'] == 2
-        assert summary['standard_filters'] == 2
-        assert summary['custom_filters'] == 0
-        assert 'marker_include' in summary['filter_breakdown']
-        assert 'pattern_exclude' in summary['filter_breakdown']
+        assert summary["total_filters"] == 2
+        assert summary["standard_filters"] == 2
+        assert summary["custom_filters"] == 0
+        assert "marker_include" in summary["filter_breakdown"]
+        assert "pattern_exclude" in summary["filter_breakdown"]
 
     def test_clear_filters(self):
         """Test clearing all filters."""
@@ -296,10 +317,14 @@ class TestConvenienceFunctions:
     def setup_method(self):
         """Set up mock test items."""
         self.mock_test_slow = Mock()
-        self.mock_test_slow.get_closest_marker = lambda name: Mock() if name == "slow" else None
+        self.mock_test_slow.get_closest_marker = lambda name: (
+            Mock() if name == "slow" else None
+        )
 
         self.mock_test_fast = Mock()
-        self.mock_test_fast.get_closest_marker = lambda name: Mock() if name == "fast" else None
+        self.mock_test_fast.get_closest_marker = lambda name: (
+            Mock() if name == "fast" else None
+        )
 
         self.test_items = [self.mock_test_slow, self.mock_test_fast]
 
@@ -308,35 +333,34 @@ class TestConvenienceFunctions:
         selector = create_marker_selector(
             include_markers=["slow"],
             exclude_markers=["flaky"],
-            require_markers=["arango_single"]
+            require_markers=["arango_single"],
         )
 
         summary = selector.get_filter_summary()
-        assert summary['total_filters'] == 3
-        assert 'marker_include' in summary['filter_breakdown']
-        assert 'marker_exclude' in summary['filter_breakdown']
-        assert 'marker_require' in summary['filter_breakdown']
+        assert summary["total_filters"] == 3
+        assert "marker_include" in summary["filter_breakdown"]
+        assert "marker_exclude" in summary["filter_breakdown"]
+        assert "marker_require" in summary["filter_breakdown"]
 
     def test_create_pattern_selector(self):
         """Test pattern selector creation."""
         selector = create_pattern_selector(
-            include_patterns=["test_auth_*"],
-            exclude_patterns=["*_slow"]
+            include_patterns=["test_auth_*"], exclude_patterns=["*_slow"]
         )
 
         summary = selector.get_filter_summary()
-        assert summary['total_filters'] == 2
-        assert 'pattern_include' in summary['filter_breakdown']
-        assert 'pattern_exclude' in summary['filter_breakdown']
+        assert summary["total_filters"] == 2
+        assert "pattern_include" in summary["filter_breakdown"]
+        assert "pattern_exclude" in summary["filter_breakdown"]
 
     def test_create_suite_selector(self):
         """Test suite selector creation."""
         selector = create_suite_selector("auth")
 
         summary = selector.get_filter_summary()
-        assert summary['total_filters'] == 1
-        assert 'tag_require' in summary['filter_breakdown']
-        assert summary['filter_breakdown']['tag_require'] == ['auth']
+        assert summary["total_filters"] == 1
+        assert "tag_require" in summary["filter_breakdown"]
+        assert summary["filter_breakdown"]["tag_require"] == ["auth"]
 
 
 class TestErrorHandling:
@@ -396,7 +420,9 @@ class TestIntegrationScenarios:
         slow_auth_test = Mock()
         slow_auth_test.name = "test_auth_integration"
         slow_auth_test.nodeid = "tests/auth/test_integration.py::test_auth_integration"
-        slow_auth_test.get_closest_marker = lambda name: Mock() if name == "slow" else None
+        slow_auth_test.get_closest_marker = lambda name: (
+            Mock() if name == "slow" else None
+        )
 
         non_auth_test = Mock()
         non_auth_test.name = "test_collections"
@@ -426,7 +452,9 @@ class TestIntegrationScenarios:
         flaky_test.get_closest_marker = lambda name: Mock() if name == "flaky" else None
 
         nightly_test = Mock()
-        nightly_test.get_closest_marker = lambda name: Mock() if name == "nightly" else None
+        nightly_test.get_closest_marker = lambda name: (
+            Mock() if name == "nightly" else None
+        )
 
         tests = [stable_test, flaky_test, nightly_test]
         result = selector.select_tests(tests)

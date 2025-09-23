@@ -10,13 +10,14 @@ from typing import Optional, List
 import aiohttp
 
 from ..core.types import ServerRole, ServerConfig, HealthStatus, ServerStats
-from ..core.errors import (
-    ServerStartupError, ServerShutdownError
-)
+from ..core.errors import ServerStartupError, ServerShutdownError
 from ..core.config import get_config, ConfigProvider
 from ..core.process import (
-    start_supervised_process, stop_supervised_process, is_process_running,
-    ProcessInfo, get_process_stats
+    start_supervised_process,
+    stop_supervised_process,
+    is_process_running,
+    ProcessInfo,
+    get_process_stats,
 )
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
@@ -33,6 +34,7 @@ logger = get_logger(__name__)
 @dataclass
 class ServerPaths:
     """File system paths for an ArangoDB server."""
+
     base_dir: Path
     data_dir: Path
     app_dir: Path
@@ -40,7 +42,9 @@ class ServerPaths:
     config: Optional[ServerConfig] = None  # Store config for command building
 
     @classmethod
-    def from_config(cls, server_id: str, config: Optional[ServerConfig]) -> 'ServerPaths':
+    def from_config(
+        cls, server_id: str, config: Optional[ServerConfig]
+    ) -> "ServerPaths":
         """Create server paths from configuration."""
         if config and config.data_dir:
             data_dir = Path(config.data_dir)
@@ -49,8 +53,12 @@ class ServerPaths:
                 base_dir=base_dir,
                 data_dir=data_dir,
                 app_dir=base_dir / "apps",
-                log_file=Path(config.log_file) if config.log_file else data_dir / "arangodb.log",
-                config=config
+                log_file=(
+                    Path(config.log_file)
+                    if config.log_file
+                    else data_dir / "arangodb.log"
+                ),
+                config=config,
             )
         else:
             # Default directory structure
@@ -60,22 +68,27 @@ class ServerPaths:
                 data_dir=base_dir / "data",
                 app_dir=base_dir / "apps",
                 log_file=base_dir / "arangodb.log",
-                config=config
+                config=config,
             )
+
 
 @dataclass
 class ServerDependencies:
     """Injectable dependencies for ArangoServer."""
+
     config_provider: ConfigProvider
     logger: Logger
     port_allocator: Optional[PortAllocator]
     command_builder: CommandBuilder
     health_checker: HealthChecker
-    auth_provider: 'AuthProvider'
+    auth_provider: "AuthProvider"
 
     @classmethod
-    def create_defaults(cls, custom_logger: Optional[Logger] = None,
-                       port_allocator: Optional[PortAllocator] = None) -> 'ServerDependencies':
+    def create_defaults(
+        cls,
+        custom_logger: Optional[Logger] = None,
+        port_allocator: Optional[PortAllocator] = None,
+    ) -> "ServerDependencies":
         """Create dependencies with sensible defaults."""
         config_provider = get_config()
         logger_instance = custom_logger or get_logger(__name__)
@@ -86,19 +99,19 @@ class ServerDependencies:
             logger=logger_instance,
             port_allocator=port_allocator,
             command_builder=ServerCommandBuilder(
-                config_provider=config_provider,
-                logger=logger_instance
+                config_provider=config_provider, logger=logger_instance
             ),
             health_checker=ServerHealthChecker(
-                logger=logger_instance,
-                auth_provider=auth_provider
+                logger=logger_instance, auth_provider=auth_provider
             ),
-            auth_provider=auth_provider
+            auth_provider=auth_provider,
         )
+
 
 @dataclass
 class ServerRuntimeState:
     """Runtime state for an ArangoDB server."""
+
     is_running: bool = False
     process_info: Optional[ProcessInfo] = None
 
@@ -112,9 +125,11 @@ class ServerRuntimeState:
         self.is_running = False
         self.process_info = None
 
+
 @dataclass
 class ArangoServerInfo:
     """Information about an ArangoDB server instance."""
+
     server_id: str
     role: ServerRole
     port: int
@@ -127,13 +142,15 @@ class ArangoServerInfo:
 class ArangoServer:
     """Wrapper for individual ArangoDB server process with lifecycle management."""
 
-    def __init__(self,
-                 server_id: str,
-                 *,
-                 role: ServerRole = ServerRole.SINGLE,
-                 port: Optional[int] = None,
-                 dependencies: Optional[ServerDependencies] = None,
-                 **legacy_kwargs) -> None:
+    def __init__(
+        self,
+        server_id: str,
+        *,
+        role: ServerRole = ServerRole.SINGLE,
+        port: Optional[int] = None,
+        dependencies: Optional[ServerDependencies] = None,
+        **legacy_kwargs,
+    ) -> None:
         """Initialize ArangoDB server with composition-based design.
 
         Args:
@@ -156,12 +173,12 @@ class ArangoServer:
             self._deps = dependencies
         elif legacy_kwargs:
             # Legacy constructor - extract parameters from kwargs
-            config_provider = legacy_kwargs.get('config_provider')
-            logger_param = legacy_kwargs.get('logger')
-            port_allocator = legacy_kwargs.get('port_allocator')
-            command_builder = legacy_kwargs.get('command_builder')
-            health_checker = legacy_kwargs.get('health_checker')
-            config = legacy_kwargs.get('config')
+            config_provider = legacy_kwargs.get("config_provider")
+            logger_param = legacy_kwargs.get("logger")
+            port_allocator = legacy_kwargs.get("port_allocator")
+            command_builder = legacy_kwargs.get("command_builder")
+            health_checker = legacy_kwargs.get("health_checker")
+            config = legacy_kwargs.get("config")
 
             final_config_provider = config_provider or get_config()
             final_logger = logger_param or get_logger(__name__)
@@ -171,15 +188,15 @@ class ArangoServer:
                 config_provider=final_config_provider,
                 logger=final_logger,
                 port_allocator=port_allocator,
-                command_builder=command_builder or ServerCommandBuilder(
-                    config_provider=final_config_provider,
-                    logger=final_logger
+                command_builder=command_builder
+                or ServerCommandBuilder(
+                    config_provider=final_config_provider, logger=final_logger
                 ),
-                health_checker=health_checker or ServerHealthChecker(
-                    logger=final_logger,
-                    auth_provider=final_auth_provider
+                health_checker=health_checker
+                or ServerHealthChecker(
+                    logger=final_logger, auth_provider=final_auth_provider
                 ),
-                auth_provider=final_auth_provider
+                auth_provider=final_auth_provider,
             )
         else:
             # No dependencies provided, use defaults
@@ -190,7 +207,7 @@ class ArangoServer:
         self.endpoint = f"http://127.0.0.1:{self.port}"
 
         # Extract config from legacy_kwargs for path setup
-        config = legacy_kwargs.get('config') if legacy_kwargs else None
+        config = legacy_kwargs.get("config") if legacy_kwargs else None
 
         # Set up file system paths (which will store config if needed)
         self.paths = ServerPaths.from_config(server_id, config)
@@ -199,7 +216,11 @@ class ArangoServer:
         self._runtime = ServerRuntimeState()
 
         log_server_event(
-            self._deps.logger, "created", server_id=server_id, role=role.value, port=self.port
+            self._deps.logger,
+            "created",
+            server_id=server_id,
+            role=role.value,
+            port=self.port,
         )
 
     def _allocate_port(self, preferred: Optional[int] = None) -> int:
@@ -220,7 +241,9 @@ class ArangoServer:
         if self._runtime.is_running:
             raise ServerStartupError(f"Server {self.server_id} is already running")
 
-        effective_timeout = clamp_timeout(timeout or 30.0, f"server_start_{self.server_id}")
+        effective_timeout = clamp_timeout(
+            timeout or 30.0, f"server_start_{self.server_id}"
+        )
 
         log_server_event(self._deps.logger, "starting", server_id=self.server_id)
 
@@ -242,20 +265,29 @@ class ArangoServer:
                     startup_timeout=effective_timeout,
                     readiness_check=self._check_readiness,
                     # ArangoDB writes directly to console - no buffering delays
-                    inherit_console=True
+                    inherit_console=True,
                 )
 
                 self._runtime.start(process_info)
-                log_server_event(self._deps.logger, "started", server_id=self.server_id,
-                               pid=process_info.pid)
+                log_server_event(
+                    self._deps.logger,
+                    "started",
+                    server_id=self.server_id,
+                    pid=process_info.pid,
+                )
 
         except (OSError, TimeoutError, ProcessLookupError) as e:
             log_server_event(
-                self._deps.logger, "start_failed", server_id=self.server_id, error=str(e)
+                self._deps.logger,
+                "start_failed",
+                server_id=self.server_id,
+                error=str(e),
             )
             # Clean up on failure
             self._cleanup_on_failure()
-            raise ServerStartupError(f"Failed to start server {self.server_id}: {e}") from e
+            raise ServerStartupError(
+                f"Failed to start server {self.server_id}: {e}"
+            ) from e
 
     def stop(self, graceful: bool = True, timeout: float = 30.0) -> None:
         """Stop the ArangoDB server."""
@@ -263,7 +295,9 @@ class ArangoServer:
             self._deps.logger.warning(f"Server {self.server_id} is not running")
             return
 
-        log_server_event(self._deps.logger, "stopping", server_id=self.server_id, graceful=graceful)
+        log_server_event(
+            self._deps.logger, "stopping", server_id=self.server_id, graceful=graceful
+        )
 
         try:
             stop_supervised_process(self.server_id, graceful=graceful, timeout=timeout)
@@ -272,7 +306,9 @@ class ArangoServer:
             log_server_event(
                 self._deps.logger, "stop_failed", server_id=self.server_id, error=str(e)
             )
-            raise ServerShutdownError(f"Failed to stop server {self.server_id}: {e}") from e
+            raise ServerShutdownError(
+                f"Failed to stop server {self.server_id}: {e}"
+            ) from e
         finally:
             self._runtime.stop()
             # Release allocated port
@@ -298,7 +334,8 @@ class ArangoServer:
         supervisor_result = is_process_running(self.server_id)
         self._deps.logger.debug(
             "is_running(%s): _is_running=True, supervisor=%s",
-            self.server_id, supervisor_result
+            self.server_id,
+            supervisor_result,
         )
         return supervisor_result
 
@@ -308,7 +345,7 @@ class ArangoServer:
             return HealthStatus(
                 is_healthy=False,
                 response_time=0.0,
-                error_message="Server is not running"
+                error_message="Server is not running",
             )
 
         start_time = time.time()
@@ -327,13 +364,13 @@ class ArangoServer:
                         return HealthStatus(
                             is_healthy=True,
                             response_time=response_time,
-                            details=details
+                            details=details,
                         )
 
                     return HealthStatus(
                         is_healthy=False,
                         response_time=response_time,
-                        error_message=f"HTTP {response.status}: {response.reason}"
+                        error_message=f"HTTP {response.status}: {response.reason}",
                     )
 
         except asyncio.TimeoutError:
@@ -341,14 +378,14 @@ class ArangoServer:
             return HealthStatus(
                 is_healthy=False,
                 response_time=response_time,
-                error_message=f"Health check timed out after {timeout}s"
+                error_message=f"Health check timed out after {timeout}s",
             )
         except (aiohttp.ClientError, OSError, builtins.ConnectionError) as e:
             response_time = time.time() - start_time
             return HealthStatus(
                 is_healthy=False,
                 response_time=response_time,
-                error_message=f"Health check failed: {e}"
+                error_message=f"Health check failed: {e}",
             )
 
     def health_check_sync(self, timeout: float = 5.0) -> HealthStatus:
@@ -359,7 +396,7 @@ class ArangoServer:
             return HealthStatus(
                 is_healthy=False,
                 response_time=timeout,
-                error_message=f"Health check error: {e}"
+                error_message=f"Health check error: {e}",
             )
 
     def get_stats_sync(self) -> Optional[ServerStats]:
@@ -390,14 +427,20 @@ class ArangoServer:
 
                         return ServerStats(
                             process_id=process_stats.pid if process_stats else 0,
-                            memory_usage=process_stats.memory_rss if process_stats else 0,
-                            cpu_percent=process_stats.cpu_percent if process_stats else 0.0,
-                            connection_count=stats_data.get('client_connections', 0),
-                            uptime=time.time() - (
-                                self._runtime.process_info.start_time
-                                if self._runtime.process_info else 0
+                            memory_usage=(
+                                process_stats.memory_rss if process_stats else 0
                             ),
-                            additional_metrics=stats_data
+                            cpu_percent=(
+                                process_stats.cpu_percent if process_stats else 0.0
+                            ),
+                            connection_count=stats_data.get("client_connections", 0),
+                            uptime=time.time()
+                            - (
+                                self._runtime.process_info.start_time
+                                if self._runtime.process_info
+                                else 0
+                            ),
+                            additional_metrics=stats_data,
                         )
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logger.debug("Failed to get server stats: %s", e)
@@ -412,9 +455,8 @@ class ArangoServer:
             endpoint=self.endpoint,
             data_dir=self.paths.data_dir,
             log_file=self.paths.log_file,
-            process_info=self._runtime.process_info
+            process_info=self._runtime.process_info,
         )
-
 
     def _build_command(self) -> List[str]:
         """Build ArangoDB command line using injected command builder."""
@@ -424,14 +466,13 @@ class ArangoServer:
             port=self.port,
             data_dir=self.paths.data_dir,
             app_dir=self.paths.app_dir,
-            config=self.paths.config
+            config=self.paths.config,
         )
         return self._deps.command_builder.build_command(params)
 
     def _check_readiness(self) -> bool:
         """Check if server is ready to accept connections using injected health checker."""
         return self._deps.health_checker.check_readiness(self.server_id, self.endpoint)
-
 
     def _cleanup_on_failure(self) -> None:
         """Clean up resources on startup failure."""
@@ -442,4 +483,3 @@ class ArangoServer:
             logger.debug("Cleanup error for %s: %s", self.server_id, e)
 
         self._runtime.stop()
-

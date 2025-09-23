@@ -27,23 +27,23 @@ class TestInstanceManagerBasic:
         manager = InstanceManager("test")
 
         # Check that expected attributes exist
-        assert hasattr(manager, 'deployment_id')
-        assert hasattr(manager, '_deps')
-        assert hasattr(manager._deps, 'config')
-        assert hasattr(manager._deps, 'port_manager')
-        assert hasattr(manager, 'state')
-        assert hasattr(manager.state, 'servers')
-        assert hasattr(manager, '_threading')
+        assert hasattr(manager, "deployment_id")
+        assert hasattr(manager, "_deps")
+        assert hasattr(manager._deps, "config")
+        assert hasattr(manager._deps, "port_manager")
+        assert hasattr(manager, "state")
+        assert hasattr(manager.state, "servers")
+        assert hasattr(manager, "_threading")
 
     def test_manager_has_expected_methods(self):
         """Test manager has expected public methods."""
         manager = InstanceManager("test")
 
         # Check that public methods exist
-        assert hasattr(manager, 'create_deployment_plan')
-        assert hasattr(manager, 'deploy_servers')
-        assert hasattr(manager, 'shutdown_deployment')
-        assert hasattr(manager, 'get_server')
+        assert hasattr(manager, "create_deployment_plan")
+        assert hasattr(manager, "deploy_servers")
+        assert hasattr(manager, "shutdown_deployment")
+        assert hasattr(manager, "get_server")
         assert callable(manager.create_deployment_plan)
         assert callable(manager.deploy_servers)
         assert callable(manager.shutdown_deployment)
@@ -79,20 +79,17 @@ class TestDeploymentPlan:
                 role=ServerRole.AGENT,
                 port=8531,
                 data_dir=Path("/tmp/agent"),
-                log_file=Path("/tmp/agent.log")
+                log_file=Path("/tmp/agent.log"),
             ),
             ServerConfig(
                 role=ServerRole.COORDINATOR,
                 port=8529,
                 data_dir=Path("/tmp/coord"),
-                log_file=Path("/tmp/coord.log")
-            )
+                log_file=Path("/tmp/coord.log"),
+            ),
         ]
 
-        plan = DeploymentPlan(
-            deployment_mode=DeploymentMode.CLUSTER,
-            servers=servers
-        )
+        plan = DeploymentPlan(deployment_mode=DeploymentMode.CLUSTER, servers=servers)
 
         assert len(plan.servers) == 2
         assert plan.deployment_mode == DeploymentMode.CLUSTER
@@ -104,20 +101,20 @@ class TestDeploymentPlan:
                 role=ServerRole.AGENT,
                 port=8531,
                 data_dir=Path("/tmp/agent"),
-                log_file=Path("/tmp/agent.log")
+                log_file=Path("/tmp/agent.log"),
             ),
             ServerConfig(
                 role=ServerRole.COORDINATOR,
                 port=8529,
                 data_dir=Path("/tmp/coord"),
-                log_file=Path("/tmp/coord.log")
+                log_file=Path("/tmp/coord.log"),
             ),
             ServerConfig(
                 role=ServerRole.DBSERVER,
                 port=8530,
                 data_dir=Path("/tmp/db"),
-                log_file=Path("/tmp/db.log")
-            )
+                log_file=Path("/tmp/db.log"),
+            ),
         ]
 
         plan = DeploymentPlan(deployment_mode=DeploymentMode.CLUSTER, servers=servers)
@@ -157,8 +154,7 @@ class TestInstanceManagerDeployment:
 
         try:
             result = self.manager.create_deployment_plan(
-                mode=DeploymentMode.SINGLE_SERVER,
-                cluster_config=ClusterConfig()
+                mode=DeploymentMode.SINGLE_SERVER, cluster_config=ClusterConfig()
             )
             # If successful, should return some result
             assert result is not None or result is None  # Either is acceptable
@@ -173,7 +169,7 @@ class TestInstanceManagerDeployment:
         try:
             result = self.manager.create_deployment_plan(
                 mode=DeploymentMode.CLUSTER,
-                cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1)
+                cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1),
             )
             # If successful, should return some result
             assert result is not None or result is None  # Either is acceptable
@@ -203,7 +199,7 @@ class TestInstanceManagerMockIntegration:
         """Set up test environment."""
         self.manager = InstanceManager("mock_test")
 
-    @patch('armadillo.instances.manager.ArangoServer')
+    @patch("armadillo.instances.manager.ArangoServer")
     def test_create_server_instances_attempts_creation(self, mock_server_class):
         """Test server instance creation is attempted."""
         mock_server = Mock()
@@ -217,9 +213,9 @@ class TestInstanceManagerMockIntegration:
                     role=ServerRole.SINGLE,
                     port=8529,
                     data_dir=Path("/tmp/data"),
-                    log_file=Path("/tmp/log")
+                    log_file=Path("/tmp/log"),
                 )
-            ]
+            ],
         )
 
         # Set the deployment plan

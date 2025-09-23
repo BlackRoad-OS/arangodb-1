@@ -3,19 +3,51 @@
 import pytest
 
 from armadillo.core.errors import (
-    ArmadilloError, ConfigurationError, EnvironmentError,
-    ProcessError, ProcessStartupError, ProcessTimeoutError, ProcessCrashError,
-    ServerError, ServerStartupError, ServerShutdownError, HealthCheckError,
-    NetworkError, ServerConnectionError, AuthenticationError, JWTError, NonceReplayError,
-    CodecError, SerializationError, DeserializationError,
-    FilesystemError, PathError, AtomicWriteError,
-    ExecutionError, ExecutionTimeoutError, SetupError, TeardownError,
-    ClusterError, AgencyError, LeaderElectionError,
-    MonitoringError, CrashAnalysisError, GdbError, SanitizerError,
-    ResultProcessingError, ResultExportError, AnalysisError,
-    TimeoutError, DeadlineExceededError, WatchdogTimeoutError,
-    CheckerError, InvariantViolationError, ResourceLeakError,
-    PluginError, PluginLoadError, FixtureError
+    ArmadilloError,
+    ConfigurationError,
+    EnvironmentError,
+    ProcessError,
+    ProcessStartupError,
+    ProcessTimeoutError,
+    ProcessCrashError,
+    ServerError,
+    ServerStartupError,
+    ServerShutdownError,
+    HealthCheckError,
+    NetworkError,
+    ServerConnectionError,
+    AuthenticationError,
+    JWTError,
+    NonceReplayError,
+    CodecError,
+    SerializationError,
+    DeserializationError,
+    FilesystemError,
+    PathError,
+    AtomicWriteError,
+    ExecutionError,
+    ExecutionTimeoutError,
+    SetupError,
+    TeardownError,
+    ClusterError,
+    AgencyError,
+    LeaderElectionError,
+    MonitoringError,
+    CrashAnalysisError,
+    GdbError,
+    SanitizerError,
+    ResultProcessingError,
+    ResultExportError,
+    AnalysisError,
+    TimeoutError,
+    DeadlineExceededError,
+    WatchdogTimeoutError,
+    CheckerError,
+    InvariantViolationError,
+    ResourceLeakError,
+    PluginError,
+    PluginLoadError,
+    FixtureError,
 )
 
 
@@ -186,11 +218,7 @@ class TestErrorUsage:
 
     def test_error_with_context(self):
         """Test error with contextual information."""
-        details = {
-            "command": ["arangod", "--help"],
-            "cwd": "/tmp",
-            "timeout": 30
-        }
+        details = {"command": ["arangod", "--help"], "cwd": "/tmp", "timeout": 30}
         error = ProcessTimeoutError("Command execution timed out", 30.0, details)
 
         assert "command" in error.details
@@ -211,15 +239,15 @@ class TestErrorUsage:
         errors = [
             ProcessTimeoutError("Timeout", 30.0),
             HealthCheckError("Health failed"),
-            InvariantViolationError("Violation", "checker")
+            InvariantViolationError("Violation", "checker"),
         ]
 
         # Should be able to handle different error types
         for error in errors:
             assert isinstance(error, ArmadilloError)
             if isinstance(error, ProcessTimeoutError):
-                assert hasattr(error, 'timeout')
+                assert hasattr(error, "timeout")
             elif isinstance(error, HealthCheckError):
-                assert hasattr(error, 'response_code')
+                assert hasattr(error, "response_code")
             elif isinstance(error, InvariantViolationError):
-                assert hasattr(error, 'checker_name')
+                assert hasattr(error, "checker_name")

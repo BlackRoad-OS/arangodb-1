@@ -10,8 +10,12 @@ from unittest.mock import Mock, patch
 import pytest
 
 from armadillo.core.logger_factory import (
-    IsolatedLogManager, StandardLoggerFactory,
-    log_event, log_process_event, log_server_event, log_test_event
+    IsolatedLogManager,
+    StandardLoggerFactory,
+    log_event,
+    log_process_event,
+    log_server_event,
+    log_test_event,
 )
 
 
@@ -58,11 +62,15 @@ class TestIsolatedLogManager:
     def test_reconfiguration_allowed(self):
         """Test that reconfiguration is allowed for test isolation."""
         # First configuration
-        self.manager.configure(level=logging.DEBUG, enable_json=False, enable_console=False)
+        self.manager.configure(
+            level=logging.DEBUG, enable_json=False, enable_console=False
+        )
         logger1 = self.manager.create_logger("test")
 
         # Reconfigure
-        self.manager.configure(level=logging.INFO, enable_json=False, enable_console=False)
+        self.manager.configure(
+            level=logging.INFO, enable_json=False, enable_console=False
+        )
         logger2 = self.manager.create_logger("test2")
 
         # Should work without errors
@@ -131,7 +139,7 @@ class TestIsolatedLogManager:
 
     def test_json_file_logging(self):
         """Test JSON file logging configuration."""
-        with tempfile.NamedTemporaryFile(suffix='.log', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f:
             log_file = Path(f.name)
 
         try:
@@ -139,7 +147,7 @@ class TestIsolatedLogManager:
                 level=logging.INFO,
                 log_file=log_file,
                 enable_json=True,
-                enable_console=False
+                enable_console=False,
             )
 
             logger = self.manager.create_logger("json_test")
@@ -168,14 +176,12 @@ class TestIsolatedLogManager:
 
     def test_shutdown_cleanup(self):
         """Test that shutdown properly cleans up resources."""
-        with tempfile.NamedTemporaryFile(suffix='.log', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f:
             log_file = Path(f.name)
 
         try:
             self.manager.configure(
-                log_file=log_file,
-                enable_json=True,
-                enable_console=False
+                log_file=log_file, enable_json=True, enable_console=False
             )
 
             logger = self.manager.create_logger("cleanup_test")
@@ -197,9 +203,7 @@ class TestStandardLoggerFactory:
     def setup_method(self):
         """Set up test environment."""
         self.factory = StandardLoggerFactory(
-            namespace="factory_test",
-            enable_json=False,
-            enable_console=False
+            namespace="factory_test", enable_json=False, enable_console=False
         )
 
     def teardown_method(self):
@@ -229,8 +233,8 @@ class TestStandardLoggerFactory:
 
     def test_protocol_compliance(self):
         """Test that StandardLoggerFactory implements LoggerFactory protocol."""
-        assert hasattr(self.factory, 'create_logger')
-        assert hasattr(self.factory, 'shutdown')
+        assert hasattr(self.factory, "create_logger")
+        assert hasattr(self.factory, "shutdown")
         assert callable(self.factory.create_logger)
         assert callable(self.factory.shutdown)
 
@@ -247,8 +251,7 @@ class TestLoggingEventFunctions:
         log_event(self.mock_logger, "custom", "Test event", extra_field="value")
 
         self.mock_logger.info.assert_called_once_with(
-            "Test event",
-            extra={'event_type': 'custom', 'extra_field': 'value'}
+            "Test event", extra={"event_type": "custom", "extra_field": "value"}
         )
 
     def test_log_process_event(self):
@@ -256,27 +259,22 @@ class TestLoggingEventFunctions:
         log_process_event(self.mock_logger, "started", pid=1234, command="test")
 
         expected_extra = {
-            'event_type': 'process',
-            'process_event': 'started',
-            'pid': 1234,
-            'command': 'test'
+            "event_type": "process",
+            "process_event": "started",
+            "pid": 1234,
+            "command": "test",
         }
         self.mock_logger.info.assert_called_once_with(
-            "Process %s", "started",
-            extra=expected_extra
+            "Process %s", "started", extra=expected_extra
         )
 
     def test_log_process_event_without_pid(self):
         """Test process event logging without PID."""
         log_process_event(self.mock_logger, "failed")
 
-        expected_extra = {
-            'event_type': 'process',
-            'process_event': 'failed'
-        }
+        expected_extra = {"event_type": "process", "process_event": "failed"}
         self.mock_logger.info.assert_called_once_with(
-            "Process %s", "failed",
-            extra=expected_extra
+            "Process %s", "failed", extra=expected_extra
         )
 
     def test_log_server_event(self):
@@ -284,55 +282,47 @@ class TestLoggingEventFunctions:
         log_server_event(self.mock_logger, "startup", server_id="srv_1", port=8529)
 
         expected_extra = {
-            'event_type': 'server',
-            'server_event': 'startup',
-            'server_id': 'srv_1',
-            'port': 8529
+            "event_type": "server",
+            "server_event": "startup",
+            "server_id": "srv_1",
+            "port": 8529,
         }
         self.mock_logger.info.assert_called_once_with(
-            "Server %s", "startup",
-            extra=expected_extra
+            "Server %s", "startup", extra=expected_extra
         )
 
     def test_log_server_event_without_id(self):
         """Test server event logging without server ID."""
         log_server_event(self.mock_logger, "shutdown")
 
-        expected_extra = {
-            'event_type': 'server',
-            'server_event': 'shutdown'
-        }
+        expected_extra = {"event_type": "server", "server_event": "shutdown"}
         self.mock_logger.info.assert_called_once_with(
-            "Server %s", "shutdown",
-            extra=expected_extra
+            "Server %s", "shutdown", extra=expected_extra
         )
 
     def test_log_test_event(self):
         """Test test event logging."""
-        log_test_event(self.mock_logger, "started", test_name="test_feature", suite="integration")
+        log_test_event(
+            self.mock_logger, "started", test_name="test_feature", suite="integration"
+        )
 
         expected_extra = {
-            'event_type': 'test',
-            'test_event': 'started',
-            'test_name': 'test_feature',
-            'suite': 'integration'
+            "event_type": "test",
+            "test_event": "started",
+            "test_name": "test_feature",
+            "suite": "integration",
         }
         self.mock_logger.info.assert_called_once_with(
-            "Test %s", "started",
-            extra=expected_extra
+            "Test %s", "started", extra=expected_extra
         )
 
     def test_log_test_event_without_name(self):
         """Test test event logging without test name."""
         log_test_event(self.mock_logger, "completed")
 
-        expected_extra = {
-            'event_type': 'test',
-            'test_event': 'completed'
-        }
+        expected_extra = {"event_type": "test", "test_event": "completed"}
         self.mock_logger.info.assert_called_once_with(
-            "Test %s", "completed",
-            extra=expected_extra
+            "Test %s", "completed", extra=expected_extra
         )
 
 
@@ -341,8 +331,12 @@ class TestLoggerFactoryIsolation:
 
     def test_multiple_factories_isolation(self):
         """Test that multiple factories don't interfere with each other."""
-        factory1 = StandardLoggerFactory(namespace="test1", enable_json=False, enable_console=False)
-        factory2 = StandardLoggerFactory(namespace="test2", enable_json=False, enable_console=False)
+        factory1 = StandardLoggerFactory(
+            namespace="test1", enable_json=False, enable_console=False
+        )
+        factory2 = StandardLoggerFactory(
+            namespace="test2", enable_json=False, enable_console=False
+        )
 
         try:
             # Set different contexts
@@ -368,7 +362,9 @@ class TestLoggerFactoryIsolation:
         """Test that factory context doesn't leak to global context."""
         from armadillo.core.log import get_log_context, clear_log_context
 
-        factory = StandardLoggerFactory(namespace="isolated", enable_json=False, enable_console=False)
+        factory = StandardLoggerFactory(
+            namespace="isolated", enable_json=False, enable_console=False
+        )
 
         try:
             # Clear any existing global context

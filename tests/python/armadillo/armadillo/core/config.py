@@ -11,7 +11,7 @@ from .types import ArmadilloConfig, DeploymentMode, ClusterConfig, MonitoringCon
 from .errors import ConfigurationError, PathError
 from .build_detection import detect_build_directory
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ConfigProvider(Protocol):
@@ -67,12 +67,14 @@ class ConfigLoader:
 
         # Update base config with environment overrides
         if config_dict:
-            if hasattr(base_config, '__dict__'):
+            if hasattr(base_config, "__dict__"):
                 for key, value in config_dict.items():
                     setattr(base_config, key, value)
             else:
                 # For immutable configs, create new instance
-                current_dict = base_config.__dict__ if hasattr(base_config, '__dict__') else {}
+                current_dict = (
+                    base_config.__dict__ if hasattr(base_config, "__dict__") else {}
+                )
                 current_dict.update(config_dict)
                 base_config = config_cls(**current_dict)
 
@@ -81,12 +83,12 @@ class ConfigLoader:
     def _convert_env_value(self, value: str, target_type: Type) -> Any:
         """Convert string environment value to target type."""
         # Handle None/empty values
-        if not value or value.lower() in ('none', 'null', ''):
+        if not value or value.lower() in ("none", "null", ""):
             return None
 
         # Handle boolean values
         if target_type == bool:
-            return value.lower() in ('true', '1', 'yes', 'on')
+            return value.lower() in ("true", "1", "yes", "on")
 
         # Handle numeric types
         if target_type == int:
@@ -106,16 +108,18 @@ class ConfigLoader:
             return Path(value)
 
         # Handle enums
-        if hasattr(target_type, '__members__'):
+        if hasattr(target_type, "__members__"):
             try:
                 return target_type(value)
             except ValueError as e:
                 valid_values = list(target_type.__members__.keys())
-                raise ConfigurationError(f"Invalid enum value '{value}'. Valid values: {valid_values}") from e
+                raise ConfigurationError(
+                    f"Invalid enum value '{value}'. Valid values: {valid_values}"
+                ) from e
 
         # Handle lists (comma-separated)
-        if hasattr(target_type, '__origin__') and target_type.__origin__ == list:
-            return [item.strip() for item in value.split(',')]
+        if hasattr(target_type, "__origin__") and target_type.__origin__ == list:
+            return [item.strip() for item in value.split(",")]
 
         # Default to string
         return value
@@ -128,9 +132,9 @@ class ConfigManager:
         self._config: Optional[ArmadilloConfig] = None
         self._loader = ConfigLoader()
 
-    def load_config(self,
-                   config_file: Optional[Path] = None,
-                   **overrides: Any) -> ArmadilloConfig:
+    def load_config(
+        self, config_file: Optional[Path] = None, **overrides: Any
+    ) -> ArmadilloConfig:
         """Load configuration from file and environment with CLI overrides."""
         base_config = self._create_default_config()
 
@@ -182,21 +186,27 @@ class ConfigManager:
             work_dir=None,
             verbose=0,
             log_level="INFO",
-            compact_mode=False
+            compact_mode=False,
         )
 
     def _load_from_file(self, config_file: Path) -> Dict[str, Any]:
         """Load configuration from YAML file."""
         try:
-            with open(config_file, 'r') as f:
-                if config_file.suffix.lower() in ('.yml', '.yaml'):
+            with open(config_file, "r") as f:
+                if config_file.suffix.lower() in (".yml", ".yaml"):
                     return yaml.safe_load(f) or {}
                 else:
-                    raise ConfigurationError(f"Unsupported config file format: {config_file.suffix}")
+                    raise ConfigurationError(
+                        f"Unsupported config file format: {config_file.suffix}"
+                    )
         except Exception as e:
-            raise ConfigurationError(f"Failed to load config file {config_file}: {e}") from e
+            raise ConfigurationError(
+                f"Failed to load config file {config_file}: {e}"
+            ) from e
 
-    def _merge_configs(self, base: ArmadilloConfig, overrides: Dict[str, Any]) -> ArmadilloConfig:
+    def _merge_configs(
+        self, base: ArmadilloConfig, overrides: Dict[str, Any]
+    ) -> ArmadilloConfig:
         """Merge configuration dictionaries."""
         config_dict = {}
 
@@ -208,7 +218,11 @@ class ConfigManager:
         def merge_dict(base_dict: Dict, override_dict: Dict) -> Dict:
             result = base_dict.copy()
             for key, value in override_dict.items():
-                if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                if (
+                    key in result
+                    and isinstance(result[key], dict)
+                    and isinstance(value, dict)
+                ):
                     result[key] = merge_dict(result[key], value)
                 else:
                     result[key] = value
@@ -217,17 +231,19 @@ class ConfigManager:
         merged_dict = merge_dict(config_dict, overrides)
 
         # Handle nested objects
-        if 'cluster' in overrides and isinstance(overrides['cluster'], dict):
-            cluster_config = ClusterConfig(**overrides['cluster'])
-            merged_dict['cluster'] = cluster_config
+        if "cluster" in overrides and isinstance(overrides["cluster"], dict):
+            cluster_config = ClusterConfig(**overrides["cluster"])
+            merged_dict["cluster"] = cluster_config
 
-        if 'monitoring' in overrides and isinstance(overrides['monitoring'], dict):
-            monitoring_config = MonitoringConfig(**overrides['monitoring'])
-            merged_dict['monitoring'] = monitoring_config
+        if "monitoring" in overrides and isinstance(overrides["monitoring"], dict):
+            monitoring_config = MonitoringConfig(**overrides["monitoring"])
+            merged_dict["monitoring"] = monitoring_config
 
         return ArmadilloConfig(**merged_dict)
 
-    def _apply_overrides(self, base: ArmadilloConfig, overrides: Dict[str, Any]) -> ArmadilloConfig:
+    def _apply_overrides(
+        self, base: ArmadilloConfig, overrides: Dict[str, Any]
+    ) -> ArmadilloConfig:
         """Apply CLI overrides to configuration."""
         config_dict = {}
 
@@ -280,7 +296,10 @@ class ConfigManager:
         """Check if we're running in a unit test context where build detection should be skipped."""
         # Check call stack for unit test patterns - this is most reliable
         for frame_info in inspect.stack():
-            if 'framework_tests/unit' in frame_info.filename or 'framework_tests\\unit' in frame_info.filename:
+            if (
+                "framework_tests/unit" in frame_info.filename
+                or "framework_tests\\unit" in frame_info.filename
+            ):
                 return True
 
         return False
@@ -303,4 +322,3 @@ def get_config() -> ArmadilloConfig:
 def derive_sub_tmp(subdir: str) -> Path:
     """Derive a subdirectory path within the configured temp directory."""
     return _config_manager.derive_sub_tmp(subdir)
-

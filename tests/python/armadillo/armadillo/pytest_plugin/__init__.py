@@ -4,4 +4,3 @@
 from .plugin import ArmadilloPlugin
 
 __all__ = ["ArmadilloPlugin"]
-

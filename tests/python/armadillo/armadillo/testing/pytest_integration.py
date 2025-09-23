@@ -6,7 +6,7 @@ from typing import Generator
 from .test_context import (
     IsolatedTestContext,
     get_test_environment_factory,
-    reset_test_environment
+    reset_test_environment,
 )
 
 
@@ -28,7 +28,7 @@ def isolated_test_context(request) -> Generator[IsolatedTestContext, None, None]
     """
     # Get test name from pytest request
     test_name = request.node.name
-    if hasattr(request.node, 'cls') and request.node.cls:
+    if hasattr(request.node, "cls") and request.node.cls:
         test_name = f"{request.node.cls.__name__}.{test_name}"
 
     # Create isolated context
@@ -36,7 +36,7 @@ def isolated_test_context(request) -> Generator[IsolatedTestContext, None, None]
     context = factory.create_context(
         test_name=test_name,
         enable_persistence=False,  # Don't persist logs for unit tests
-        cleanup_on_exit=False  # We'll clean up manually
+        cleanup_on_exit=False,  # We'll clean up manually
     )
 
     try:
@@ -62,7 +62,7 @@ def test_environment(request) -> Generator[IsolatedTestContext, None, None]:
     """
     # Get test name from pytest request
     test_name = request.node.name
-    if hasattr(request.node, 'cls') and request.node.cls:
+    if hasattr(request.node, "cls") and request.node.cls:
         test_name = f"{request.node.cls.__name__}.{test_name}"
 
     # Create isolated context with persistence
@@ -70,7 +70,7 @@ def test_environment(request) -> Generator[IsolatedTestContext, None, None]:
     context = factory.create_context(
         test_name=test_name,
         enable_persistence=True,  # Enable persistence for debugging
-        cleanup_on_exit=False  # We'll clean up manually
+        cleanup_on_exit=False,  # We'll clean up manually
     )
 
     try:
@@ -133,7 +133,7 @@ class ContextTestManager:
         self._context = factory.create_context(
             test_name=self._test_name,
             cleanup_on_exit=False,  # We'll clean up manually
-            **self._context_kwargs
+            **self._context_kwargs,
         )
         return self._context
 
@@ -184,5 +184,6 @@ def pytest_configure(config):
         "markers", "isolated: mark test as requiring full isolation"
     )
     config.addinivalue_line(
-        "markers", "no_isolation: mark test as not requiring isolation (for performance)"
+        "markers",
+        "no_isolation: mark test as not requiring isolation (for performance)",
     )

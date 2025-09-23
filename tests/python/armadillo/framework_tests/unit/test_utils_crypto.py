@@ -5,8 +5,15 @@ import hashlib
 from unittest.mock import patch
 
 from armadillo.utils.crypto import (
-    CryptoService, sha256, md5, random_id, random_bytes,
-    random_hex, register_nonce, is_nonce_used, generate_secret
+    CryptoService,
+    sha256,
+    md5,
+    random_id,
+    random_bytes,
+    random_hex,
+    register_nonce,
+    is_nonce_used,
+    generate_secret,
 )
 from armadillo.core.errors import NonceReplayError
 
@@ -26,7 +33,7 @@ class TestCryptoService:
         service = CryptoService()
 
         result = service.sha256("hello world")
-        expected = hashlib.sha256("hello world".encode('utf-8')).hexdigest()
+        expected = hashlib.sha256("hello world".encode("utf-8")).hexdigest()
 
         assert result == expected
         assert len(result) == 64  # SHA256 hex length
@@ -56,7 +63,7 @@ class TestCryptoService:
         service = CryptoService()
 
         result = service.md5("hello world")
-        expected = hashlib.md5("hello world".encode('utf-8')).hexdigest()
+        expected = hashlib.md5("hello world".encode("utf-8")).hexdigest()
 
         assert result == expected
         assert len(result) == 32  # MD5 hex length
@@ -78,7 +85,7 @@ class TestCryptoService:
         result = service.random_id()
 
         assert len(result) == 16
-        assert all(c.isalnum() or c in '-_' for c in result)
+        assert all(c.isalnum() or c in "-_" for c in result)
 
     def test_random_id_custom_length(self):
         """Test random ID generation with custom length."""
@@ -87,7 +94,7 @@ class TestCryptoService:
         result = service.random_id(32)
 
         assert len(result) == 32
-        assert all(c.isalnum() or c in '-_' for c in result)
+        assert all(c.isalnum() or c in "-_" for c in result)
 
     def test_random_id_uniqueness(self):
         """Test random ID uniqueness over multiple generations."""
@@ -129,7 +136,7 @@ class TestCryptoService:
 
         assert isinstance(result, str)
         assert len(result) == 16  # 8 bytes = 16 hex characters
-        assert all(c in '0123456789abcdef' for c in result)
+        assert all(c in "0123456789abcdef" for c in result)
 
     def test_nonce_registration(self):
         """Test nonce registration and tracking."""
@@ -193,7 +200,7 @@ class TestCryptoService:
 
         assert isinstance(secret, str)
         assert len(secret) == 64  # 32 bytes = 64 hex characters
-        assert all(c in '0123456789abcdef' for c in secret)
+        assert all(c in "0123456789abcdef" for c in secret)
 
         # Custom length
         secret2 = service.generate_secret(16)
@@ -239,14 +246,14 @@ class TestGlobalCryptoFunctions:
         """Test global sha256 function."""
         result = sha256("test data")
 
-        expected = hashlib.sha256("test data".encode('utf-8')).hexdigest()
+        expected = hashlib.sha256("test data".encode("utf-8")).hexdigest()
         assert result == expected
 
     def test_md5_function(self):
         """Test global md5 function."""
         result = md5("test data")
 
-        expected = hashlib.md5("test data".encode('utf-8')).hexdigest()
+        expected = hashlib.md5("test data".encode("utf-8")).hexdigest()
         assert result == expected
 
     def test_random_id_function(self):
@@ -254,7 +261,7 @@ class TestGlobalCryptoFunctions:
         result = random_id(24)
 
         assert len(result) == 24
-        assert all(c.isalnum() or c in '-_' for c in result)
+        assert all(c.isalnum() or c in "-_" for c in result)
 
     def test_random_bytes_function(self):
         """Test global random_bytes function."""
@@ -269,7 +276,7 @@ class TestGlobalCryptoFunctions:
 
         assert isinstance(result, str)
         assert len(result) == 12  # 6 bytes = 12 hex chars
-        assert all(c in '0123456789abcdef' for c in result)
+        assert all(c in "0123456789abcdef" for c in result)
 
     def test_nonce_functions(self):
         """Test global nonce management functions."""

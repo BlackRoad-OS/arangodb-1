@@ -6,9 +6,14 @@ from pathlib import Path
 import time
 
 from armadillo.test_management.organizer import (
-    SuiteConfig, Suite, SuiteOrganizer,
-    SuitePriority, SuiteStatus,
-    create_marker_suite, create_pattern_suite, create_priority_suite
+    SuiteConfig,
+    Suite,
+    SuiteOrganizer,
+    SuitePriority,
+    SuiteStatus,
+    create_marker_suite,
+    create_pattern_suite,
+    create_priority_suite,
 )
 from armadillo.test_management.selector import Selector, create_marker_selector
 
@@ -42,7 +47,7 @@ class TestSuiteConfig:
             conflicts_with=["fast_suite"],
             min_memory_mb=1024,
             requires_network=True,
-            metadata={"version": "1.0"}
+            metadata={"version": "1.0"},
         )
 
         assert config.name == "full_suite"
@@ -60,11 +65,13 @@ class TestSuiteConfig:
 
     def test_suite_config_chaining(self):
         """Test method chaining on suite config."""
-        config = (SuiteConfig(name="chain_test")
-                 .add_tag("slow")
-                 .add_tag("integration")
-                 .add_dependency("auth_suite")
-                 .add_conflict("fast_suite"))
+        config = (
+            SuiteConfig(name="chain_test")
+            .add_tag("slow")
+            .add_tag("integration")
+            .add_dependency("auth_suite")
+            .add_conflict("fast_suite")
+        )
 
         assert "slow" in config.tags
         assert "integration" in config.tags
@@ -169,7 +176,7 @@ class TestSuiteFunctionality:
     def test_suite_collect_tests(self):
         """Test test collection."""
         # Mock selector to return specific tests
-        with patch.object(self.selector, 'select_tests') as mock_select:
+        with patch.object(self.selector, "select_tests") as mock_select:
             mock_result = Mock()
             mock_result.selected_tests = self.mock_tests[:3]
             mock_select.return_value = mock_result
@@ -269,7 +276,7 @@ class TestSuiteFunctionality:
         criteria = {
             "tags": ["slow"],
             "status": SuiteStatus.COMPLETED,
-            "metadata": {"version": "1.0"}
+            "metadata": {"version": "1.0"},
         }
         assert self.suite.matches_criteria(criteria) is True
 
@@ -289,19 +296,19 @@ class TestSuiteFunctionality:
 
         summary = self.suite.summary()
 
-        assert summary['name'] == 'test_suite'
-        assert summary['full_name'] == 'test_suite'
-        assert summary['status'] == 'completed'
-        assert summary['test_count'] == 5
-        assert summary['total_tests'] == 5
-        assert summary['passed'] == 3
-        assert summary['failed'] == 1
-        assert summary['skipped'] == 1
-        assert summary['success_rate'] == 60.0
-        assert summary['priority'] == 3  # SuitePriority.NORMAL.value
-        assert summary['tags'] == ['slow']
-        assert summary['children_count'] == 1
-        assert summary['has_parent'] is False
+        assert summary["name"] == "test_suite"
+        assert summary["full_name"] == "test_suite"
+        assert summary["status"] == "completed"
+        assert summary["test_count"] == 5
+        assert summary["total_tests"] == 5
+        assert summary["passed"] == 3
+        assert summary["failed"] == 1
+        assert summary["skipped"] == 1
+        assert summary["success_rate"] == 60.0
+        assert summary["priority"] == 3  # SuitePriority.NORMAL.value
+        assert summary["tags"] == ["slow"]
+        assert summary["children_count"] == 1
+        assert summary["has_parent"] is False
 
 
 class TestSuiteOrganizer:
@@ -316,12 +323,12 @@ class TestSuiteOrganizer:
         self.auth_suite = Suite(config=self.auth_config, selector=Selector())
 
         self.collections_config = SuiteConfig(name="collections_suite")
-        self.collections_suite = Suite(config=self.collections_config, selector=Selector())
+        self.collections_suite = Suite(
+            config=self.collections_config, selector=Selector()
+        )
 
         self.slow_config = SuiteConfig(
-            name="slow_suite",
-            priority=SuitePriority.LOW,
-            depends_on=["auth_suite"]
+            name="slow_suite", priority=SuitePriority.LOW, depends_on=["auth_suite"]
         )
         self.slow_suite = Suite(config=self.slow_config, selector=Selector())
 
@@ -406,7 +413,9 @@ class TestSuiteOrganizer:
         slow_marker = Mock()
         slow_marker.name = "slow"
         slow_test.iter_markers = lambda: [slow_marker]
-        slow_test.get_closest_marker = lambda name: slow_marker if name == "slow" else None
+        slow_test.get_closest_marker = lambda name: (
+            slow_marker if name == "slow" else None
+        )
         mock_tests.append(slow_test)
 
         # Fast test
@@ -414,7 +423,9 @@ class TestSuiteOrganizer:
         fast_marker = Mock()
         fast_marker.name = "fast"
         fast_test.iter_markers = lambda: [fast_marker]
-        fast_test.get_closest_marker = lambda name: fast_marker if name == "fast" else None
+        fast_test.get_closest_marker = lambda name: (
+            fast_marker if name == "fast" else None
+        )
         mock_tests.append(fast_test)
 
         # Integration test
@@ -422,7 +433,9 @@ class TestSuiteOrganizer:
         integration_marker = Mock()
         integration_marker.name = "integration"
         integration_test.iter_markers = lambda: [integration_marker]
-        integration_test.get_closest_marker = lambda name: integration_marker if name == "integration" else None
+        integration_test.get_closest_marker = lambda name: (
+            integration_marker if name == "integration" else None
+        )
         mock_tests.append(integration_test)
 
         # Test with no common markers
@@ -430,15 +443,22 @@ class TestSuiteOrganizer:
         other_marker = Mock()
         other_marker.name = "other"
         other_test.iter_markers = lambda: [other_marker]
-        other_test.get_closest_marker = lambda name: other_marker if name == "other" else None
+        other_test.get_closest_marker = lambda name: (
+            other_marker if name == "other" else None
+        )
         mock_tests.append(other_test)
 
         # Patch the selector's select_tests method to return the appropriate tests
-        with patch('armadillo.test_management.selector.Selector.select_tests') as mock_select:
+        with patch(
+            "armadillo.test_management.selector.Selector.select_tests"
+        ) as mock_select:
+
             def select_tests_side_effect(all_tests):
                 # Mock result that returns tests for the suite being created
                 result = Mock()
-                result.selected_tests = [mock_tests[0]]  # Just return one test for simplicity
+                result.selected_tests = [
+                    mock_tests[0]
+                ]  # Just return one test for simplicity
                 return result
 
             mock_select.side_effect = select_tests_side_effect
@@ -472,7 +492,9 @@ class TestSuiteOrganizer:
         for i in range(2):
             test = Mock()
             test.fspath = Path(f"tests/collections/test_collections_{i}.py")
-            test.nodeid = f"tests/collections/test_collections_{i}.py::test_function_{i}"
+            test.nodeid = (
+                f"tests/collections/test_collections_{i}.py::test_function_{i}"
+            )
             mock_tests.append(test)
 
         # Single test in integration (should not create suite)
@@ -527,9 +549,11 @@ class TestSuiteOrganizer:
     def test_calculate_execution_order(self):
         """Test execution order calculation with dependencies."""
         # Add suites with dependencies
-        self.organizer.add_suite(self.auth_suite)      # No dependencies, HIGH priority
-        self.organizer.add_suite(self.collections_suite)  # No dependencies, NORMAL priority
-        self.organizer.add_suite(self.slow_suite)      # Depends on auth_suite, LOW priority
+        self.organizer.add_suite(self.auth_suite)  # No dependencies, HIGH priority
+        self.organizer.add_suite(
+            self.collections_suite
+        )  # No dependencies, NORMAL priority
+        self.organizer.add_suite(self.slow_suite)  # Depends on auth_suite, LOW priority
 
         order = self.organizer.calculate_execution_order()
 
@@ -564,7 +588,9 @@ class TestSuiteOrganizer:
         invalid_suite = Suite(config=invalid_config, selector=Selector())
 
         # Add suite with conflict
-        conflict_config = SuiteConfig(name="conflict", conflicts_with=["collections_suite"])
+        conflict_config = SuiteConfig(
+            name="conflict", conflicts_with=["collections_suite"]
+        )
         conflict_suite = Suite(config=conflict_config, selector=Selector())
 
         self.organizer.add_suite(invalid_suite)
@@ -582,8 +608,10 @@ class TestSuiteOrganizer:
         mock_tests = [Mock() for _ in range(5)]
 
         # Mock selectors to return different subsets
-        with patch.object(self.auth_suite.selector, 'select_tests') as mock_auth:
-            with patch.object(self.collections_suite.selector, 'select_tests') as mock_collections:
+        with patch.object(self.auth_suite.selector, "select_tests") as mock_auth:
+            with patch.object(
+                self.collections_suite.selector, "select_tests"
+            ) as mock_collections:
                 auth_result = Mock()
                 auth_result.selected_tests = mock_tests[:2]
                 mock_auth.return_value = auth_result
@@ -611,15 +639,15 @@ class TestSuiteOrganizer:
 
         stats = self.organizer.get_statistics()
 
-        assert stats['total_suites'] == 3
-        assert stats['root_suites'] == 3
-        assert stats['status_distribution']['completed'] == 1
-        assert stats['status_distribution']['running'] == 1
-        assert stats['status_distribution']['pending'] == 1
-        assert stats['priority_distribution'][SuitePriority.HIGH.value] == 1
-        assert stats['priority_distribution'][SuitePriority.NORMAL.value] == 1
-        assert stats['priority_distribution'][SuitePriority.LOW.value] == 1
-        assert stats['has_dependencies'] is True  # slow_suite depends on auth_suite
+        assert stats["total_suites"] == 3
+        assert stats["root_suites"] == 3
+        assert stats["status_distribution"]["completed"] == 1
+        assert stats["status_distribution"]["running"] == 1
+        assert stats["status_distribution"]["pending"] == 1
+        assert stats["priority_distribution"][SuitePriority.HIGH.value] == 1
+        assert stats["priority_distribution"][SuitePriority.NORMAL.value] == 1
+        assert stats["priority_distribution"][SuitePriority.LOW.value] == 1
+        assert stats["has_dependencies"] is True  # slow_suite depends on auth_suite
 
     def test_export_summary(self):
         """Test comprehensive summary export."""
@@ -628,15 +656,15 @@ class TestSuiteOrganizer:
 
         summary = self.organizer.export_summary()
 
-        assert 'statistics' in summary
-        assert 'execution_order' in summary
-        assert 'validation_errors' in summary
-        assert 'suites' in summary
-        assert 'hierarchy' in summary
+        assert "statistics" in summary
+        assert "execution_order" in summary
+        assert "validation_errors" in summary
+        assert "suites" in summary
+        assert "hierarchy" in summary
 
-        assert len(summary['suites']) == 2
-        assert 'auth_suite' in summary['suites']
-        assert 'collections_suite' in summary['suites']
+        assert len(summary["suites"]) == 2
+        assert "auth_suite" in summary["suites"]
+        assert "collections_suite" in summary["suites"]
 
 
 class TestConvenienceFunctions:
@@ -663,7 +691,9 @@ class TestConvenienceFunctions:
     def test_create_priority_suite(self):
         """Test priority-based suite creation."""
         selector = Selector()
-        suite = create_priority_suite("critical_tests", SuitePriority.CRITICAL, selector, "Critical tests")
+        suite = create_priority_suite(
+            "critical_tests", SuitePriority.CRITICAL, selector, "Critical tests"
+        )
 
         assert suite.name == "critical_tests"
         assert suite.config.priority == SuitePriority.CRITICAL
@@ -689,7 +719,9 @@ class TestIntegrationScenarios:
             test.nodeid = f"tests/auth/test_auth.py::test_auth_{i}"
             test.fspath = Path("tests/auth/test_auth.py")
             test.iter_markers = lambda: [Mock(name="slow"), Mock(name="integration")]
-            test.get_closest_marker = lambda name: Mock() if name in ["slow", "integration"] else None
+            test.get_closest_marker = lambda name: (
+                Mock() if name in ["slow", "integration"] else None
+            )
             self.mock_tests.append(test)
 
         # Fast unit tests
@@ -699,7 +731,9 @@ class TestIntegrationScenarios:
             test.nodeid = f"tests/unit/test_unit.py::test_unit_{i}"
             test.fspath = Path("tests/unit/test_unit.py")
             test.iter_markers = lambda: [Mock(name="fast"), Mock(name="unit")]
-            test.get_closest_marker = lambda name: Mock() if name in ["fast", "unit"] else None
+            test.get_closest_marker = lambda name: (
+                Mock() if name in ["fast", "unit"] else None
+            )
             self.mock_tests.append(test)
 
         # Collections tests
@@ -722,13 +756,15 @@ class TestIntegrationScenarios:
 
         # Step 3: Add custom suites with dependencies
         # First check what unit suite was actually created
-        unit_suite_names = [name for name in self.organizer.suites.keys() if "unit" in name.lower()]
+        unit_suite_names = [
+            name for name in self.organizer.suites.keys() if "unit" in name.lower()
+        ]
         dependency_name = unit_suite_names[0] if unit_suite_names else "unit_tests"
 
         critical_config = SuiteConfig(
             name="critical_suite",
             priority=SuitePriority.CRITICAL,
-            depends_on=[dependency_name]
+            depends_on=[dependency_name],
         )
         critical_selector = create_marker_selector(require_markers=["integration"])
         critical_suite = Suite(config=critical_config, selector=critical_selector)
@@ -744,10 +780,14 @@ class TestIntegrationScenarios:
         errors = self.organizer.validate_dependencies()
 
         # Verify results
-        assert len(self.organizer.suites) >= 3  # At least unit, slow, integration from markers
+        assert (
+            len(self.organizer.suites) >= 3
+        )  # At least unit, slow, integration from markers
         assert len(order) >= 3
         # Unit_tests may be created by marker organization or path organization
-        has_unit_suite = any("unit" in suite_name for suite_name in self.organizer.suites.keys())
+        has_unit_suite = any(
+            "unit" in suite_name for suite_name in self.organizer.suites.keys()
+        )
         assert has_unit_suite  # Should have some unit-related suite
 
         # Critical suite should depend on some unit suite (if both exist)
@@ -767,21 +807,23 @@ class TestIntegrationScenarios:
         parent_suite = Suite(config=parent_config, selector=Selector())
 
         # Create child suites with dependencies
-        auth_config = SuiteConfig(
-            name="integration.auth",
-            depends_on=["unit_tests"]
+        auth_config = SuiteConfig(name="integration.auth", depends_on=["unit_tests"])
+        auth_suite = Suite(
+            config=auth_config,
+            selector=create_marker_selector(require_markers=["integration"]),
         )
-        auth_suite = Suite(config=auth_config, selector=create_marker_selector(require_markers=["integration"]))
 
         collections_config = SuiteConfig(
-            name="integration.collections",
-            depends_on=["integration.auth"]
+            name="integration.collections", depends_on=["integration.auth"]
         )
         collections_suite = Suite(config=collections_config, selector=Selector())
 
         # Add unit tests suite (dependency)
         unit_config = SuiteConfig(name="unit_tests", priority=SuitePriority.HIGH)
-        unit_suite = Suite(config=unit_config, selector=create_marker_selector(require_markers=["unit"]))
+        unit_suite = Suite(
+            config=unit_config,
+            selector=create_marker_selector(require_markers=["unit"]),
+        )
 
         # Add all suites
         for suite in [parent_suite, auth_suite, collections_suite, unit_suite]:
@@ -799,7 +841,9 @@ class TestIntegrationScenarios:
         collections_index = order.index("integration.collections")
 
         assert unit_index < auth_index  # unit_tests before integration.auth
-        assert auth_index < collections_index  # integration.auth before integration.collections
+        assert (
+            auth_index < collections_index
+        )  # integration.auth before integration.collections
 
     def test_conflict_resolution(self):
         """Test handling of suite conflicts."""
@@ -807,15 +851,18 @@ class TestIntegrationScenarios:
         fast_config = SuiteConfig(
             name="fast_suite",
             conflicts_with=["slow_suite"],
-            priority=SuitePriority.HIGH
+            priority=SuitePriority.HIGH,
         )
-        fast_suite = Suite(config=fast_config, selector=create_marker_selector(require_markers=["fast"]))
+        fast_suite = Suite(
+            config=fast_config,
+            selector=create_marker_selector(require_markers=["fast"]),
+        )
 
-        slow_config = SuiteConfig(
-            name="slow_suite",
-            priority=SuitePriority.LOW
+        slow_config = SuiteConfig(name="slow_suite", priority=SuitePriority.LOW)
+        slow_suite = Suite(
+            config=slow_config,
+            selector=create_marker_selector(require_markers=["slow"]),
         )
-        slow_suite = Suite(config=slow_config, selector=create_marker_selector(require_markers=["slow"]))
 
         self.organizer.add_suite(fast_suite)
         self.organizer.add_suite(slow_suite)
@@ -842,7 +889,7 @@ class TestIntegrationScenarios:
             config = SuiteConfig(
                 name=f"suite_{i:02d}",
                 priority=list(SuitePriority)[i % len(SuitePriority)],
-                tags={f"category_{i % 3}", "auto_generated"}
+                tags={f"category_{i % 3}", "auto_generated"},
             )
 
             # Add some dependencies
@@ -861,8 +908,8 @@ class TestIntegrationScenarios:
 
         # Verify all suites included
         assert len(order) == suite_count
-        assert stats['total_suites'] == suite_count
-        assert stats['has_dependencies'] is True
+        assert stats["total_suites"] == suite_count
+        assert stats["has_dependencies"] is True
 
         # Verify dependency ordering (basic check)
         for i, suite_name in enumerate(order):
@@ -870,4 +917,6 @@ class TestIntegrationScenarios:
             for dep_name in suite.config.depends_on:
                 if dep_name in order:
                     dep_index = order.index(dep_name)
-                    assert dep_index < i, f"Dependency {dep_name} should come before {suite_name}"
+                    assert (
+                        dep_index < i
+                    ), f"Dependency {dep_name} should come before {suite_name}"

@@ -1,4 +1,5 @@
 """Test suite organization and management for Armadillo framework."""
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Dict, Set, Optional, Any, Callable, Union
@@ -6,30 +7,37 @@ from pathlib import Path
 from pytest import Item as PytestItem
 from .selector import Selector, create_marker_selector, create_pattern_selector
 from ..core.log import get_logger
+
 logger = get_logger(__name__)
+
 
 class SuitePriority(Enum):
     """Priority levels for suite execution ordering."""
+
     CRITICAL = 1
     HIGH = 2
     NORMAL = 3
     LOW = 4
     DEFERRED = 5
 
+
 class SuiteStatus(Enum):
     """Status of suite execution."""
-    PENDING = 'pending'
-    RUNNING = 'running'
-    COMPLETED = 'completed'
-    FAILED = 'failed'
-    SKIPPED = 'skipped'
-    CANCELLED = 'cancelled'
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    CANCELLED = "cancelled"
+
 
 @dataclass
 class SuiteConfig:
     """Configuration for test suite behavior and execution."""
+
     name: str
-    description: str = ''
+    description: str = ""
     priority: SuitePriority = SuitePriority.NORMAL
     tags: Set[str] = field(default_factory=set)
     timeout: Optional[float] = None
@@ -47,7 +55,7 @@ class SuiteConfig:
     teardown_hooks: List[Union[str, Callable]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def add_tag(self, tag: str) -> 'SuiteConfig':
+    def add_tag(self, tag: str) -> "SuiteConfig":
         """Add a tag to this suite configuration.
 
         Args:
@@ -59,7 +67,7 @@ class SuiteConfig:
         self.tags.add(tag)
         return self
 
-    def add_dependency(self, suite_name: str) -> 'SuiteConfig':
+    def add_dependency(self, suite_name: str) -> "SuiteConfig":
         """Add a dependency on another suite.
 
         Args:
@@ -72,7 +80,7 @@ class SuiteConfig:
             self.depends_on.append(suite_name)
         return self
 
-    def add_conflict(self, suite_name: str) -> 'SuiteConfig':
+    def add_conflict(self, suite_name: str) -> "SuiteConfig":
         """Add a conflict with another suite.
 
         Args:
@@ -89,13 +97,18 @@ class SuiteConfig:
         """Check if suite has a specific tag."""
         return tag in self.tags
 
-    def is_compatible_with(self, other: 'SuiteConfig') -> bool:
+    def is_compatible_with(self, other: "SuiteConfig") -> bool:
         """Check if this suite is compatible with another suite."""
-        return other.name not in self.conflicts_with and self.name not in other.conflicts_with
+        return (
+            other.name not in self.conflicts_with
+            and self.name not in other.conflicts_with
+        )
+
 
 @dataclass
 class Suite:
     """A logical grouping of tests with associated metadata and configuration."""
+
     config: SuiteConfig
     selector: Selector
     tests: List[PytestItem] = field(default_factory=list)
@@ -106,8 +119,8 @@ class Suite:
     failed: int = 0
     skipped: int = 0
     errors: int = 0
-    parent: Optional['Suite'] = None
-    children: List['Suite'] = field(default_factory=list)
+    parent: Optional["Suite"] = None
+    children: List["Suite"] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -141,7 +154,7 @@ class Suite:
             return 0.0
         return self.passed / self.test_count * 100
 
-    def collect_tests(self, all_tests: List[PytestItem]) -> 'Suite':
+    def collect_tests(self, all_tests: List[PytestItem]) -> "Suite":
         """Collect tests for this suite using the configured selector.
 
         Args:
@@ -155,7 +168,7 @@ class Suite:
         logger.debug("Suite '%s' collected %s tests", self.name, len(self.tests))
         return self
 
-    def add_child(self, child_suite: 'Suite') -> 'Suite':
+    def add_child(self, child_suite: "Suite") -> "Suite":
         """Add a child suite.
 
         Args:
@@ -169,7 +182,7 @@ class Suite:
             child_suite.parent = self
         return self
 
-    def remove_child(self, child_suite: 'Suite') -> 'Suite':
+    def remove_child(self, child_suite: "Suite") -> "Suite":
         """Remove a child suite.
 
         Args:
@@ -198,7 +211,7 @@ class Suite:
 
     def get_full_name(self) -> str:
         """Get the full hierarchical name."""
-        return '.'.join(self.get_path())
+        return ".".join(self.get_path())
 
     def matches_criteria(self, criteria: Dict[str, Any]) -> bool:
         """Check if suite matches given criteria.
@@ -209,18 +222,22 @@ class Suite:
         Returns:
             True if suite matches all criteria
         """
-        if 'tags' in criteria:
-            required_tags = set(criteria['tags']) if isinstance(criteria['tags'], (list, set)) else {criteria['tags']}
+        if "tags" in criteria:
+            required_tags = (
+                set(criteria["tags"])
+                if isinstance(criteria["tags"], (list, set))
+                else {criteria["tags"]}
+            )
             if not required_tags.issubset(self.config.tags):
                 return False
-        if 'priority' in criteria:
-            if self.config.priority != criteria['priority']:
+        if "priority" in criteria:
+            if self.config.priority != criteria["priority"]:
                 return False
-        if 'status' in criteria:
-            if self.status != criteria['status']:
+        if "status" in criteria:
+            if self.status != criteria["status"]:
                 return False
-        if 'metadata' in criteria:
-            for key, value in criteria['metadata'].items():
+        if "metadata" in criteria:
+            for key, value in criteria["metadata"].items():
                 if self.config.metadata.get(key) != value:
                     return False
         return True
@@ -228,22 +245,23 @@ class Suite:
     def summary(self) -> Dict[str, Any]:
         """Get a summary of this suite."""
         return {
-            'name': self.name,
-            'full_name': self.get_full_name(),
-            'status': self.status.value,
-            'test_count': self.test_count,
-            'total_tests': self.total_tests,
-            'passed': self.passed,
-            'failed': self.failed,
-            'skipped': self.skipped,
-            'errors': self.errors,
-            'success_rate': self.success_rate,
-            'duration': self.duration,
-            'priority': self.config.priority.value,
-            'tags': list(self.config.tags),
-            'children_count': len(self.children),
-            'has_parent': self.parent is not None
+            "name": self.name,
+            "full_name": self.get_full_name(),
+            "status": self.status.value,
+            "test_count": self.test_count,
+            "total_tests": self.total_tests,
+            "passed": self.passed,
+            "failed": self.failed,
+            "skipped": self.skipped,
+            "errors": self.errors,
+            "success_rate": self.success_rate,
+            "duration": self.duration,
+            "priority": self.config.priority.value,
+            "tags": list(self.config.tags),
+            "children_count": len(self.children),
+            "has_parent": self.parent is not None,
         }
+
 
 class SuiteOrganizer:
     """Organizes and manages test suites with hierarchy and dependencies."""
@@ -255,14 +273,14 @@ class SuiteOrganizer:
             logger_factory: Optional logger factory for dependency injection
         """
         if logger_factory:
-            self.logger = logger_factory.create_logger('test_suite_organizer')
+            self.logger = logger_factory.create_logger("test_suite_organizer")
         else:
             self.logger = get_logger(__name__)
         self.suites: Dict[str, Suite] = {}
         self.root_suites: List[Suite] = []
         self.execution_order: List[str] = []
 
-    def create_suite(self, config: SuiteConfig, selector: Selector=None) -> Suite:
+    def create_suite(self, config: SuiteConfig, selector: Selector = None) -> Suite:
         """Create a new test suite.
 
         Args:
@@ -276,10 +294,10 @@ class SuiteOrganizer:
             selector = Selector()
         suite = Suite(config=config, selector=selector)
         self.add_suite(suite)
-        self.logger.debug('Created suite: %s', config.name)
+        self.logger.debug("Created suite: %s", config.name)
         return suite
 
-    def add_suite(self, suite: Suite) -> 'SuiteOrganizer':
+    def add_suite(self, suite: Suite) -> "SuiteOrganizer":
         """Add a suite to the organizer.
 
         Args:
@@ -294,7 +312,7 @@ class SuiteOrganizer:
         if suite.parent is None and suite not in self.root_suites:
             self.root_suites.append(suite)
         self.execution_order.clear()
-        self.logger.debug('Added suite: %s', suite.name)
+        self.logger.debug("Added suite: %s", suite.name)
         return self
 
     def remove_suite(self, suite_name: str) -> bool:
@@ -319,7 +337,7 @@ class SuiteOrganizer:
                 self.root_suites.append(child)
         del self.suites[suite_name]
         self.execution_order.clear()
-        self.logger.debug('Removed suite: %s', suite_name)
+        self.logger.debug("Removed suite: %s", suite_name)
         return True
 
     def get_suite(self, suite_name: str) -> Optional[Suite]:
@@ -348,7 +366,7 @@ class SuiteOrganizer:
                 matching_suites.append(suite)
         return matching_suites
 
-    def organize_by_markers(self, all_tests: List[PytestItem]) -> 'SuiteOrganizer':
+    def organize_by_markers(self, all_tests: List[PytestItem]) -> "SuiteOrganizer":
         """Automatically organize tests into suites based on pytest markers.
 
         Args:
@@ -361,17 +379,32 @@ class SuiteOrganizer:
         for test in all_tests:
             for marker in test.iter_markers():
                 markers.add(marker.name)
-        common_markers = ['slow', 'fast', 'integration', 'unit', 'arango_single', 'arango_cluster']
+        common_markers = [
+            "slow",
+            "fast",
+            "integration",
+            "unit",
+            "arango_single",
+            "arango_cluster",
+        ]
         for marker in markers:
             if marker in common_markers:
-                config = SuiteConfig(name=f'{marker}_tests', description=f'Tests marked with @pytest.mark.{marker}', tags={marker, 'auto_generated'})
+                config = SuiteConfig(
+                    name=f"{marker}_tests",
+                    description=f"Tests marked with @pytest.mark.{marker}",
+                    tags={marker, "auto_generated"},
+                )
                 selector = create_marker_selector(require_markers=[marker])
                 suite = self.create_suite(config, selector)
                 suite.collect_tests(all_tests)
-                self.logger.debug("Auto-created suite '%s_tests' with %s tests", marker, suite.test_count)
+                self.logger.debug(
+                    "Auto-created suite '%s_tests' with %s tests",
+                    marker,
+                    suite.test_count,
+                )
         return self
 
-    def organize_by_paths(self, all_tests: List[PytestItem]) -> 'SuiteOrganizer':
+    def organize_by_paths(self, all_tests: List[PytestItem]) -> "SuiteOrganizer":
         """Automatically organize tests into suites based on file paths.
 
         Args:
@@ -383,12 +416,12 @@ class SuiteOrganizer:
         path_groups = {}
         for test in all_tests:
             test_path = None
-            if hasattr(test, 'fspath'):
+            if hasattr(test, "fspath"):
                 test_path = Path(str(test.fspath))
-            elif hasattr(test, 'path'):
+            elif hasattr(test, "path"):
                 test_path = Path(str(test.path))
             elif test.nodeid:
-                path_part = test.nodeid.split('::')[0]
+                path_part = test.nodeid.split("::")[0]
                 test_path = Path(path_part)
             if test_path:
                 parent_dir = test_path.parent.name
@@ -397,14 +430,22 @@ class SuiteOrganizer:
                 path_groups[parent_dir].append(test)
         for dir_name, tests in path_groups.items():
             if len(tests) >= 2:
-                config = SuiteConfig(name=f'{dir_name}_suite', description=f'Tests from {dir_name} directory', tags={dir_name, 'path_based', 'auto_generated'})
+                config = SuiteConfig(
+                    name=f"{dir_name}_suite",
+                    description=f"Tests from {dir_name} directory",
+                    tags={dir_name, "path_based", "auto_generated"},
+                )
                 selector = Selector()
                 suite = Suite(config=config, selector=selector, tests=tests)
                 self.add_suite(suite)
-                self.logger.debug("Auto-created path suite '%s_suite' with %s tests", dir_name, len(tests))
+                self.logger.debug(
+                    "Auto-created path suite '%s_suite' with %s tests",
+                    dir_name,
+                    len(tests),
+                )
         return self
 
-    def organize_hierarchical(self, separator: str='.') -> 'SuiteOrganizer':
+    def organize_hierarchical(self, separator: str = ".") -> "SuiteOrganizer":
         """Organize suites into hierarchy based on names with separators.
 
         Args:
@@ -419,31 +460,38 @@ class SuiteOrganizer:
             current_level = suite_hierarchy
             for i, part in enumerate(parts):
                 if part not in current_level:
-                    current_level[part] = {'suites': [], 'children': {}}
+                    current_level[part] = {"suites": [], "children": {}}
                 if i == len(parts) - 1:
-                    current_level[part]['suites'].append(suite)
+                    current_level[part]["suites"].append(suite)
                 else:
-                    current_level = current_level[part]['children']
+                    current_level = current_level[part]["children"]
 
-        def create_parent_suites(level_dict, parent_name='', level=0):
+        def create_parent_suites(level_dict, parent_name="", level=0):
             for name, data in level_dict.items():
-                current_name = f'{parent_name}{separator}{name}' if parent_name else name
-                if data['children'] and len(data['children']) > 1:
+                current_name = (
+                    f"{parent_name}{separator}{name}" if parent_name else name
+                )
+                if data["children"] and len(data["children"]) > 1:
                     if current_name not in self.suites:
-                        parent_config = SuiteConfig(name=current_name, description=f'Parent suite for {name} category', tags={name, 'parent_suite', 'auto_generated'})
+                        parent_config = SuiteConfig(
+                            name=current_name,
+                            description=f"Parent suite for {name} category",
+                            tags={name, "parent_suite", "auto_generated"},
+                        )
                         parent_suite = self.create_suite(parent_config, Selector())
                     else:
                         parent_suite = self.suites[current_name]
-                    for child_name, _ in data['children'].items():
-                        child_full_name = f'{current_name}{separator}{child_name}'
+                    for child_name, _ in data["children"].items():
+                        child_full_name = f"{current_name}{separator}{child_name}"
                         if child_full_name in self.suites:
                             child_suite = self.suites[child_full_name]
                             parent_suite.add_child(child_suite)
                             if child_suite in self.root_suites:
                                 self.root_suites.remove(child_suite)
-                create_parent_suites(data['children'], current_name, level + 1)
+                create_parent_suites(data["children"], current_name, level + 1)
+
         create_parent_suites(suite_hierarchy)
-        self.logger.debug('Organized suites into hierarchy')
+        self.logger.debug("Organized suites into hierarchy")
         return self
 
     def calculate_execution_order(self) -> List[str]:
@@ -460,7 +508,9 @@ class SuiteOrganizer:
 
         def visit(suite_name: str):
             if suite_name in temp_visited:
-                raise ValueError(f'Circular dependency detected involving suite: {suite_name}')
+                raise ValueError(
+                    f"Circular dependency detected involving suite: {suite_name}"
+                )
             if suite_name in visited:
                 return
             temp_visited.add(suite_name)
@@ -472,12 +522,16 @@ class SuiteOrganizer:
             temp_visited.remove(suite_name)
             visited.add(suite_name)
             execution_order.append(suite_name)
-        sorted_suites = sorted(self.suites.items(), key=lambda item: (item[1].config.priority.value, item[0]))
+
+        sorted_suites = sorted(
+            self.suites.items(),
+            key=lambda item: (item[1].config.priority.value, item[0]),
+        )
         for suite_name, _ in sorted_suites:
             if suite_name not in visited:
                 visit(suite_name)
         self.execution_order = execution_order
-        self.logger.debug('Calculated execution order: %s', execution_order)
+        self.logger.debug("Calculated execution order: %s", execution_order)
         return execution_order
 
     def validate_dependencies(self) -> List[str]:
@@ -490,19 +544,23 @@ class SuiteOrganizer:
         for suite_name, suite in self.suites.items():
             for dep_name in suite.config.depends_on:
                 if dep_name not in self.suites:
-                    errors.append(f"Suite '{suite_name}' depends on non-existent suite '{dep_name}'")
+                    errors.append(
+                        f"Suite '{suite_name}' depends on non-existent suite '{dep_name}'"
+                    )
             for conflict_name in suite.config.conflicts_with:
                 if conflict_name in self.suites:
                     conflict_suite = self.suites[conflict_name]
                     if not suite.config.is_compatible_with(conflict_suite.config):
-                        errors.append(f"Suite '{suite_name}' conflicts with '{conflict_name}'")
+                        errors.append(
+                            f"Suite '{suite_name}' conflicts with '{conflict_name}'"
+                        )
         try:
             self.calculate_execution_order()
         except ValueError as e:
             errors.append(str(e))
         return errors
 
-    def collect_all_tests(self, all_tests: List[PytestItem]) -> 'SuiteOrganizer':
+    def collect_all_tests(self, all_tests: List[PytestItem]) -> "SuiteOrganizer":
         """Collect tests for all suites.
 
         Args:
@@ -513,7 +571,7 @@ class SuiteOrganizer:
         """
         for suite in self.suites.values():
             suite.collect_tests(all_tests)
-        self.logger.info('Collected tests for %s suites', len(self.suites))
+        self.logger.info("Collected tests for %s suites", len(self.suites))
         return self
 
     def get_statistics(self) -> Dict[str, Any]:
@@ -527,15 +585,33 @@ class SuiteOrganizer:
         root_suites_count = len(self.root_suites)
         status_counts = {}
         for status in SuiteStatus:
-            status_counts[status.value] = sum((1 for s in self.suites.values() if s.status == status))
+            status_counts[status.value] = sum(
+                (1 for s in self.suites.values() if s.status == status)
+            )
         priority_counts = {}
         for priority in SuitePriority:
-            priority_counts[priority.value] = sum((1 for s in self.suites.values() if s.config.priority == priority))
+            priority_counts[priority.value] = sum(
+                (1 for s in self.suites.values() if s.config.priority == priority)
+            )
         max_depth = 0
         for suite in self.suites.values():
             depth = len(suite.get_path())
             max_depth = max(max_depth, depth)
-        return {'total_suites': total_suites, 'total_tests': total_tests, 'root_suites': root_suites_count, 'max_hierarchy_depth': max_depth, 'status_distribution': status_counts, 'priority_distribution': priority_counts, 'has_dependencies': any((suite.config.depends_on for suite in self.suites.values())), 'has_conflicts': any((suite.config.conflicts_with for suite in self.suites.values())), 'execution_order_calculated': bool(self.execution_order)}
+        return {
+            "total_suites": total_suites,
+            "total_tests": total_tests,
+            "root_suites": root_suites_count,
+            "max_hierarchy_depth": max_depth,
+            "status_distribution": status_counts,
+            "priority_distribution": priority_counts,
+            "has_dependencies": any(
+                (suite.config.depends_on for suite in self.suites.values())
+            ),
+            "has_conflicts": any(
+                (suite.config.conflicts_with for suite in self.suites.values())
+            ),
+            "execution_order_calculated": bool(self.execution_order),
+        }
 
     def export_summary(self) -> Dict[str, Any]:
         """Export a comprehensive summary of all suites.
@@ -543,16 +619,29 @@ class SuiteOrganizer:
         Returns:
             Dictionary containing complete suite information
         """
-        return {'statistics': self.get_statistics(), 'execution_order': self.calculate_execution_order(), 'validation_errors': self.validate_dependencies(), 'suites': {name: suite.summary() for name, suite in self.suites.items()}, 'hierarchy': self._build_hierarchy_tree()}
+        return {
+            "statistics": self.get_statistics(),
+            "execution_order": self.calculate_execution_order(),
+            "validation_errors": self.validate_dependencies(),
+            "suites": {name: suite.summary() for name, suite in self.suites.items()},
+            "hierarchy": self._build_hierarchy_tree(),
+        }
 
     def _build_hierarchy_tree(self) -> Dict[str, Any]:
         """Build a tree representation of suite hierarchy."""
 
         def build_tree(suite: Suite) -> Dict[str, Any]:
-            return {'name': suite.name, 'test_count': suite.test_count, 'status': suite.status.value, 'children': [build_tree(child) for child in suite.children]}
-        return {'roots': [build_tree(suite) for suite in self.root_suites]}
+            return {
+                "name": suite.name,
+                "test_count": suite.test_count,
+                "status": suite.status.value,
+                "children": [build_tree(child) for child in suite.children],
+            }
 
-def create_marker_suite(name: str, marker: str, description: str='') -> Suite:
+        return {"roots": [build_tree(suite) for suite in self.root_suites]}
+
+
+def create_marker_suite(name: str, marker: str, description: str = "") -> Suite:
     """Create a suite based on a pytest marker.
 
     Args:
@@ -563,11 +652,16 @@ def create_marker_suite(name: str, marker: str, description: str='') -> Suite:
     Returns:
         Configured test suite
     """
-    config = SuiteConfig(name=name, description=description or f'Tests marked with @pytest.mark.{marker}', tags={marker})
+    config = SuiteConfig(
+        name=name,
+        description=description or f"Tests marked with @pytest.mark.{marker}",
+        tags={marker},
+    )
     selector = create_marker_selector(require_markers=[marker])
     return Suite(config=config, selector=selector)
 
-def create_pattern_suite(name: str, pattern: str, description: str='') -> Suite:
+
+def create_pattern_suite(name: str, pattern: str, description: str = "") -> Suite:
     """Create a suite based on a test name pattern.
 
     Args:
@@ -578,11 +672,18 @@ def create_pattern_suite(name: str, pattern: str, description: str='') -> Suite:
     Returns:
         Configured test suite
     """
-    config = SuiteConfig(name=name, description=description or f'Tests matching pattern: {pattern}', tags={'pattern_based'})
+    config = SuiteConfig(
+        name=name,
+        description=description or f"Tests matching pattern: {pattern}",
+        tags={"pattern_based"},
+    )
     selector = create_pattern_selector(include_patterns=[pattern])
     return Suite(config=config, selector=selector)
 
-def create_priority_suite(name: str, priority: SuitePriority, selector: Selector, description: str='') -> Suite:
+
+def create_priority_suite(
+    name: str, priority: SuitePriority, selector: Selector, description: str = ""
+) -> Suite:
     """Create a suite with specific priority.
 
     Args:
@@ -594,5 +695,10 @@ def create_priority_suite(name: str, priority: SuitePriority, selector: Selector
     Returns:
         Configured test suite
     """
-    config = SuiteConfig(name=name, description=description, priority=priority, tags={priority.name.lower()})
+    config = SuiteConfig(
+        name=name,
+        description=description,
+        priority=priority,
+        tags={priority.name.lower()},
+    )
     return Suite(config=config, selector=selector)

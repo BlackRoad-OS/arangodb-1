@@ -44,9 +44,10 @@ def reset_filesystem_state():
 
     # Reset the global session ID to prevent test interference
     import armadillo.utils.filesystem as fs
+
     fs._test_session_id = None
     # Also clear any cached filesystem service
-    if hasattr(fs, '_filesystem_service'):
+    if hasattr(fs, "_filesystem_service"):
         fs._filesystem_service._work_dir = None
 
 
@@ -54,12 +55,14 @@ def reset_filesystem_state():
 def patch_dangerous_operations():
     """Patch potentially dangerous operations during unit tests."""
 
-    with patch('subprocess.Popen') as mock_popen, \
-         patch('socket.socket') as mock_socket, \
-         patch('os.kill') as mock_kill, \
-         patch('os.killpg') as mock_killpg, \
-         patch('psutil.Process') as mock_psutil_process, \
-         patch('threading.Thread') as mock_thread:
+    with (
+        patch("subprocess.Popen") as mock_popen,
+        patch("socket.socket") as mock_socket,
+        patch("os.kill") as mock_kill,
+        patch("os.killpg") as mock_killpg,
+        patch("psutil.Process") as mock_psutil_process,
+        patch("threading.Thread") as mock_thread,
+    ):
 
         # Configure safe defaults for Popen mock
         mock_subprocess = mock_popen.return_value
@@ -86,7 +89,9 @@ def patch_dangerous_operations():
             return None
 
         mock_socket_instance.bind.side_effect = mock_bind
-        mock_socket_instance.connect_ex.return_value = 1  # Connection failed (port free)
+        mock_socket_instance.connect_ex.return_value = (
+            1  # Connection failed (port free)
+        )
         mock_socket_instance.settimeout.return_value = None
 
         # Configure process killing mocks
@@ -108,12 +113,12 @@ def patch_dangerous_operations():
         mock_thread_instance.daemon = True
 
         yield {
-            'popen': mock_popen,
-            'socket': mock_socket,
-            'kill': mock_kill,
-            'killpg': mock_killpg,
-            'psutil_process': mock_psutil_process,
-            'thread': mock_thread
+            "popen": mock_popen,
+            "socket": mock_socket,
+            "kill": mock_kill,
+            "killpg": mock_killpg,
+            "psutil_process": mock_psutil_process,
+            "thread": mock_thread,
         }
 
 
@@ -122,7 +127,9 @@ def isolated_port_manager():
     """Provide an isolated PortManager for testing."""
     from armadillo.utils.ports import PortManager
 
-    manager = PortManager(base_port=19000, max_ports=100)  # Use high ports to avoid conflicts
+    manager = PortManager(
+        base_port=19000, max_ports=100
+    )  # Use high ports to avoid conflicts
     yield manager
 
     # Cleanup
@@ -158,7 +165,7 @@ def isolated_process_supervisor():
             supervisor.stop(process_id)
         supervisor._processes.clear()
         supervisor._process_info.clear()
-        if hasattr(supervisor, '_streaming_threads'):
+        if hasattr(supervisor, "_streaming_threads"):
             supervisor._streaming_threads.clear()
     except Exception:
         pass
@@ -167,7 +174,7 @@ def isolated_process_supervisor():
 @pytest.fixture
 def no_actual_processes():
     """Prevent actual process creation during tests."""
-    with patch('subprocess.Popen') as mock_popen:
+    with patch("subprocess.Popen") as mock_popen:
         # Create a mock process that behaves safely
         mock_process = mock_popen.return_value
         mock_process.pid = 99999
@@ -183,7 +190,7 @@ def no_actual_processes():
 @pytest.fixture
 def no_actual_sockets():
     """Prevent actual socket operations during tests."""
-    with patch('socket.socket') as mock_socket_class:
+    with patch("socket.socket") as mock_socket_class:
         mock_socket = mock_socket_class.return_value.__enter__.return_value
         mock_socket.bind.return_value = None
         mock_socket.connect_ex.return_value = 1  # Connection failed
@@ -195,22 +202,26 @@ def no_actual_sockets():
 @pytest.fixture
 def no_actual_filesystem():
     """Mock filesystem operations to prevent actual file I/O."""
-    with patch('pathlib.Path.mkdir') as mock_mkdir, \
-         patch('pathlib.Path.exists', return_value=False) as mock_exists, \
-         patch('pathlib.Path.is_dir', return_value=True) as mock_is_dir, \
-         patch('pathlib.Path.is_file', return_value=True) as mock_is_file, \
-         patch('shutil.rmtree') as mock_rmtree, \
-         patch('armadillo.utils.filesystem.atomic_write') as mock_atomic_write, \
-         patch('armadillo.utils.filesystem.read_text', return_value="") as mock_read_text:
+    with (
+        patch("pathlib.Path.mkdir") as mock_mkdir,
+        patch("pathlib.Path.exists", return_value=False) as mock_exists,
+        patch("pathlib.Path.is_dir", return_value=True) as mock_is_dir,
+        patch("pathlib.Path.is_file", return_value=True) as mock_is_file,
+        patch("shutil.rmtree") as mock_rmtree,
+        patch("armadillo.utils.filesystem.atomic_write") as mock_atomic_write,
+        patch(
+            "armadillo.utils.filesystem.read_text", return_value=""
+        ) as mock_read_text,
+    ):
 
         yield {
-            'mkdir': mock_mkdir,
-            'exists': mock_exists,
-            'is_dir': mock_is_dir,
-            'is_file': mock_is_file,
-            'rmtree': mock_rmtree,
-            'atomic_write': mock_atomic_write,
-            'read_text': mock_read_text
+            "mkdir": mock_mkdir,
+            "exists": mock_exists,
+            "is_dir": mock_is_dir,
+            "is_file": mock_is_file,
+            "rmtree": mock_rmtree,
+            "atomic_write": mock_atomic_write,
+            "read_text": mock_read_text,
         }
 
 
@@ -234,6 +245,7 @@ def pytest_runtest_teardown(item, nextitem):
     """Teardown after each test."""
     # Force garbage collection
     import gc
+
     gc.collect()
 
     # Small delay to allow cleanup
@@ -256,4 +268,5 @@ def pytest_sessionfinish(session, exitstatus):
 
     # Force final garbage collection
     import gc
+
     gc.collect()

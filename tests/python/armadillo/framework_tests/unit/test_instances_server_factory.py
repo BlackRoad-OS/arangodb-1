@@ -27,7 +27,7 @@ class TestStandardServerFactory:
         self.factory = StandardServerFactory(
             config_provider=self.mock_config,
             logger=self.mock_logger,
-            port_allocator=self.mock_port_allocator
+            port_allocator=self.mock_port_allocator,
         )
 
     def test_create_single_server_instance(self):
@@ -37,7 +37,7 @@ class TestStandardServerFactory:
             port=8529,
             data_dir=Path("/fake/data"),
             log_file=Path("/fake/log"),
-            args={"test": "value"}
+            args={"test": "value"},
         )
 
         servers = self.factory.create_server_instances([server_config])
@@ -54,7 +54,10 @@ class TestStandardServerFactory:
 
         # Verify debug logging
         self.mock_logger.debug.assert_called_with(
-            "Created server instance %s with role %s on port %s", "server_0", "single", 8529
+            "Created server instance %s with role %s on port %s",
+            "server_0",
+            "single",
+            8529,
         )
 
     def test_create_cluster_instances(self):
@@ -65,22 +68,22 @@ class TestStandardServerFactory:
                 port=8530,
                 data_dir=Path("/fake/agent/data"),
                 log_file=Path("/fake/agent/log"),
-                args={"agency.activate": "true"}
+                args={"agency.activate": "true"},
             ),
             ServerConfig(
                 role=ServerRole.DBSERVER,
                 port=8531,
                 data_dir=Path("/fake/db/data"),
                 log_file=Path("/fake/db/log"),
-                args={"cluster.my-role": "PRIMARY"}
+                args={"cluster.my-role": "PRIMARY"},
             ),
             ServerConfig(
                 role=ServerRole.COORDINATOR,
                 port=8532,
                 data_dir=Path("/fake/coord/data"),
                 log_file=Path("/fake/coord/log"),
-                args={"cluster.my-role": "COORDINATOR"}
-            )
+                args={"cluster.my-role": "COORDINATOR"},
+            ),
         ]
 
         servers = self.factory.create_server_instances(servers_config)
@@ -113,7 +116,10 @@ class TestStandardServerFactory:
         assert self.factory._generate_server_id(ServerRole.AGENT, 0) == "agent_0"
         assert self.factory._generate_server_id(ServerRole.AGENT, 2) == "agent_2"
         assert self.factory._generate_server_id(ServerRole.DBSERVER, 1) == "dbserver_1"
-        assert self.factory._generate_server_id(ServerRole.COORDINATOR, 3) == "coordinator_3"
+        assert (
+            self.factory._generate_server_id(ServerRole.COORDINATOR, 3)
+            == "coordinator_3"
+        )
         assert self.factory._generate_server_id(ServerRole.SINGLE, 0) == "server_0"
 
     def test_invalid_port_type_error(self):
@@ -122,10 +128,12 @@ class TestStandardServerFactory:
             role=ServerRole.SINGLE,
             port="invalid_port",  # String instead of int
             data_dir=Path("/fake/data"),
-            log_file=Path("/fake/log")
+            log_file=Path("/fake/log"),
         )
 
-        with pytest.raises(ServerError, match="Invalid port type for server_0.*expected int"):
+        with pytest.raises(
+            ServerError, match="Invalid port type for server_0.*expected int"
+        ):
             self.factory.create_server_instances([server_config])
 
     def test_minimal_config_creation(self):
@@ -137,7 +145,7 @@ class TestStandardServerFactory:
             log_file=Path("/fake/log"),
             args={"custom": "arg", "memory": "1G"},
             memory_limit_mb=512,
-            startup_timeout=45.0
+            startup_timeout=45.0,
         )
 
         servers = self.factory.create_server_instances([server_config])
@@ -161,7 +169,7 @@ class TestStandardServerFactory:
             role=ServerRole.SINGLE,
             port=8529,
             data_dir=Path("/custom/data/dir"),
-            log_file=Path("/custom/log/file.log")
+            log_file=Path("/custom/log/file.log"),
         )
 
         servers = self.factory.create_server_instances([server_config])
@@ -172,7 +180,7 @@ class TestStandardServerFactory:
         assert server.paths.log_file == Path("/custom/log/file.log")
 
         # Check that ServerConfig was stored for reference
-        assert hasattr(server.paths, 'config')
+        assert hasattr(server.paths, "config")
         assert server.paths.config.data_dir == server_config.data_dir
 
     def test_dependency_creation(self):
@@ -181,7 +189,7 @@ class TestStandardServerFactory:
             role=ServerRole.SINGLE,
             port=8529,
             data_dir=Path("/fake/data"),
-            log_file=Path("/fake/log")
+            log_file=Path("/fake/log"),
         )
 
         servers = self.factory.create_server_instances([server_config])
@@ -207,15 +215,30 @@ class TestStandardServerFactory:
     def test_server_factory_protocol_compliance(self):
         """Test that StandardServerFactory implements ServerFactory protocol."""
         # This test verifies that the class implements the expected interface
-        assert hasattr(self.factory, 'create_server_instances')
+        assert hasattr(self.factory, "create_server_instances")
         assert callable(self.factory.create_server_instances)
 
     def test_multiple_agents_indexing(self):
         """Test that multiple servers of same role get proper indexing."""
         servers_config = [
-            ServerConfig(role=ServerRole.AGENT, port=8530, data_dir=Path("/agent0"), log_file=Path("/log0")),
-            ServerConfig(role=ServerRole.AGENT, port=8531, data_dir=Path("/agent1"), log_file=Path("/log1")),
-            ServerConfig(role=ServerRole.AGENT, port=8532, data_dir=Path("/agent2"), log_file=Path("/log2"))
+            ServerConfig(
+                role=ServerRole.AGENT,
+                port=8530,
+                data_dir=Path("/agent0"),
+                log_file=Path("/log0"),
+            ),
+            ServerConfig(
+                role=ServerRole.AGENT,
+                port=8531,
+                data_dir=Path("/agent1"),
+                log_file=Path("/log1"),
+            ),
+            ServerConfig(
+                role=ServerRole.AGENT,
+                port=8532,
+                data_dir=Path("/agent2"),
+                log_file=Path("/log2"),
+            ),
         ]
 
         servers = self.factory.create_server_instances(servers_config)
@@ -237,7 +260,7 @@ class TestStandardServerFactory:
             port=8529,
             data_dir=Path("/fake/data"),
             log_file=Path("/fake/log"),
-            args={"original": "value"}
+            args={"original": "value"},
         )
 
         servers = self.factory.create_server_instances([server_config])

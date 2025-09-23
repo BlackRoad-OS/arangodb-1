@@ -6,9 +6,13 @@ import jwt
 from unittest.mock import patch, Mock
 
 from armadillo.utils.auth import (
-    AuthProvider, BasicAuthProvider,
-    get_auth_provider, get_basic_auth_provider,
-    issue_jwt, verify_jwt, authorization_header
+    AuthProvider,
+    BasicAuthProvider,
+    get_auth_provider,
+    get_basic_auth_provider,
+    issue_jwt,
+    verify_jwt,
+    authorization_header,
 )
 from armadillo.core.errors import JWTError, AuthenticationError
 
@@ -42,7 +46,7 @@ class TestAuthProvider:
         assert len(token) > 0
 
         # Should be valid JWT format (3 parts separated by dots)
-        parts = token.split('.')
+        parts = token.split(".")
         assert len(parts) == 3
 
     def test_issue_jwt_custom_ttl(self):
@@ -54,13 +58,13 @@ class TestAuthProvider:
         # Decode without verification to check claims
         payload = jwt.decode(token, options={"verify_signature": False})
 
-        assert 'exp' in payload
-        assert 'iat' in payload
-        assert payload['iss'] == 'armadillo'
+        assert "exp" in payload
+        assert "iat" in payload
+        assert payload["iss"] == "armadillo"
 
         # Check TTL is approximately correct
-        exp_time = payload['exp']
-        iat_time = payload['iat']
+        exp_time = payload["exp"]
+        iat_time = payload["iat"]
         ttl = exp_time - iat_time
         assert 3590 <= ttl <= 3610  # Allow for small timing differences
 
@@ -69,9 +73,9 @@ class TestAuthProvider:
         provider = AuthProvider("test_secret")
 
         custom_claims = {
-            'user_id': 'test_user',
-            'role': 'admin',
-            'permissions': ['read', 'write']
+            "user_id": "test_user",
+            "role": "admin",
+            "permissions": ["read", "write"],
         }
 
         token = provider.issue_jwt(claims=custom_claims)
@@ -79,23 +83,23 @@ class TestAuthProvider:
         # Decode without verification to check claims
         payload = jwt.decode(token, options={"verify_signature": False})
 
-        assert payload['user_id'] == 'test_user'
-        assert payload['role'] == 'admin'
-        assert payload['permissions'] == ['read', 'write']
-        assert payload['iss'] == 'armadillo'  # Should still have issuer
+        assert payload["user_id"] == "test_user"
+        assert payload["role"] == "admin"
+        assert payload["permissions"] == ["read", "write"]
+        assert payload["iss"] == "armadillo"  # Should still have issuer
 
     def test_verify_jwt_valid_token(self):
         """Test JWT token verification with valid token."""
         provider = AuthProvider("test_secret")
 
-        token = provider.issue_jwt(ttl=60.0, claims={'test': 'value'})
+        token = provider.issue_jwt(ttl=60.0, claims={"test": "value"})
 
         payload = provider.verify_jwt(token)
 
-        assert payload['test'] == 'value'
-        assert payload['iss'] == 'armadillo'
-        assert 'exp' in payload
-        assert 'iat' in payload
+        assert payload["test"] == "value"
+        assert payload["iss"] == "armadillo"
+        assert "exp" in payload
+        assert "iat" in payload
 
     def test_verify_jwt_expired_token(self):
         """Test JWT token verification with expired token."""
@@ -134,14 +138,14 @@ class TestAuthProvider:
 
         headers = provider.authorization_header()
 
-        assert 'Authorization' in headers
-        auth_value = headers['Authorization']
-        assert auth_value.startswith('Bearer ')
+        assert "Authorization" in headers
+        auth_value = headers["Authorization"]
+        assert auth_value.startswith("Bearer ")
 
         # Extract token and verify it's valid
         token = auth_value[7:]  # Remove "Bearer " prefix
         payload = provider.verify_jwt(token)
-        assert payload['iss'] == 'armadillo'
+        assert payload["iss"] == "armadillo"
 
     def test_get_auth_headers(self):
         """Test get_auth_headers method (alias for authorization_header)."""
@@ -151,8 +155,8 @@ class TestAuthProvider:
         headers2 = provider.get_auth_headers()
 
         # Should be identical functionality
-        assert 'Authorization' in headers1
-        assert 'Authorization' in headers2
+        assert "Authorization" in headers1
+        assert "Authorization" in headers2
 
     def test_is_token_expired(self):
         """Test token expiration check without raising exceptions."""
@@ -174,19 +178,19 @@ class TestAuthProvider:
         """Test getting token claims without signature verification."""
         provider = AuthProvider("test_secret")
 
-        claims = {'user': 'test', 'role': 'admin'}
+        claims = {"user": "test", "role": "admin"}
         token = provider.issue_jwt(claims=claims)
 
         extracted_claims = provider.get_token_claims(token)
 
         assert extracted_claims is not None
-        assert extracted_claims['user'] == 'test'
-        assert extracted_claims['role'] == 'admin'
+        assert extracted_claims["user"] == "test"
+        assert extracted_claims["role"] == "admin"
 
         # Should work even with wrong secret
         provider2 = AuthProvider("wrong_secret")
         extracted_claims2 = provider2.get_token_claims(token)
-        assert extracted_claims2['user'] == 'test'
+        assert extracted_claims2["user"] == "test"
 
     def test_get_token_claims_invalid_token(self):
         """Test getting claims from invalid token."""
@@ -199,7 +203,7 @@ class TestAuthProvider:
         """Test token refresh functionality."""
         provider = AuthProvider("test_secret")
 
-        original_claims = {'user': 'test', 'role': 'user'}
+        original_claims = {"user": "test", "role": "user"}
         original_token = provider.issue_jwt(ttl=60.0, claims=original_claims)
 
         # Refresh with new TTL
@@ -207,14 +211,14 @@ class TestAuthProvider:
 
         # New token should have same claims but different timing
         new_payload = provider.verify_jwt(new_token)
-        assert new_payload['user'] == 'test'
-        assert new_payload['role'] == 'user'
+        assert new_payload["user"] == "test"
+        assert new_payload["role"] == "user"
 
         # Should have new expiration time
         original_payload = provider.verify_jwt(original_token)
-        assert new_payload['exp'] != original_payload['exp']
+        assert new_payload["exp"] != original_payload["exp"]
         # iat times may be the same if refresh happens very quickly - that's acceptable
-        assert new_payload['iat'] >= original_payload['iat']
+        assert new_payload["iat"] >= original_payload["iat"]
 
     def test_refresh_token_expired(self):
         """Test refreshing an expired token."""
@@ -257,12 +261,13 @@ class TestBasicAuthProvider:
 
         headers = provider.get_auth_headers()
 
-        assert 'Authorization' in headers
-        auth_value = headers['Authorization']
-        assert auth_value.startswith('Basic ')
+        assert "Authorization" in headers
+        auth_value = headers["Authorization"]
+        assert auth_value.startswith("Basic ")
 
         # Decode and verify
         import base64
+
         encoded = auth_value[6:]  # Remove "Basic " prefix
         decoded = base64.b64decode(encoded).decode()
         assert decoded == "testuser:testpass"
@@ -274,7 +279,8 @@ class TestBasicAuthProvider:
         headers = provider.get_auth_headers()
 
         import base64
-        auth_value = headers['Authorization']
+
+        auth_value = headers["Authorization"]
         encoded = auth_value[6:]
         decoded = base64.b64decode(encoded).decode()
         assert decoded == "root:"
@@ -294,6 +300,7 @@ class TestGlobalAuthFunctions:
         """Test get_auth_provider with custom parameters."""
         # Reset global provider
         import armadillo.utils.auth
+
         armadillo.utils.auth._auth_provider = None
 
         provider = get_auth_provider("custom_secret", "HS512")
@@ -312,6 +319,7 @@ class TestGlobalAuthFunctions:
         """Test get_basic_auth_provider with custom parameters."""
         # Reset global provider
         import armadillo.utils.auth
+
         armadillo.utils.auth._basic_auth_provider = None
 
         provider = get_basic_auth_provider("admin", "password")
@@ -321,39 +329,41 @@ class TestGlobalAuthFunctions:
 
     def test_issue_jwt_function(self):
         """Test global issue_jwt function."""
-        with patch('armadillo.utils.auth.get_auth_provider') as mock_get:
+        with patch("armadillo.utils.auth.get_auth_provider") as mock_get:
             mock_provider = Mock()
             mock_provider.issue_jwt.return_value = "test.jwt.token"
             mock_get.return_value = mock_provider
 
-            result = issue_jwt(120.0, {'test': 'claim'})
+            result = issue_jwt(120.0, {"test": "claim"})
 
-            mock_provider.issue_jwt.assert_called_once_with(120.0, {'test': 'claim'})
+            mock_provider.issue_jwt.assert_called_once_with(120.0, {"test": "claim"})
             assert result == "test.jwt.token"
 
     def test_verify_jwt_function(self):
         """Test global verify_jwt function."""
-        with patch('armadillo.utils.auth.get_auth_provider') as mock_get:
+        with patch("armadillo.utils.auth.get_auth_provider") as mock_get:
             mock_provider = Mock()
-            mock_provider.verify_jwt.return_value = {'user': 'test'}
+            mock_provider.verify_jwt.return_value = {"user": "test"}
             mock_get.return_value = mock_provider
 
             result = verify_jwt("test.jwt.token")
 
             mock_provider.verify_jwt.assert_called_once_with("test.jwt.token")
-            assert result == {'user': 'test'}
+            assert result == {"user": "test"}
 
     def test_authorization_header_function(self):
         """Test global authorization_header function."""
-        with patch('armadillo.utils.auth.get_auth_provider') as mock_get:
+        with patch("armadillo.utils.auth.get_auth_provider") as mock_get:
             mock_provider = Mock()
-            mock_provider.authorization_header.return_value = {'Authorization': 'Bearer token'}
+            mock_provider.authorization_header.return_value = {
+                "Authorization": "Bearer token"
+            }
             mock_get.return_value = mock_provider
 
             result = authorization_header(60.0)
 
             mock_provider.authorization_header.assert_called_once_with(60.0)
-            assert result == {'Authorization': 'Bearer token'}
+            assert result == {"Authorization": "Bearer token"}
 
 
 class TestAuthEdgeCases:
@@ -364,19 +374,19 @@ class TestAuthEdgeCases:
         provider = AuthProvider("test_secret")
 
         claims = {
-            'unicode': 'Hello 世界!',
-            'symbols': '!@#$%^&*()',
-            'whitespace': '  spaced  ',
-            'newlines': 'line1\nline2'
+            "unicode": "Hello 世界!",
+            "symbols": "!@#$%^&*()",
+            "whitespace": "  spaced  ",
+            "newlines": "line1\nline2",
         }
 
         token = provider.issue_jwt(claims=claims)
         payload = provider.verify_jwt(token)
 
-        assert payload['unicode'] == 'Hello 世界!'
-        assert payload['symbols'] == '!@#$%^&*()'
-        assert payload['whitespace'] == '  spaced  '
-        assert payload['newlines'] == 'line1\nline2'
+        assert payload["unicode"] == "Hello 世界!"
+        assert payload["symbols"] == "!@#$%^&*()"
+        assert payload["whitespace"] == "  spaced  "
+        assert payload["newlines"] == "line1\nline2"
 
     def test_jwt_with_large_payload(self):
         """Test JWT with large payload."""
@@ -384,12 +394,12 @@ class TestAuthEdgeCases:
 
         # Create large claims
         large_claim = "x" * 10000
-        claims = {'large_data': large_claim}
+        claims = {"large_data": large_claim}
 
         token = provider.issue_jwt(claims=claims)
         payload = provider.verify_jwt(token)
 
-        assert payload['large_data'] == large_claim
+        assert payload["large_data"] == large_claim
 
     def test_auth_provider_with_empty_secret(self):
         """Test AuthProvider with empty secret."""
@@ -399,7 +409,7 @@ class TestAuthEdgeCases:
         token = provider.issue_jwt()
         payload = provider.verify_jwt(token)
 
-        assert 'iss' in payload
+        assert "iss" in payload
 
     def test_basic_auth_with_special_characters(self):
         """Test BasicAuthProvider with special characters in credentials."""
@@ -409,7 +419,8 @@ class TestAuthEdgeCases:
 
         # Should properly encode special characters
         import base64
-        auth_value = headers['Authorization']
+
+        auth_value = headers["Authorization"]
         encoded = auth_value[6:]
         decoded = base64.b64decode(encoded).decode()
         assert decoded == "user:name:pass@word!"

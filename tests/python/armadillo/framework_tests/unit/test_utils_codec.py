@@ -7,10 +7,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 from armadillo.utils.codec import (
-    JsonCodec, CompactJsonCodec, VPackCodec, CodecManager,
-    get_codec, set_default_codec, register_codec,
-    encode_json, decode_json, encode_json_compact,
-    to_json_string, from_json_string
+    JsonCodec,
+    CompactJsonCodec,
+    VPackCodec,
+    CodecManager,
+    get_codec,
+    set_default_codec,
+    register_codec,
+    encode_json,
+    decode_json,
+    encode_json_compact,
+    to_json_string,
+    from_json_string,
 )
 from armadillo.core.errors import CodecError, SerializationError, DeserializationError
 
@@ -37,13 +45,13 @@ class TestJsonCodec:
         codec = JsonCodec()
 
         data = {
-            'string': 'hello',
-            'number': 42,
-            'float': 3.14,
-            'boolean': True,
-            'null': None,
-            'list': [1, 2, 3],
-            'nested': {'key': 'value'}
+            "string": "hello",
+            "number": 42,
+            "float": 3.14,
+            "boolean": True,
+            "null": None,
+            "list": [1, 2, 3],
+            "nested": {"key": "value"},
         }
 
         encoded = codec.encode(data)
@@ -51,28 +59,28 @@ class TestJsonCodec:
         assert isinstance(encoded, bytes)
 
         # Should be valid JSON
-        decoded_dict = json.loads(encoded.decode('utf-8'))
+        decoded_dict = json.loads(encoded.decode("utf-8"))
         assert decoded_dict == data
 
     def test_encode_with_indentation(self):
         """Test encoding with proper indentation."""
         codec = JsonCodec(indent=2)
 
-        data = {'key': 'value', 'nested': {'inner': 'data'}}
+        data = {"key": "value", "nested": {"inner": "data"}}
         encoded = codec.encode(data)
-        json_str = encoded.decode('utf-8')
+        json_str = encoded.decode("utf-8")
 
         # Should have indentation
-        assert '  ' in json_str
-        assert json_str.count('\n') > 0
+        assert "  " in json_str
+        assert json_str.count("\n") > 0
 
     def test_encode_with_sorting(self):
         """Test encoding with key sorting."""
         codec = JsonCodec(sort_keys=True)
 
-        data = {'z': 1, 'a': 2, 'm': 3}
+        data = {"z": 1, "a": 2, "m": 3}
         encoded = codec.encode(data)
-        json_str = encoded.decode('utf-8')
+        json_str = encoded.decode("utf-8")
 
         # Keys should be sorted alphabetically
         assert json_str.index('"a"') < json_str.index('"m"') < json_str.index('"z"')
@@ -81,8 +89,8 @@ class TestJsonCodec:
         """Test decoding simple JSON data."""
         codec = JsonCodec()
 
-        data = {'key': 'value', 'number': 42}
-        json_bytes = json.dumps(data).encode('utf-8')
+        data = {"key": "value", "number": 42}
+        json_bytes = json.dumps(data).encode("utf-8")
 
         decoded = codec.decode(json_bytes)
 
@@ -93,23 +101,17 @@ class TestJsonCodec:
         codec = JsonCodec()
 
         original_data = {
-            'string': 'test string',
-            'number': 12345,
-            'float': 3.14159,
-            'boolean_true': True,
-            'boolean_false': False,
-            'null_value': None,
-            'empty_list': [],
-            'list_with_data': [1, 'two', 3.0, True, None],
-            'empty_dict': {},
-            'nested_dict': {
-                'level1': {
-                    'level2': {
-                        'level3': 'deep_value'
-                    }
-                }
-            },
-            'unicode': 'Hello 世界! 🌍'
+            "string": "test string",
+            "number": 12345,
+            "float": 3.14159,
+            "boolean_true": True,
+            "boolean_false": False,
+            "null_value": None,
+            "empty_list": [],
+            "list_with_data": [1, "two", 3.0, True, None],
+            "empty_dict": {},
+            "nested_dict": {"level1": {"level2": {"level3": "deep_value"}}},
+            "unicode": "Hello 世界! 🌍",
         }
 
         encoded = codec.encode(original_data)
@@ -125,16 +127,16 @@ class TestJsonCodec:
         path = Path("/tmp/test")
 
         data = {
-            'datetime': now,
-            'path': path,
+            "datetime": now,
+            "path": path,
         }
 
         encoded = codec.encode(data)
         decoded = codec.decode(encoded)
 
         # Should serialize to strings
-        assert decoded['datetime'] == now.isoformat()
-        assert decoded['path'] == str(path)
+        assert decoded["datetime"] == now.isoformat()
+        assert decoded["path"] == str(path)
 
     def test_encode_dataclass_object(self):
         """Test encoding dataclass objects."""
@@ -148,17 +150,17 @@ class TestJsonCodec:
         codec = JsonCodec()
         obj = TestData("test", 42)
 
-        encoded = codec.encode({'obj': obj})
+        encoded = codec.encode({"obj": obj})
         decoded = codec.decode(encoded)
 
-        assert decoded['obj']['name'] == "test"
-        assert decoded['obj']['value'] == 42
+        assert decoded["obj"]["name"] == "test"
+        assert decoded["obj"]["value"] == 42
 
     def test_encode_to_string(self):
         """Test encoding to JSON string."""
         codec = JsonCodec()
 
-        data = {'key': 'value'}
+        data = {"key": "value"}
         result = codec.encode_to_string(data)
 
         assert isinstance(result, str)
@@ -168,7 +170,7 @@ class TestJsonCodec:
         """Test decoding from JSON string."""
         codec = JsonCodec()
 
-        data = {'key': 'value'}
+        data = {"key": "value"}
         json_str = json.dumps(data)
 
         result = codec.decode_from_string(json_str)
@@ -181,7 +183,8 @@ class TestJsonCodec:
 
         # Use a truly unserializable object
         import threading
-        data = {'obj': threading.Lock()}  # Locks are not JSON serializable
+
+        data = {"obj": threading.Lock()}  # Locks are not JSON serializable
 
         # Should raise SerializationError when JSON serialization fails
         with pytest.raises(SerializationError):
@@ -200,7 +203,7 @@ class TestJsonCodec:
         """Test decoding invalid UTF-8 bytes."""
         codec = JsonCodec()
 
-        invalid_utf8 = b'\xff\xfe\x00\x00'
+        invalid_utf8 = b"\xff\xfe\x00\x00"
 
         with pytest.raises(DeserializationError):
             codec.decode(invalid_utf8)
@@ -220,15 +223,15 @@ class TestCompactJsonCodec:
         """Test compact encoding produces minimal JSON."""
         codec = CompactJsonCodec()
 
-        data = {'key': 'value', 'nested': {'inner': 'data'}}
+        data = {"key": "value", "nested": {"inner": "data"}}
         encoded = codec.encode(data)
-        json_str = encoded.decode('utf-8')
+        json_str = encoded.decode("utf-8")
 
         # Should not have indentation
-        assert '  ' not in json_str  # No double spaces (indentation)
-        assert '\n' not in json_str  # No newlines
+        assert "  " not in json_str  # No double spaces (indentation)
+        assert "\n" not in json_str  # No newlines
         # Some spaces around colons/commas may be acceptable depending on JSON implementation
-        assert json_str.count(' ') <= 4  # Allow some spaces
+        assert json_str.count(" ") <= 4  # Allow some spaces
 
 
 class TestVPackCodec:
@@ -239,26 +242,26 @@ class TestVPackCodec:
         codec = VPackCodec()
 
         # Should have fallback to JsonCodec
-        assert hasattr(codec, '_fallback')
+        assert hasattr(codec, "_fallback")
         assert isinstance(codec._fallback, JsonCodec)
 
     def test_vpack_encode_fallback(self):
         """Test VPackCodec encode falls back to JSON."""
         codec = VPackCodec()
 
-        data = {'key': 'value'}
+        data = {"key": "value"}
         encoded = codec.encode(data)
 
         # Should produce JSON output (fallback)
-        decoded_dict = json.loads(encoded.decode('utf-8'))
+        decoded_dict = json.loads(encoded.decode("utf-8"))
         assert decoded_dict == data
 
     def test_vpack_decode_fallback(self):
         """Test VPackCodec decode falls back to JSON."""
         codec = VPackCodec()
 
-        data = {'key': 'value'}
-        json_bytes = json.dumps(data).encode('utf-8')
+        data = {"key": "value"}
+        json_bytes = json.dumps(data).encode("utf-8")
 
         decoded = codec.decode(json_bytes)
 
@@ -272,10 +275,10 @@ class TestCodecManager:
         """Test CodecManager creation with default codecs."""
         manager = CodecManager()
 
-        assert 'json' in manager._codecs
-        assert 'json_compact' in manager._codecs
-        assert 'vpack' in manager._codecs
-        assert manager._default_codec == 'json'
+        assert "json" in manager._codecs
+        assert "json_compact" in manager._codecs
+        assert "vpack" in manager._codecs
+        assert manager._default_codec == "json"
 
     def test_get_codec_default(self):
         """Test getting default codec."""
@@ -289,9 +292,9 @@ class TestCodecManager:
         """Test getting codec by name."""
         manager = CodecManager()
 
-        json_codec = manager.get_codec('json')
-        compact_codec = manager.get_codec('json_compact')
-        vpack_codec = manager.get_codec('vpack')
+        json_codec = manager.get_codec("json")
+        compact_codec = manager.get_codec("json_compact")
+        vpack_codec = manager.get_codec("vpack")
 
         assert isinstance(json_codec, JsonCodec)
         assert isinstance(compact_codec, CompactJsonCodec)
@@ -302,15 +305,15 @@ class TestCodecManager:
         manager = CodecManager()
 
         with pytest.raises(CodecError, match="Unknown codec"):
-            manager.get_codec('nonexistent')
+            manager.get_codec("nonexistent")
 
     def test_set_default_codec(self):
         """Test setting default codec."""
         manager = CodecManager()
 
-        manager.set_default_codec('json_compact')
+        manager.set_default_codec("json_compact")
 
-        assert manager._default_codec == 'json_compact'
+        assert manager._default_codec == "json_compact"
 
         # Default should now return compact codec
         codec = manager.get_codec()
@@ -321,7 +324,7 @@ class TestCodecManager:
         manager = CodecManager()
 
         with pytest.raises(CodecError, match="Unknown codec"):
-            manager.set_default_codec('nonexistent')
+            manager.set_default_codec("nonexistent")
 
     def test_register_codec(self):
         """Test registering custom codec."""
@@ -329,15 +332,16 @@ class TestCodecManager:
 
         class CustomCodec:
             def encode(self, obj):
-                return b'custom'
+                return b"custom"
+
             def decode(self, data):
-                return {'custom': True}
+                return {"custom": True}
 
         custom_codec = CustomCodec()
-        manager.register_codec('custom', custom_codec)
+        manager.register_codec("custom", custom_codec)
 
-        assert 'custom' in manager._codecs
-        retrieved_codec = manager.get_codec('custom')
+        assert "custom" in manager._codecs
+        retrieved_codec = manager.get_codec("custom")
         assert retrieved_codec is custom_codec
 
     def test_list_codecs(self):
@@ -346,9 +350,9 @@ class TestCodecManager:
 
         codecs = manager.list_codecs()
 
-        assert 'json' in codecs
-        assert 'json_compact' in codecs
-        assert 'vpack' in codecs
+        assert "json" in codecs
+        assert "json_compact" in codecs
+        assert "vpack" in codecs
 
 
 class TestGlobalCodecFunctions:
@@ -356,44 +360,44 @@ class TestGlobalCodecFunctions:
 
     def test_get_codec_function(self):
         """Test global get_codec function."""
-        with patch('armadillo.utils.codec._codec_manager') as mock_manager:
+        with patch("armadillo.utils.codec._codec_manager") as mock_manager:
             mock_codec = JsonCodec()
             mock_manager.get_codec.return_value = mock_codec
 
-            result = get_codec('json')
+            result = get_codec("json")
 
-            mock_manager.get_codec.assert_called_once_with('json')
+            mock_manager.get_codec.assert_called_once_with("json")
             assert result is mock_codec
 
     def test_set_default_codec_function(self):
         """Test global set_default_codec function."""
-        with patch('armadillo.utils.codec._codec_manager') as mock_manager:
-            set_default_codec('json_compact')
+        with patch("armadillo.utils.codec._codec_manager") as mock_manager:
+            set_default_codec("json_compact")
 
-            mock_manager.set_default_codec.assert_called_once_with('json_compact')
+            mock_manager.set_default_codec.assert_called_once_with("json_compact")
 
     def test_register_codec_function(self):
         """Test global register_codec function."""
-        with patch('armadillo.utils.codec._codec_manager') as mock_manager:
+        with patch("armadillo.utils.codec._codec_manager") as mock_manager:
             codec = JsonCodec()
-            register_codec('test', codec)
+            register_codec("test", codec)
 
-            mock_manager.register_codec.assert_called_once_with('test', codec)
+            mock_manager.register_codec.assert_called_once_with("test", codec)
 
     def test_encode_json_function(self):
         """Test global encode_json function."""
-        data = {'key': 'value'}
+        data = {"key": "value"}
 
         result = encode_json(data)
 
         assert isinstance(result, bytes)
-        decoded = json.loads(result.decode('utf-8'))
+        decoded = json.loads(result.decode("utf-8"))
         assert decoded == data
 
     def test_decode_json_function(self):
         """Test global decode_json function."""
-        data = {'key': 'value'}
-        json_bytes = json.dumps(data).encode('utf-8')
+        data = {"key": "value"}
+        json_bytes = json.dumps(data).encode("utf-8")
 
         result = decode_json(json_bytes)
 
@@ -401,17 +405,17 @@ class TestGlobalCodecFunctions:
 
     def test_encode_json_compact_function(self):
         """Test global encode_json_compact function."""
-        data = {'key': 'value'}
+        data = {"key": "value"}
 
         result = encode_json_compact(data)
 
         assert isinstance(result, bytes)
-        json_str = result.decode('utf-8')
-        assert '\n' not in json_str  # Should be compact
+        json_str = result.decode("utf-8")
+        assert "\n" not in json_str  # Should be compact
 
     def test_to_json_string_function(self):
         """Test global to_json_string function."""
-        data = {'key': 'value'}
+        data = {"key": "value"}
 
         result = to_json_string(data)
 
@@ -420,7 +424,7 @@ class TestGlobalCodecFunctions:
 
     def test_from_json_string_function(self):
         """Test global from_json_string function."""
-        data = {'key': 'value'}
+        data = {"key": "value"}
         json_str = json.dumps(data)
 
         result = from_json_string(json_str)
@@ -436,7 +440,7 @@ class TestCodecEdgeCases:
         codec = JsonCodec()
 
         # Create large nested structure
-        large_data = {'items': [{'id': i, 'data': 'x' * 1000} for i in range(100)]}
+        large_data = {"items": [{"id": i, "data": "x" * 1000} for i in range(100)]}
 
         encoded = codec.encode(large_data)
         decoded = codec.decode(encoded)
@@ -451,10 +455,10 @@ class TestCodecEdgeCases:
         nested_data = {}
         current = nested_data
         for i in range(50):
-            current['level'] = i
-            current['nested'] = {}
-            current = current['nested']
-        current['final'] = 'value'
+            current["level"] = i
+            current["nested"] = {}
+            current = current["nested"]
+        current["final"] = "value"
 
         encoded = codec.encode(nested_data)
         decoded = codec.decode(encoded)
@@ -466,10 +470,10 @@ class TestCodecEdgeCases:
         codec = JsonCodec()
 
         unicode_data = {
-            'english': 'Hello World',
-            'chinese': '你好世界',
-            'emoji': '🌍🚀✨',
-            'mixed': 'Hello 世界! 🌍'
+            "english": "Hello World",
+            "chinese": "你好世界",
+            "emoji": "🌍🚀✨",
+            "mixed": "Hello 世界! 🌍",
         }
 
         encoded = codec.encode(unicode_data)
@@ -482,10 +486,10 @@ class TestCodecEdgeCases:
         codec = JsonCodec()
 
         empty_data = {
-            'empty_dict': {},
-            'empty_list': [],
-            'empty_string': '',
-            'null_value': None
+            "empty_dict": {},
+            "empty_list": [],
+            "empty_string": "",
+            "null_value": None,
         }
 
         encoded = codec.encode(empty_data)

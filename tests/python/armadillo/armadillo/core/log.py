@@ -27,10 +27,6 @@ class Logger(Protocol):
         """Log exception with traceback."""
 
 
-
-
-
-
 class LogManager:
     """Central logging configuration and management.
 
@@ -45,12 +41,14 @@ class LogManager:
         self._manager = IsolatedLogManager("global")
         self._configured = False
 
-    def configure(self,
-                  level: Union[int, str] = logging.INFO,
-                  log_file: Optional[Path] = None,
-                  enable_json: bool = True,
-                  enable_console: bool = True,
-                  console_level: Optional[Union[int, str]] = None) -> None:
+    def configure(
+        self,
+        level: Union[int, str] = logging.INFO,
+        log_file: Optional[Path] = None,
+        enable_json: bool = True,
+        enable_console: bool = True,
+        console_level: Optional[Union[int, str]] = None,
+    ) -> None:
         """Configure logging system."""
         if self._configured:
             return
@@ -61,7 +59,7 @@ class LogManager:
             log_file=log_file,
             enable_json=enable_json,
             enable_console=enable_console,
-            console_level=console_level
+            console_level=console_level,
         )
 
         # Also configure root logger for backward compatibility with code
@@ -83,9 +81,7 @@ class LogManager:
         if enable_console:
             console_level = console_level or level
             console_handler = ArmadilloRichHandler(
-                show_time=True,
-                show_path=False,
-                markup=True
+                show_time=True, show_path=False, markup=True
             )
             console_handler.setLevel(console_level)
             root_logger.addHandler(console_handler)
@@ -123,6 +119,7 @@ class LogManager:
 
         # Re-create isolated manager
         from .logger_factory import IsolatedLogManager
+
         self._manager = IsolatedLogManager("global")
 
 
@@ -156,32 +153,38 @@ def reset_logging() -> None:
 
 def log_event(logger: logging.Logger, event_type: str, message: str, **kwargs) -> None:
     """Log a structured event with context."""
-    logger.info(message, extra={'event_type': event_type, **kwargs})
+    logger.info(message, extra={"event_type": event_type, **kwargs})
 
 
-def log_process_event(logger: logging.Logger, event: str, pid: Optional[int] = None, **kwargs) -> None:
+def log_process_event(
+    logger: logging.Logger, event: str, pid: Optional[int] = None, **kwargs
+) -> None:
     """Log a process-related event."""
-    extra = {'event_type': 'process', 'process_event': event}
+    extra = {"event_type": "process", "process_event": event}
     if pid is not None:
-        extra['pid'] = pid
+        extra["pid"] = pid
     extra.update(kwargs)
     logger.info("Process %s", event, extra=extra)
 
 
-def log_server_event(logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs) -> None:
+def log_server_event(
+    logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs
+) -> None:
     """Log a server-related event."""
-    extra = {'event_type': 'server', 'server_event': event}
+    extra = {"event_type": "server", "server_event": event}
     if server_id is not None:
-        extra['server_id'] = server_id
+        extra["server_id"] = server_id
     extra.update(kwargs)
     logger.info("Server %s", event, extra=extra)
 
 
-def log_test_event(logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs) -> None:
+def log_test_event(
+    logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs
+) -> None:
     """Log a test-related event."""
-    extra = {'event_type': 'test', 'test_event': event}
+    extra = {"event_type": "test", "test_event": event}
     if test_name is not None:
-        extra['test_name'] = test_name
+        extra["test_name"] = test_name
     extra.update(kwargs)
     logger.info("Test %s", event, extra=extra)
 
@@ -205,4 +208,3 @@ def clear_log_context() -> None:
 def log_context(**kwargs):
     """Context manager for temporary logging context."""
     return _log_context.context(**kwargs)
-

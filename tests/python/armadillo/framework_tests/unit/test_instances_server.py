@@ -17,9 +17,7 @@ class TestArangoServerBasic:
     def test_server_can_be_created(self):
         """Test ArangoServer can be instantiated."""
         server = ArangoServer(
-            server_id="test_server",
-            role=ServerRole.SINGLE,
-            port=8529
+            server_id="test_server", role=ServerRole.SINGLE, port=8529
         )
 
         assert server is not None
@@ -30,7 +28,12 @@ class TestArangoServerBasic:
 
     def test_server_with_different_roles(self):
         """Test server creation with different roles."""
-        for role in [ServerRole.SINGLE, ServerRole.COORDINATOR, ServerRole.DBSERVER, ServerRole.AGENT]:
+        for role in [
+            ServerRole.SINGLE,
+            ServerRole.COORDINATOR,
+            ServerRole.DBSERVER,
+            ServerRole.AGENT,
+        ]:
             server = ArangoServer(f"test_{role.value}", role=role, port=8530)
             assert server.role == role
 
@@ -65,7 +68,7 @@ class TestArangoServerConfiguration:
         server = ArangoServer("test", role=ServerRole.SINGLE, port=8529)
 
         # Just verify the method exists and doesn't crash when called
-        with patch('pathlib.Path.exists', return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             try:
                 result = server._build_command()
                 assert isinstance(result, list)
@@ -103,9 +106,9 @@ class TestArangoServerPublicInterface:
         server = ArangoServer("test", role=ServerRole.SINGLE, port=8529)
 
         # Check that public methods exist
-        assert hasattr(server, 'start')
-        assert hasattr(server, 'stop')
-        assert hasattr(server, 'is_running')
+        assert hasattr(server, "start")
+        assert hasattr(server, "stop")
+        assert hasattr(server, "is_running")
         assert callable(server.start)
         assert callable(server.stop)
         assert callable(server.is_running)
@@ -115,10 +118,10 @@ class TestArangoServerPublicInterface:
         server = ArangoServer("test", role=ServerRole.SINGLE, port=8529)
 
         # Check that public properties exist
-        assert hasattr(server, 'server_id')
-        assert hasattr(server, 'role')
-        assert hasattr(server, 'port')
-        assert hasattr(server, 'endpoint')
+        assert hasattr(server, "server_id")
+        assert hasattr(server, "role")
+        assert hasattr(server, "port")
+        assert hasattr(server, "endpoint")
 
     def test_endpoint_format(self):
         """Test endpoint format is consistent."""
@@ -135,7 +138,7 @@ class TestArangoServerPublicInterface:
             (ServerRole.SINGLE, "single"),
             (ServerRole.COORDINATOR, "coordinator"),
             (ServerRole.DBSERVER, "dbserver"),
-            (ServerRole.AGENT, "agent")
+            (ServerRole.AGENT, "agent"),
         ]
 
         for role, expected_value in test_cases:
@@ -147,8 +150,8 @@ class TestArangoServerPublicInterface:
 class TestArangoServerMockIntegration:
     """Test server with minimal safe mocking."""
 
-    @patch('armadillo.instances.server.start_supervised_process')
-    @patch('pathlib.Path.exists', return_value=True)
+    @patch("armadillo.instances.server.start_supervised_process")
+    @patch("pathlib.Path.exists", return_value=True)
     def test_start_attempts_process_creation(self, mock_exists, mock_start_process):
         """Test start attempts to create a process."""
         server = ArangoServer("mock_test", role=ServerRole.SINGLE, port=8529)
@@ -166,7 +169,7 @@ class TestArangoServerMockIntegration:
                 # Re-raise if process creation wasn't even attempted
                 raise
 
-    @patch('armadillo.instances.server.stop_supervised_process')
+    @patch("armadillo.instances.server.stop_supervised_process")
     def test_stop_attempts_process_termination(self, mock_stop_process):
         """Test stop attempts to terminate process."""
         server = ArangoServer("mock_test", role=ServerRole.SINGLE, port=8529)
@@ -177,7 +180,9 @@ class TestArangoServerMockIntegration:
         try:
             server.stop()
             # Should have attempted to stop the process
-            mock_stop_process.assert_called_once_with("mock_test", graceful=True, timeout=30.0)
+            mock_stop_process.assert_called_once_with(
+                "mock_test", graceful=True, timeout=30.0
+            )
         except Exception:
             # Even if it fails, the attempt should have been made
             assert mock_stop_process.called

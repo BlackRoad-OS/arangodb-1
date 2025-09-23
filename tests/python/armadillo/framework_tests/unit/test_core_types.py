@@ -5,9 +5,18 @@ from pathlib import Path
 from dataclasses import asdict
 
 from armadillo.core.types import (
-    DeploymentMode, ServerRole, ExecutionOutcome,
-    ServerConfig, ClusterConfig, MonitoringConfig, ArmadilloConfig,
-    ExecutionResult, SuiteExecutionResults, HealthStatus, ServerStats, ProcessStats
+    DeploymentMode,
+    ServerRole,
+    ExecutionOutcome,
+    ServerConfig,
+    ClusterConfig,
+    MonitoringConfig,
+    ArmadilloConfig,
+    ExecutionResult,
+    SuiteExecutionResults,
+    HealthStatus,
+    ServerStats,
+    ProcessStats,
 )
 
 
@@ -45,7 +54,7 @@ class TestServerConfig:
             role=ServerRole.SINGLE,
             port=8529,
             data_dir=Path("/tmp/data"),
-            log_file=Path("/tmp/log.txt")
+            log_file=Path("/tmp/log.txt"),
         )
 
         assert config.role == ServerRole.SINGLE
@@ -65,7 +74,7 @@ class TestServerConfig:
             log_file=Path("/tmp/log.txt"),
             args={"server.threads": "4"},
             memory_limit_mb=1024,
-            startup_timeout=60.0
+            startup_timeout=60.0,
         )
 
         assert config.args == {"server.threads": "4"}
@@ -88,10 +97,7 @@ class TestClusterConfig:
     def test_cluster_config_custom(self):
         """Test ClusterConfig with custom values."""
         config = ClusterConfig(
-            agents=5,
-            dbservers=4,
-            coordinators=2,
-            replication_factor=3
+            agents=5, dbservers=4, coordinators=2, replication_factor=3
         )
 
         assert config.agents == 5
@@ -120,9 +126,7 @@ class TestArmadilloConfig:
 
     def test_armadillo_config_creation(self):
         """Test ArmadilloConfig creation."""
-        config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.SINGLE_SERVER
-        )
+        config = ArmadilloConfig(deployment_mode=DeploymentMode.SINGLE_SERVER)
 
         assert config.deployment_mode == DeploymentMode.SINGLE_SERVER
         assert isinstance(config.cluster, ClusterConfig)
@@ -142,9 +146,7 @@ class TestExecutionResult:
     def test_test_result_creation(self):
         """Test ExecutionResult creation."""
         result = ExecutionResult(
-            name="test_example",
-            outcome=ExecutionOutcome.PASSED,
-            duration=1.5
+            name="test_example", outcome=ExecutionOutcome.PASSED, duration=1.5
         )
 
         assert result.name == "test_example"
@@ -164,7 +166,7 @@ class TestExecutionResult:
             duration=2.0,
             failure_message="Assertion failed",
             setup_duration=0.1,
-            teardown_duration=0.05
+            teardown_duration=0.05,
         )
 
         assert result.outcome == ExecutionOutcome.FAILED
@@ -185,7 +187,7 @@ class TestSuiteExecutionResults:
             tests=[test1, test2],
             total_duration=10.5,
             summary={"passed": 1, "failed": 1},
-            metadata={"framework": "armadillo"}
+            metadata={"framework": "armadillo"},
         )
 
         assert len(results.tests) == 2
@@ -199,10 +201,7 @@ class TestHealthStatus:
 
     def test_healthy_status(self):
         """Test healthy status creation."""
-        status = HealthStatus(
-            is_healthy=True,
-            response_time=0.5
-        )
+        status = HealthStatus(is_healthy=True, response_time=0.5)
 
         assert status.is_healthy is True
         assert status.response_time == 0.5
@@ -215,7 +214,7 @@ class TestHealthStatus:
             is_healthy=False,
             response_time=5.0,
             error_message="Connection timeout",
-            details={"status_code": 500}
+            details={"status_code": 500},
         )
 
         assert status.is_healthy is False
@@ -231,15 +230,15 @@ class TestServerStats:
         """Test ServerStats creation."""
         stats = ServerStats(
             process_id=12345,
-            memory_usage=1024*1024,
+            memory_usage=1024 * 1024,
             cpu_percent=25.5,
             connection_count=10,
             uptime=3600.0,
-            additional_metrics={"cache_hit_rate": 0.95}
+            additional_metrics={"cache_hit_rate": 0.95},
         )
 
         assert stats.process_id == 12345
-        assert stats.memory_usage == 1024*1024
+        assert stats.memory_usage == 1024 * 1024
         assert stats.cpu_percent == 25.5
         assert stats.connection_count == 10
         assert stats.uptime == 3600.0
@@ -253,16 +252,16 @@ class TestProcessStats:
         """Test ProcessStats creation."""
         stats = ProcessStats(
             pid=12345,
-            memory_rss=1024*1024,
-            memory_vms=2048*1024,
+            memory_rss=1024 * 1024,
+            memory_vms=2048 * 1024,
             cpu_percent=15.0,
             num_threads=8,
-            status="running"
+            status="running",
         )
 
         assert stats.pid == 12345
-        assert stats.memory_rss == 1024*1024
-        assert stats.memory_vms == 2048*1024
+        assert stats.memory_rss == 1024 * 1024
+        assert stats.memory_vms == 2048 * 1024
         assert stats.cpu_percent == 15.0
         assert stats.num_threads == 8
         assert stats.status == "running"

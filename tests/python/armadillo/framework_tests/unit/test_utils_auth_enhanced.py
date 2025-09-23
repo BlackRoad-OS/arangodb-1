@@ -17,7 +17,7 @@ class TestAuthProviderEnhanced:
             secret="test_secret",
             algorithm="HS512",
             default_username="admin",
-            default_password="secret"
+            default_password="secret",
         )
 
         assert provider.secret == "test_secret"
@@ -35,7 +35,7 @@ class TestAuthProviderEnhanced:
             username="test_user",
             permissions=["read", "write", "admin"],
             ttl=600.0,
-            additional_claims={"department": "engineering"}
+            additional_claims={"department": "engineering"},
         )
 
         assert isinstance(token, str)
@@ -63,7 +63,7 @@ class TestAuthProviderEnhanced:
         token = provider.create_service_token(
             service_name="backup_service",
             permissions=["backup", "restore"],
-            ttl=86400.0  # 24 hours
+            ttl=86400.0,  # 24 hours
         )
 
         assert isinstance(token, str)
@@ -82,10 +82,7 @@ class TestAuthProviderEnhanced:
 
     def test_get_basic_auth_header(self):
         """Test generating basic auth headers."""
-        provider = AuthProvider(
-            default_username="root",
-            default_password="password123"
-        )
+        provider = AuthProvider(default_username="root", default_password="password123")
 
         # Test with defaults
         headers = provider.get_basic_auth_header()
@@ -94,6 +91,7 @@ class TestAuthProviderEnhanced:
 
         # Decode and verify
         import base64
+
         encoded = headers["Authorization"][6:]  # Remove "Basic "
         decoded = base64.b64decode(encoded).decode()
         assert decoded == "root:password123"
@@ -109,9 +107,7 @@ class TestAuthProviderEnhanced:
         provider = AuthProvider("cluster_secret")
 
         headers = provider.create_cluster_auth_headers(
-            cluster_id="prod_cluster_01",
-            role="coordinator",
-            ttl=7200.0
+            cluster_id="prod_cluster_01", role="coordinator", ttl=7200.0
         )
 
         assert "Authorization" in headers
@@ -137,8 +133,7 @@ class TestAuthProviderEnhanced:
 
         # Create token with specific permissions
         token = provider.create_user_token(
-            username="test_user",
-            permissions=["read", "write", "delete"]
+            username="test_user", permissions=["read", "write", "delete"]
         )
 
         # Test successful validation
@@ -202,7 +197,7 @@ class TestAuthProviderEnhanced:
         provider = AuthProvider("test_secret")
 
         # Create tokens with different expiration times
-        with patch('time.time', return_value=1000.0):
+        with patch("time.time", return_value=1000.0):
             # Short-lived token (will be expired)
             short_token = provider.create_user_token("user1", ["read"], ttl=1.0)
 
@@ -210,7 +205,7 @@ class TestAuthProviderEnhanced:
             long_token = provider.create_user_token("user2", ["read"], ttl=3600.0)
 
         # Simulate time passing
-        with patch('time.time', return_value=1002.0):  # 2 seconds later
+        with patch("time.time", return_value=1002.0):  # 2 seconds later
             cleaned = provider.cleanup_expired_tokens()
 
             assert cleaned == 1  # One token cleaned up
@@ -226,12 +221,12 @@ class TestAuthProviderEnhanced:
         provider = AuthProvider("test_secret")
 
         # Create tokens at time 1000
-        with patch('time.time', return_value=1000.0):
+        with patch("time.time", return_value=1000.0):
             provider.create_user_token("user1", ["read"], ttl=1.0)  # Expires at 1001
             provider.create_user_token("user2", ["read"], ttl=10.0)  # Expires at 1010
 
         # Check at time 1005 (first token expired, second still valid)
-        with patch('time.time', return_value=1005.0):
+        with patch("time.time", return_value=1005.0):
             active = provider.get_active_tokens()
 
             assert len(active) == 1
@@ -263,8 +258,7 @@ class TestAuthProviderEnhanced:
         provider = AuthProvider("test_secret")
 
         headers = provider.authorization_header(
-            ttl=1800.0,
-            claims={"custom_claim": "custom_value", "role": "admin"}
+            ttl=1800.0, claims={"custom_claim": "custom_value", "role": "admin"}
         )
 
         assert "Authorization" in headers
@@ -326,7 +320,9 @@ class TestAuthProviderEnhanced:
         # Token with empty permissions
         token_empty = provider.create_user_token("user1", [])
         assert not provider.validate_token_permissions(token_empty, ["read"])
-        assert provider.validate_token_permissions(token_empty, [])  # Empty requirements should pass
+        assert provider.validate_token_permissions(
+            token_empty, []
+        )  # Empty requirements should pass
 
         # Token with many permissions
         many_perms = [f"perm_{i}" for i in range(100)]

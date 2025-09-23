@@ -9,8 +9,11 @@ from unittest.mock import Mock, patch, call
 import pytest
 
 from armadillo.utils.resource_pool import (
-    ResourceTracker, PortPool, ManagedPortPool,
-    create_isolated_port_pool, create_ephemeral_port_pool
+    ResourceTracker,
+    PortPool,
+    ManagedPortPool,
+    create_isolated_port_pool,
+    create_ephemeral_port_pool,
 )
 from armadillo.utils.ports import PortManager
 from armadillo.core.errors import NetworkError
@@ -106,6 +109,7 @@ class TestResourceTracker:
 
     def test_cleanup_with_exception(self):
         """Test that cleanup continues even if one callback fails."""
+
         def failing_cleanup(resources):
             raise Exception("Cleanup failed")
 
@@ -166,7 +170,7 @@ class TestPortPool:
         self.pool = PortPool(
             port_manager=self.mock_port_manager,
             resource_tracker=self.mock_resource_tracker,
-            name="test_pool"
+            name="test_pool",
         )
 
     def test_pool_creation(self):
@@ -195,11 +199,7 @@ class TestPortPool:
         self.mock_port_manager.allocate_ports.assert_called_once_with(3)
 
         # Should track each port individually
-        expected_calls = [
-            call("ports", 8529),
-            call("ports", 8530),
-            call("ports", 8531)
-        ]
+        expected_calls = [call("ports", 8529), call("ports", 8530), call("ports", 8531)]
         self.mock_resource_tracker.track_resource.assert_has_calls(expected_calls)
 
     def test_release_port(self):
@@ -207,7 +207,9 @@ class TestPortPool:
         self.pool.release(8529)
 
         self.mock_port_manager.release_port.assert_called_once_with(8529)
-        self.mock_resource_tracker.untrack_resource.assert_called_once_with("ports", 8529)
+        self.mock_resource_tracker.untrack_resource.assert_called_once_with(
+            "ports", 8529
+        )
 
     def test_release_multiple_ports(self):
         """Test releasing multiple ports."""
@@ -218,11 +220,7 @@ class TestPortPool:
         self.mock_port_manager.release_ports.assert_called_once_with(ports)
 
         # Should untrack each port individually
-        expected_calls = [
-            call("ports", 8529),
-            call("ports", 8530),
-            call("ports", 8531)
-        ]
+        expected_calls = [call("ports", 8529), call("ports", 8530), call("ports", 8531)]
         self.mock_resource_tracker.untrack_resource.assert_has_calls(expected_calls)
 
     def test_acquire_context_manager(self):
@@ -254,7 +252,9 @@ class TestPortPool:
         allocated = self.pool.get_allocated_ports()
 
         assert allocated == [8529, 8530]
-        self.mock_resource_tracker.get_tracked_resources.assert_called_once_with("ports")
+        self.mock_resource_tracker.get_tracked_resources.assert_called_once_with(
+            "ports"
+        )
 
     def test_cleanup_all_ports(self):
         """Test cleaning up all allocated ports."""
@@ -289,9 +289,10 @@ class TestManagedPortPool:
         """Clean up after test."""
         # Clean up temp directory
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch('armadillo.utils.resource_pool.PortManager')
+    @patch("armadillo.utils.resource_pool.PortManager")
     def test_managed_pool_creation_with_persistence(self, mock_port_manager_class):
         """Test creating managed pool with persistence."""
         mock_port_manager = Mock()
@@ -302,7 +303,7 @@ class TestManagedPortPool:
             max_ports=500,
             name="test_managed",
             enable_persistence=True,
-            work_dir=self.temp_dir
+            work_dir=self.temp_dir,
         )
 
         # Should create PortManager with correct parameters
@@ -312,7 +313,7 @@ class TestManagedPortPool:
         expected_file = self.temp_dir / "port_reservations_test_managed.txt"
         mock_port_manager.set_reservation_file.assert_called_once_with(expected_file)
 
-    @patch('armadillo.utils.resource_pool.PortManager')
+    @patch("armadillo.utils.resource_pool.PortManager")
     def test_managed_pool_creation_without_persistence(self, mock_port_manager_class):
         """Test creating managed pool without persistence."""
         mock_port_manager = Mock()
@@ -323,14 +324,14 @@ class TestManagedPortPool:
             max_ports=500,
             name="test_managed",
             enable_persistence=False,
-            work_dir=None
+            work_dir=None,
         )
 
         # Should not set reservation file
         mock_port_manager.set_reservation_file.assert_not_called()
 
-    @patch('armadillo.utils.resource_pool.atexit.register')
-    @patch('armadillo.utils.resource_pool.PortManager')
+    @patch("armadillo.utils.resource_pool.atexit.register")
+    @patch("armadillo.utils.resource_pool.PortManager")
     def test_atexit_registration(self, mock_port_manager_class, mock_atexit):
         """Test that shutdown is registered with atexit."""
         pool = ManagedPortPool(name="test_atexit")
@@ -352,19 +353,17 @@ class TestPortPoolUtilities:
     def teardown_method(self):
         """Clean up after test."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch('armadillo.utils.resource_pool.ManagedPortPool')
+    @patch("armadillo.utils.resource_pool.ManagedPortPool")
     def test_create_isolated_port_pool(self, mock_managed_pool_class):
         """Test creating isolated port pool."""
         mock_pool = Mock()
         mock_managed_pool_class.return_value = mock_pool
 
         pool = create_isolated_port_pool(
-            name="test_isolated",
-            base_port=9000,
-            max_ports=500,
-            work_dir=self.temp_dir
+            name="test_isolated", base_port=9000, max_ports=500, work_dir=self.temp_dir
         )
 
         mock_managed_pool_class.assert_called_once_with(
@@ -372,21 +371,19 @@ class TestPortPoolUtilities:
             max_ports=500,
             name="test_isolated",
             enable_persistence=True,
-            work_dir=self.temp_dir
+            work_dir=self.temp_dir,
         )
 
         assert pool == mock_pool
 
-    @patch('armadillo.utils.resource_pool.ManagedPortPool')
+    @patch("armadillo.utils.resource_pool.ManagedPortPool")
     def test_create_ephemeral_port_pool(self, mock_managed_pool_class):
         """Test creating ephemeral port pool."""
         mock_pool = Mock()
         mock_managed_pool_class.return_value = mock_pool
 
         pool = create_ephemeral_port_pool(
-            name="test_ephemeral",
-            base_port=9000,
-            max_ports=500
+            name="test_ephemeral", base_port=9000, max_ports=500
         )
 
         mock_managed_pool_class.assert_called_once_with(
@@ -394,7 +391,7 @@ class TestPortPoolUtilities:
             max_ports=500,
             name="test_ephemeral",
             enable_persistence=False,
-            work_dir=None
+            work_dir=None,
         )
 
         assert pool == mock_pool
@@ -411,7 +408,7 @@ class TestPortPoolIntegration:
             base_port=self.base_port,
             max_ports=100,
             name="integration_test",
-            enable_persistence=False
+            enable_persistence=False,
         )
 
     def teardown_method(self):

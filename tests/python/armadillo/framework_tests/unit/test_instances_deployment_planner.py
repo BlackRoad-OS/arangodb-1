@@ -16,15 +16,16 @@ class TestStandardDeploymentPlanner:
         """Set up test environment."""
         # Create mock port allocator
         self.mock_port_allocator = Mock()
-        self.mock_port_allocator.allocate_port.side_effect = lambda: self._get_next_port()
+        self.mock_port_allocator.allocate_port.side_effect = (
+            lambda: self._get_next_port()
+        )
         self._port_counter = 8529
 
         # Create mock logger
         self.mock_logger = Mock()
 
         self.planner = StandardDeploymentPlanner(
-            port_allocator=self.mock_port_allocator,
-            logger=self.mock_logger
+            port_allocator=self.mock_port_allocator, logger=self.mock_logger
         )
 
     def _get_next_port(self) -> int:
@@ -36,8 +37,7 @@ class TestStandardDeploymentPlanner:
     def test_create_single_server_deployment(self):
         """Test creating single server deployment plan."""
         plan = self.planner.create_deployment_plan(
-            deployment_id="test_single",
-            mode=DeploymentMode.SINGLE_SERVER
+            deployment_id="test_single", mode=DeploymentMode.SINGLE_SERVER
         )
 
         assert plan.deployment_mode == DeploymentMode.SINGLE_SERVER
@@ -59,14 +59,13 @@ class TestStandardDeploymentPlanner:
         self.mock_logger.info.assert_called_once()
         # Check for lazy formatting: info('Created deployment plan: %s with %s servers', 'single_server', 1)
         self.mock_logger.info.assert_called_with(
-            'Created deployment plan: %s with %s servers', 'single_server', 1
+            "Created deployment plan: %s with %s servers", "single_server", 1
         )
 
     def test_create_cluster_deployment_default_config(self):
         """Test creating cluster deployment with default configuration."""
         plan = self.planner.create_deployment_plan(
-            deployment_id="test_cluster",
-            mode=DeploymentMode.CLUSTER
+            deployment_id="test_cluster", mode=DeploymentMode.CLUSTER
         )
 
         assert plan.deployment_mode == DeploymentMode.CLUSTER
@@ -83,16 +82,13 @@ class TestStandardDeploymentPlanner:
     def test_create_cluster_deployment_custom_config(self):
         """Test creating cluster deployment with custom configuration."""
         custom_config = ClusterConfig(
-            agents=1,
-            dbservers=2,
-            coordinators=2,
-            replication_factor=1
+            agents=1, dbservers=2, coordinators=2, replication_factor=1
         )
 
         plan = self.planner.create_deployment_plan(
             deployment_id="test_custom_cluster",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=custom_config
+            cluster_config=custom_config,
         )
 
         assert len(plan.get_agents()) == 1
@@ -106,7 +102,7 @@ class TestStandardDeploymentPlanner:
         plan = self.planner.create_deployment_plan(
             deployment_id="test_agents",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=ClusterConfig(agents=2, dbservers=1, coordinators=1)
+            cluster_config=ClusterConfig(agents=2, dbservers=1, coordinators=1),
         )
 
         agents = plan.get_agents()
@@ -133,7 +129,7 @@ class TestStandardDeploymentPlanner:
         plan = self.planner.create_deployment_plan(
             deployment_id="test_dbservers",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=ClusterConfig(agents=1, dbservers=2, coordinators=1)
+            cluster_config=ClusterConfig(agents=1, dbservers=2, coordinators=1),
         )
 
         dbservers = plan.get_dbservers()
@@ -145,11 +141,16 @@ class TestStandardDeploymentPlanner:
             assert dbserver.role == ServerRole.DBSERVER
             assert dbserver.port == expected_port
             assert str(dbserver.data_dir).endswith(f"test_dbservers/dbserver_{i}/data")
-            assert str(dbserver.log_file).endswith(f"test_dbservers/dbserver_{i}/arangod.log")
+            assert str(dbserver.log_file).endswith(
+                f"test_dbservers/dbserver_{i}/arangod.log"
+            )
 
             # Check dbserver-specific args
             assert dbserver.args["cluster.my-role"] == "PRIMARY"
-            assert dbserver.args["cluster.my-address"] == f"tcp://127.0.0.1:{expected_port}"
+            assert (
+                dbserver.args["cluster.my-address"]
+                == f"tcp://127.0.0.1:{expected_port}"
+            )
             assert dbserver.args["cluster.agency-endpoint"] == "tcp://127.0.0.1:8529"
             assert dbserver.args["server.authentication"] == "false"
 
@@ -158,7 +159,7 @@ class TestStandardDeploymentPlanner:
         plan = self.planner.create_deployment_plan(
             deployment_id="test_coordinators",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=2)
+            cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=2),
         )
 
         coordinators = plan.get_coordinators()
@@ -169,12 +170,19 @@ class TestStandardDeploymentPlanner:
             expected_port = 8531 + i
             assert coordinator.role == ServerRole.COORDINATOR
             assert coordinator.port == expected_port
-            assert str(coordinator.data_dir).endswith(f"test_coordinators/coordinator_{i}/data")
-            assert str(coordinator.log_file).endswith(f"test_coordinators/coordinator_{i}/arangod.log")
+            assert str(coordinator.data_dir).endswith(
+                f"test_coordinators/coordinator_{i}/data"
+            )
+            assert str(coordinator.log_file).endswith(
+                f"test_coordinators/coordinator_{i}/arangod.log"
+            )
 
             # Check coordinator-specific args
             assert coordinator.args["cluster.my-role"] == "COORDINATOR"
-            assert coordinator.args["cluster.my-address"] == f"tcp://127.0.0.1:{expected_port}"
+            assert (
+                coordinator.args["cluster.my-address"]
+                == f"tcp://127.0.0.1:{expected_port}"
+            )
             assert coordinator.args["cluster.agency-endpoint"] == "tcp://127.0.0.1:8529"
             assert coordinator.args["server.authentication"] == "false"
 
@@ -191,14 +199,14 @@ class TestStandardDeploymentPlanner:
         plan = self.planner.create_deployment_plan(
             deployment_id="test_agency",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=ClusterConfig(agents=3, dbservers=1, coordinators=1)
+            cluster_config=ClusterConfig(agents=3, dbservers=1, coordinators=1),
         )
 
         agents = plan.get_agents()
         expected_agency_endpoints = [
             "tcp://127.0.0.1:8529",
             "tcp://127.0.0.1:8530",
-            "tcp://127.0.0.1:8531"
+            "tcp://127.0.0.1:8531",
         ]
 
         # All agents should have the same agency endpoints
@@ -212,7 +220,7 @@ class TestStandardDeploymentPlanner:
         self.planner.create_deployment_plan(
             deployment_id="test_ports",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=ClusterConfig(agents=2, dbservers=2, coordinators=1)
+            cluster_config=ClusterConfig(agents=2, dbservers=2, coordinators=1),
         )
 
         # Should allocate ports for: 2 agents + 2 dbservers + 1 coordinator = 5 calls
@@ -223,20 +231,19 @@ class TestStandardDeploymentPlanner:
         with pytest.raises(ValueError, match="Unsupported deployment mode"):
             self.planner.create_deployment_plan(
                 deployment_id="test_error",
-                mode="INVALID_MODE"  # This should cause a ValueError
+                mode="INVALID_MODE",  # This should cause a ValueError
             )
 
     def test_deployment_planner_protocol_compliance(self):
         """Test that StandardDeploymentPlanner implements DeploymentPlanner protocol."""
         # This test verifies that the class implements the expected interface
-        assert hasattr(self.planner, 'create_deployment_plan')
+        assert hasattr(self.planner, "create_deployment_plan")
         assert callable(self.planner.create_deployment_plan)
 
     def test_plan_single_server_directory_structure(self):
         """Test single server directory structure."""
         plan = self.planner.create_deployment_plan(
-            deployment_id="dir_test",
-            mode=DeploymentMode.SINGLE_SERVER
+            deployment_id="dir_test", mode=DeploymentMode.SINGLE_SERVER
         )
 
         server = plan.servers[0]
@@ -248,7 +255,7 @@ class TestStandardDeploymentPlanner:
         plan = self.planner.create_deployment_plan(
             deployment_id="cluster_dir_test",
             mode=DeploymentMode.CLUSTER,
-            cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1)
+            cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1),
         )
 
         # Check agent directory
@@ -259,9 +266,13 @@ class TestStandardDeploymentPlanner:
         # Check dbserver directory
         dbserver = plan.get_dbservers()[0]
         assert str(dbserver.data_dir).endswith("cluster_dir_test/dbserver_0/data")
-        assert str(dbserver.log_file).endswith("cluster_dir_test/dbserver_0/arangod.log")
+        assert str(dbserver.log_file).endswith(
+            "cluster_dir_test/dbserver_0/arangod.log"
+        )
 
         # Check coordinator directory
         coordinator = plan.get_coordinators()[0]
         assert str(coordinator.data_dir).endswith("cluster_dir_test/coordinator_0/data")
-        assert str(coordinator.log_file).endswith("cluster_dir_test/coordinator_0/arangod.log")
+        assert str(coordinator.log_file).endswith(
+            "cluster_dir_test/coordinator_0/arangod.log"
+        )

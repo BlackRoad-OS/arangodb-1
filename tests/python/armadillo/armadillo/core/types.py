@@ -8,12 +8,14 @@ from pathlib import Path
 
 class DeploymentMode(Enum):
     """ArangoDB deployment mode."""
+
     SINGLE_SERVER = "single_server"
     CLUSTER = "cluster"
 
 
 class ServerRole(Enum):
     """ArangoDB server role."""
+
     SINGLE = "single"
     AGENT = "agent"
     DBSERVER = "dbserver"
@@ -22,6 +24,7 @@ class ServerRole(Enum):
 
 class ExecutionOutcome(Enum):
     """Test execution outcome."""
+
     PASSED = "passed"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -33,6 +36,7 @@ class ExecutionOutcome(Enum):
 @dataclass
 class ServerConfig:
     """Configuration for a single ArangoDB server."""
+
     role: ServerRole
     port: int
     data_dir: Path
@@ -45,6 +49,7 @@ class ServerConfig:
 @dataclass
 class ClusterConfig:
     """Configuration for ArangoDB cluster topology."""
+
     agents: int = 3
     dbservers: int = 3
     coordinators: int = 1
@@ -54,6 +59,7 @@ class ClusterConfig:
 @dataclass
 class MonitoringConfig:
     """Monitoring and debugging configuration."""
+
     enable_crash_analysis: bool = True
     enable_gdb_debugging: bool = True
     enable_memory_profiling: bool = False
@@ -65,6 +71,7 @@ class MonitoringConfig:
 @dataclass
 class ArmadilloConfig:
     """Main framework configuration."""
+
     deployment_mode: DeploymentMode
     cluster: ClusterConfig = field(default_factory=ClusterConfig)
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
@@ -87,6 +94,7 @@ class ArmadilloConfig:
 @dataclass
 class ExecutionResult:
     """Individual test result."""
+
     name: str
     outcome: ExecutionOutcome
     duration: float
@@ -100,6 +108,7 @@ class ExecutionResult:
 @dataclass
 class SuiteExecutionResults:
     """Results for a complete test suite."""
+
     tests: List[ExecutionResult]
     total_duration: float
     summary: Dict[str, int] = field(default_factory=dict)
@@ -110,6 +119,7 @@ class SuiteExecutionResults:
 @dataclass
 class HealthStatus:
     """Server health status."""
+
     is_healthy: bool
     response_time: float
     error_message: Optional[str] = None
@@ -119,6 +129,7 @@ class HealthStatus:
 @dataclass
 class ServerStats:
     """Server statistics and metrics."""
+
     process_id: int
     memory_usage: int
     cpu_percent: float
@@ -131,10 +142,10 @@ class ServerStats:
 @dataclass
 class ProcessStats:
     """Process statistics."""
+
     pid: int
     memory_rss: int
     memory_vms: int
     cpu_percent: float
     num_threads: int
     status: str
-

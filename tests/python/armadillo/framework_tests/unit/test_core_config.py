@@ -6,7 +6,12 @@ from pathlib import Path
 from unittest.mock import patch, mock_open
 
 from armadillo.core.config import ConfigLoader, ConfigManager, load_config, get_config
-from armadillo.core.types import ArmadilloConfig, DeploymentMode, ClusterConfig, MonitoringConfig
+from armadillo.core.types import (
+    ArmadilloConfig,
+    DeploymentMode,
+    ClusterConfig,
+    MonitoringConfig,
+)
 from armadillo.core.errors import ConfigurationError, PathError
 
 
@@ -23,11 +28,14 @@ class TestConfigLoader:
         loader = ConfigLoader()
         assert loader.env_prefix == "ARMADILLO_"
 
-    @patch.dict(os.environ, {
-        'ARMADILLO_DEPLOYMENT_MODE': 'cluster',
-        'ARMADILLO_TEST_TIMEOUT': '1200.0',
-        'ARMADILLO_VERBOSE': '2'
-    })
+    @patch.dict(
+        os.environ,
+        {
+            "ARMADILLO_DEPLOYMENT_MODE": "cluster",
+            "ARMADILLO_TEST_TIMEOUT": "1200.0",
+            "ARMADILLO_VERBOSE": "2",
+        },
+    )
     def test_load_from_env(self):
         """Test loading configuration from environment variables."""
         loader = ConfigLoader()
@@ -39,7 +47,7 @@ class TestConfigLoader:
         assert config.test_timeout == 1200.0
         assert config.verbose == 2
 
-    @patch.dict(os.environ, {'ARMADILLO_DEPLOYMENT_MODE': 'invalid_mode'})
+    @patch.dict(os.environ, {"ARMADILLO_DEPLOYMENT_MODE": "invalid_mode"})
     def test_load_from_env_invalid_enum(self):
         """Test loading invalid enum value from environment."""
         loader = ConfigLoader()
@@ -83,6 +91,7 @@ class TestConfigLoader:
 
         # Mock list type
         from typing import List
+
         result = loader._convert_env_value("a,b,c", List[str])
         assert result == ["a", "b", "c"]
 
@@ -111,9 +120,9 @@ class TestConfigManager:
         manager = ConfigManager()
 
         overrides = {
-            'deployment_mode': DeploymentMode.CLUSTER,
-            'test_timeout': 600.0,
-            'verbose': 1
+            "deployment_mode": DeploymentMode.CLUSTER,
+            "test_timeout": 600.0,
+            "verbose": 1,
         }
 
         config = manager.load_config(**overrides)
@@ -134,12 +143,15 @@ monitoring:
   enable_crash_analysis: false
 """
 
-        with patch('builtins.open', mock_open(read_data=yaml_content)):
-            with patch('pathlib.Path.exists', return_value=True):
+        with patch("builtins.open", mock_open(read_data=yaml_content)):
+            with patch("pathlib.Path.exists", return_value=True):
                 manager = ConfigManager()
                 config = manager.load_config(config_file=Path("test.yaml"))
 
-                assert config.deployment_mode == DeploymentMode.CLUSTER or config.deployment_mode == 'cluster'
+                assert (
+                    config.deployment_mode == DeploymentMode.CLUSTER
+                    or config.deployment_mode == "cluster"
+                )
                 assert config.test_timeout == 1800.0
                 assert config.cluster.agents == 5
                 assert config.cluster.dbservers == 4
@@ -149,9 +161,12 @@ monitoring:
         """Test loading configuration from unsupported file format."""
         manager = ConfigManager()
 
-        with patch('builtins.open', mock_open(read_data="invalid content")):
-            with patch('pathlib.Path.exists', return_value=True):
-                with pytest.raises(ConfigurationError, match="Failed to load config file|Unsupported config file format"):
+        with patch("builtins.open", mock_open(read_data="invalid content")):
+            with patch("pathlib.Path.exists", return_value=True):
+                with pytest.raises(
+                    ConfigurationError,
+                    match="Failed to load config file|Unsupported config file format",
+                ):
                     manager.load_config(config_file=Path("test.txt"))
 
     def test_validate_config_cluster_validation(self):
@@ -161,7 +176,7 @@ monitoring:
         # Invalid cluster configuration - no agents
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.CLUSTER,
-            cluster=ClusterConfig(agents=0, dbservers=1, coordinators=1)
+            cluster=ClusterConfig(agents=0, dbservers=1, coordinators=1),
         )
 
         with pytest.raises(ConfigurationError, match="at least 1 agent"):
@@ -172,8 +187,7 @@ monitoring:
         manager = ConfigManager()
 
         config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.SINGLE_SERVER,
-            test_timeout=-10.0
+            deployment_mode=DeploymentMode.SINGLE_SERVER, test_timeout=-10.0
         )
 
         with pytest.raises(ConfigurationError, match="timeout must be positive"):
@@ -185,7 +199,7 @@ monitoring:
 
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
-            bin_dir=Path("/nonexistent/path")
+            bin_dir=Path("/nonexistent/path"),
         )
 
         with pytest.raises(PathError):
@@ -196,10 +210,10 @@ monitoring:
         manager = ConfigManager()
 
         # Set up a config with temp directory
-        with patch('pathlib.Path.mkdir'):
+        with patch("pathlib.Path.mkdir"):
             config = ArmadilloConfig(
                 deployment_mode=DeploymentMode.SINGLE_SERVER,
-                temp_dir=Path("/tmp/test_armadillo")
+                temp_dir=Path("/tmp/test_armadillo"),
             )
             manager._config = config
 
@@ -212,7 +226,7 @@ class TestGlobalConfigFunctions:
 
     def test_load_config_function(self):
         """Test global load_config function."""
-        with patch('armadillo.core.config._config_manager') as mock_manager:
+        with patch("armadillo.core.config._config_manager") as mock_manager:
             mock_manager.load_config.return_value = ArmadilloConfig(
                 deployment_mode=DeploymentMode.SINGLE_SERVER
             )
@@ -222,7 +236,7 @@ class TestGlobalConfigFunctions:
 
     def test_get_config_function(self):
         """Test global get_config function."""
-        with patch('armadillo.core.config._config_manager') as mock_manager:
+        with patch("armadillo.core.config._config_manager") as mock_manager:
             mock_manager.get_config.return_value = ArmadilloConfig(
                 deployment_mode=DeploymentMode.CLUSTER
             )
@@ -237,7 +251,7 @@ class TestGlobalConfigFunctions:
         # Reset the config manager
         _config_manager._config = None
 
-        with patch.object(_config_manager, 'load_config') as mock_load:
+        with patch.object(_config_manager, "load_config") as mock_load:
             mock_load.return_value = ArmadilloConfig(
                 deployment_mode=DeploymentMode.SINGLE_SERVER
             )
@@ -261,8 +275,8 @@ class TestConfigurationEdgeCases:
         """Test handling of invalid YAML file."""
         invalid_yaml = "invalid: yaml: content: ["
 
-        with patch('builtins.open', mock_open(read_data=invalid_yaml)):
-            with patch('pathlib.Path.exists', return_value=True):
+        with patch("builtins.open", mock_open(read_data=invalid_yaml)):
+            with patch("pathlib.Path.exists", return_value=True):
                 manager = ConfigManager()
 
                 with pytest.raises(ConfigurationError):
@@ -274,16 +288,16 @@ class TestConfigurationEdgeCases:
 
         base_config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
-            cluster=ClusterConfig(agents=3, dbservers=2)
+            cluster=ClusterConfig(agents=3, dbservers=2),
         )
 
-        overrides = {
-            'cluster': {'agents': 5, 'coordinators': 3}
-        }
+        overrides = {"cluster": {"agents": 5, "coordinators": 3}}
 
         merged = manager._merge_configs(base_config, overrides)
 
         # Should have updated cluster config
         assert merged.cluster.agents == 5
         assert merged.cluster.coordinators == 3
-        assert merged.cluster.dbservers == 2 or merged.cluster.dbservers == 3  # Merge behavior may vary
+        assert (
+            merged.cluster.dbservers == 2 or merged.cluster.dbservers == 3
+        )  # Merge behavior may vary

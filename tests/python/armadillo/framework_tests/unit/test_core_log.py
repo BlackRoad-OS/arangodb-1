@@ -13,12 +13,23 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from armadillo.core.log import (
-    LogManager, configure_logging, get_logger, shutdown_logging,
-    log_event, log_process_event, log_server_event, log_test_event,
-    set_log_context, get_log_context, clear_log_context, log_context
+    LogManager,
+    configure_logging,
+    get_logger,
+    shutdown_logging,
+    log_event,
+    log_process_event,
+    log_server_event,
+    log_test_event,
+    set_log_context,
+    get_log_context,
+    clear_log_context,
+    log_context,
 )
 from armadillo.core.log_formatters import (
-    LogContext, StructuredFormatter, ArmadilloRichHandler
+    LogContext,
+    StructuredFormatter,
+    ArmadilloRichHandler,
 )
 
 
@@ -32,7 +43,7 @@ class TestLogContext:
     def test_context_creation(self):
         """Test LogContext can be created."""
         assert isinstance(self.context, LogContext)
-        assert hasattr(self.context, '_local')
+        assert hasattr(self.context, "_local")
 
     def test_set_and_get_context(self):
         """Test setting and getting context variables."""
@@ -104,7 +115,7 @@ class TestStructuredFormatter:
         """Set up test environment."""
         self.formatter = StructuredFormatter()
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_basic_formatting(self, mock_context):
         """Test basic log record formatting."""
         mock_context.get_context.return_value = {}
@@ -117,7 +128,7 @@ class TestStructuredFormatter:
             lineno=42,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
 
@@ -130,7 +141,7 @@ class TestStructuredFormatter:
         assert "timestamp" in log_data
         assert log_data["timestamp"].startswith("2009-02-13T23:31:30")
 
-    @patch('armadillo.core.log_formatters._log_context')
+    @patch("armadillo.core.log_formatters._log_context")
     def test_formatting_with_context(self, mock_context):
         """Test formatting with context."""
         mock_context.get_context.return_value = {"test_id": "test_123"}
@@ -142,7 +153,7 @@ class TestStructuredFormatter:
             lineno=42,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
 
@@ -152,7 +163,7 @@ class TestStructuredFormatter:
         assert "context" in log_data
         assert log_data["context"]["test_id"] == "test_123"
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_formatting_without_context(self, mock_context):
         """Test formatting with context disabled."""
         formatter = StructuredFormatter(include_context=False)
@@ -165,7 +176,7 @@ class TestStructuredFormatter:
             lineno=42,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
 
@@ -174,7 +185,7 @@ class TestStructuredFormatter:
 
         assert "context" not in log_data
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_formatting_with_extra_fields(self, mock_context):
         """Test formatting with extra fields."""
         mock_context.get_context.return_value = {}
@@ -186,7 +197,7 @@ class TestStructuredFormatter:
             lineno=42,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
         record.custom_field = "custom_value"
@@ -199,7 +210,7 @@ class TestStructuredFormatter:
         assert log_data["fields"]["custom_field"] == "custom_value"
         assert log_data["fields"]["event_type"] == "test"
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_formatting_with_exception(self, mock_context):
         """Test formatting with exception information."""
         mock_context.get_context.return_value = {}
@@ -208,6 +219,7 @@ class TestStructuredFormatter:
             raise ValueError("Test exception")
         except ValueError:
             import sys
+
             exc_info = sys.exc_info()
 
         record = logging.LogRecord(
@@ -217,7 +229,7 @@ class TestStructuredFormatter:
             lineno=42,
             msg="Error occurred",
             args=(),
-            exc_info=exc_info
+            exc_info=exc_info,
         )
         record.created = 1234567890.0
 
@@ -235,11 +247,11 @@ class TestArmadilloRichHandler:
 
     def test_handler_creation(self):
         """Test handler can be created."""
-        with patch('rich.console.Console'):
+        with patch("rich.console.Console"):
             handler = ArmadilloRichHandler()
             assert isinstance(handler, ArmadilloRichHandler)
 
-    @patch('rich.console.Console')
+    @patch("rich.console.Console")
     def test_render_message_basic(self, mock_console_class):
         """Test basic message rendering."""
         mock_console = Mock()
@@ -254,14 +266,14 @@ class TestArmadilloRichHandler:
             lineno=42,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
 
         # Test render_message method exists and works
         result = handler.render_message(record, "Test message")
         assert result is not None
 
-    @patch('rich.console.Console')
+    @patch("rich.console.Console")
     def test_render_message_with_event_type(self, mock_console_class):
         """Test message rendering with event types."""
         mock_console = Mock()
@@ -276,7 +288,7 @@ class TestArmadilloRichHandler:
             lineno=42,
             msg="Process started",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.event_type = "process"
 
@@ -296,13 +308,15 @@ class TestLogManager:
         assert isinstance(self.manager, LogManager)
         assert self.manager._configured is False
         # Internal structure changed - just test that it was created properly
-        assert hasattr(self.manager, '_manager')  # IsolatedLogManager
+        assert hasattr(self.manager, "_manager")  # IsolatedLogManager
 
-    @patch('logging.getLogger')
-    @patch('logging.FileHandler')
-    @patch('armadillo.core.log.ArmadilloRichHandler')
-    @patch('pathlib.Path.mkdir')
-    def test_configure_logging(self, mock_mkdir, mock_rich_handler, mock_file_handler, mock_get_logger):
+    @patch("logging.getLogger")
+    @patch("logging.FileHandler")
+    @patch("armadillo.core.log.ArmadilloRichHandler")
+    @patch("pathlib.Path.mkdir")
+    def test_configure_logging(
+        self, mock_mkdir, mock_rich_handler, mock_file_handler, mock_get_logger
+    ):
         """Test logging configuration."""
         mock_root_logger = Mock()
         mock_get_logger.return_value = mock_root_logger
@@ -320,7 +334,7 @@ class TestLogManager:
                 level=logging.INFO,
                 log_file=log_file,
                 enable_json=True,
-                enable_console=True
+                enable_console=True,
             )
 
         assert self.manager._configured is True
@@ -330,28 +344,26 @@ class TestLogManager:
         mock_root_logger.addHandler.assert_any_call(mock_json_handler)
         mock_root_logger.addHandler.assert_any_call(mock_console_handler)
 
-    @patch('logging.getLogger')
+    @patch("logging.getLogger")
     def test_configure_console_only(self, mock_get_logger):
         """Test configuration with console only."""
         mock_root_logger = Mock()
         mock_get_logger.return_value = mock_root_logger
         mock_root_logger.handlers = []
 
-        with patch('armadillo.core.log.ArmadilloRichHandler') as mock_rich_handler:
+        with patch("armadillo.core.log.ArmadilloRichHandler") as mock_rich_handler:
             mock_console_handler = Mock()
             mock_rich_handler.return_value = mock_console_handler
 
             self.manager.configure(
-                level=logging.INFO,
-                enable_json=False,
-                enable_console=True
+                level=logging.INFO, enable_json=False, enable_console=True
             )
 
         assert self.manager._configured is True
         # Test behavior rather than internals - just that configuration completed
         mock_root_logger.addHandler.assert_called_once_with(mock_console_handler)
 
-    @patch('logging.getLogger')
+    @patch("logging.getLogger")
     def test_get_logger(self, mock_get_logger):
         """Test getting logger instance."""
         mock_logger = Mock()
@@ -363,8 +375,8 @@ class TestLogManager:
         # Logger names are now namespaced with "global." prefix
         mock_get_logger.assert_called_once_with("global.test.logger")
 
-    @patch('logging.shutdown')
-    @patch('logging.getLogger')
+    @patch("logging.shutdown")
+    @patch("logging.getLogger")
     def test_shutdown(self, mock_get_logger, mock_shutdown):
         """Test shutting down logging."""
         mock_root_logger = Mock()
@@ -377,7 +389,7 @@ class TestLogManager:
 
     def test_double_configure_ignored(self):
         """Test that double configuration is ignored."""
-        with patch('logging.getLogger') as mock_get_logger:
+        with patch("logging.getLogger") as mock_get_logger:
             mock_root_logger = Mock()
             mock_get_logger.return_value = mock_root_logger
             mock_root_logger.handlers = []
@@ -396,14 +408,16 @@ class TestLogManager:
 class TestModuleLevelFunctions:
     """Test module-level convenience functions."""
 
-    @patch('armadillo.core.log._log_manager')
+    @patch("armadillo.core.log._log_manager")
     def test_configure_logging_function(self, mock_manager):
         """Test module-level configure_logging function."""
         configure_logging(level=logging.DEBUG, enable_console=False)
 
-        mock_manager.configure.assert_called_once_with(level=logging.DEBUG, enable_console=False)
+        mock_manager.configure.assert_called_once_with(
+            level=logging.DEBUG, enable_console=False
+        )
 
-    @patch('armadillo.core.log._log_manager')
+    @patch("armadillo.core.log._log_manager")
     def test_get_logger_function(self, mock_manager):
         """Test module-level get_logger function."""
         mock_logger = Mock()
@@ -414,7 +428,7 @@ class TestModuleLevelFunctions:
         assert result == mock_logger
         mock_manager.get_logger.assert_called_once_with("test.logger")
 
-    @patch('armadillo.core.log._log_manager')
+    @patch("armadillo.core.log._log_manager")
     def test_shutdown_logging_function(self, mock_manager):
         """Test module-level shutdown_logging function."""
         shutdown_logging()
@@ -428,8 +442,7 @@ class TestModuleLevelFunctions:
         log_event(mock_logger, "test", "Test message", custom_field="value")
 
         mock_logger.info.assert_called_once_with(
-            "Test message",
-            extra={'event_type': 'test', 'custom_field': 'value'}
+            "Test message", extra={"event_type": "test", "custom_field": "value"}
         )
 
     def test_log_process_event_function(self):
@@ -439,12 +452,14 @@ class TestModuleLevelFunctions:
         log_process_event(mock_logger, "started", pid=12345, command="test_cmd")
 
         expected_extra = {
-            'event_type': 'process',
-            'process_event': 'started',
-            'pid': 12345,
-            'command': 'test_cmd'
+            "event_type": "process",
+            "process_event": "started",
+            "pid": 12345,
+            "command": "test_cmd",
         }
-        mock_logger.info.assert_called_once_with("Process %s", "started", extra=expected_extra)
+        mock_logger.info.assert_called_once_with(
+            "Process %s", "started", extra=expected_extra
+        )
 
     def test_log_server_event_function(self):
         """Test log_server_event function."""
@@ -453,12 +468,14 @@ class TestModuleLevelFunctions:
         log_server_event(mock_logger, "ready", server_id="server_1", port=8529)
 
         expected_extra = {
-            'event_type': 'server',
-            'server_event': 'ready',
-            'server_id': 'server_1',
-            'port': 8529
+            "event_type": "server",
+            "server_event": "ready",
+            "server_id": "server_1",
+            "port": 8529,
         }
-        mock_logger.info.assert_called_once_with("Server %s", "ready", extra=expected_extra)
+        mock_logger.info.assert_called_once_with(
+            "Server %s", "ready", extra=expected_extra
+        )
 
     def test_log_test_event_function(self):
         """Test log_test_event function."""
@@ -467,25 +484,29 @@ class TestModuleLevelFunctions:
         log_test_event(mock_logger, "passed", test_name="test_example", duration=1.23)
 
         expected_extra = {
-            'event_type': 'test',
-            'test_event': 'passed',
-            'test_name': 'test_example',
-            'duration': 1.23
+            "event_type": "test",
+            "test_event": "passed",
+            "test_name": "test_example",
+            "duration": 1.23,
         }
-        mock_logger.info.assert_called_once_with("Test %s", "passed", extra=expected_extra)
+        mock_logger.info.assert_called_once_with(
+            "Test %s", "passed", extra=expected_extra
+        )
 
 
 class TestContextManagement:
     """Test global context management functions."""
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_set_log_context_function(self, mock_context):
         """Test set_log_context function."""
         set_log_context(deployment="cluster", test_id="test_123")
 
-        mock_context.set_context.assert_called_once_with(deployment="cluster", test_id="test_123")
+        mock_context.set_context.assert_called_once_with(
+            deployment="cluster", test_id="test_123"
+        )
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_get_log_context_function(self, mock_context):
         """Test get_log_context function."""
         mock_context.get_context.return_value = {"key": "value"}
@@ -495,14 +516,14 @@ class TestContextManagement:
         assert result == {"key": "value"}
         mock_context.get_context.assert_called_once()
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_clear_log_context_function(self, mock_context):
         """Test clear_log_context function."""
         clear_log_context()
 
         mock_context.clear_context.assert_called_once()
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_log_context_function(self, mock_context):
         """Test log_context function."""
         mock_context_manager = Mock()
@@ -529,7 +550,7 @@ class TestLoggerIntegration:
             lineno=42,
             msg="Integration test",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
 
@@ -573,7 +594,7 @@ class TestErrorHandling:
             lineno=42,
             msg="Error message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
 
@@ -582,7 +603,7 @@ class TestErrorHandling:
         log_data = json.loads(result)
         assert "exception" not in log_data
 
-    @patch('armadillo.core.log._log_context')
+    @patch("armadillo.core.log._log_context")
     def test_formatter_handles_context_error(self, mock_context):
         """Test formatter handles context retrieval error."""
         mock_context.get_context.side_effect = Exception("Context error")
@@ -595,7 +616,7 @@ class TestErrorHandling:
             lineno=42,
             msg="Test message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.created = 1234567890.0
 
@@ -622,12 +643,14 @@ class TestErrorHandling:
         manager._json_handler = mock_json_handler
         manager._console_handler = mock_console_handler
 
-        with patch('logging.shutdown') as mock_shutdown:
+        with patch("logging.shutdown") as mock_shutdown:
             # Should not raise exception
             try:
                 manager.shutdown()
             except Exception:
-                pytest.fail("LogManager.shutdown should handle handler close errors gracefully")
+                pytest.fail(
+                    "LogManager.shutdown should handle handler close errors gracefully"
+                )
 
             # Should still call logging.shutdown
             mock_shutdown.assert_called_once()

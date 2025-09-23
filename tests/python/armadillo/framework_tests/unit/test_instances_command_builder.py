@@ -5,7 +5,10 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from armadillo.core.types import ServerRole, ServerConfig
-from armadillo.instances.command_builder import ServerCommandBuilder, ServerCommandParams
+from armadillo.instances.command_builder import (
+    ServerCommandBuilder,
+    ServerCommandParams,
+)
 
 
 class TestServerCommandBuilder:
@@ -22,8 +25,7 @@ class TestServerCommandBuilder:
         self.mock_logger = Mock()
 
         self.builder = ServerCommandBuilder(
-            config_provider=self.mock_config,
-            logger=self.mock_logger
+            config_provider=self.mock_config, logger=self.mock_logger
         )
 
     @pytest.fixture
@@ -53,7 +55,7 @@ class TestServerCommandBuilder:
             role=ServerRole.SINGLE,
             port=8529,
             data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps")
+            app_dir=Path("/fake/apps"),
         )
         command = self.builder.build_command(params)
 
@@ -92,7 +94,7 @@ class TestServerCommandBuilder:
             role=ServerRole.AGENT,
             port=8531,
             data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps")
+            app_dir=Path("/fake/apps"),
         )
         command = self.builder.build_command(params)
 
@@ -113,7 +115,7 @@ class TestServerCommandBuilder:
             role=ServerRole.COORDINATOR,
             port=8530,
             data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps")
+            app_dir=Path("/fake/apps"),
         )
         command = self.builder.build_command(params)
 
@@ -133,7 +135,7 @@ class TestServerCommandBuilder:
             role=ServerRole.DBSERVER,
             port=8532,
             data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps")
+            app_dir=Path("/fake/apps"),
         )
         command = self.builder.build_command(params)
 
@@ -151,7 +153,7 @@ class TestServerCommandBuilder:
             port=8529,
             data_dir=Path("/fake/data"),
             log_file=Path("/fake/logs/arangod.log"),
-            args={"log.level": "debug", "server.authentication": "false"}
+            args={"log.level": "debug", "server.authentication": "false"},
         )
 
         params = ServerCommandParams(
@@ -160,7 +162,7 @@ class TestServerCommandBuilder:
             port=8529,
             data_dir=Path("/fake/data"),
             app_dir=Path("/fake/apps"),
-            config=custom_config
+            config=custom_config,
         )
         command = self.builder.build_command(params)
 
@@ -191,6 +193,7 @@ class TestServerCommandBuilder:
         (repo_dir / "etc").mkdir()
 
         import os
+
         original_cwd = os.getcwd()
         try:
             os.chdir(str(repo_dir))
@@ -214,6 +217,7 @@ class TestServerCommandBuilder:
         nested_dir.mkdir(parents=True)
 
         import os
+
         original_cwd = os.getcwd()
         try:
             os.chdir(str(nested_dir))
@@ -224,10 +228,22 @@ class TestServerCommandBuilder:
 
     def test_config_file_for_different_roles(self):
         """Test configuration file selection for different server roles."""
-        assert self.builder._get_config_file_for_role(ServerRole.SINGLE) == "etc/testing/arangod-single.conf"
-        assert self.builder._get_config_file_for_role(ServerRole.AGENT) == "etc/testing/arangod-agent.conf"
-        assert self.builder._get_config_file_for_role(ServerRole.COORDINATOR) == "etc/testing/arangod-coordinator.conf"
-        assert self.builder._get_config_file_for_role(ServerRole.DBSERVER) == "etc/testing/arangod-dbserver.conf"
+        assert (
+            self.builder._get_config_file_for_role(ServerRole.SINGLE)
+            == "etc/testing/arangod-single.conf"
+        )
+        assert (
+            self.builder._get_config_file_for_role(ServerRole.AGENT)
+            == "etc/testing/arangod-agent.conf"
+        )
+        assert (
+            self.builder._get_config_file_for_role(ServerRole.COORDINATOR)
+            == "etc/testing/arangod-coordinator.conf"
+        )
+        assert (
+            self.builder._get_config_file_for_role(ServerRole.DBSERVER)
+            == "etc/testing/arangod-dbserver.conf"
+        )
 
     def test_logs_command_for_debugging(self, setup_repo_structure):
         """Test that command building logs the command for debugging."""
@@ -236,7 +252,7 @@ class TestServerCommandBuilder:
             role=ServerRole.SINGLE,
             port=8529,
             data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps")
+            app_dir=Path("/fake/apps"),
         )
         self.builder.build_command(params)
 
@@ -246,15 +262,26 @@ class TestServerCommandBuilder:
         # Check specific log messages (now with lazy formatting)
         log_calls = self.mock_logger.info.call_args_list
         # Check for format string and args separately
-        command_header_found = any(">>> ARANGOD COMMAND FOR %s <<<" == call.args[0] and
-                                 len(call.args) > 1 and call.args[1] == "test_logging"
-                                 for call in log_calls)
-        command_footer_found = any(">>> END ARANGOD COMMAND <<<" in call.args[0] for call in log_calls)
+        command_header_found = any(
+            ">>> ARANGOD COMMAND FOR %s <<<" == call.args[0]
+            and len(call.args) > 1
+            and call.args[1] == "test_logging"
+            for call in log_calls
+        )
+        command_footer_found = any(
+            ">>> END ARANGOD COMMAND <<<" in call.args[0] for call in log_calls
+        )
         command_line_found = any("Command: %s" == call.args[0] for call in log_calls)
 
-        assert command_header_found, f"Expected command header not found in log calls: {[call.args for call in log_calls]}"
-        assert command_footer_found, f"Expected command footer not found in log calls: {[call.args for call in log_calls]}"
-        assert command_line_found, f"Expected command line not found in log calls: {[call.args for call in log_calls]}"
+        assert (
+            command_header_found
+        ), f"Expected command header not found in log calls: {[call.args for call in log_calls]}"
+        assert (
+            command_footer_found
+        ), f"Expected command footer not found in log calls: {[call.args for call in log_calls]}"
+        assert (
+            command_line_found
+        ), f"Expected command line not found in log calls: {[call.args for call in log_calls]}"
 
     def test_binary_path_fallback_when_no_bin_dir(self, setup_repo_structure):
         """Test fallback to 'arangod' in PATH when no bin_dir configured."""
@@ -265,7 +292,7 @@ class TestServerCommandBuilder:
             role=ServerRole.SINGLE,
             port=8529,
             data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps")
+            app_dir=Path("/fake/apps"),
         )
         command = self.builder.build_command(params)
 

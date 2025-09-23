@@ -22,20 +22,22 @@ class TestProcessSupervisorMinimal:
     def test_supervisor_can_be_created(self):
         """Test ProcessSupervisor can be instantiated."""
         assert self.supervisor is not None
-        assert hasattr(self.supervisor, '_processes')
-        assert hasattr(self.supervisor, '_process_info')
+        assert hasattr(self.supervisor, "_processes")
+        assert hasattr(self.supervisor, "_process_info")
         assert isinstance(self.supervisor._processes, dict)
         assert isinstance(self.supervisor._process_info, dict)
 
     def test_can_start_process_basic(self):
         """Test basic process starting works."""
         # Just verify the supervisor exists and has the start method
-        assert hasattr(self.supervisor, 'start')
+        assert hasattr(self.supervisor, "start")
         assert callable(self.supervisor.start)
 
         # Test with invalid command should not crash the supervisor
         try:
-            result = self.supervisor.start("test_invalid", ["nonexistent_command_12345"], inherit_console=True)
+            result = self.supervisor.start(
+                "test_invalid", ["nonexistent_command_12345"], inherit_console=True
+            )
         except Exception:
             pass  # Expected to fail, just ensure it doesn't crash badly
 
@@ -70,7 +72,13 @@ class TestProcessSupervisorMinimal:
     def test_supervisor_interface_methods(self):
         """Test supervisor has expected interface methods."""
         # Should have all the expected methods
-        expected_methods = ['start', 'stop', 'is_running', 'list_processes', 'get_stats']
+        expected_methods = [
+            "start",
+            "stop",
+            "is_running",
+            "list_processes",
+            "get_stats",
+        ]
         for method_name in expected_methods:
             assert hasattr(self.supervisor, method_name)
             assert callable(getattr(self.supervisor, method_name))
@@ -138,7 +146,11 @@ class TestUtilityFunctions:
 
     def test_process_utilities_exist(self):
         """Test process utility functions exist."""
-        from armadillo.core.process import get_child_pids, kill_process_tree, force_kill_by_pid
+        from armadillo.core.process import (
+            get_child_pids,
+            kill_process_tree,
+            force_kill_by_pid,
+        )
 
         # Should all be callable
         assert callable(get_child_pids)
@@ -158,10 +170,10 @@ class TestBasicIntegration:
         supervisor = ProcessSupervisor()
 
         # Should have workflow methods
-        assert hasattr(supervisor, 'start')
-        assert hasattr(supervisor, 'stop')
-        assert hasattr(supervisor, 'is_running')
-        assert hasattr(supervisor, 'list_processes')
+        assert hasattr(supervisor, "start")
+        assert hasattr(supervisor, "stop")
+        assert hasattr(supervisor, "is_running")
+        assert hasattr(supervisor, "list_processes")
 
         # Should work with nonexistent processes
         assert supervisor.is_running("nonexistent") is False
