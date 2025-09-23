@@ -122,7 +122,7 @@ class ProcessSupervisor:
                     if line.strip():
                         line_count += 1
                         print(f'[{process_id}] {line}', flush=True)
-        except Exception as e:
+        except (OSError, UnicodeDecodeError, BrokenPipeError, ValueError) as e:
             logger.error('Output streaming error for %s: %s', process_id, e, exc_info=True)
 
     def start(self,
@@ -256,7 +256,7 @@ class ProcessSupervisor:
                 logger.debug('Could not send SIGKILL to process group %s: %s', process.pid, e)
                 try:
                     process.kill()
-                except:
+                except (OSError, ProcessLookupError):
                     pass
             try:
                 process.wait(timeout=5.0)
@@ -271,14 +271,14 @@ class ProcessSupervisor:
                         logger.info('Emergency process tree kill succeeded for %s', process_id)
                     else:
                         logger.error('Emergency process tree kill also failed for %s', process_id)
-                except Exception as tree_e:
+                except (OSError, ProcessLookupError, PermissionError) as tree_e:
                     logger.error('Emergency process tree kill exception for %s: %s', process_id, tree_e)
                 try:
                     poll_result = process.poll()
                     logger.error('Process %s poll() result after all kill attempts: %s', process_id, poll_result)
-                except Exception as poll_e:
+                except (OSError, ProcessLookupError) as poll_e:
                     logger.error('Could not poll process %s: %s', process_id, poll_e)
-        except Exception as e:
+        except (OSError, ProcessLookupError, PermissionError, subprocess.SubprocessError) as e:
             logger.error('Unexpected error stopping process %s: %s', process_id, e)
             log_process_event(logger, 'supervisor.stop_error', process_id=process_id, error=str(e))
             logger.error('Stack trace: %s', traceback.format_exc())
@@ -297,7 +297,7 @@ class ProcessSupervisor:
             if process_id in self._streaming_threads:
                 thread = self._streaming_threads.pop(process_id)
                 logger.debug('Cleaned up streaming thread for %s', process_id)
-        except Exception as e:
+        except (KeyError, RuntimeError, AttributeError) as e:
             logger.error('Error cleaning up process %s: %s', process_id, e)
 
     def is_running(self, process_id: str) -> bool:
@@ -340,7 +340,7 @@ class ProcessSupervisor:
         for process_id in process_ids:
             try:
                 self.stop(process_id, graceful, timeout)
-            except Exception as e:
+            except (OSError, ProcessLookupError, PermissionError, subprocess.SubprocessError) as e:
                 logger.error('Error stopping process %s: %s', process_id, e)
         self._stop_monitoring.set()
 
@@ -357,14 +357,14 @@ class ProcessSupervisor:
                             stdout, _ = proc.communicate(timeout=1.0)
                             if stdout:
                                 error_output = f'\nProcess output:\n{stdout}'
-                except:
+                except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired):
                     pass
                 raise ProcessStartupError(f'Process {process_id} died during startup{error_output}')
             try:
                 if readiness_check():
                     log_process_event(logger, 'supervisor.ready', process_id=process_id, duration=time.time() - start_time)
                     return
-            except Exception as e:
+            except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
                 logger.debug('Readiness check failed for %s: %s', process_id, e)
             time.sleep(0.5)
         raise ProcessTimeoutError(f'Process {process_id} did not become ready within {timeout}s', timeout=timeout)
@@ -397,7 +397,7 @@ class ProcessSupervisor:
                     self._handle_process_exit(process_id, poll_result)
                     break
                 time.sleep(1.0)
-            except Exception as e:
+            except (OSError, ProcessLookupError, AttributeError) as e:
                 logger.error('Error monitoring process %s: %s', process_id, e)
                 break
 
@@ -413,7 +413,7 @@ class ProcessSupervisor:
             if process and process.stderr:
                 try:
                     stderr_output = process.stderr.read()
-                except Exception:
+                except (OSError, UnicodeDecodeError, ValueError):
                     pass
             logger.error('Process %s crashed with exit code %s', process_id, exit_code)
             if stderr_output:
@@ -479,7 +479,7 @@ def get_child_pids(parent_pid: int) -> List[int]:
         logger.debug('Found %s child processes for PID %s: %s', len(child_pids), parent_pid, child_pids)
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
         logger.debug('Could not get children for PID %s: %s', parent_pid, e)
-    except Exception as e:
+    except (psutil.Error, OSError) as e:
         logger.warning('Error getting child PIDs for %s: %s', parent_pid, e)
     return child_pids
 
@@ -527,7 +527,7 @@ def kill_process_tree(root_pid: int, signal_num: int=signal.SIGKILL, timeout: fl
             time.sleep(0.1)
         logger.warning('Some processes in tree rooted at %s are still alive after %ss', root_pid, timeout)
         return False
-    except Exception as e:
+    except (OSError, ProcessLookupError, PermissionError, psutil.Error) as e:
         logger.error('Error killing process tree rooted at %s: %s', root_pid, e)
         return False
 
@@ -562,7 +562,7 @@ def force_kill_by_pid(pid: int, timeout: float=5.0) -> bool:
                 return True
         logger.error('CRITICAL: PID %s still exists after SIGKILL and %ss wait!', pid, timeout)
         return False
-    except Exception as e:
+    except (OSError, ProcessLookupError, PermissionError) as e:
         logger.error('Error in emergency PID kill for %s: %s', pid, e)
         return False
 
@@ -586,7 +586,7 @@ def kill_all_supervised_processes() -> None:
                         logger.debug('Emergency SIGTERM for process tree %s (root PID: %s)', process_id, pid)
                         if not kill_process_tree(pid, signal.SIGTERM, timeout=2.0):
                             failed_trees.append((process_id, pid))
-                    except Exception as e:
+                    except (OSError, ProcessLookupError, AttributeError, psutil.Error) as e:
                         logger.error('Error in SIGTERM phase for process %s: %s', process_id, e)
                         failed_trees.append((process_id, getattr(process, 'pid', None)))
                 if failed_trees:
@@ -597,7 +597,7 @@ def kill_all_supervised_processes() -> None:
                                 logger.debug('Emergency SIGKILL for process tree %s (root PID: %s)', process_id, pid)
                                 if not kill_process_tree(pid, signal.SIGKILL, timeout=2.0):
                                     logger.error('CRITICAL: Could not kill process tree %s (PID: %s) even with SIGKILL', process_id, pid)
-                            except Exception as e:
+                            except (OSError, ProcessLookupError, psutil.Error) as e:
                                 logger.error('Error in SIGKILL phase for process %s: %s', process_id, e)
                 _process_supervisor._processes.clear()
                 _process_supervisor._process_info.clear()
@@ -605,7 +605,7 @@ def kill_all_supervised_processes() -> None:
                 logger.warning('Emergency process tree kill completed')
             else:
                 logger.debug('No supervised processes to kill')
-    except Exception as e:
+    except (OSError, ProcessLookupError, AttributeError, psutil.Error, RuntimeError) as e:
         logger.error('Error in emergency process tree kill: %s', e)
         logger.error('Stack trace: %s', traceback.format_exc())
 _process_supervisor = ProcessSupervisor()

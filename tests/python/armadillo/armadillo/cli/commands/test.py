@@ -38,11 +38,11 @@ def run(test_paths: List[str]=typer.Argument(help='Test paths to execute'), clus
             pytest_args.append(str(path))
         if show_output:
             pytest_args.append('-s')
-        
+
         # Implement timeout functionality
         if timeout:
             pytest_args.extend(['--timeout', str(timeout)])
-            
+
         # Implement keep-instances-on-failure by setting environment variable
         # that the pytest plugin can check
         if keep_instances_on_failure:
@@ -50,7 +50,7 @@ def run(test_paths: List[str]=typer.Argument(help='Test paths to execute'), clus
             console.print('[yellow]🔧 Instances will be kept running on test failure for debugging[/yellow]')
         else:
             os.environ.pop('ARMADILLO_KEEP_INSTANCES_ON_FAILURE', None)
-            
+
         if extra_args:
             pytest_args.extend(extra_args)
         output_dir.mkdir(parents=True, exist_ok=True)

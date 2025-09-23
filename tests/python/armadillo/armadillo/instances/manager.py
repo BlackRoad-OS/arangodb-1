@@ -45,14 +45,14 @@ class ManagerDependencies:
                        port_allocator: Optional[PortAllocator] = None) -> 'ManagerDependencies':
         """Create dependencies with deployment-specific defaults."""
         final_config = config or get_config()
-        
+
         # Create deployment-specific logger with context if not provided
         if custom_logger:
             final_logger = custom_logger
         else:
             base_logger = get_logger(f"{__name__}.{deployment_id}")
             final_logger = base_logger
-            
+
         final_port_manager = port_allocator or get_port_manager()
 
         return cls(
