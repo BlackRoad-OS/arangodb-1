@@ -146,14 +146,14 @@ class TestStandardServerFactory:
         # Check that the minimal config was passed correctly
         # We can't directly access it, but we can verify the server was created successfully
         assert server.server_id == "server_0"
-        assert server.config.args["custom"] == "arg"
+        assert server.paths.config.args["custom"] == "arg"
 
         # Verify that data_dir and log_file from ServerConfig are preserved
-        assert server.data_dir == Path("/fake/data")
-        assert server.log_file == Path("/fake/log")
-        assert server.config.args["memory"] == "1G"
-        assert server.config.memory_limit_mb == 512
-        assert server.config.startup_timeout == 45.0
+        assert server.paths.data_dir == Path("/fake/data")
+        assert server.paths.log_file == Path("/fake/log")
+        assert server.paths.config.args["memory"] == "1G"
+        assert server.paths.config.memory_limit_mb == 512
+        assert server.paths.config.startup_timeout == 45.0
 
     def test_post_creation_configuration(self):
         """Test that servers are configured after creation."""
@@ -244,8 +244,8 @@ class TestStandardServerFactory:
         server = servers["server_0"]
 
         # Original args should be copied, not referenced
-        assert server.config.args == {"original": "value"}
+        assert server.paths.config.args == {"original": "value"}
 
         # Modifying server config args should not affect original
-        server.config.args["modified"] = "new_value"
+        server.paths.config.args["modified"] = "new_value"
         assert "modified" not in server_config.args

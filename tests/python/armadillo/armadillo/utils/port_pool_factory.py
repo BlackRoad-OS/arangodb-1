@@ -80,7 +80,7 @@ class PortPoolTestFactory(StandardPortPoolFactory):
             try:
                 if hasattr(pool, 'shutdown'):
                     pool.shutdown()
-            except (RuntimeError, OSError) as e:
+            except (RuntimeError, OSError, Exception) as e:
                 self._logger.error('Failed to shutdown pool: %s', e)
         self._created_pools.clear()
         self._logger.debug('Cleaned up all pools for test: %s', self._test_name)

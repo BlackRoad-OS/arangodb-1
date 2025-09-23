@@ -112,6 +112,7 @@ class TestFilesystemService:
         mock_temp = Mock()
         mock_temp.name = str(temp_dir / ".test.txt.tmp123")
         mock_temp.__enter__ = Mock(side_effect=OSError("Write failed"))
+        mock_temp.__exit__ = Mock(return_value=None)
         mock_temp_file.return_value = mock_temp
 
         with pytest.raises(AtomicWriteError):

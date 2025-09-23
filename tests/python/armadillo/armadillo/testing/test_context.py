@@ -126,7 +126,7 @@ class IsolatedTestContext:
             for callback in reversed(self._cleanup_callbacks):
                 try:
                     callback()
-                except (RuntimeError, OSError, AttributeError) as e:
+                except (RuntimeError, OSError, AttributeError, Exception) as e:
                     self._logger.error('Error in cleanup callback: %s', e)
             for pool in self._created_pools:
                 try:

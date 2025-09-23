@@ -163,7 +163,7 @@ def check_port_available(host: str, port: int) -> bool:
             sock.settimeout(1.0)
             result = sock.connect_ex((host, port))
             return result != 0
-    except (socket.error, OSError):
+    except (socket.error, OSError, Exception):
         return True
 
 def wait_for_port(host: str, port: int, timeout: float=30.0) -> bool:
@@ -176,7 +176,7 @@ def wait_for_port(host: str, port: int, timeout: float=30.0) -> bool:
                 result = sock.connect_ex((host, port))
                 if result == 0:
                     return True
-        except (socket.error, OSError):
+        except (socket.error, OSError, Exception):
             pass
         time.sleep(0.5)
     return False
