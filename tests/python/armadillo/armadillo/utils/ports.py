@@ -130,7 +130,7 @@ class PortManager:
             try:
                 data = '\n'.join(map(str, sorted(self.reserved_ports)))
                 atomic_write(self.reservation_file, data)
-            except (OSError, PermissionError) as e:
+            except (OSError, PermissionError, Exception) as e:
                 logger.warning('Failed to save port reservations: %s', e)
 
     def _load_reservations(self) -> None:
@@ -142,7 +142,7 @@ class PortManager:
                     ports = [int(line.strip()) for line in content.split('\n') if line.strip()]
                     self.reserved_ports.update(ports)
                     logger.debug('Loaded %s port reservations', len(ports))
-            except (OSError, PermissionError, ValueError) as e:
+            except (OSError, PermissionError, ValueError, Exception) as e:
                 logger.warning('Failed to load port reservations: %s', e)
 
 def find_free_port(start_port: int=8529, max_attempts: int=1000) -> int:

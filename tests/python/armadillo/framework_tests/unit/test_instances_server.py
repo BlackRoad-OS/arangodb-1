@@ -172,7 +172,7 @@ class TestArangoServerMockIntegration:
         server = ArangoServer("mock_test", role=ServerRole.SINGLE, port=8529)
 
         # Set server as if it's running
-        server._is_running = True
+        server._runtime.is_running = True
 
         try:
             server.stop()

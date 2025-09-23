@@ -35,7 +35,7 @@ class ServerHealthChecker:
             if not health.is_healthy:
                 self._logger.debug('Readiness check failed for %s: %s', server_id, health.error_message)
             return health.is_healthy
-        except (HealthCheckError, NetworkError, aiohttp.ClientError, OSError) as e:
+        except (HealthCheckError, NetworkError, aiohttp.ClientError, OSError, Exception) as e:
             self._logger.debug('Readiness check exception for %s: %s', server_id, e)
             return False
 
@@ -44,7 +44,7 @@ class ServerHealthChecker:
         start_time = time.time()
         try:
             return asyncio.run(self._async_health_check(endpoint, timeout))
-        except (HealthCheckError, NetworkError, aiohttp.ClientError, OSError) as e:
+        except (HealthCheckError, NetworkError, aiohttp.ClientError, OSError, Exception) as e:
             response_time = time.time() - start_time
             return HealthStatus(is_healthy=False, response_time=response_time, error_message=f'Health check error: {e}')
 

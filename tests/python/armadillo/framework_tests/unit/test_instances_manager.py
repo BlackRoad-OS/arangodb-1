@@ -28,11 +28,12 @@ class TestInstanceManagerBasic:
 
         # Check that expected attributes exist
         assert hasattr(manager, 'deployment_id')
-        assert hasattr(manager, 'config')
-        assert hasattr(manager, 'port_manager')
-        assert hasattr(manager, 'auth_provider')
-        assert hasattr(manager, '_servers')
-        assert hasattr(manager, '_deployment_plan')
+        assert hasattr(manager, '_deps')
+        assert hasattr(manager._deps, 'config')
+        assert hasattr(manager._deps, 'port_manager')
+        assert hasattr(manager, 'state')
+        assert hasattr(manager.state, 'servers')
+        assert hasattr(manager, '_threading')
 
     def test_manager_has_expected_methods(self):
         """Test manager has expected public methods."""
