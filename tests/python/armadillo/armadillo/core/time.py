@@ -141,7 +141,7 @@ class TimeoutManager:
                     break
                 if self._watchdog_stop_event.wait(1.0):
                     break
-            except Exception as e:
+            except (OSError, RuntimeError, AttributeError) as e:
                 logger.error('Watchdog error: %s', e)
                 continue
 
@@ -151,14 +151,14 @@ class TimeoutManager:
         try:
             from .log import log_event
             log_event(logger, 'timeout', f'Watchdog fired: {reason}', event='timeout.watchdog.fired', reason=reason)
-        except Exception:
+        except (ImportError, AttributeError, OSError):
             pass
         try:
             import os
             os.kill(os.getpid(), signal.SIGTERM)
             time.sleep(2.0)
             os.kill(os.getpid(), signal.SIGKILL)
-        except Exception as e:
+        except (OSError, ProcessLookupError, PermissionError) as e:
             logger.error('Failed to send timeout signals: %s', e)
 
     def stop_watchdog(self) -> None:

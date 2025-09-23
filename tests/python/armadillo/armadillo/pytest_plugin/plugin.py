@@ -75,12 +75,13 @@ class ArmadilloPlugin:
                     manager.shutdown_deployment()
                 else:
                     logger.debug('Deployment %s already stopped', deployment_id)
-            except Exception as e:
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error('Error during plugin cleanup of deployment %s: %s', deployment_id, e)
         for orchestrator_id, orchestrator in orchestrators_to_clean:
             try:
                 logger.debug('Plugin safety cleanup: cleaning up orchestrator %s', orchestrator_id)
-            except Exception as e:
+                # TODO: Add actual orchestrator cleanup - orchestrator.cancel_all_operations()?
+            except (OSError, RuntimeError) as e:
                 logger.error('Error during plugin cleanup of orchestrator %s: %s', orchestrator_id, e)
         for server_id, server in servers_to_clean:
             try:
@@ -89,7 +90,7 @@ class ArmadilloPlugin:
                     server.stop()
                 else:
                     logger.debug('Server %s already stopped', server_id)
-            except Exception as e:
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error('Error during plugin cleanup of server %s: %s', server_id, e)
         self._session_deployments.clear()
         self._session_orchestrators.clear()

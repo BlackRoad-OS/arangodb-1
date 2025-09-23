@@ -118,7 +118,7 @@ class IsolatedTestContext:
             if hasattr(pool, 'shutdown'):
                 try:
                     pool.shutdown()
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     self._logger.error('Error shutting down temp port pool: %s', e)
 
     def cleanup(self) -> None:
@@ -130,28 +130,28 @@ class IsolatedTestContext:
             for callback in reversed(self._cleanup_callbacks):
                 try:
                     callback()
-                except Exception as e:
+                except (RuntimeError, OSError, AttributeError) as e:
                     self._logger.error('Error in cleanup callback: %s', e)
             for pool in self._created_pools:
                 try:
                     if hasattr(pool, 'shutdown'):
                         pool.shutdown()
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     self._logger.error('Error shutting down port pool: %s', e)
             if hasattr(self._port_pool_factory, 'cleanup_all_pools'):
                 try:
                     self._port_pool_factory.cleanup_all_pools()
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     self._logger.error('Error cleaning up port pool factory: %s', e)
             try:
                 self._logger_factory.shutdown()
-            except Exception as e:
+            except (RuntimeError, OSError):
                 pass
             if self._owns_work_dir and hasattr(self, '_temp_dir'):
                 try:
                     import shutil
                     shutil.rmtree(self._temp_dir, ignore_errors=True)
-                except Exception:
+                except (OSError, PermissionError):
                     pass
             self._cleanup_callbacks.clear()
             self._created_pools.clear()
@@ -224,7 +224,7 @@ class EnvironmentTestFactory:
         for test_name, context in contexts:
             try:
                 context.cleanup()
-            except Exception:
+            except (RuntimeError, OSError, AttributeError):
                 pass
 
     def list_active_contexts(self) -> List[str]:
