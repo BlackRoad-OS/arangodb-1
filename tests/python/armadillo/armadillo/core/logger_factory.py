@@ -15,11 +15,9 @@ class LoggerFactory(Protocol):
 
     def create_logger(self, name: str) -> logging.Logger:
         """Create a logger instance."""
-        ...
 
     def shutdown(self) -> None:
         """Shutdown the logging system."""
-        ...
 
 
 class IsolatedLogManager:

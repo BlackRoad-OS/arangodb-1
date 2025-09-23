@@ -16,19 +16,15 @@ class TestContext(Protocol):
 
     def get_logger_factory(self) -> LoggerFactory:
         """Get the logger factory for this test context."""
-        ...
 
     def get_port_pool_factory(self) -> PortPoolFactory:
         """Get the port pool factory for this test context."""
-        ...
 
     def get_work_dir(self) -> Path:
         """Get the working directory for this test context."""
-        ...
 
     def cleanup(self) -> None:
         """Clean up all resources in this test context."""
-        ...
 
 class IsolatedTestContext:
     """Isolated test context with independent resources."""

@@ -14,19 +14,15 @@ class ResourcePool(Protocol, Generic[T]):
 
     def acquire(self, preferred: Optional[T]=None) -> T:
         """Acquire a resource from the pool."""
-        ...
 
     def acquire_multiple(self, count: int) -> List[T]:
         """Acquire multiple resources from the pool."""
-        ...
 
     def release(self, resource: T) -> None:
         """Release a resource back to the pool."""
-        ...
 
     def release_multiple(self, resources: List[T]) -> None:
         """Release multiple resources back to the pool."""
-        ...
 
 class ResourceTracker:
     """Tracks allocated resources for automatic cleanup."""

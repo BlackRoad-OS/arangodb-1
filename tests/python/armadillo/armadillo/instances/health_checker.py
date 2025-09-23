@@ -14,11 +14,9 @@ class HealthChecker(Protocol):
 
     def check_readiness(self, server_id: str, endpoint: str) -> bool:
         """Check if server is ready to accept connections during startup."""
-        ...
 
     def check_health(self, endpoint: str, timeout: float=5.0) -> HealthStatus:
         """Perform comprehensive health check with detailed status."""
-        ...
 
 class ServerHealthChecker:
     """Handles health checking for ArangoDB server instances."""

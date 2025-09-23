@@ -13,11 +13,9 @@ class DataCodec(Protocol):
 
     def encode(self, obj: Any) -> bytes:
         """Encode object to bytes."""
-        ...
 
     def decode(self, data: bytes) -> Any:
         """Decode bytes to object."""
-        ...
 
 class JsonCodec(DataCodec):
     """JSON codec implementation with custom serialization support."""

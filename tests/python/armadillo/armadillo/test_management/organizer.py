@@ -434,7 +434,7 @@ class SuiteOrganizer:
                         parent_suite = self.create_suite(parent_config, Selector())
                     else:
                         parent_suite = self.suites[current_name]
-                    for child_name, child_data in data['children'].items():
+                    for child_name, _ in data['children'].items():
                         child_full_name = f'{current_name}{separator}{child_name}'
                         if child_full_name in self.suites:
                             child_suite = self.suites[child_full_name]

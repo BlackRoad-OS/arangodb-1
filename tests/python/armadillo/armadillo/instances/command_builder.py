@@ -21,11 +21,9 @@ class CommandBuilder(Protocol):
 
     def build_command(self, params: ServerCommandParams) -> List[str]:
         """Build command line arguments for server startup."""
-        ...
 
     def get_repository_root(self) -> Path:
         """Get the ArangoDB repository root directory."""
-        ...
 
 class ServerCommandBuilder:
     """Builds ArangoDB server command lines based on role and configuration."""

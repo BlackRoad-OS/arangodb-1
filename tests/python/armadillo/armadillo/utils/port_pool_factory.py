@@ -10,15 +10,12 @@ class PortPoolFactory(Protocol):
 
     def create_port_pool(self, name: str='', base_port: int=8529, max_ports: int=1000, work_dir: Optional[Path]=None, enable_persistence: bool=True) -> PortPool:
         """Create a port pool instance."""
-        ...
 
     def create_isolated_pool(self, name: str, base_port: int=8529, max_ports: int=1000, work_dir: Optional[Path]=None) -> PortPool:
         """Create an isolated port pool for test environments."""
-        ...
 
     def create_ephemeral_pool(self, name: str='', base_port: int=8529, max_ports: int=1000) -> PortPool:
         """Create an ephemeral port pool (no persistence)."""
-        ...
 
 class StandardPortPoolFactory:
     """Standard implementation of PortPoolFactory."""

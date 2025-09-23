@@ -17,7 +17,6 @@ class DeploymentPlanner(Protocol):
                              mode: DeploymentMode,
                              cluster_config: Optional[ClusterConfig] = None) -> 'DeploymentPlan':
         """Create a deployment plan for the specified mode."""
-        ...
 
 
 class StandardDeploymentPlanner:

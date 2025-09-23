@@ -17,7 +17,6 @@ class ServerFactory(Protocol):
 
     def create_server_instances(self, servers_config: list[ServerConfig]) -> Dict[str, ArangoServer]:
         """Create ArangoServer instances from ServerConfig objects."""
-        ...
 
 @dataclass
 class MinimalConfig:

@@ -13,7 +13,7 @@ from ..core.types import (
 )
 from ..core.errors import (
     ServerError, ClusterError, ServerStartupError, ServerShutdownError,
-    HealthCheckError, TimeoutError, AgencyError
+    HealthCheckError, AgencyError
 )
 from ..core.log import get_logger, Logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
@@ -251,7 +251,7 @@ class InstanceManager:
                 # Try to cleanup partial deployment
                 try:
                     self.shutdown_deployment()
-                except:
+                except (OSError, ProcessLookupError, RuntimeError, AttributeError):
                     pass
                 raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
@@ -790,7 +790,7 @@ class InstanceManager:
         try:
             error_body = response.json()
             return error_body.get('errorNum') == 1931  # ERROR_SERVICE_API_DISABLED
-        except:
+        except (ValueError, KeyError, AttributeError):
             return False
 
     def _check_all_servers_ready(self) -> bool:

@@ -14,19 +14,15 @@ class PortAllocator(Protocol):
 
     def allocate_port(self, preferred: Optional[int]=None) -> int:
         """Allocate an available port."""
-        ...
 
     def allocate_ports(self, count: int) -> List[int]:
         """Allocate multiple ports."""
-        ...
 
     def release_port(self, port: int) -> None:
         """Release a previously allocated port."""
-        ...
 
     def release_ports(self, ports: List[int]) -> None:
         """Release multiple previously allocated ports."""
-        ...
 
 class PortManager:
     """Manages port allocation with collision avoidance."""
