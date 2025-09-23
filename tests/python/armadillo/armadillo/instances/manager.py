@@ -13,7 +13,7 @@ from ..core.types import (
 )
 from ..core.errors import (
     ServerError, ClusterError, ServerStartupError, ServerShutdownError,
-    HealthCheckError, AgencyError
+    HealthCheckError, AgencyError, ProcessError, NetworkError
 )
 from ..core.log import get_logger, Logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
