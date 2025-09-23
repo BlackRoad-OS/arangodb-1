@@ -6,6 +6,7 @@ import aiohttp
 from ..core.log import Logger
 from ..core.process import is_process_running
 from ..core.types import HealthStatus
+from ..core.errors import HealthCheckError, NetworkError
 from ..utils.auth import AuthProvider
 
 class HealthChecker(Protocol):
@@ -36,7 +37,7 @@ class ServerHealthChecker:
             if not health.is_healthy:
                 self._logger.debug('Readiness check failed for %s: %s', server_id, health.error_message)
             return health.is_healthy
-        except Exception as e:
+        except (HealthCheckError, NetworkError, aiohttp.ClientError, OSError) as e:
             self._logger.debug('Readiness check exception for %s: %s', server_id, e)
             return False
 
@@ -45,7 +46,7 @@ class ServerHealthChecker:
         start_time = time.time()
         try:
             return asyncio.run(self._async_health_check(endpoint, timeout))
-        except Exception as e:
+        except (HealthCheckError, NetworkError, aiohttp.ClientError, OSError) as e:
             response_time = time.time() - start_time
             return HealthStatus(is_healthy=False, response_time=response_time, error_message=f'Health check error: {e}')
 
@@ -65,6 +66,6 @@ class ServerHealthChecker:
         except asyncio.TimeoutError:
             response_time = time.time() - start_time
             return HealthStatus(is_healthy=False, response_time=response_time, error_message='Connection timeout')
-        except Exception as e:
+        except (aiohttp.ClientError, OSError) as e:
             response_time = time.time() - start_time
             return HealthStatus(is_healthy=False, response_time=response_time, error_message=f'Connection error: {e}')

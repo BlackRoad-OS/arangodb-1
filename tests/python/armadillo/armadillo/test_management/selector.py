@@ -89,7 +89,7 @@ class Filter:
             else:
                 self.logger.warning('Unknown filter type: %s', self.criteria.filter_type)
                 return False
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, re.error) as e:
             self.logger.error('Error matching filter %s: %s', self.criteria.value, e)
             return False
 

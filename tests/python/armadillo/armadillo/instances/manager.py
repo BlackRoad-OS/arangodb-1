@@ -39,7 +39,7 @@ class ManagerDependencies:
     server_factory: ServerFactory
 
     @classmethod
-    def create_defaults(cls, deployment_id: str, 
+    def create_defaults(cls, deployment_id: str,
                        config: Optional[ConfigProvider] = None,
                        custom_logger: Optional[Logger] = None,
                        port_allocator: Optional[PortAllocator] = None) -> 'ManagerDependencies':
@@ -351,7 +351,7 @@ class InstanceManager:
                 else:
                     logger.debug("Server %s has no process info for force kill", server.server_id)
 
-            except Exception as force_e:
+            except (OSError, PermissionError, ProcessError) as force_e:
                 logger.error(
                     "CRITICAL: Emergency force kill failed for server %s: %s",
                     server.server_id, force_e
@@ -462,7 +462,7 @@ class InstanceManager:
             error_msg = f"Unhealthy servers: {', '.join(unhealthy_servers)}"
             return self._create_health_status(False, elapsed_time, error_msg, unhealthy_servers)
 
-        except Exception as e:
+        except (ServerError, NetworkError, OSError) as e:
             self.state.status.is_healthy = False
             return HealthStatus(
                 is_healthy=False,
@@ -758,7 +758,7 @@ class InstanceManager:
             logger.debug("Server %s not ready yet (status: %s)", server_id, response.status_code)
             return False
 
-        except Exception as e:
+        except (requests.RequestException, OSError, NetworkError) as e:
             # Server not responding
             logger.debug("Server %s not responding: %s", server_id, e)
             return False
@@ -897,7 +897,7 @@ class InstanceManager:
         """Release all allocated ports."""
         try:
             self._deps.port_manager.release_all()
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.warning("Error releasing ports: %s", e)
 
 
@@ -928,7 +928,7 @@ def cleanup_instance_managers() -> None:
             try:
                 if manager.is_deployed():
                     manager.shutdown_deployment()
-            except Exception as e:
+            except (ServerError, ServerShutdownError, OSError) as e:
                 logger.error("Error during manager cleanup: %s", e)
 
         _instance_managers.clear()

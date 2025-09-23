@@ -7,7 +7,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 from ..core.types import ServerRole
-from ..core.errors import ClusterError, AgencyError, HealthCheckError
+from ..core.errors import ClusterError, AgencyError, HealthCheckError, ServerError, NetworkError
 from ..core.log import get_logger
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.config import get_config
@@ -174,7 +174,7 @@ class ClusterOrchestrator:
             healthy_coordinators = state.get_healthy_coordinators()
             healthy_dbservers = state.get_healthy_dbservers()
             health_percentage = state.cluster_health_percentage()
-            
+
             report = {
                 'deployment_id': self.deployment_id,
                 'timestamp': time.time(),
@@ -219,7 +219,7 @@ class ClusterOrchestrator:
                                 'uptime': stats.uptime
                             } if stats else None
                         }
-                    except Exception as e:
+                    except (HealthCheckError, ServerError, NetworkError, OSError) as e:
                         report['servers'][server_id] = {
                             'role': server.role.value,
                             'endpoint': server.endpoint,
@@ -258,7 +258,7 @@ class ClusterOrchestrator:
                             elapsed = time.time() - start_time
                             logger.info('Cluster is ready (%s%% healthy) after %ss', health_pct, elapsed)
                             return
-                except Exception as e:
+                except (ClusterError, AgencyError, aiohttp.ClientError, OSError) as e:
                     logger.debug('Error checking cluster state: %s', e)
                 await asyncio.sleep(2.0)
 
@@ -365,7 +365,7 @@ class ClusterOrchestrator:
                         if health.is_healthy:
                             logger.info('Agency leadership established')
                             return
-            except Exception as e:
+            except (HealthCheckError, ServerError, NetworkError, OSError) as e:
                 logger.debug('Agency leadership check failed: %s', e)
             await asyncio.sleep(2.0)
         raise AgencyError('Agency leadership not established within timeout')
@@ -438,7 +438,7 @@ class ClusterOrchestrator:
                 elif server.role == ServerRole.DBSERVER:
                     if server_id not in state.dbservers:
                         state.dbservers.append(server_id)
-            except Exception as e:
+            except (HealthCheckError, ServerError, NetworkError, OSError) as e:
                 logger.debug('Error checking server %s: %s', server_id, e)
                 state.unhealthy_servers.add(server_id)
 
@@ -457,7 +457,7 @@ class ClusterOrchestrator:
                 health = server.health_check_sync(timeout=3.0)
                 if health.is_healthy:
                     return
-            except Exception as e:
+            except (HealthCheckError, ServerError, NetworkError, OSError) as e:
                 logger.debug('Server %s health check failed: %s', server.server_id, e)
             await asyncio.sleep(1.0)
         raise HealthCheckError(f'Server {server.server_id} did not become healthy within timeout')
@@ -493,6 +493,6 @@ def cleanup_cluster_orchestrators() -> None:
         for orchestrator in _cluster_orchestrators.values():
             try:
                 orchestrator._cancel_all_operations()
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 logger.error('Error during orchestrator cleanup: %s', e)
         _cluster_orchestrators.clear()
