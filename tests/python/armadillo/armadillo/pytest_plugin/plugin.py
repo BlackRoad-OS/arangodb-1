@@ -18,10 +18,10 @@ from ..core.time import set_global_deadline, stop_watchdog
 from ..core.types import ServerRole, DeploymentMode, ClusterConfig
 from ..instances.server import ArangoServer
 from ..instances.manager import InstanceManager, get_instance_manager
+from .reporter import get_armadillo_reporter
 from ..instances.orchestrator import ClusterOrchestrator, get_cluster_orchestrator
 from ..utils.crypto import random_id
 from ..utils.filesystem import set_test_session_id, clear_test_session, cleanup_work_dir
-from .reporter import get_armadillo_reporter
 
 logger = get_logger(__name__)
 
@@ -537,6 +537,34 @@ def pytest_sessionfinish(session, exitstatus):
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionfinish(session, exitstatus)
+
+
+def pytest_runtest_logstart(nodeid, location):
+    """Handle test run start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_logstart(nodeid, location)
+
+
+def pytest_runtest_setup(item):
+    """Handle test setup start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_setup(item)
+
+
+def pytest_runtest_call(item):
+    """Handle test call start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_call(item)
+
+
+def pytest_runtest_teardown(item, nextitem):
+    """Handle test teardown start."""
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_teardown(item)
 
 
 def pytest_runtest_logreport(report):
