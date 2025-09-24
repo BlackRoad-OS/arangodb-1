@@ -49,6 +49,7 @@ class ArmadilloReporter:
         self.expected_total_tests = 0
         self.summary_printed = False
         self.use_colors = Colors.is_color_supported()
+        self.current_file = None  # Track current test file for header display
 
     def _colorize(self, text: str, color: str) -> str:
         """Apply color to text if colors are supported."""
@@ -90,6 +91,25 @@ class ArmadilloReporter:
             return test_name
         return nodeid.split("::")[-1]
 
+    def _get_file_path(self, nodeid: str) -> str:
+        """Extract file path from pytest node ID."""
+        return nodeid.split("::")[0]
+
+    def _print_file_header(self, file_path: str):
+        """Print a colored header when starting a new test file."""
+        header_msg = f"\n🚀 {self._colorize('Running', Colors.CYAN)} {self._colorize(file_path, Colors.BOLD)}\n"
+        underline = "─" * min(len(f"🚀 Running {file_path}"), 80)  # Limit width to 80 chars
+        header_msg += f"{self._colorize(underline, Colors.CYAN)}\n"
+        
+        try:
+            with open("/dev/tty", "w") as tty:
+                tty.write(header_msg)
+                tty.flush()
+        except (OSError, IOError):
+            # Fallback to stderr if /dev/tty is not available
+            sys.stderr.write(header_msg)
+            sys.stderr.flush()
+
     def pytest_sessionstart(self, _session):
         """Handle session start."""
         self.session_start_time = time.time()
@@ -99,6 +119,12 @@ class ArmadilloReporter:
         """Handle test run start."""
         suite_name = self._get_suite_name(nodeid)
         test_name = self._get_test_name(nodeid)
+        file_path = self._get_file_path(nodeid)
+
+        # Check if we're starting a new test file and print header if needed
+        if self.current_file != file_path:
+            self.current_file = file_path
+            self._print_file_header(file_path)
 
         # Track suite information
         if suite_name not in self.suite_start_times:
@@ -115,8 +141,7 @@ class ArmadilloReporter:
             }
 
         # Print [ RUN ] message here - this hook may not be captured like pytest_runtest_call
-        # Add newline before RUN message to ensure it appears on its own line (pytest filename output has no trailing newline)
-        run_msg = f"\n{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
+        run_msg = f"{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
         try:
             with open("/dev/tty", "w") as tty:
                 tty.write(run_msg)
