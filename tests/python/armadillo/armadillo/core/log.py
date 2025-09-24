@@ -48,8 +48,14 @@ class LogManager:
         enable_json: bool = True,
         enable_console: bool = True,
         console_level: Optional[Union[int, str]] = None,
+        configure_root_compat: bool = False,
     ) -> None:
-        """Configure logging system."""
+        """Configure logging system.
+
+        By default, only the isolated manager is configured. Set
+        configure_root_compat=True to mirror handlers to the root logger
+        for third-party library capture.
+        """
         if self._configured:
             return
 
@@ -62,29 +68,30 @@ class LogManager:
             console_level=console_level,
         )
 
-        # Also configure root logger for backward compatibility with code
-        # that might use logging.getLogger() directly
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG)
+        if configure_root_compat:
+            # Configure root logger for backward compatibility with code
+            # that might use logging.getLogger() directly
+            root_logger = logging.getLogger()
+            root_logger.setLevel(logging.DEBUG)
 
-        # Remove any existing handlers to prevent duplication
-        for handler in root_logger.handlers[:]:
-            root_logger.removeHandler(handler)
+            # Remove any existing handlers to prevent duplication
+            for handler in root_logger.handlers[:]:
+                root_logger.removeHandler(handler)
 
-        # Add handlers to root logger for backward compatibility
-        if enable_json and log_file:
-            json_handler = logging.FileHandler(log_file)
-            json_handler.setFormatter(StructuredFormatter())
-            json_handler.setLevel(level)
-            root_logger.addHandler(json_handler)
+            # Add handlers to root logger for backward compatibility
+            if enable_json and log_file:
+                json_handler = logging.FileHandler(log_file)
+                json_handler.setFormatter(StructuredFormatter())
+                json_handler.setLevel(level)
+                root_logger.addHandler(json_handler)
 
-        if enable_console:
-            console_level = console_level or level
-            console_handler = ArmadilloRichHandler(
-                show_time=True, show_path=False, markup=True
-            )
-            console_handler.setLevel(console_level)
-            root_logger.addHandler(console_handler)
+            if enable_console:
+                console_level = console_level or level
+                console_handler = ArmadilloRichHandler(
+                    show_time=True, show_path=False, markup=True
+                )
+                console_handler.setLevel(console_level)
+                root_logger.addHandler(console_handler)
 
         self._configured = True
 

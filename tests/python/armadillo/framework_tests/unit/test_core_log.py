@@ -336,6 +336,7 @@ class TestLogManager:
                 log_file=log_file,
                 enable_json=True,
                 enable_console=True,
+                configure_root_compat=True,
             )
 
         assert self.manager._configured is True
@@ -357,24 +358,21 @@ class TestLogManager:
             mock_rich_handler.return_value = mock_console_handler
 
             self.manager.configure(
-                level=logging.INFO, enable_json=False, enable_console=True
+                level=logging.INFO,
+                enable_json=False,
+                enable_console=True,
+                configure_root_compat=True,
             )
 
         assert self.manager._configured is True
         # Test behavior rather than internals - just that configuration completed
         mock_root_logger.addHandler.assert_called_once_with(mock_console_handler)
 
-    @patch("logging.getLogger")
-    def test_get_logger(self, mock_get_logger):
-        """Test getting logger instance."""
-        mock_logger = Mock()
-        mock_get_logger.return_value = mock_logger
-
+    def test_get_logger(self):
+        """Test getting logger instance returns namespaced logger."""
         result = self.manager.get_logger("test.logger")
-
-        assert result == mock_logger
-        # Logger names are now namespaced with "global." prefix
-        mock_get_logger.assert_called_once_with("global.test.logger")
+        assert isinstance(result, logging.Logger)
+        assert result.name == "global.test.logger"
 
     @patch("logging.shutdown")
     @patch("logging.getLogger")
@@ -388,22 +386,22 @@ class TestLogManager:
         self.manager.shutdown()
         mock_shutdown.assert_called_once()
 
-    def test_double_configure_ignored(self):
+    @patch("logging.getLogger")
+    def test_double_configure_ignored(self, mock_get_logger):
         """Test that double configuration is ignored."""
-        with patch("logging.getLogger") as mock_get_logger:
-            mock_root_logger = Mock()
-            mock_get_logger.return_value = mock_root_logger
-            mock_root_logger.handlers = []
+        mock_root_logger = Mock()
+        mock_get_logger.return_value = mock_root_logger
+        mock_root_logger.handlers = []
 
-            # First configuration
-            self.manager.configure()
-            assert self.manager._configured is True
+        # First configuration (enable root compat to trigger getLogger)
+        self.manager.configure(configure_root_compat=True)
+        assert self.manager._configured is True
 
-            # Second configuration should be ignored
-            self.manager.configure()
+        # Second configuration should be ignored
+        self.manager.configure(configure_root_compat=True)
 
-            # Should only be called once
-            assert mock_get_logger.call_count == 1
+        # Should only be called once
+        assert mock_get_logger.call_count == 1
 
 
 class TestModuleLevelFunctions:

@@ -59,7 +59,9 @@ class IsolatedLogManager:
 
                 self._json_handler = logging.FileHandler(self._log_file)
                 self._json_handler.setFormatter(
-                    StructuredFormatter(include_context=True)
+                    StructuredFormatter(
+                        include_context=True, context_getter=self._context.get_context
+                    )
                 )
                 self._json_handler.setLevel(level)
 
@@ -206,40 +208,4 @@ class StandardLoggerFactory:
             yield
 
 
-# Utility functions for logging events with factory-created loggers
-def log_event(logger: logging.Logger, event_type: str, message: str, **kwargs) -> None:
-    """Log a structured event with context."""
-    logger.info(message, extra={"event_type": event_type, **kwargs})
-
-
-def log_process_event(
-    logger: logging.Logger, event: str, pid: Optional[int] = None, **kwargs
-) -> None:
-    """Log a process-related event."""
-    extra = {"event_type": "process", "process_event": event}
-    if pid is not None:
-        extra["pid"] = pid
-    extra.update(kwargs)
-    logger.info("Process %s", event, extra=extra)
-
-
-def log_server_event(
-    logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs
-) -> None:
-    """Log a server-related event."""
-    extra = {"event_type": "server", "server_event": event}
-    if server_id is not None:
-        extra["server_id"] = server_id
-    extra.update(kwargs)
-    logger.info("Server %s", event, extra=extra)
-
-
-def log_test_event(
-    logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs
-) -> None:
-    """Log a test-related event."""
-    extra = {"event_type": "test", "test_event": event}
-    if test_name is not None:
-        extra["test_name"] = test_name
-    extra.update(kwargs)
-    logger.info("Test %s", event, extra=extra)
+## Event helper functions removed here; use armadillo.core.log module helpers.

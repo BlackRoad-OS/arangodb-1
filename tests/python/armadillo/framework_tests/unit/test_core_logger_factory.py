@@ -12,6 +12,8 @@ import pytest
 from armadillo.core.logger_factory import (
     IsolatedLogManager,
     StandardLoggerFactory,
+)
+from armadillo.core.log import (
     log_event,
     log_process_event,
     log_server_event,

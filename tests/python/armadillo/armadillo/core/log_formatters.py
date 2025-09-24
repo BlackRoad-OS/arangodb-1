@@ -53,11 +53,16 @@ _log_context = LogContext()
 
 
 class StructuredFormatter(logging.Formatter):
-    """JSON formatter for structured logging."""
+    """JSON formatter for structured logging.
 
-    def __init__(self, include_context: bool = True) -> None:
+    Optionally accepts a context getter to unify context across managers.
+    """
+
+    def __init__(self, include_context: bool = True, context_getter=None) -> None:
         super().__init__()
         self.include_context = include_context
+        # If not provided, we'll call the module-level getter at format-time
+        self._context_getter = context_getter
 
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
@@ -113,7 +118,16 @@ class StructuredFormatter(logging.Formatter):
 
         # Add thread context if enabled
         if self.include_context:
-            context = _log_context.get_context()
+            context = {}
+            try:
+                if self._context_getter is not None:
+                    context = self._context_getter()
+                else:
+                    # Defer to module-level context at call time to honor test patches
+                    context = _log_context.get_context()
+            except Exception:
+                # Be resilient to context getter errors
+                context = {}
             if context:
                 log_entry["context"] = context
 

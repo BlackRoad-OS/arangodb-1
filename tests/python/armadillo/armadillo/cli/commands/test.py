@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 from rich.console import Console
 from rich.table import Table
 from ...core.config import get_config, load_config
-from ...core.log import get_logger, LogManager
+from ...core.log import get_logger
 from ...core.types import DeploymentMode
 
 
@@ -196,8 +196,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
         compact_mode=options.compact,
     )
 
-    log_manager = LogManager()
-    log_manager.configure(level=options.log_level, enable_console=True)
+    # Logging is configured once in the main CLI callback.
 
     if options.build_dir:
         config.bin_dir = options.build_dir.resolve()
