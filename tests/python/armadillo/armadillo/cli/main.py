@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 import typer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from rich.console import Console
 from rich.table import Table
 from ..core.config import load_config
@@ -16,15 +16,21 @@ from .commands.analyze import analyze_app
 
 class GlobalCliOptions(BaseModel):
     """Global CLI options that can be used across all commands."""
-    
+
     verbose: int = Field(0, description="Increase verbosity level")
-    config_file: Optional[Path] = Field(None, description="Configuration file path")  
-    build_dir: Optional[Path] = Field(None, description="ArangoDB build directory (auto-detected if not specified)")
-    log_level: str = Field("INFO", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)")
-    
-    class Config:
+    config_file: Optional[Path] = Field(None, description="Configuration file path")
+    build_dir: Optional[Path] = Field(
+        None, description="ArangoDB build directory (auto-detected if not specified)"
+    )
+    log_level: str = Field(
+        "INFO", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
+    )
+
+    model_config = ConfigDict(
         # Allow typer to use this model for CLI argument parsing
-        use_enum_values = True
+        use_enum_values=True,
+    )
+
 
 app = typer.Typer(
     name="armadillo",
@@ -50,7 +56,7 @@ def main(
     build_dir: Optional[Path] = typer.Option(
         None,
         "--build-dir",
-        "-b", 
+        "-b",
         help="ArangoDB build directory (auto-detected if not specified)",
     ),
 ):
@@ -60,19 +66,21 @@ def main(
         verbose=verbose,
         config_file=config_file,
         build_dir=build_dir,
-        log_level="DEBUG" if verbose >= 2 else "INFO" if verbose == 1 else "WARNING"
+        log_level="DEBUG" if verbose >= 2 else "INFO" if verbose == 1 else "WARNING",
     )
-    
+
     # Store CLI options in typer context for access by subcommands
     ctx.ensure_object(dict)
     ctx.obj["cli_options"] = cli_options
-    
-    configure_logging(level=cli_options.log_level, enable_console=True, enable_json=False)
+
+    configure_logging(
+        level=cli_options.log_level, enable_console=True, enable_json=False
+    )
     try:
         config = load_config(
-            config_file=cli_options.config_file, 
+            config_file=cli_options.config_file,
             verbose=cli_options.verbose,
-            log_level=cli_options.log_level
+            log_level=cli_options.log_level,
         )
         if cli_options.build_dir:
             config.bin_dir = cli_options.build_dir.resolve()
