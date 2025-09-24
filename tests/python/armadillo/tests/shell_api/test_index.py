@@ -46,7 +46,9 @@ class TestIndexAPI:
     def test_create_unique_hash_index_new_then_existing(self, collection):
         col = collection
 
-        b1 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": False})
+        b1 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": False}
+        )
         # Index ID format is just the numeric ID, not collection/id
         assert b1["id"] is not None
         assert b1["type"] == "hash"
@@ -56,7 +58,9 @@ class TestIndexAPI:
         assert _bool(b1.get("isNewlyCreated") or b1.get("is_newly_created")) is True
         iid = b1["id"]
 
-        b2 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": False})
+        b2 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": False}
+        )
         assert b2["id"] == iid
         assert b2["type"] == "hash"
         assert _bool(b2.get("unique")) is True
@@ -68,14 +72,18 @@ class TestIndexAPI:
     def test_create_unique_sparse_hash_index(self, collection):
         col = collection
 
-        b1 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": True})
+        b1 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": True}
+        )
         assert b1["type"] == "hash"
         assert _bool(b1.get("unique")) is True
         assert _bool(b1.get("sparse")) is True
         assert b1.get("fields") == ["a", "b"]
         iid = b1["id"]
 
-        b2 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": True})
+        b2 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": True, "sparse": True}
+        )
         assert b2["id"] == iid
         assert _bool(b2.get("unique")) is True
         assert _bool(b2.get("sparse")) is True
@@ -84,12 +92,16 @@ class TestIndexAPI:
     def test_create_hash_index_new_then_existing(self, collection):
         col = collection
 
-        b1 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": False})
+        b1 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": False}
+        )
         assert _bool(b1.get("unique")) is False
         assert _bool(b1.get("sparse")) is False
 
         iid = b1["id"]
-        b2 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": False})
+        b2 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": False}
+        )
         assert b2["id"] == iid
         assert _bool(b2.get("unique")) is False
         assert _bool(b2.get("sparse")) is False
@@ -98,10 +110,14 @@ class TestIndexAPI:
     def test_create_hash_index_mixed_sparsity(self, collection):
         col = collection
 
-        b1 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": False})
+        b1 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": False}
+        )
         iid1 = b1["id"]
 
-        b2 = col.add_index({"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": True})
+        b2 = col.add_index(
+            {"type": "hash", "fields": ["a", "b"], "unique": False, "sparse": True}
+        )
         iid2 = b2["id"]
         assert iid2 != iid1
         # teardown handled by fixture
@@ -109,20 +125,30 @@ class TestIndexAPI:
     def test_skiplist_indexes(self, collection):
         col = collection
 
-        b1 = col.add_index({"type": "skiplist", "fields": ["a", "b"], "unique": False, "sparse": False})
+        b1 = col.add_index(
+            {"type": "skiplist", "fields": ["a", "b"], "unique": False, "sparse": False}
+        )
         iid = b1["id"]
-        b2 = col.add_index({"type": "skiplist", "fields": ["a", "b"], "unique": False, "sparse": False})
+        b2 = col.add_index(
+            {"type": "skiplist", "fields": ["a", "b"], "unique": False, "sparse": False}
+        )
         assert b2["id"] == iid
 
-        b3 = col.add_index({"type": "skiplist", "fields": ["a", "b"], "unique": False, "sparse": True})
+        b3 = col.add_index(
+            {"type": "skiplist", "fields": ["a", "b"], "unique": False, "sparse": True}
+        )
         assert _bool(b3.get("sparse")) is True
         # teardown handled by fixture
 
     def test_reading_all_indexes(self, collection):
         col = collection
 
-        col.add_index({"type": "hash", "fields": ["a"], "unique": False, "sparse": False})
-        col.add_index({"type": "hash", "fields": ["b"], "unique": False, "sparse": False})
+        col.add_index(
+            {"type": "hash", "fields": ["a"], "unique": False, "sparse": False}
+        )
+        col.add_index(
+            {"type": "hash", "fields": ["b"], "unique": False, "sparse": False}
+        )
 
         idxs = col.indexes()
         assert isinstance(idxs, list)
@@ -139,7 +165,9 @@ class TestIndexAPI:
 
     def test_deleting_an_index(self, collection):
         col = collection
-        b1 = col.add_index({"type": "skiplist", "fields": ["a", "b"], "unique": True, "sparse": False})
+        b1 = col.add_index(
+            {"type": "skiplist", "fields": ["a", "b"], "unique": True, "sparse": False}
+        )
         iid = b1["id"]
 
         assert col.delete_index(iid) is True

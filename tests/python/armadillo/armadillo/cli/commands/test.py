@@ -208,7 +208,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
     pytest_args = ["python", "-m", "pytest"]
     pytest_args.extend(["-p", "armadillo.pytest_plugin.plugin"])
 
-    if not options.compact:
+    if options.compact:
         pytest_args.extend(["-q", "--tb=no"])
 
     for path in options.test_paths:

@@ -87,13 +87,6 @@ class ArmadilloReporter:
             # Convert Python test name to descriptive format
             test_name = parts[2]
             # Convert test_statistics_correct_endpoint -> test_testing_statistics_correct_cmd
-            if test_name.startswith("test_"):
-                test_name = test_name.replace("test_", "test_testing_")
-                test_name = test_name.replace("_endpoint", "_cmd")
-                test_name = test_name.replace("_wrong", "_wrong")
-                test_name = test_name.replace(
-                    "async_request_statistics_counting", "async_requests_"
-                )
             return test_name
         return nodeid.split("::")[-1]
 
