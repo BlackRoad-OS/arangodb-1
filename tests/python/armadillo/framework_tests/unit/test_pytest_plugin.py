@@ -8,7 +8,16 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
-from armadillo.pytest_plugin.plugin import ArmadilloPlugin
+from armadillo.pytest_plugin.plugin import (
+    ArmadilloPlugin,
+    pytest_runtest_logstart,
+    pytest_runtest_setup,
+    pytest_runtest_call,
+    pytest_runtest_teardown,
+    pytest_runtest_logreport,
+    _is_verbose_output_enabled,
+)
+from armadillo.pytest_plugin.reporter import ArmadilloReporter, get_armadillo_reporter
 
 
 class TestArmadilloPluginBasic:
@@ -270,3 +279,270 @@ class TestArmadilloPluginMarkers:
             assert (
                 marker_name in combined_markers
             ), f"Expected marker '{marker_name}' not found"
+
+
+class TestArmadilloReporter:
+    """Test Armadillo reporter functionality."""
+
+    def setup_method(self):
+        """Reset global reporter state before each test."""
+        # Clear global reporter instance to ensure clean state
+        import armadillo.pytest_plugin.reporter as reporter_module
+        reporter_module._reporter = None
+
+    def test_reporter_can_be_created(self):
+        """Test ArmadilloReporter can be instantiated."""
+        reporter = ArmadilloReporter()
+        
+        assert reporter is not None
+        assert hasattr(reporter, 'test_times')
+        assert hasattr(reporter, 'suite_start_times')
+        assert isinstance(reporter.test_times, dict)
+
+    def test_get_armadillo_reporter_singleton(self):
+        """Test get_armadillo_reporter returns singleton instance."""
+        reporter1 = get_armadillo_reporter()
+        reporter2 = get_armadillo_reporter()
+        
+        assert reporter1 is reporter2
+        assert isinstance(reporter1, ArmadilloReporter)
+
+    @patch('sys.stderr.write')
+    @patch('sys.stderr.flush')
+    def test_reporter_run_header_output(self, mock_flush, mock_write):
+        """Test reporter outputs RUN header when test starts."""
+        reporter = ArmadilloReporter()
+        
+        # Simulate test start
+        nodeid = "test_file.py::TestClass::test_method"
+        location = ("test_file.py", 10, "TestClass.test_method")
+        
+        reporter.pytest_runtest_logstart(nodeid, location)
+        
+        # Should have written RUN header to stderr
+        mock_write.assert_called()
+        written_text = mock_write.call_args[0][0]
+        assert "[ RUN        ]" in written_text
+        assert "test_method" in written_text
+
+    def test_reporter_tracks_test_timing(self):
+        """Test reporter accurately tracks test execution timing."""
+        reporter = ArmadilloReporter()
+        nodeid = "test_file.py::TestClass::test_method"
+        
+        # Start test
+        reporter.pytest_runtest_logstart(nodeid, ("test_file.py", 10, "test_method"))
+        
+        # Verify timing structure is initialized
+        test_name = "test_method"
+        assert test_name in reporter.test_times
+        assert "start" in reporter.test_times[test_name]
+        assert "setup" in reporter.test_times[test_name]
+        assert "call" in reporter.test_times[test_name]
+        assert "teardown" in reporter.test_times[test_name]
+
+    def test_reporter_extracts_test_name_correctly(self):
+        """Test reporter extracts test name from nodeid correctly."""
+        reporter = ArmadilloReporter()
+        
+        test_cases = [
+            ("test_file.py::TestClass::test_method", "test_method"),
+            ("tests/test_module.py::test_function", "test_function"),
+            ("path/to/test.py::TestSuite::test_with_long_name", "test_with_long_name"),
+        ]
+        
+        for nodeid, expected_name in test_cases:
+            actual_name = reporter._get_test_name(nodeid)
+            assert actual_name == expected_name, f"Failed for {nodeid}"
+
+
+class TestArmadilloPytestHooks:
+    """Test pytest hook functions are properly connected."""
+
+    def setup_method(self):
+        """Reset global reporter state before each test."""
+        import armadillo.pytest_plugin.reporter as reporter_module
+        reporter_module._reporter = None
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_pytest_runtest_logstart_hook_connected(self, mock_get_reporter, mock_verbose):
+        """Test pytest_runtest_logstart hook calls reporter correctly."""
+        mock_verbose.return_value = True
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        nodeid = "test_file.py::test_function"
+        location = ("test_file.py", 10, "test_function")
+        
+        pytest_runtest_logstart(nodeid, location)
+        
+        mock_get_reporter.assert_called_once()
+        mock_reporter.pytest_runtest_logstart.assert_called_once_with(nodeid, location)
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_pytest_runtest_setup_hook_connected(self, mock_get_reporter, mock_verbose):
+        """Test pytest_runtest_setup hook calls reporter correctly."""
+        mock_verbose.return_value = True
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        mock_item = Mock()
+        pytest_runtest_setup(mock_item)
+        
+        mock_get_reporter.assert_called_once()
+        mock_reporter.pytest_runtest_setup.assert_called_once_with(mock_item)
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_pytest_runtest_call_hook_connected(self, mock_get_reporter, mock_verbose):
+        """Test pytest_runtest_call hook calls reporter correctly."""
+        mock_verbose.return_value = True
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        mock_item = Mock()
+        pytest_runtest_call(mock_item)
+        
+        mock_get_reporter.assert_called_once()
+        mock_reporter.pytest_runtest_call.assert_called_once_with(mock_item)
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_pytest_runtest_teardown_hook_connected(self, mock_get_reporter, mock_verbose):
+        """Test pytest_runtest_teardown hook calls reporter correctly."""
+        mock_verbose.return_value = True
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        mock_item = Mock()
+        pytest_runtest_teardown(mock_item, None)
+        
+        mock_get_reporter.assert_called_once()
+        mock_reporter.pytest_runtest_teardown.assert_called_once_with(mock_item)
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_pytest_runtest_logreport_hook_connected(self, mock_get_reporter, mock_verbose):
+        """Test pytest_runtest_logreport hook calls reporter correctly."""
+        mock_verbose.return_value = True
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        mock_report = Mock()
+        pytest_runtest_logreport(mock_report)
+        
+        mock_get_reporter.assert_called_once()
+        mock_reporter.pytest_runtest_logreport.assert_called_once_with(mock_report)
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_hooks_respect_verbose_mode(self, mock_get_reporter, mock_verbose):
+        """Test hooks only call reporter when verbose mode is enabled."""
+        mock_verbose.return_value = False  # Compact mode
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        # Call various hooks
+        pytest_runtest_logstart("test", ("test", 1, "test"))
+        pytest_runtest_setup(Mock())
+        pytest_runtest_call(Mock())
+        pytest_runtest_teardown(Mock(), None)
+        pytest_runtest_logreport(Mock())
+        
+        # Reporter should not be called in compact mode
+        mock_get_reporter.assert_not_called()
+        mock_reporter.pytest_runtest_logstart.assert_not_called()
+
+    def test_verbose_output_enabled_function(self):
+        """Test _is_verbose_output_enabled function exists and is callable."""
+        # Just test that the function exists and can be called
+        # The actual behavior is tested through integration
+        result = _is_verbose_output_enabled()
+        assert isinstance(result, bool)
+
+
+class TestArmadilloReporterRegressionTests:
+    """Regression tests to catch the specific issues we fixed."""
+
+    def setup_method(self):
+        """Reset global reporter state before each test."""
+        import armadillo.pytest_plugin.reporter as reporter_module
+        reporter_module._reporter = None
+
+    def test_pytest_hooks_are_connected(self):
+        """Test that all required pytest hooks exist and are connected.
+        
+        This is a regression test for the issue where missing hooks
+        caused RUN headers and timing to not work.
+        """
+        # Test that all the hook functions exist
+        assert callable(pytest_runtest_logstart)
+        assert callable(pytest_runtest_setup) 
+        assert callable(pytest_runtest_call)
+        assert callable(pytest_runtest_teardown)
+        assert callable(pytest_runtest_logreport)
+
+    @patch('armadillo.pytest_plugin.plugin._is_verbose_output_enabled')
+    @patch('armadillo.pytest_plugin.plugin.get_armadillo_reporter')
+    def test_hooks_call_reporter_when_verbose(self, mock_get_reporter, mock_verbose):
+        """Test hooks call reporter when verbose mode is enabled.
+        
+        This is a regression test for the missing hook connections.
+        """
+        mock_verbose.return_value = True
+        mock_reporter = Mock()
+        mock_get_reporter.return_value = mock_reporter
+        
+        # Test that each hook calls the reporter
+        pytest_runtest_logstart("test_file.py::test_func", ("test_file.py", 1, "test_func"))
+        mock_reporter.pytest_runtest_logstart.assert_called_once()
+        
+        mock_item = Mock()
+        pytest_runtest_setup(mock_item)
+        mock_reporter.pytest_runtest_setup.assert_called_once_with(mock_item)
+        
+        pytest_runtest_call(mock_item)
+        mock_reporter.pytest_runtest_call.assert_called_once_with(mock_item)
+
+    def test_reporter_initializes_timing_structure(self):
+        """Test reporter initializes timing structure correctly.
+        
+        This is a regression test for timing not being tracked.
+        """
+        reporter = ArmadilloReporter()
+        nodeid = "test_file.py::TestClass::test_method"
+        
+        # This should initialize timing structure
+        reporter.pytest_runtest_logstart(nodeid, ("test_file.py", 10, "test_method"))
+        
+        test_name = "test_method"
+        assert test_name in reporter.test_times
+        timing = reporter.test_times[test_name]
+        
+        # Check all required timing fields exist
+        assert "start" in timing
+        assert "setup" in timing  
+        assert "call" in timing
+        assert "teardown" in timing
+        assert timing["start"] > 0  # Should have actual timestamp
+
+    @patch('sys.stderr.write')
+    def test_run_header_is_output(self, mock_write):
+        """Test that RUN header is written to stderr.
+        
+        This is a regression test for missing RUN headers.
+        """
+        reporter = ArmadilloReporter()
+        nodeid = "test_file.py::TestClass::test_method"
+        
+        reporter.pytest_runtest_logstart(nodeid, ("test_file.py", 10, "test_method"))
+        
+        # Should have written something to stderr
+        mock_write.assert_called()
+        written_text = mock_write.call_args[0][0]
+        
+        # Should contain RUN header and test name
+        assert "[ RUN        ]" in written_text
+        assert "test_method" in written_text
