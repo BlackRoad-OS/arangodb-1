@@ -124,17 +124,16 @@ class TestStandardServerFactory:
 
     def test_invalid_port_type_error(self):
         """Test error handling for invalid port types."""
-        server_config = ServerConfig(
-            role=ServerRole.SINGLE,
-            port="invalid_port",  # String instead of int
-            data_dir=Path("/fake/data"),
-            log_file=Path("/fake/log"),
-        )
+        # With pydantic validation, the error occurs immediately during ServerConfig creation
+        from pydantic import ValidationError
 
-        with pytest.raises(
-            ServerError, match="Invalid port type for server_0.*expected int"
-        ):
-            self.factory.create_server_instances([server_config])
+        with pytest.raises(ValidationError, match="Input should be a valid integer"):
+            ServerConfig(
+                role=ServerRole.SINGLE,
+                port="invalid_port",  # String instead of int
+                data_dir=Path("/fake/data"),
+                log_file=Path("/fake/log"),
+            )
 
     def test_minimal_config_creation(self):
         """Test that MinimalConfig is created with correct values."""

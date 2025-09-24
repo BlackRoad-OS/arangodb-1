@@ -2,7 +2,6 @@
 
 import pytest
 from pathlib import Path
-from dataclasses import asdict
 
 from armadillo.core.types import (
     DeploymentMode,
@@ -133,7 +132,8 @@ class TestArmadilloConfig:
         assert isinstance(config.monitoring, MonitoringConfig)
         assert config.test_timeout == 900.0
         assert config.result_formats == ["junit", "json"]
-        assert config.temp_dir is None
+        # temp_dir is now set to default by the validator
+        assert config.temp_dir == Path("/tmp/armadillo")
         assert config.keep_instances_on_failure is False
         assert config.bin_dir is None
         assert config.work_dir is None
@@ -180,8 +180,12 @@ class TestSuiteExecutionResults:
 
     def test_test_suite_results_creation(self):
         """Test SuiteExecutionResults creation."""
-        test1 = ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0)
-        test2 = ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0)
+        test1 = ExecutionResult(
+            name="test1", outcome=ExecutionOutcome.PASSED, duration=1.0
+        )
+        test2 = ExecutionResult(
+            name="test2", outcome=ExecutionOutcome.FAILED, duration=2.0
+        )
 
         results = SuiteExecutionResults(
             tests=[test1, test2],

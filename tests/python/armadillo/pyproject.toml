@@ -22,6 +22,7 @@ dependencies = [
     "pyjwt>=2.8.0",
     "python-arango>=7.8.0",
     "requests>=2.31.0",
+    "pydantic-settings>=2.0.0",
 ]
 
 [project.optional-dependencies]

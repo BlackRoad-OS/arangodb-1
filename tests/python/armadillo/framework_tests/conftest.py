@@ -6,7 +6,6 @@ import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from armadillo.core.config import ConfigLoader
 from armadillo.core.types import ArmadilloConfig, DeploymentMode
 
 

@@ -5,7 +5,13 @@ import os
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from armadillo.core.config import ConfigLoader, ConfigManager, load_config, get_config
+from armadillo.core.config import (
+    ConfigManager,
+    load_config,
+    get_config,
+    load_env_overrides,
+    _convert_env_value,
+)
 from armadillo.core.types import (
     ArmadilloConfig,
     DeploymentMode,
@@ -15,18 +21,8 @@ from armadillo.core.types import (
 from armadillo.core.errors import ConfigurationError, PathError
 
 
-class TestConfigLoader:
-    """Test ConfigLoader class."""
-
-    def test_config_loader_creation(self):
-        """Test ConfigLoader creation with custom prefix."""
-        loader = ConfigLoader("TEST_")
-        assert loader.env_prefix == "TEST_"
-
-    def test_config_loader_default_prefix(self):
-        """Test ConfigLoader with default prefix."""
-        loader = ConfigLoader()
-        assert loader.env_prefix == "ARMADILLO_"
+class TestEnvironmentLoading:
+    """Test environment variable loading functions."""
 
     @patch.dict(
         os.environ,
@@ -34,66 +30,41 @@ class TestConfigLoader:
             "ARMADILLO_DEPLOYMENT_MODE": "cluster",
             "ARMADILLO_TEST_TIMEOUT": "1200.0",
             "ARMADILLO_VERBOSE": "2",
+            "ARMADILLO_CLUSTER__AGENTS": "5",
         },
+        clear=True,
     )
-    def test_load_from_env(self):
-        """Test loading configuration from environment variables."""
-        loader = ConfigLoader()
-        base_config = ArmadilloConfig(deployment_mode=DeploymentMode.SINGLE_SERVER)
+    def test_load_env_overrides(self):
+        """Test loading environment variable overrides."""
+        overrides = load_env_overrides()
 
-        config = loader.load_from_env(ArmadilloConfig, base_config)
-
-        assert config.deployment_mode == DeploymentMode.CLUSTER
-        assert config.test_timeout == 1200.0
-        assert config.verbose == 2
-
-    @patch.dict(os.environ, {"ARMADILLO_DEPLOYMENT_MODE": "invalid_mode"})
-    def test_load_from_env_invalid_enum(self):
-        """Test loading invalid enum value from environment."""
-        loader = ConfigLoader()
-        base_config = ArmadilloConfig(deployment_mode=DeploymentMode.SINGLE_SERVER)
-
-        with pytest.raises(ConfigurationError):
-            loader.load_from_env(ArmadilloConfig, base_config)
+        assert overrides["deployment_mode"] == "cluster"
+        assert overrides["test_timeout"] == 1200.0
+        assert overrides["verbose"] == 2
+        assert overrides["cluster"]["agents"] == 5
 
     def test_convert_env_value_boolean(self):
         """Test boolean conversion from environment values."""
-        loader = ConfigLoader()
-
-        assert loader._convert_env_value("true", bool) is True
-        assert loader._convert_env_value("false", bool) is False
-        assert loader._convert_env_value("1", bool) is True
-        assert loader._convert_env_value("0", bool) is False
-        assert loader._convert_env_value("yes", bool) is True
-        assert loader._convert_env_value("no", bool) is False
+        assert _convert_env_value("true") is True
+        assert _convert_env_value("false") is False
+        assert _convert_env_value("1") is True
+        assert _convert_env_value("0") is False
+        assert _convert_env_value("yes") is True
+        assert _convert_env_value("no") is False
 
     def test_convert_env_value_numeric(self):
         """Test numeric conversion from environment values."""
-        loader = ConfigLoader()
-
-        assert loader._convert_env_value("42", int) == 42
-        assert loader._convert_env_value("3.14", float) == 3.14
-
-        with pytest.raises(ConfigurationError):
-            loader._convert_env_value("not_a_number", int)
-
-    def test_convert_env_value_path(self):
-        """Test Path conversion from environment values."""
-        loader = ConfigLoader()
-
-        result = loader._convert_env_value("/tmp/test", Path)
-        assert isinstance(result, Path)
-        assert str(result) == "/tmp/test"
+        assert _convert_env_value("42") == 42
+        assert _convert_env_value("3.14") == 3.14
 
     def test_convert_env_value_list(self):
         """Test list conversion from environment values."""
-        loader = ConfigLoader()
-
-        # Mock list type
-        from typing import List
-
-        result = loader._convert_env_value("a,b,c", List[str])
+        result = _convert_env_value("a,b,c")
         assert result == ["a", "b", "c"]
+
+    def test_convert_env_value_string(self):
+        """Test string values are returned as-is."""
+        assert _convert_env_value("test_string") == "test_string"
 
 
 class TestConfigManager:
@@ -103,17 +74,6 @@ class TestConfigManager:
         """Test ConfigManager creation."""
         manager = ConfigManager()
         assert manager._config is None
-
-    def test_create_default_config(self):
-        """Test default configuration creation."""
-        manager = ConfigManager()
-        config = manager._create_default_config()
-
-        assert config.deployment_mode == DeploymentMode.SINGLE_SERVER
-        assert config.test_timeout == 900.0
-        assert config.result_formats == ["junit", "json"]
-        assert config.keep_instances_on_failure is False
-        assert config.verbose == 0
 
     def test_load_config_with_overrides(self):
         """Test configuration loading with CLI overrides."""
@@ -125,7 +85,8 @@ class TestConfigManager:
             "verbose": 1,
         }
 
-        config = manager.load_config(**overrides)
+        with patch("armadillo.core.config.load_env_overrides", return_value={}):
+            config = manager.load_config(**overrides)
 
         assert config.deployment_mode == DeploymentMode.CLUSTER
         assert config.test_timeout == 600.0
@@ -145,17 +106,15 @@ monitoring:
 
         with patch("builtins.open", mock_open(read_data=yaml_content)):
             with patch("pathlib.Path.exists", return_value=True):
-                manager = ConfigManager()
-                config = manager.load_config(config_file=Path("test.yaml"))
+                with patch("armadillo.core.config.load_env_overrides", return_value={}):
+                    manager = ConfigManager()
+                    config = manager.load_config(config_file=Path("test.yaml"))
 
-                assert (
-                    config.deployment_mode == DeploymentMode.CLUSTER
-                    or config.deployment_mode == "cluster"
-                )
-                assert config.test_timeout == 1800.0
-                assert config.cluster.agents == 5
-                assert config.cluster.dbservers == 4
-                assert config.monitoring.enable_crash_analysis is False
+                    assert config.deployment_mode == DeploymentMode.CLUSTER
+                    assert config.test_timeout == 1800.0
+                    assert config.cluster.agents == 5
+                    assert config.cluster.dbservers == 4
+                    assert config.monitoring.enable_crash_analysis is False
 
     def test_load_config_invalid_file_format(self):
         """Test loading configuration from unsupported file format."""
@@ -163,47 +122,28 @@ monitoring:
 
         with patch("builtins.open", mock_open(read_data="invalid content")):
             with patch("pathlib.Path.exists", return_value=True):
-                with pytest.raises(
-                    ConfigurationError,
-                    match="Failed to load config file|Unsupported config file format",
-                ):
-                    manager.load_config(config_file=Path("test.txt"))
+                with patch("armadillo.core.config.load_env_overrides", return_value={}):
+                    with pytest.raises(
+                        ConfigurationError,
+                        match="Failed to load config file|Unsupported config file format",
+                    ):
+                        manager.load_config(config_file=Path("test.txt"))
 
-    def test_validate_config_cluster_validation(self):
-        """Test configuration validation for cluster settings."""
-        manager = ConfigManager()
-
+    def test_config_validation_cluster_settings(self):
+        """Test pydantic validation for cluster settings."""
         # Invalid cluster configuration - no agents
-        config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.CLUSTER,
-            cluster=ClusterConfig(agents=0, dbservers=1, coordinators=1),
-        )
-
         with pytest.raises(ConfigurationError, match="at least 1 agent"):
-            manager._validate_config(config)
+            ArmadilloConfig(
+                deployment_mode=DeploymentMode.CLUSTER,
+                cluster=ClusterConfig(agents=0, dbservers=1, coordinators=1),
+            )
 
-    def test_validate_config_timeout_validation(self):
-        """Test configuration validation for timeout settings."""
-        manager = ConfigManager()
-
-        config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.SINGLE_SERVER, test_timeout=-10.0
-        )
-
+    def test_config_validation_timeout_settings(self):
+        """Test pydantic validation for timeout settings."""
         with pytest.raises(ConfigurationError, match="timeout must be positive"):
-            manager._validate_config(config)
-
-    def test_validate_config_path_validation(self):
-        """Test configuration validation for paths."""
-        manager = ConfigManager()
-
-        config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.SINGLE_SERVER,
-            bin_dir=Path("/nonexistent/path"),
-        )
-
-        with pytest.raises(PathError):
-            manager._validate_config(config)
+            ArmadilloConfig(
+                deployment_mode=DeploymentMode.SINGLE_SERVER, test_timeout=-10.0
+            )
 
     def test_derive_sub_tmp(self):
         """Test temporary directory derivation."""
@@ -282,22 +222,27 @@ class TestConfigurationEdgeCases:
                 with pytest.raises(ConfigurationError):
                     manager.load_config(config_file=Path("invalid.yaml"))
 
-    def test_merge_configs_with_nested_objects(self):
-        """Test configuration merging with nested objects."""
+    def test_load_config_with_environment_and_overrides(self):
+        """Test configuration loading with environment variables and CLI overrides."""
         manager = ConfigManager()
 
-        base_config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.SINGLE_SERVER,
-            cluster=ClusterConfig(agents=3, dbservers=2),
-        )
+        # Mock environment loading to return some values
+        env_overrides = {
+            "deployment_mode": "cluster",
+            "test_timeout": 1200.0,
+        }
 
-        overrides = {"cluster": {"agents": 5, "coordinators": 3}}
+        # CLI overrides should take precedence
+        cli_overrides = {
+            "test_timeout": 600.0,  # Should override env value
+            "verbose": 1,
+        }
 
-        merged = manager._merge_configs(base_config, overrides)
+        with patch(
+            "armadillo.core.config.load_env_overrides", return_value=env_overrides
+        ):
+            config = manager.load_config(**cli_overrides)
 
-        # Should have updated cluster config
-        assert merged.cluster.agents == 5
-        assert merged.cluster.coordinators == 3
-        assert (
-            merged.cluster.dbservers == 2 or merged.cluster.dbservers == 3
-        )  # Merge behavior may vary
+        assert config.deployment_mode == DeploymentMode.CLUSTER  # From env
+        assert config.test_timeout == 600.0  # CLI override wins
+        assert config.verbose == 1  # From CLI
