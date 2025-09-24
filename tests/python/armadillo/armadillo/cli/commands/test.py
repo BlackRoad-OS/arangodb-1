@@ -6,11 +6,98 @@ import subprocess
 from pathlib import Path
 from typing import Optional, List
 import typer
+from pydantic import BaseModel, Field, validator
 from rich.console import Console
 from rich.table import Table
-from ...core.config import get_config
+from ...core.config import get_config, load_config
 from ...core.log import get_logger, LogManager
 from ...core.types import DeploymentMode
+
+
+class TestRunOptions(BaseModel):
+    """Pydantic model for test run command options."""
+    
+    test_paths: List[str] = Field(
+        default_factory=lambda: ["tests/"], 
+        description="Test paths to execute"
+    )
+    cluster: bool = Field(
+        False, 
+        description="Use cluster deployment instead of single server"
+    )
+    timeout: Optional[float] = Field(
+        None, 
+        description="Test timeout in seconds per test"
+    )
+    output_dir: Path = Field(
+        Path("./test-results"), 
+        description="Output directory for results"
+    )
+    formats: List[str] = Field(
+        default_factory=lambda: ["junit", "json"], 
+        description="Result output formats"
+    )
+    build_dir: Optional[Path] = Field(
+        None, 
+        description="ArangoDB build directory (auto-detected if not specified)"
+    )
+    keep_instances_on_failure: bool = Field(
+        False, 
+        description="Keep instances running on test failure for debugging"
+    )
+    parallel: bool = Field(
+        False, 
+        description="Run tests in parallel"
+    )
+    max_workers: Optional[int] = Field(
+        None, 
+        description="Maximum parallel workers"
+    )
+    show_output: bool = Field(
+        False, 
+        description="Show ArangoDB server output during tests (disables pytest capture)"
+    )
+    extra_args: Optional[List[str]] = Field(
+        None, 
+        description="Additional arguments to pass to pytest"
+    )
+    log_level: str = Field(
+        "WARNING", 
+        description="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
+    )
+    compact: bool = Field(
+        False, 
+        description="Use compact pytest-style output instead of detailed verbose output"
+    )
+    
+    @validator('formats')
+    def validate_formats(cls, v):
+        """Validate that only supported formats are specified."""
+        supported_formats = {"junit", "json", "yaml", "html"}
+        for fmt in v:
+            if fmt not in supported_formats:
+                raise ValueError(f"Unsupported format '{fmt}'. Supported: {supported_formats}")
+        return v
+    
+    @validator('log_level')
+    def validate_log_level(cls, v):
+        """Validate log level is supported."""
+        if v.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ValueError(f"Invalid log level '{v}'. Must be one of: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+        return v.upper()
+    
+    @validator('max_workers')
+    def validate_max_workers(cls, v):
+        """Validate max_workers is reasonable."""
+        if v is not None and (v < 1 or v > 64):
+            raise ValueError("max_workers must be between 1 and 64")
+        return v
+    
+    class Config:
+        # Allow extra fields for future expansion
+        extra = "forbid"
+        # Use enum values 
+        use_enum_values = True
 
 console = Console()
 logger = get_logger(__name__)
@@ -73,78 +160,118 @@ def run(
 ):
     """Run tests with ArangoDB instances."""
     try:
-        config = get_config()
-        from armadillo.core.config import load_config
-
-        deployment_mode = (
-            DeploymentMode.CLUSTER if cluster else DeploymentMode.SINGLE_SERVER
-        )
-        config = load_config(
-            deployment_mode=deployment_mode,
-            log_level=log_level.upper(),
-            compact_mode=compact,
-        )
-        log_manager = LogManager()
-        log_manager.configure(level=log_level.upper(), enable_console=True)
-        if build_dir:
-            config.bin_dir = build_dir.resolve()
-            console.print(
-                f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]"
-            )
+        # Create and validate options using pydantic model
+        # If no test paths provided, use default
         if not test_paths:
             test_paths = ["tests/"]
-        pytest_args = ["python", "-m", "pytest"]
-        pytest_args.extend(["-p", "armadillo.pytest_plugin.plugin"])
-        if not compact:
-            pytest_args.extend(["-q", "--tb=no"])
-        for path in test_paths:
-            pytest_args.append(str(path))
-        if show_output:
-            pytest_args.append("-s")
-
-        # Implement timeout functionality
-        if timeout:
-            pytest_args.extend(["--timeout", str(timeout)])
-
-        # Implement keep-instances-on-failure by setting environment variable
-        # that the pytest plugin can check
-        if keep_instances_on_failure:
-            os.environ["ARMADILLO_KEEP_INSTANCES_ON_FAILURE"] = "1"
-            console.print(
-                "[yellow]🔧 Instances will be kept running on test failure for debugging[/yellow]"
-            )
-        else:
-            os.environ.pop("ARMADILLO_KEEP_INSTANCES_ON_FAILURE", None)
-
-        if extra_args:
-            pytest_args.extend(extra_args)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        if "junit" in formats:
-            pytest_args.extend(["--junitxml", str(output_dir / "junit.xml")])
-        if config.verbose > 0:
-            pytest_args.append("-" + "v" * min(config.verbose, 3))
-        if parallel:
-            try:
-                pytest_args.extend(["-n", str(max_workers or "auto")])
-            except ImportError:
-                console.print(
-                    "[yellow]pytest-xdist not installed, running sequentially[/yellow]"
-                )
-        console.print(
-            f"[cyan]Running tests with command:[/cyan] {' '.join(pytest_args)}"
+            
+        options = TestRunOptions(
+            test_paths=test_paths,
+            cluster=cluster,
+            timeout=timeout,
+            output_dir=output_dir,
+            formats=formats,
+            build_dir=build_dir,
+            keep_instances_on_failure=keep_instances_on_failure,
+            parallel=parallel,
+            max_workers=max_workers,
+            show_output=show_output,
+            extra_args=extra_args,
+            log_level=log_level,
+            compact=compact,
         )
-        result = subprocess.run(pytest_args, cwd=Path.cwd())
-        if result.returncode == 0:
-            console.print("[green]✅ All tests passed![/green]")
-        else:
-            console.print(
-                f"[red]❌ Tests failed (exit code: {result.returncode})[/red]"
-            )
-        sys.exit(result.returncode)
+        
+        # Use the validated options for the rest of the function
+        _execute_test_run(options)
+        
     except Exception as e:
         logger.error("Test execution failed: %s", e)
         console.print(f"[red]Test execution failed: {e}[/red]")
         raise typer.Exit(1)
+
+
+def _execute_test_run(options: TestRunOptions) -> None:
+    """Execute test run with validated options."""
+    # Load and configure the framework
+    deployment_mode = (
+        DeploymentMode.CLUSTER if options.cluster else DeploymentMode.SINGLE_SERVER
+    )
+    config = load_config(
+        deployment_mode=deployment_mode,
+        log_level=options.log_level,
+        compact_mode=options.compact,
+    )
+    
+    log_manager = LogManager()
+    log_manager.configure(level=options.log_level, enable_console=True)
+    
+    if options.build_dir:
+        config.bin_dir = options.build_dir.resolve()
+        console.print(
+            f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]"
+        )
+    
+    # Build pytest arguments
+    pytest_args = ["python", "-m", "pytest"]
+    pytest_args.extend(["-p", "armadillo.pytest_plugin.plugin"])
+    
+    if not options.compact:
+        pytest_args.extend(["-q", "--tb=no"])
+        
+    for path in options.test_paths:
+        pytest_args.append(str(path))
+        
+    if options.show_output:
+        pytest_args.append("-s")
+
+    # Configure timeout
+    if options.timeout:
+        pytest_args.extend(["--timeout", str(options.timeout)])
+
+    # Configure instance retention on failure
+    if options.keep_instances_on_failure:
+        os.environ["ARMADILLO_KEEP_INSTANCES_ON_FAILURE"] = "1"
+        console.print(
+            "[yellow]🔧 Instances will be kept running on test failure for debugging[/yellow]"
+        )
+    else:
+        os.environ.pop("ARMADILLO_KEEP_INSTANCES_ON_FAILURE", None)
+
+    # Add extra arguments
+    if options.extra_args:
+        pytest_args.extend(options.extra_args)
+        
+    # Configure output directory and formats
+    options.output_dir.mkdir(parents=True, exist_ok=True)
+    if "junit" in options.formats:
+        pytest_args.extend(["--junitxml", str(options.output_dir / "junit.xml")])
+        
+    # Configure verbosity
+    if config.verbose > 0:
+        pytest_args.append("-" + "v" * min(config.verbose, 3))
+        
+    # Configure parallel execution
+    if options.parallel:
+        try:
+            pytest_args.extend(["-n", str(options.max_workers or "auto")])
+        except ImportError:
+            console.print(
+                "[yellow]pytest-xdist not installed, running sequentially[/yellow]"
+            )
+    
+    # Execute tests
+    console.print(
+        f"[cyan]Running tests with command:[/cyan] {' '.join(pytest_args)}"
+    )
+    result = subprocess.run(pytest_args, cwd=Path.cwd())
+    
+    if result.returncode == 0:
+        console.print("[green]✅ All tests passed![/green]")
+    else:
+        console.print(
+            f"[red]❌ Tests failed (exit code: {result.returncode})[/red]"
+        )
+    sys.exit(result.returncode)
 
 
 @test_app.command()

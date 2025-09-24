@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 import typer
+from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.table import Table
 from ..core.config import load_config
@@ -11,6 +12,19 @@ from ..core.log import configure_logging, get_logger
 from ..core.types import DeploymentMode
 from .commands.test import test_app
 from .commands.analyze import analyze_app
+
+
+class GlobalCliOptions(BaseModel):
+    """Global CLI options that can be used across all commands."""
+    
+    verbose: int = Field(0, description="Increase verbosity level")
+    config_file: Optional[Path] = Field(None, description="Configuration file path")  
+    build_dir: Optional[Path] = Field(None, description="ArangoDB build directory (auto-detected if not specified)")
+    log_level: str = Field("INFO", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)")
+    
+    class Config:
+        # Allow typer to use this model for CLI argument parsing
+        use_enum_values = True
 
 app = typer.Typer(
     name="armadillo",
@@ -26,6 +40,7 @@ logger = get_logger(__name__)
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     verbose: int = typer.Option(
         0, "--verbose", "-v", count=True, help="Increase verbosity level"
     ),
@@ -35,21 +50,32 @@ def main(
     build_dir: Optional[Path] = typer.Option(
         None,
         "--build-dir",
-        "-b",
+        "-b", 
         help="ArangoDB build directory (auto-detected if not specified)",
     ),
 ):
     """Armadillo: Modern ArangoDB Testing Framework."""
-    log_level = "INFO"
-    if verbose >= 2:
-        log_level = "DEBUG"
-    elif verbose == 1:
-        log_level = "INFO"
-    configure_logging(level=log_level, enable_console=True, enable_json=False)
+    # Create CLI options model from the parsed arguments
+    cli_options = GlobalCliOptions(
+        verbose=verbose,
+        config_file=config_file,
+        build_dir=build_dir,
+        log_level="DEBUG" if verbose >= 2 else "INFO" if verbose == 1 else "WARNING"
+    )
+    
+    # Store CLI options in typer context for access by subcommands
+    ctx.ensure_object(dict)
+    ctx.obj["cli_options"] = cli_options
+    
+    configure_logging(level=cli_options.log_level, enable_console=True, enable_json=False)
     try:
-        config = load_config(config_file=config_file, verbose=verbose)
-        if build_dir:
-            config.bin_dir = build_dir.resolve()
+        config = load_config(
+            config_file=cli_options.config_file, 
+            verbose=cli_options.verbose,
+            log_level=cli_options.log_level
+        )
+        if cli_options.build_dir:
+            config.bin_dir = cli_options.build_dir.resolve()
             console.print(
                 f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]"
             )
