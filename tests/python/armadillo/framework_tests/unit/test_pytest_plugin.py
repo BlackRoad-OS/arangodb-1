@@ -310,7 +310,8 @@ class TestArmadilloReporter:
 
     @patch("sys.stderr.write")
     @patch("sys.stderr.flush")
-    def test_reporter_run_header_output(self, mock_flush, mock_write):
+    @patch("builtins.open", side_effect=OSError("No /dev/tty available"))
+    def test_reporter_run_header_output(self, mock_open, mock_flush, mock_write):
         """Test reporter outputs RUN header when test starts."""
         reporter = ArmadilloReporter()
 
@@ -320,7 +321,7 @@ class TestArmadilloReporter:
 
         reporter.pytest_runtest_logstart(nodeid, location)
 
-        # Should have written RUN header to stderr
+        # Should have written RUN header to stderr (fallback from /dev/tty)
         mock_write.assert_called()
         written_text = mock_write.call_args[0][0]
         assert "[ RUN        ]" in written_text
@@ -540,7 +541,8 @@ class TestArmadilloReporterRegressionTests:
         assert timing["start"] > 0  # Should have actual timestamp
 
     @patch("sys.stderr.write")
-    def test_run_header_is_output(self, mock_write):
+    @patch("builtins.open", side_effect=OSError("No /dev/tty available"))
+    def test_run_header_is_output(self, mock_open, mock_write):
         """Test that RUN header is written to stderr.
 
         This is a regression test for missing RUN headers.
@@ -550,7 +552,7 @@ class TestArmadilloReporterRegressionTests:
 
         reporter.pytest_runtest_logstart(nodeid, ("test_file.py", 10, "test_method"))
 
-        # Should have written something to stderr
+        # Should have written something to stderr (fallback from /dev/tty)
         mock_write.assert_called()
         written_text = mock_write.call_args[0][0]
 
