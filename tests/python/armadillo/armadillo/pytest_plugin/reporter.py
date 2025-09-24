@@ -115,7 +115,8 @@ class ArmadilloReporter:
             }
 
         # Print [ RUN ] message here - this hook may not be captured like pytest_runtest_call
-        run_msg = f"{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
+        # Add newline before RUN message to ensure it appears on its own line (pytest filename output has no trailing newline)
+        run_msg = f"\n{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
         try:
             with open("/dev/tty", "w") as tty:
                 tty.write(run_msg)
