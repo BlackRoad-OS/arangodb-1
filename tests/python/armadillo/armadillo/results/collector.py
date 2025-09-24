@@ -19,6 +19,8 @@ logger = get_logger(__name__)
 @dataclass
 class TestTiming:
     """Timing information for a test."""
+    
+    __test__ = False  # Tell pytest this is not a test class
 
     duration: float
     setup_duration: float = 0.0
@@ -28,6 +30,8 @@ class TestTiming:
 @dataclass
 class TestResultParams:
     """Parameters for recording a test result."""
+    
+    __test__ = False  # Tell pytest this is not a test class
 
     name: str
     outcome: ExecutionOutcome
