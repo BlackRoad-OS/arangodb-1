@@ -14,23 +14,11 @@ from arango import ArangoClient
 
 # Common fixtures for all test suites
 @pytest.fixture(scope="session")
-def arango_client(arango_deployment):
-    """Get ArangoDB client connected to test deployment (single server or coordinator).
-
-    Args:
-        arango_deployment: The ArangoDB deployment (single server or cluster coordinator)
-
-    Returns:
-        ArangoDatabase: Connected to _system database for admin endpoints
-    """
+def adb(arango_deployment):
+    """ArangoDB _system database client (short alias)."""
     server = arango_deployment  # Works with both single server and cluster coordinator
-
-    # Create client using the server's endpoint
     client = ArangoClient(hosts=server.endpoint)
-
-    # Connect to system database for admin endpoints
-    db = client.db('_system')
-    return db
+    return client.db("_system")
 
 
 @pytest.fixture(scope="session")
@@ -51,19 +39,11 @@ def base_url(arango_deployment):
 def pytest_configure(config):
     """Configure pytest markers for Armadillo tests."""
     # These markers should integrate with our TestSelector
+    config.addinivalue_line("markers", "shell_api: Tests for shell API functionality")
+    config.addinivalue_line("markers", "statistics: Tests for statistics API endpoints")
     config.addinivalue_line(
-        "markers",
-        "shell_api: Tests for shell API functionality"
+        "markers", "admin_endpoints: Tests for administrative endpoints"
     )
     config.addinivalue_line(
-        "markers",
-        "statistics: Tests for statistics API endpoints"
-    )
-    config.addinivalue_line(
-        "markers",
-        "admin_endpoints: Tests for administrative endpoints"
-    )
-    config.addinivalue_line(
-        "markers",
-        "converted_from_js: Tests converted from JavaScript framework"
+        "markers", "converted_from_js: Tests converted from JavaScript framework"
     )

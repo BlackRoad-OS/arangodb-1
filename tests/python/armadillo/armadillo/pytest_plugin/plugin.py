@@ -410,7 +410,7 @@ def arango_agents(arango_cluster) -> List[ArangoServer]:
     return arango_cluster.get_servers_by_role(ServerRole.AGENT)
 
 
-def pytest_fixture_setup(_fixturedef, request):
+def pytest_fixture_setup(fixturedef, request):
     """Automatic fixture setup based on markers."""
     if hasattr(request, "node") and hasattr(request.node, "iter_markers"):
         if any(
@@ -429,7 +429,7 @@ def pytest_fixture_setup(_fixturedef, request):
             )
 
 
-def pytest_collection_modifyitems(_config, items):
+def pytest_collection_modifyitems(config, items):
     """Modify test collection based on markers and configuration."""
     for item in items:
         if any(
@@ -546,7 +546,7 @@ def pytest_runtest_logreport(report):
         reporter.pytest_runtest_logreport(report)
 
 
-def pytest_report_teststatus(report, _config):
+def pytest_report_teststatus(report, config):
     """Override test status reporting to suppress pytest's progress dots and status."""
     if _is_verbose_output_enabled():
         if report.when == "call":
@@ -560,7 +560,7 @@ def pytest_report_teststatus(report, _config):
     return None
 
 
-def pytest_terminal_summary(_terminalreporter, _exitstatus, _config):
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
