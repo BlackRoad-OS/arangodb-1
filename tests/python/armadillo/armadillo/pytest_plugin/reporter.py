@@ -52,6 +52,8 @@ class ArmadilloReporter:
         self.current_file = None  # Track current test file for header display
         self.file_start_times: Dict[str, float] = {}  # Track start time per file
         self.file_test_counts: Dict[str, int] = {}  # Track test count per file
+        self.file_expected_counts: Dict[str, int] = {}  # Expected test count per file
+        self.files_completed: set = set()  # Track which files have been completed
 
     def _colorize(self, text: str, color: str) -> str:
         """Apply color to text if colors are supported."""
@@ -132,6 +134,21 @@ class ArmadilloReporter:
 
         self._write_to_terminal(summary_msg)
 
+    def _print_session_summary(self):
+        """Print the session summary (total tests, timing, etc.)."""
+        current_time = time.time()
+        total_time = int((current_time - self.session_start_time) * 1000)
+        summary_color = Colors.GREEN if self.failed_tests == 0 else Colors.RED
+        status_text = "PASSED" if self.failed_tests == 0 else "FAILED"
+        sys.stderr.write(
+            f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n"
+        )
+        sys.stderr.write(
+            f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} Ran: {self.total_tests} tests "
+            f"({self._colorize(f'{self.passed_tests} passed', Colors.GREEN)}, {self._colorize(f'{self.failed_tests} failed', Colors.RED if self.failed_tests > 0 else Colors.GREEN)}) ({total_time}ms total)\n"
+        )
+        sys.stderr.flush()
+
     def pytest_sessionstart(self, _session):
         """Handle session start."""
         self.session_start_time = time.time()
@@ -145,10 +162,6 @@ class ArmadilloReporter:
 
         # Check if we're starting a new test file and print header if needed
         if self.current_file != file_path:
-            # Print summary for the previous file if we had one
-            if self.current_file is not None:
-                self._print_file_summary(self.current_file)
-
             # Start tracking the new file
             self.current_file = file_path
             self.file_start_times[file_path] = time.time()
@@ -208,6 +221,7 @@ class ArmadilloReporter:
         if report.when == "teardown":
             test_name = self._get_test_name(report.nodeid)
             suite_name = self._get_suite_name(report.nodeid)
+            file_path = self._get_file_path(report.nodeid)
 
             # Calculate teardown time
             if (
@@ -240,23 +254,18 @@ class ArmadilloReporter:
                 )
                 sys.stderr.flush()
 
+            # Print file summary immediately after each test to ensure proper timing
+            # This happens in teardown phase to ensure all timing is complete
+            self._print_file_summary(file_path)
+
             self.suite_test_counts[suite_name] = (
                 self.suite_test_counts.get(suite_name, 0) + 1
             )
-            # Increment file test count
-            file_path = self._get_file_path(report.nodeid)
+            # Increment file test count FIRST
             self.file_test_counts[file_path] = (
                 self.file_test_counts.get(file_path, 0) + 1
             )
             self.total_tests += 1
-
-            # Check if this was the last test - if so, print summary immediately
-            if (
-                self.total_tests == self.expected_total_tests
-                and not self.summary_printed
-            ):
-                self.print_final_summary()
-                self.summary_printed = True
 
     def pytest_collection_modifyitems(self, items):
         """Handle collection completion - print file and suite info."""
@@ -273,6 +282,11 @@ class ArmadilloReporter:
             if file_path not in files:
                 files[file_path] = []
             files[file_path].append(item)
+
+        # Set expected test counts per file
+        for file_path, file_items in files.items():
+            file_path_normalized = self._get_file_path(file_items[0].nodeid)
+            self.file_expected_counts[file_path_normalized] = len(file_items)
 
         # Print file information using sys.stderr to bypass pytest's output capture
         for file_path, file_items in files.items():
@@ -297,23 +311,8 @@ class ArmadilloReporter:
         if self.summary_printed:
             return  # Already printed
 
-        # Print summary for the last file if we have one
-        if self.current_file is not None:
-            self._print_file_summary(self.current_file)
-
-        # Print final summary
-        current_time = time.time()
-        total_time = int((current_time - self.session_start_time) * 1000)
-        summary_color = Colors.GREEN if self.failed_tests == 0 else Colors.RED
-        status_text = "PASSED" if self.failed_tests == 0 else "FAILED"
-        sys.stderr.write(
-            f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n"
-        )
-        sys.stderr.write(
-            f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} Ran: {self.total_tests} tests "
-            f"({self._colorize(f'{self.passed_tests} passed', Colors.GREEN)}, {self._colorize(f'{self.failed_tests} failed', Colors.RED if self.failed_tests > 0 else Colors.GREEN)}) ({total_time}ms total)\n"
-        )
-        sys.stderr.flush()
+        self._print_session_summary()
+        self.summary_printed = True
 
 
 # Global reporter instance
