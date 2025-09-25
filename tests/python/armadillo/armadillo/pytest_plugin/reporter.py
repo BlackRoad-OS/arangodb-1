@@ -136,8 +136,11 @@ class ArmadilloReporter:
 
     def _print_session_summary(self):
         """Print the session summary (total tests, timing, etc.)."""
-        current_time = time.time()
-        total_time = int((current_time - self.session_start_time) * 1000)
+        # Use captured session_finish_time if available, otherwise current time
+        end_time = (
+            self.session_finish_time if self.session_finish_time > 0 else time.time()
+        )
+        total_time = int((end_time - self.session_start_time) * 1000)
         summary_color = Colors.GREEN if self.failed_tests == 0 else Colors.RED
         status_text = "PASSED" if self.failed_tests == 0 else "FAILED"
         sys.stderr.write(
@@ -151,7 +154,7 @@ class ArmadilloReporter:
 
     def pytest_sessionstart(self, _session):
         """Handle session start."""
-        self.session_start_time = time.time()
+        # session_start_time will be set by the plugin after server deployment
         # Don't print session start here - will be handled by file processing
 
     def pytest_runtest_logstart(self, nodeid, _location):
@@ -301,10 +304,9 @@ class ArmadilloReporter:
 
     def pytest_sessionfinish(self, _session, exitstatus):
         """Handle session finish - store data for later summary."""
-        # Don't print summary here - it will be printed by pytest_terminal_summary
-        # which runs after all cleanup is complete
+        # session_finish_time is now set by the plugin before cleanup
+        # Summary is printed immediately by the plugin before server shutdown
         self.final_exitstatus = exitstatus
-        self.session_finish_time = time.time()
 
     def print_final_summary(self):
         """Print the final test summary."""

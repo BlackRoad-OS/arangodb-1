@@ -4,6 +4,7 @@ import asyncio
 import atexit
 import logging
 import pytest
+import time
 import traceback
 from typing import Generator, Optional, Dict, Any, List
 from ..core.config import load_config, get_config
@@ -507,6 +508,8 @@ def pytest_sessionstart(session):
     if not framework_config.compact_mode:
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionstart(session)
+        # Set the actual test start time AFTER server deployment is complete
+        reporter.session_start_time = time.time()
 
 
 def _is_verbose_output_enabled():
@@ -521,6 +524,15 @@ def _is_verbose_output_enabled():
 def pytest_sessionfinish(session, exitstatus):
     """Clean up all resources at the end of test session."""
     logger.debug("Starting pytest plugin cleanup")
+
+    # Capture the test end time BEFORE server shutdown begins
+    if _is_verbose_output_enabled():
+        reporter = get_armadillo_reporter()
+        reporter.session_finish_time = time.time()
+        # Print the final summary immediately, before any server cleanup
+        reporter.print_final_summary()
+        reporter.pytest_sessionfinish(session, exitstatus)
+
     try:
         _cleanup_all_deployments()
         _cleanup_all_processes()
@@ -534,9 +546,6 @@ def pytest_sessionfinish(session, exitstatus):
             stop_watchdog()
         except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.debug("Error stopping watchdog: %s", e)
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_sessionfinish(session, exitstatus)
 
 
 def pytest_runtest_setup(item):
