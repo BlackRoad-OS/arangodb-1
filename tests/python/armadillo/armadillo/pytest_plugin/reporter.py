@@ -50,6 +50,8 @@ class ArmadilloReporter:
         self.summary_printed = False
         self.use_colors = Colors.is_color_supported()
         self.current_file = None  # Track current test file for header display
+        self.file_start_times: Dict[str, float] = {}  # Track start time per file
+        self.file_test_counts: Dict[str, int] = {}  # Track test count per file
 
     def _colorize(self, text: str, color: str) -> str:
         """Apply color to text if colors are supported."""
@@ -112,6 +114,29 @@ class ArmadilloReporter:
             sys.stderr.write(header_msg)
             sys.stderr.flush()
 
+    def _print_file_summary(self, file_path: str):
+        """Print a summary for a completed test file."""
+        test_count = self.file_test_counts.get(file_path, 0)
+        if test_count == 0:
+            return  # No tests in this file
+
+        # Calculate file execution time
+        current_time = time.time()
+        file_start_time = self.file_start_times.get(file_path, current_time)
+        file_duration_ms = int((current_time - file_start_time) * 1000)
+
+        # Print file summary
+        summary_msg = f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(file_path, Colors.BOLD)} ran ({file_duration_ms}ms total)\n"
+
+        try:
+            with open("/dev/tty", "w") as tty:
+                tty.write(summary_msg)
+                tty.flush()
+        except (OSError, IOError):
+            # Fallback to stderr if /dev/tty is not available
+            sys.stderr.write(summary_msg)
+            sys.stderr.flush()
+
     def pytest_sessionstart(self, _session):
         """Handle session start."""
         self.session_start_time = time.time()
@@ -125,10 +150,15 @@ class ArmadilloReporter:
 
         # Check if we're starting a new test file and print header if needed
         if self.current_file != file_path:
+            # Print summary for the previous file if we had one
+            if self.current_file is not None:
+                self._print_file_summary(self.current_file)
+
+            # Start tracking the new file
             self.current_file = file_path
-            # If file_path doesn't start with 'tests/', prepend it
-            display_path = file_path if file_path.startswith('tests/') else f"tests/{file_path}"
-            self._print_file_header(display_path)
+            self.file_start_times[file_path] = time.time()
+            self.file_test_counts[file_path] = 0
+            self._print_file_header(file_path)
 
         # Track suite information
         if suite_name not in self.suite_start_times:
@@ -225,6 +255,11 @@ class ArmadilloReporter:
             self.suite_test_counts[suite_name] = (
                 self.suite_test_counts.get(suite_name, 0) + 1
             )
+            # Increment file test count
+            file_path = self._get_file_path(report.nodeid)
+            self.file_test_counts[file_path] = (
+                self.file_test_counts.get(file_path, 0) + 1
+            )
             self.total_tests += 1
 
             # Check if this was the last test - if so, print summary immediately
@@ -274,11 +309,9 @@ class ArmadilloReporter:
         if self.summary_printed:
             return  # Already printed
 
-        # Print suite summaries using sys.stderr to bypass pytest's output capture
-        for suite_name, test_count in self.suite_test_counts.items():
-            sys.stderr.write(
-                f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(suite_name, Colors.BOLD)} ran (tearDownAll: 0ms)\n"
-            )
+        # Print summary for the last file if we have one
+        if self.current_file is not None:
+            self._print_file_summary(self.current_file)
 
         # Print final summary
         current_time = time.time()
