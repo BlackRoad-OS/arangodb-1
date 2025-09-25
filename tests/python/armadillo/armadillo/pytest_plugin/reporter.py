@@ -59,6 +59,15 @@ class ArmadilloReporter:
             return text
         return f"{color}{text}{Colors.RESET}"
 
+    def _write_to_terminal(self, message: str) -> None:
+        """Write message directly to terminal.
+
+        Since pytest is run with -s (no output capture), we can write directly
+        to stderr without needing /dev/tty hacks.
+        """
+        sys.stderr.write(message)
+        sys.stderr.flush()
+
     def _get_timestamp(self) -> str:
         """Get formatted timestamp."""
         return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -105,14 +114,7 @@ class ArmadilloReporter:
         )  # Limit width to 80 chars
         header_msg += f"{self._colorize(underline, Colors.CYAN)}\n"
 
-        try:
-            with open("/dev/tty", "w") as tty:
-                tty.write(header_msg)
-                tty.flush()
-        except (OSError, IOError):
-            # Fallback to stderr if /dev/tty is not available
-            sys.stderr.write(header_msg)
-            sys.stderr.flush()
+        self._write_to_terminal(header_msg)
 
     def _print_file_summary(self, file_path: str):
         """Print a summary for a completed test file."""
@@ -128,14 +130,7 @@ class ArmadilloReporter:
         # Print file summary
         summary_msg = f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(file_path, Colors.BOLD)} ran ({file_duration_ms}ms total)\n"
 
-        try:
-            with open("/dev/tty", "w") as tty:
-                tty.write(summary_msg)
-                tty.flush()
-        except (OSError, IOError):
-            # Fallback to stderr if /dev/tty is not available
-            sys.stderr.write(summary_msg)
-            sys.stderr.flush()
+        self._write_to_terminal(summary_msg)
 
     def pytest_sessionstart(self, _session):
         """Handle session start."""
@@ -176,14 +171,7 @@ class ArmadilloReporter:
 
         # Print [ RUN ] message here - this hook may not be captured like pytest_runtest_call
         run_msg = f"{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
-        try:
-            with open("/dev/tty", "w") as tty:
-                tty.write(run_msg)
-                tty.flush()
-        except (OSError, IOError):
-            # Fallback to stderr if /dev/tty is not available
-            sys.stderr.write(run_msg)
-            sys.stderr.flush()
+        self._write_to_terminal(run_msg)
 
     def pytest_runtest_setup(self, item):
         """Handle test setup start."""

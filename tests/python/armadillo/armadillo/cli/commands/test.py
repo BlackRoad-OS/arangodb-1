@@ -40,10 +40,6 @@ class TestRunOptions(BaseModel):
     )
     parallel: bool = Field(False, description="Run tests in parallel")
     max_workers: Optional[int] = Field(None, description="Maximum parallel workers")
-    show_output: bool = Field(
-        False,
-        description="Show ArangoDB server output during tests (disables pytest capture)",
-    )
     extra_args: Optional[List[str]] = Field(
         None, description="Additional arguments to pass to pytest"
     )
@@ -131,12 +127,6 @@ def run(
     max_workers: Optional[int] = typer.Option(
         None, "--max-workers", help="Maximum parallel workers"
     ),
-    show_output: bool = typer.Option(
-        False,
-        "--show-output",
-        "-s",
-        help="Show ArangoDB server output during tests (disables pytest capture)",
-    ),
     extra_args: Optional[List[str]] = typer.Option(
         None, "--pytest-arg", help="Additional arguments to pass to pytest"
     ),
@@ -169,7 +159,6 @@ def run(
             keep_instances_on_failure=keep_instances_on_failure,
             parallel=parallel,
             max_workers=max_workers,
-            show_output=show_output,
             extra_args=extra_args,
             log_level=log_level,
             compact=compact,
@@ -208,6 +197,9 @@ def _execute_test_run(options: TestRunOptions) -> None:
     pytest_args = ["python", "-m", "pytest"]
     pytest_args.extend(["-p", "armadillo.pytest_plugin.plugin"])
 
+    # Always disable output capture to allow our reporter to work without /dev/tty hacks
+    pytest_args.append("-s")
+
     if options.compact:
         pytest_args.extend(["-q", "--tb=no"])
     else:
@@ -216,9 +208,6 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
     for path in options.test_paths:
         pytest_args.append(str(path))
-
-    if options.show_output:
-        pytest_args.append("-s")
 
     # Configure timeout
     if options.timeout:
