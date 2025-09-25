@@ -996,9 +996,15 @@ class InstanceManager:
             raise
 
     def _release_ports(self) -> None:
-        """Release all allocated ports."""
+        """Release all allocated ports for this deployment."""
         try:
-            self._deps.port_manager.release_all()
+            # Release ports for each server in this deployment
+            for server in self.state.servers.values():
+                if hasattr(server, "port"):
+                    self._deps.port_manager.release_port(server.port)
+                    logger.debug(
+                        "Released port %s for server %s", server.port, server.server_id
+                    )
         except (OSError, RuntimeError, ValueError) as e:
             logger.warning("Error releasing ports: %s", e)
 
