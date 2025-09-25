@@ -213,6 +213,10 @@ def _execute_test_run(options: TestRunOptions) -> None:
     if options.timeout:
         pytest_args.extend(["--timeout", str(options.timeout)])
 
+    # Configure deployment mode for pytest subprocess
+    os.environ["ARMADILLO_DEPLOYMENT_MODE"] = deployment_mode.value
+    console.print(f"[cyan]🚀 Using {deployment_mode.value} deployment mode[/cyan]")
+
     # Configure instance retention on failure
     if options.keep_instances_on_failure:
         os.environ["ARMADILLO_KEEP_INSTANCES_ON_FAILURE"] = "1"
