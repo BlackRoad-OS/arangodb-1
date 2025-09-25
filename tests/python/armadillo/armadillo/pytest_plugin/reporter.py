@@ -98,9 +98,11 @@ class ArmadilloReporter:
     def _print_file_header(self, file_path: str):
         """Print a colored header when starting a new test file."""
         header_msg = f"\n🚀 {self._colorize('Running', Colors.CYAN)} {self._colorize(file_path, Colors.BOLD)}\n"
-        underline = "─" * min(len(f"🚀 Running {file_path}"), 80)  # Limit width to 80 chars
+        underline = "─" * min(
+            len(f"🚀 Running {file_path}"), 80
+        )  # Limit width to 80 chars
         header_msg += f"{self._colorize(underline, Colors.CYAN)}\n"
-        
+
         try:
             with open("/dev/tty", "w") as tty:
                 tty.write(header_msg)
@@ -124,7 +126,9 @@ class ArmadilloReporter:
         # Check if we're starting a new test file and print header if needed
         if self.current_file != file_path:
             self.current_file = file_path
-            self._print_file_header(file_path)
+            # If file_path doesn't start with 'tests/', prepend it
+            display_path = file_path if file_path.startswith('tests/') else f"tests/{file_path}"
+            self._print_file_header(display_path)
 
         # Track suite information
         if suite_name not in self.suite_start_times:

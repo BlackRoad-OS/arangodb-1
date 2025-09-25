@@ -539,13 +539,6 @@ def pytest_sessionfinish(session, exitstatus):
         reporter.pytest_sessionfinish(session, exitstatus)
 
 
-def pytest_runtest_logstart(nodeid, location):
-    """Handle test run start."""
-    if _is_verbose_output_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_logstart(nodeid, location)
-
-
 def pytest_runtest_setup(item):
     """Handle test setup start."""
     if _is_verbose_output_enabled():
@@ -572,6 +565,17 @@ def pytest_runtest_logreport(report):
     if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_logreport(report)
+
+
+def pytest_runtest_logstart(nodeid, location):
+    """Override pytest's default test file output to suppress filename printing."""
+    if _is_verbose_output_enabled():
+        # Call our reporter but suppress pytest's default filename output
+        reporter = get_armadillo_reporter()
+        reporter.pytest_runtest_logstart(nodeid, location)
+        # Return empty string to suppress pytest's default output
+        return ""
+    return None
 
 
 def pytest_report_teststatus(report, config):

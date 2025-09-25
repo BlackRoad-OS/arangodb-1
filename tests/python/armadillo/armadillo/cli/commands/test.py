@@ -210,6 +210,9 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
     if options.compact:
         pytest_args.extend(["-q", "--tb=no"])
+    else:
+        # Even in verbose mode, suppress pytest's filename output since we have our own
+        pytest_args.append("-q")
 
     for path in options.test_paths:
         pytest_args.append(str(path))
