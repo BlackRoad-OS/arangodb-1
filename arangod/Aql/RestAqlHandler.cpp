@@ -835,9 +835,8 @@ auto RestAqlHandler::handleFinishQuery(std::string const& idString)
   answerBuilder.add(StaticStrings::Code, VPackValue(res.errorNumber()));
   answerBuilder.close();
 
-  generateResult(
-      rest::ResponseCode::OK,
-      static_cast<velocypack::Buffer<uint8_t>&&>(std::move(buffer)));
+  generateResult(rest::ResponseCode::OK,
+                 static_cast<velocypack::Buffer<uint8_t>&&>(std::move(buffer)));
 }
 
 RequestLane RestAqlHandler::lane() const {
