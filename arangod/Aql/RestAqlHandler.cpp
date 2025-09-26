@@ -328,7 +328,9 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
       co_await createTransactionContext(access, origin), std::move(options));
   TRI_ASSERT(clusterQueryId == 0 || clusterQueryId == q->id());
 
-  velocypack::SupervisedBuffer buffer(_engine->getQuery().resourceMonitor());
+  VPackBufferUInt8 buffer;  // This buffer is for http response, cannot use
+                            // SupervisedBuffer since the response will live
+                            // longer than the query and its ResourceMonitor
   VPackBuilder answerBuilder(buffer);
   answerBuilder.openObject();
   answerBuilder.add(StaticStrings::Error, VPackValue(false));
@@ -395,8 +397,7 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
 
   _queryRegistry->insertQuery(std::move(q), ttl, qs, std::move(rGuard));
 
-  generateResult(rest::ResponseCode::OK,
-                 static_cast<velocypack::Buffer<uint8_t>&&>(std::move(buffer)));
+  generateResult(rest::ResponseCode::OK, std::move(buffer));
 }
 
 // PUT method for /_api/aql/<operation>/<queryId>, (internal)
@@ -715,8 +716,10 @@ auto RestAqlHandler::handleUseQuery(std::string const& operation,
     opts = &_engine->getQuery().vpackOptions();
   }
 
-  velocypack::SupervisedBuffer answerBuffer(
-      _engine->getQuery().resourceMonitor());
+  VPackBufferUInt8
+      answerBuffer;  // This buffer is for http response, cannot use
+                     // SupervisedBuffer since the response will live longer
+                     // than the query and its ResourceMonitor
   VPackBuilder answerBuilder(answerBuffer);
   answerBuilder.openObject(/*unindexed*/ true);
 
@@ -777,10 +780,7 @@ auto RestAqlHandler::handleUseQuery(std::string const& operation,
 
   answerBuilder.close();
 
-  generateResult(
-      rest::ResponseCode::OK,
-      static_cast<velocypack::Buffer<uint8_t>&&>(std::move(answerBuffer)),
-      opts);
+  generateResult(rest::ResponseCode::OK, std::move(answerBuffer), opts);
 
   co_return;
 }
@@ -821,7 +821,9 @@ auto RestAqlHandler::handleFinishQuery(std::string const& idString)
       << "Finalizing query with use_count " << query.use_count();
   auto res = co_await query->finalizeClusterQuery(errorCode);
 
-  velocypack::SupervisedBuffer buffer(_engine->getQuery().resourceMonitor());
+  VPackBufferUInt8 buffer;  // This buffer is for http response, cannot use
+  // SupervisedBuffer since the response will live
+  // longer than the query and its ResourceMonitor
   VPackBuilder answerBuilder(buffer);
   answerBuilder.openObject(/*unindexed*/ true);
   answerBuilder.add(VPackValue("stats"));
@@ -835,8 +837,7 @@ auto RestAqlHandler::handleFinishQuery(std::string const& idString)
   answerBuilder.add(StaticStrings::Code, VPackValue(res.errorNumber()));
   answerBuilder.close();
 
-  generateResult(rest::ResponseCode::OK,
-                 static_cast<velocypack::Buffer<uint8_t>&&>(std::move(buffer)));
+  generateResult(rest::ResponseCode::OK, std::move(buffer));
 }
 
 RequestLane RestAqlHandler::lane() const {
