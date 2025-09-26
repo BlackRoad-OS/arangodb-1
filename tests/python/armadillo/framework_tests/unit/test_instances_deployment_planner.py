@@ -24,8 +24,14 @@ class TestStandardDeploymentPlanner:
         # Create mock logger
         self.mock_logger = Mock()
 
+        # Create mock config provider
+        self.mock_config_provider = Mock()
+        self.mock_config_provider.verbose = 0  # Default to quiet mode for tests
+
         self.planner = StandardDeploymentPlanner(
-            port_allocator=self.mock_port_allocator, logger=self.mock_logger
+            port_allocator=self.mock_port_allocator,
+            logger=self.mock_logger,
+            config_provider=self.mock_config_provider,
         )
 
     def _get_next_port(self) -> int:

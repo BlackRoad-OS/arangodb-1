@@ -47,10 +47,14 @@ class TestEnvironmentLoading:
         """Test boolean conversion from environment values."""
         assert _convert_env_value("true") is True
         assert _convert_env_value("false") is False
-        assert _convert_env_value("1") is True
-        assert _convert_env_value("0") is False
         assert _convert_env_value("yes") is True
         assert _convert_env_value("no") is False
+
+    def test_convert_env_value_integer(self):
+        """Test integer conversion from environment values."""
+        assert _convert_env_value("1") == 1
+        assert _convert_env_value("0") == 0
+        assert _convert_env_value("42") == 42
 
     def test_convert_env_value_numeric(self):
         """Test numeric conversion from environment values."""
