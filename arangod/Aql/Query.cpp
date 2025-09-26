@@ -212,9 +212,6 @@ Query::Query(std::shared_ptr<transaction::Context> ctx, QueryString queryString,
 
 Query::~Query() {
   TRI_ASSERT(!_isExecuting);
-  if (!_planSliceCopy.isNone()) {
-    _resourceMonitor->decreaseMemoryUsage(_planSliceCopy.byteSize());
-  }
 
   // In the most derived class needs to explicitly call 'destroy()'
   // because otherwise we have potential data races on the vptr
@@ -476,7 +473,6 @@ async<void> Query::prepareQuery() {
         TRI_IF_FAILURE("Query::serializePlans1") {
           THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
         }
-        _resourceMonitor->increaseMemoryUsage(_planSliceCopy.byteSize());
       } catch (std::exception const& ex) {
         // must clear _planSliceCopy here so that the destructor of
         // Query doesn't subtract the memory used by _planSliceCopy
@@ -563,10 +559,9 @@ void Query::storePlanInCache(ExecutionPlan& plan) {
       /*verbosePlans*/ true, /*explainInternals*/ true,
       /*explainRegisters*/ false);
 
-  // sb needs to be a shared_ptr as serialized will be moved to outside the
-  // scope
-  auto sb = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-  velocypack::Builder serialized(sb);
+  // This builder can't be supervised; this will be moved to queryPlanCache,
+  // which will live longer than query, hence ResourceMonitor
+  velocypack::Builder serialized;
   // Note that in this serialization it is crucial to include the numeric
   // ids, otherwise the Plan can not be instantiated correctly, when this
   // plan comes back from the query plan cache!
