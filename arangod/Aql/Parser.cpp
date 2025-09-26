@@ -138,6 +138,7 @@ QueryResult Parser::parseWithDetails() {
   QueryResult result;
   result.collectionNames = _query.collections().collectionNames();
   result.bindParameters = _ast.bindParameterNames();
+  // sb needs to be shared_ptr as this escapes to outside of this class
   auto sb =
       std::make_shared<velocypack::SupervisedBuffer>(_query.resourceMonitor());
   auto builder = std::make_shared<VPackBuilder>(sb);
