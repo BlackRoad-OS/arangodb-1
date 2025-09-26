@@ -27,8 +27,8 @@
 #include "Aql/Collection.h"
 #include "Aql/RegisterPlan.h"
 #include "Aql/QueryContext.h"
-#include "Cluster/ServerState.h"
 #include "Basics/ResourceUsage.h"
+#include "Cluster/ServerState.h"
 
 using namespace arangodb;
 using namespace arangodb::aql;
