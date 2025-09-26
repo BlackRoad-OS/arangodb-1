@@ -96,6 +96,7 @@ test_app = typer.Typer(help="Execute tests")
 
 @test_app.command()
 def run(
+    ctx: typer.Context,
     test_paths: List[str] = typer.Argument(help="Test paths to execute"),
     cluster: bool = typer.Option(
         False, "--cluster", help="Use cluster deployment instead of single server"
@@ -164,8 +165,12 @@ def run(
             compact=compact,
         )
 
+        # Get verbose level from CLI context
+        cli_options = ctx.obj.get("cli_options", {}) if ctx.obj else {}
+        verbose = getattr(cli_options, "verbose", 0)
+
         # Use the validated options for the rest of the function
-        _execute_test_run(options)
+        _execute_test_run(options, verbose=verbose)
 
     except Exception as e:
         logger.error("Test execution failed: %s", e)
@@ -173,7 +178,7 @@ def run(
         raise typer.Exit(1)
 
 
-def _execute_test_run(options: TestRunOptions) -> None:
+def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
     """Execute test run with validated options."""
     # Load and configure the framework
     deployment_mode = (
@@ -216,6 +221,9 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Configure deployment mode for pytest subprocess
     os.environ["ARMADILLO_DEPLOYMENT_MODE"] = deployment_mode.value
     console.print(f"[cyan]🚀 Using {deployment_mode.value} deployment mode[/cyan]")
+
+    # Configure verbose level for pytest subprocess
+    os.environ["ARMADILLO_VERBOSE"] = str(verbose)
 
     # Configure instance retention on failure
     if options.keep_instances_on_failure:

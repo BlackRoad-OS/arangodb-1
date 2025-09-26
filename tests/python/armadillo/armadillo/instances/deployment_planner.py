@@ -4,9 +4,11 @@ from typing import Optional, List, Protocol
 
 from ..core.types import DeploymentMode, ServerRole, ServerConfig, ClusterConfig
 from ..core.log import Logger
+from ..core.config import ConfigProvider
 from ..utils.ports import PortAllocator
 from ..utils.filesystem import server_dir
 from .deployment_plan import DeploymentPlan
+from .server_config_builder import ServerConfigBuilder
 
 
 class DeploymentPlanner(Protocol):
@@ -24,9 +26,16 @@ class DeploymentPlanner(Protocol):
 class StandardDeploymentPlanner:
     """Creates deployment plans for ArangoDB server configurations."""
 
-    def __init__(self, port_allocator: PortAllocator, logger: Logger) -> None:
+    def __init__(
+        self,
+        port_allocator: PortAllocator,
+        logger: Logger,
+        config_provider: ConfigProvider,
+    ) -> None:
         self._port_allocator = port_allocator
         self._logger = logger
+        self._config_provider = config_provider
+        self._server_config_builder = ServerConfigBuilder(config_provider, logger)
 
     def create_deployment_plan(
         self,
@@ -61,14 +70,25 @@ class StandardDeploymentPlanner:
         )
         return plan
 
+    def _configure_server_logging(self, args: dict) -> None:
+        """Configure server logging arguments based on framework verbose mode."""
+        server_args = self._server_config_builder.build_server_args()
+        args.update(server_args)
+
     def _plan_single_server(self, plan: "DeploymentPlan", deployment_id: str) -> None:
         """Plan single server deployment."""
         port = self._port_allocator.allocate_port()
+
+        # Configure server arguments including logging
+        args = {}
+        self._configure_server_logging(args)
+
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
             port=port,
             data_dir=server_dir(deployment_id) / "single" / "data",
             log_file=server_dir(deployment_id) / "single" / "arangod.log",
+            args=args,
         )
         plan.servers.append(server_config)
         plan.coordination_endpoints.append(f"http://127.0.0.1:{port}")
@@ -108,18 +128,23 @@ class StandardDeploymentPlanner:
         agent_endpoints = []
         for i in range(cluster_config.agents):
             port = self._port_allocator.allocate_port()
+
+            # Configure server arguments including logging
+            args = {
+                "agency.activate": "true",
+                "agency.size": str(cluster_config.agents),
+                "agency.supervision": "true",
+                "server.authentication": "false",  # Start with auth disabled
+                "agency.my-address": f"tcp://127.0.0.1:{port}",
+            }
+            self._configure_server_logging(args)
+
             agent_config = ServerConfig(
                 role=ServerRole.AGENT,
                 port=port,
                 data_dir=server_dir(deployment_id) / f"agent_{i}" / "data",
                 log_file=server_dir(deployment_id) / f"agent_{i}" / "arangod.log",
-                args={
-                    "agency.activate": "true",
-                    "agency.size": str(cluster_config.agents),
-                    "agency.supervision": "true",
-                    "server.authentication": "false",  # Start with auth disabled
-                    "agency.my-address": f"tcp://127.0.0.1:{port}",
-                },
+                args=args,
             )
             plan.servers.append(agent_config)
             agent_endpoints.append(f"tcp://127.0.0.1:{port}")
@@ -135,17 +160,22 @@ class StandardDeploymentPlanner:
         """Create database server configurations."""
         for i in range(cluster_config.dbservers):
             port = self._port_allocator.allocate_port()
+
+            # Configure server arguments including logging
+            args = {
+                "cluster.my-role": "PRIMARY",
+                "cluster.my-address": f"tcp://127.0.0.1:{port}",
+                "cluster.agency-endpoint": agent_endpoints[0],
+                "server.authentication": "false",
+            }
+            self._configure_server_logging(args)
+
             dbserver_config = ServerConfig(
                 role=ServerRole.DBSERVER,
                 port=port,
                 data_dir=server_dir(deployment_id) / f"dbserver_{i}" / "data",
                 log_file=server_dir(deployment_id) / f"dbserver_{i}" / "arangod.log",
-                args={
-                    "cluster.my-role": "PRIMARY",
-                    "cluster.my-address": f"tcp://127.0.0.1:{port}",
-                    "cluster.agency-endpoint": agent_endpoints[0],
-                    "server.authentication": "false",
-                },
+                args=args,
             )
             plan.servers.append(dbserver_config)
 
@@ -160,19 +190,24 @@ class StandardDeploymentPlanner:
         coordinator_endpoints = []
         for i in range(cluster_config.coordinators):
             port = self._port_allocator.allocate_port()
+
+            # Configure server arguments including logging
+            args = {
+                "cluster.my-role": "COORDINATOR",
+                "cluster.my-address": f"tcp://127.0.0.1:{port}",
+                "cluster.agency-endpoint": agent_endpoints[0],
+                "server.authentication": "false",
+                "foxx.force-update-on-startup": "true",  # Wait for Foxx services to be ready
+                "cluster.default-replication-factor": "2",
+            }
+            self._configure_server_logging(args)
+
             coordinator_config = ServerConfig(
                 role=ServerRole.COORDINATOR,
                 port=port,
                 data_dir=server_dir(deployment_id) / f"coordinator_{i}" / "data",
                 log_file=server_dir(deployment_id) / f"coordinator_{i}" / "arangod.log",
-                args={
-                    "cluster.my-role": "COORDINATOR",
-                    "cluster.my-address": f"tcp://127.0.0.1:{port}",
-                    "cluster.agency-endpoint": agent_endpoints[0],
-                    "server.authentication": "false",
-                    "foxx.force-update-on-startup": "true",  # Wait for Foxx services to be ready
-                    "cluster.default-replication-factor": "2",
-                },
+                args=args,
             )
             plan.servers.append(coordinator_config)
             coordinator_endpoints.append(f"http://127.0.0.1:{port}")

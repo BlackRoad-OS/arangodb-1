@@ -75,7 +75,9 @@ class ManagerDependencies:
             port_manager=final_port_manager,
             auth_provider=get_auth_provider(),
             deployment_planner=StandardDeploymentPlanner(
-                port_allocator=final_port_manager, logger=final_logger
+                port_allocator=final_port_manager,
+                logger=final_logger,
+                config_provider=final_config,
             ),
             server_factory=StandardServerFactory(
                 config_provider=final_config,

@@ -41,13 +41,7 @@ def _convert_env_value(value: str) -> Any:
     if not value:
         return None
 
-    # Handle boolean values
-    if value.lower() in ("true", "1", "yes", "on"):
-        return True
-    elif value.lower() in ("false", "0", "no", "off"):
-        return False
-
-    # Try to convert to int
+    # Try to convert to int first (before boolean check)
     try:
         return int(value)
     except ValueError:
@@ -58,6 +52,12 @@ def _convert_env_value(value: str) -> Any:
         return float(value)
     except ValueError:
         pass
+
+    # Handle boolean values (after numeric conversion)
+    if value.lower() in ("true", "yes", "on"):
+        return True
+    elif value.lower() in ("false", "no", "off"):
+        return False
 
     # Handle lists (comma-separated)
     if "," in value:

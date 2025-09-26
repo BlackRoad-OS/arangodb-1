@@ -4,6 +4,7 @@ import asyncio
 import atexit
 import logging
 import pytest
+import sys
 import time
 import traceback
 from typing import Generator, Optional, Dict, Any, List
@@ -79,7 +80,9 @@ class ArmadilloPlugin:
         config.addinivalue_line("markers", "smoke_test: Basic smoke test")
         config.addinivalue_line("markers", "regression: Regression test")
         config.addinivalue_line("markers", "performance: Performance measurement test")
-        self._armadillo_config = load_config(verbose=config.option.verbose)
+        # Don't pass pytest's verbose level to load_config - let it load from environment variables
+        # (ARMADILLO_VERBOSE) set by the CLI process
+        self._armadillo_config = load_config()
         configure_logging(
             level="DEBUG" if config.option.verbose > 0 else "INFO",
             enable_console=True,
@@ -236,7 +239,7 @@ def pytest_runtest_call(item: pytest.Item) -> None:
 @pytest.fixture(scope="session")
 def arango_single_server() -> Generator[ArangoServer, None, None]:
     """Provide a single ArangoDB server for testing."""
-    server = ArangoServer("test_single_server", role=ServerRole.SINGLE)
+    server = _create_configured_server("test_single_server")
     try:
         logger.info("Starting session single server")
         server.start(timeout=60.0)
@@ -296,7 +299,7 @@ def _get_or_create_cluster(self) -> "InstanceManager":
 def _get_or_create_single_server(self) -> ArangoServer:
     """Get or create session single server."""
     if "single" not in self._session_servers:
-        server = ArangoServer("test_single_server", role=ServerRole.SINGLE)
+        server = _create_configured_server("test_single_server")
         logger.info("Starting session single server")
         server.start(timeout=60.0)
         health = server.health_check_sync(timeout=10.0)
@@ -307,6 +310,37 @@ def _get_or_create_single_server(self) -> ArangoServer:
     return self._session_servers["single"]
 
 
+def _create_configured_server(server_id: str) -> ArangoServer:
+    """Create an ArangoDB server with proper logging configuration.
+
+    This centralizes the server creation logic to eliminate duplication across
+    all the pytest plugin's server creation functions.
+
+    Args:
+        server_id: Unique identifier for the server
+
+    Returns:
+        Configured ArangoServer instance (not started)
+    """
+    from ..core.config import get_config
+    from ..core.log import get_logger
+    from ..instances.server_config_builder import ServerConfigBuilder
+    from ..instances.server_factory import MinimalConfig
+
+    config = get_config()
+    server_logger = get_logger(__name__)
+
+    # Use centralized server configuration logic
+    config_builder = ServerConfigBuilder(config, server_logger)
+    server_args = config_builder.build_server_args()
+
+    # Create minimal config with logging arguments
+    minimal_config = MinimalConfig(args=server_args)
+
+    # Create configured server (caller is responsible for starting)
+    return ArangoServer(server_id, role=ServerRole.SINGLE, config=minimal_config)
+
+
 ArmadilloPlugin._get_or_create_cluster = _get_or_create_cluster
 ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 
@@ -315,7 +349,7 @@ ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server."""
     server_id = f"test_func_{random_id(8)}"
-    server = ArangoServer(server_id, role=ServerRole.SINGLE)
+    server = _create_configured_server(server_id)
     try:
         logger.info("Starting function server %s", server_id)
         server.start(timeout=30.0)
