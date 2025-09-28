@@ -617,7 +617,10 @@ auto EngineInfoContainerDBServerServerBased::buildEnginesInternal(
       // variant, but we have just waited 2 seconds and will linearly lock all
       // servers, any performance optimization here will not have measureable
       // impact.
-      VPackBuilder overwrittenOptions;
+      auto sbForOverwrittenOptions =
+          std::make_shared<velocypack::SupervisedBuffer>(
+              _query.resourceMonitor());
+      VPackBuilder overwrittenOptions(sbForOverwrittenOptions);
       overwrittenOptions.openObject();
       // patch query id
       overwrittenOptions.add("clusterQueryId", VPackValue(clusterQueryId));
@@ -801,8 +804,8 @@ EngineInfoContainerDBServerServerBased::cleanupEngines(
   options.timeout = network::Timeout(10.0);  // Picked arbitrarily
 
   // Shutdown query snippets
-  auto supervisedBody = std::make_shared<velocypack::SupervisedBuffer>(_query.resourceMonitor());
-  VPackBuilder builder(supervisedBody);
+  velocypack::SupervisedBuffer body(_query.resourceMonitor());
+  VPackBuilder builder(body);
   builder.openObject();
   builder.add(StaticStrings::Code, VPackValue(errorCode));
   builder.close();
@@ -813,13 +816,12 @@ EngineInfoContainerDBServerServerBased::cleanupEngines(
     futureResponses.emplace_back(network::sendRequestRetry(
         pool, "server:" + server, fuerte::RestVerb::Delete,
         absl::StrCat(::finishUrl, queryId),
-        /*copy*/ *supervisedBody, options));
+        /*copy*/ body, options));
   }
   _query.incHttpRequests(static_cast<unsigned>(serverQueryIds.size()));
 
   // Shutdown traverser engines
-  auto supervisedNoBody =
-      std::make_shared<velocypack::SupervisedBuffer>(_query.resourceMonitor());
+  velocypack::SupervisedBuffer noBody(_query.resourceMonitor());
 
   for (auto& gn : _graphNodes) {
     auto allEngines = gn->engines();
@@ -827,7 +829,7 @@ EngineInfoContainerDBServerServerBased::cleanupEngines(
       TRI_ASSERT(!engine.first.starts_with("server:"));
       futureResponses.emplace_back(network::sendRequestRetry(
           pool, "server:" + engine.first, fuerte::RestVerb::Delete,
-          absl::StrCat(::traverserUrl, engine.second), *supervisedNoBody,
+          absl::StrCat(::traverserUrl, engine.second), /*copy*/ noBody,
           options));
     }
     _query.incHttpRequests(static_cast<unsigned>(allEngines->size()));
