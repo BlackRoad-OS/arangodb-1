@@ -873,11 +873,9 @@ futures::Future<futures::Unit> Query::execute(
         }
         // NOTE: If the options have a shorter lifetime than the builder, it
         // gets invalid (at least set() and close() are broken).
-        auto sb =
-            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-        auto supervisedBuilder = std::make_shared<VPackBuilder>(sb);
-        supervisedBuilder->options = &vpackOptions();
-        queryResult.data = supervisedBuilder;
+        auto builder = std::make_shared<VPackBuilder>();
+        builder->options = &vpackOptions();
+        queryResult.data = builder;
 
         // reserve some space in Builder to avoid frequent reallocs
         queryResult.data->reserve(16 * 1024);
@@ -1148,6 +1146,7 @@ QueryResultV8 Query::executeV8(v8::Isolate* isolate) {
     options.buildUnindexedArrays = true;
     options.buildUnindexedObjects = true;
     auto builder = std::make_shared<VPackBuilder>();
+    builder->options = &options;
 
     try {
       ss->resetWakeupHandler();
@@ -1388,6 +1387,7 @@ QueryResult Query::explain() {
   options.checkAttributeUniqueness = false;
   options.buildUnindexedArrays = true;
   auto builderForResultData = std::make_shared<VPackBuilder>();
+  builderForResultData->options = &options;
   result.data = builderForResultData;
 
   try {
