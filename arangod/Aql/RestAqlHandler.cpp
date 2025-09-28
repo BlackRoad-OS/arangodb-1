@@ -201,14 +201,13 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
     co_return;
   }
 
+  // Cannot be supervised (i.e. pass ResourceMonitor&) as this will live longer
+  // than ResourceMonitor
   std::shared_ptr<VPackBuilder> bindParameters = nullptr;
   {
     VPackSlice bindParametersSlice = querySlice.get("bindParameters");
     if (bindParametersSlice.isObject()) {
-      auto sb = std::make_shared<velocypack::SupervisedBuffer>(
-          _engine->getQuery().resourceMonitor());
-      bindParameters = std::make_shared<VPackBuilder>(sb);
-      bindParameters->add(bindParametersSlice);
+      bindParameters = std::make_shared<VPackBuilder>(bindParametersSlice);
     }
   }
 
