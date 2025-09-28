@@ -31,7 +31,6 @@
 #include "Aql/QueryString.h"
 #include "Basics/ScopeGuard.h"
 #include "Basics/debugging.h"
-#include "Basics/SupervisedBuffer.h"
 
 #include <absl/strings/str_cat.h>
 
@@ -138,10 +137,9 @@ QueryResult Parser::parseWithDetails() {
   QueryResult result;
   result.collectionNames = _query.collections().collectionNames();
   result.bindParameters = _ast.bindParameterNames();
-  // sb needs to be shared_ptr as this escapes to outside of this class
-  auto sb =
-      std::make_shared<velocypack::SupervisedBuffer>(_query.resourceMonitor());
-  auto builder = std::make_shared<VPackBuilder>(sb);
+  // Cannot be supervised (i.e. add SupervisedBuffer) because this builder will
+  // live longer than ResourceMonitor& as QueryResult.data
+  auto builder = std::make_shared<VPackBuilder>();
   _ast.toVelocyPack(*builder, false);
   result.data = std::move(builder);
 
