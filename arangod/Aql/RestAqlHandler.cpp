@@ -270,8 +270,8 @@ futures::Future<futures::Unit> RestAqlHandler::setupClusterQuery() {
   // TODO: technically we could change the code in prepareClusterQuery to parse
   //       the collection info directly
   // Build the collection information
-  VPackBuilder collectionBuilder(std::make_shared<velocypack::SupervisedBuffer>(
-      _engine->getQuery().resourceMonitor()));
+  VPackBuilder collectionBuilder;  // Cannot add SupervisedBuffer as this will
+                                   // live longer than ResourceMonitor
   collectionBuilder.openArray();
   for (auto lockInf : VPackObjectIterator(lockInfoSlice)) {
     if (!lockInf.value.isArray()) {
