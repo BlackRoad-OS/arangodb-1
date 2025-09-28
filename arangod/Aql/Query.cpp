@@ -873,8 +873,11 @@ futures::Future<futures::Unit> Query::execute(
         }
         // NOTE: If the options have a shorter lifetime than the builder, it
         // gets invalid (at least set() and close() are broken).
-
-        queryResult.data = std::make_unique<velocypack::Builder>();
+        auto sb =
+            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
+        auto supervisedBuilder = std::make_shared<VPackBuilder>(sb);
+        supervisedBuilder->options = &vpackOptions();
+        queryResult.data = supervisedBuilder;
 
         // reserve some space in Builder to avoid frequent reallocs
         queryResult.data->reserve(16 * 1024);
@@ -996,9 +999,7 @@ futures::Future<futures::Unit> Query::execute(
         [[fallthrough]];
       case ExecutionPhase::FINALIZE: {
         if (!queryResult.extra) {
-          auto sb =
-              std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-          queryResult.extra = std::make_shared<VPackBuilder>(sb);
+          queryResult.extra = std::make_shared<VPackBuilder>();
         }
 
         // TODO Refactor finalize into a coroutine (that's aware of
@@ -1146,9 +1147,7 @@ QueryResultV8 Query::executeV8(v8::Isolate* isolate) {
     VPackOptions options = VPackOptions::Defaults;
     options.buildUnindexedArrays = true;
     options.buildUnindexedObjects = true;
-    auto sb = std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-    auto builder = std::make_shared<VPackBuilder>(sb);
-    builder->options = &options;
+    auto builder = std::make_shared<VPackBuilder>();
 
     try {
       ss->resetWakeupHandler();
@@ -1237,9 +1236,7 @@ QueryResultV8 Query::executeV8(v8::Isolate* isolate) {
     }
     queryResult.v8Data = resArray;
     queryResult.context = _trx->transactionContext();
-    auto sbForExtra =
-        std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-    queryResult.extra = std::make_shared<VPackBuilder>(sbForExtra);
+    queryResult.extra = std::make_shared<VPackBuilder>();
     queryResult.allowDirtyReads = _allowDirtyReads;
 
     if (useQueryCache && _warnings.empty()) {
@@ -1385,17 +1382,12 @@ QueryResult Query::parse() {
 /// @brief explain an AQL query
 QueryResult Query::explain() {
   QueryResult result;
-  auto sbForExtra =
-      std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-  result.extra = std::make_shared<VPackBuilder>(sbForExtra);
+  result.extra = std::make_shared<VPackBuilder>();
 
   VPackOptions options;
   options.checkAttributeUniqueness = false;
   options.buildUnindexedArrays = true;
-  auto sbForResultData =
-      std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-  auto builderForResultData = std::make_shared<VPackBuilder>(sbForResultData);
-  builderForResultData->options = &options;
+  auto builderForResultData = std::make_shared<VPackBuilder>();
   result.data = builderForResultData;
 
   try {
