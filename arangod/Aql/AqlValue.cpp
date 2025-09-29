@@ -860,7 +860,7 @@ AqlValue AqlValue::materialize(velocypack::Options const* options,
           std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
       toVelocyPack(options, builder, /*allowUnindexed*/ true);
       hasCopied = true;
-      return AqlValue{{std::move(*builder.buffer())}};
+      return AqlValue{std::move(*builder.buffer())};
     }
     default:
       hasCopied = false;
