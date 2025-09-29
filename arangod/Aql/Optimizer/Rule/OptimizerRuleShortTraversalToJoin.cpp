@@ -65,6 +65,16 @@ void arangodb::aql::shortTraversalToJoinRule(
 
   for (auto const& node : traversalNodes) {
     auto* traversal = EN::castTo<TraversalNode*>(node);
+
+    auto const* opts = traversal->options();
+
+    TRI_ASSERT(opts != nullptr);
+
+    if (opts->minDepth == 1 and opts->maxDepth == 1) {
+      LOG_RULE << "FOUND ONE DEPZ TRAVERSAL";
+      LOG_RULE << "prune " << opts->usesPrune()
+               << " postFilter: " << opts->usesPostFilter();
+    }
   }
 
   opt->addPlan(std::move(plan), rule, modified);
