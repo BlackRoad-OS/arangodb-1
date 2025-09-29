@@ -185,8 +185,7 @@ Query::Query(QueryId id, std::shared_ptr<transaction::Context> ctx,
   }
 
   if (level >= ProfileLevel::TraceOne) {
-    auto sb = velocypack::SupervisedBuffer(resourceMonitor());
-    VPackBuilder b(sb);
+    velocypack::Builder b;
     _queryOptions.toVelocyPack(b, /*disableOptimizerRules*/ false);
     LOG_TOPIC("8979d", INFO, Logger::QUERIES) << "options: " << b.toJson();
   }
@@ -459,16 +458,13 @@ async<void> Query::prepareQuery() {
           /*verbose*/ false, /*includeInternals*/ false,
           /*explainRegisters*/ false);
       try {
-        // sb needs to be a shared_ptr as _planSliceCopy will steal this buffer
-        auto sb =
-            std::make_shared<velocypack::SupervisedBuffer>(resourceMonitor());
-        auto b = velocypack::Builder(sb);
+        velocypack::Builder b;
         plan->toVelocyPack(
             b, flags,
             buildSerializeQueryDataCallback({.includeNumericIds = false,
                                              .includeViews = true,
                                              .includeViewsSeparately = false}));
-        _planSliceCopy = std::move(b).sharedSlice();
+        _planSliceCopy = b.sharedSlice();
 
         TRI_IF_FAILURE("Query::serializePlans1") {
           THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
