@@ -48,6 +48,11 @@
 #include <frozen/unordered_map.h>
 
 #include <velocypack/Builder.h>
+#include "Basics/ResourceUsage.h"
+#include "Basics/SupervisedBuffer.h"
+#include "Basics/GlobalResourceMonitor.h"
+
+#include <memory>
 #include <velocypack/Dumper.h>
 #include <velocypack/Iterator.h>
 #include <velocypack/Sink.h>
@@ -393,7 +398,10 @@ int compareAstNodes(AstNode const* lhs, AstNode const* rhs, bool compareUtf8) {
       // afford the inefficiency to convert the node to VPack
       // for comparison (this saves us from writing our own compare function
       // for array AstNodes)
-      VPackBuilder builder;
+      auto& global = arangodb::GlobalResourceMonitor::instance();
+      arangodb::ResourceMonitor dummyMonitor(global);
+      velocypack::Builder builder(
+          std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
       // add the first Slice to the Builder
       lhs->toVelocyPackValue(builder);
 
@@ -805,7 +813,10 @@ std::ostream& AstNode::toStream(std::ostream& os, int level) const {
   os << "- " << getTypeString();
 
   if (type == NODE_TYPE_VALUE || type == NODE_TYPE_ARRAY) {
-    VPackBuilder b;
+    auto& global = arangodb::GlobalResourceMonitor::instance();
+    arangodb::ResourceMonitor dummyMonitor(global);
+    velocypack::Builder b(
+        std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
     toVelocyPackValue(b);
     os << ": " << b.toJson();
   } else if (type == NODE_TYPE_ATTRIBUTE_ACCESS) {
@@ -835,7 +846,10 @@ VPackSlice AstNode::computeValue(VPackBuilder* builder) const {
     TRI_ASSERT(!hasFlag(AstNodeFlagType::FLAG_INTERNAL_CONST));
 
     if (builder == nullptr) {
-      VPackBuilder b;
+      auto& global = arangodb::GlobalResourceMonitor::instance();
+      arangodb::ResourceMonitor dummyMonitor(global);
+      velocypack::Builder b(
+          std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
       computeValue(b);
     } else {
       builder->clear();
@@ -928,7 +942,10 @@ std::string_view AstNode::getValueTypeString() const {
 
 /// @brief stringify the AstNode
 std::string AstNode::toString(AstNode const* node) {
-  VPackBuilder builder;
+  auto& global = arangodb::GlobalResourceMonitor::instance();
+  arangodb::ResourceMonitor dummyMonitor(global);
+  velocypack::Builder builder(
+      std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
   node->toVelocyPack(builder, false);
   return builder.toJson();
 }
@@ -1085,7 +1102,10 @@ void AstNode::toVelocyPackValue(VPackBuilder& builder) const {
 
   if (type == NODE_TYPE_ATTRIBUTE_ACCESS) {
     // TODO Could this be done more efficiently in the builder in place?
-    VPackBuilder tmp;
+    auto& global = arangodb::GlobalResourceMonitor::instance();
+    arangodb::ResourceMonitor dummyMonitor(global);
+    velocypack::Builder tmp(
+        std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
     getMember(0)->toVelocyPackValue(tmp);
 
     VPackSlice slice = tmp.slice();
