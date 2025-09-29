@@ -854,11 +854,13 @@ AqlValue AqlValue::materialize(velocypack::Options const* options,
   auto t = type();
   switch (t) {
     case RANGE: {
-      VPackBuffer<uint8_t> buffer;
-      VPackBuilder builder{buffer};
+      auto& global = arangodb::GlobalResourceMonitor::instance();
+      arangodb::ResourceMonitor dummyMonitor(global);
+      velocypack::Builder builder(
+          std::make_shared<velocypack::SupervisedBuffer>(dummyMonitor));
       toVelocyPack(options, builder, /*allowUnindexed*/ true);
       hasCopied = true;
-      return AqlValue{std::move(buffer)};
+      return AqlValue{{std::move(*builder.buffer())}};
     }
     default:
       hasCopied = false;
