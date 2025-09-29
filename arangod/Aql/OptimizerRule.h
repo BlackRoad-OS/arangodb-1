@@ -105,6 +105,8 @@ struct OptimizerRule {
 
     replaceLikeWithRange,
 
+    shortTraversalToJoinRule,
+
     // replace iteration over an ENTRIES array with an object iteration
     replaceEntriesWithObjectIteration,
 
