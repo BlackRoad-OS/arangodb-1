@@ -227,7 +227,9 @@ DocumentProducingFunctionContext::DocumentProducingFunctionContext(
       _readOwnWrites(infos.canReadOwnWrites()),
       _checkUniqueness(false),
       _allowCoveringIndexOptimization(false),
-      _isLastIndex(false) {
+      _isLastIndex(false),
+      _supervisedObjectBuffer(_resourceMonitor),
+      _objectBuilder(_supervisedObjectBuffer) {
   // now erase all projections for which there is no output register
   _projectionsForRegisters.erase(
       [](Projections::Projection& p) { return p.variable == nullptr; });

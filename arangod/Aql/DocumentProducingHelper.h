@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <velocypack/Builder.h>
+#include "Basics/SupervisedBuffer.h"
 
 #include "Aql/types.h"
 #include "Aql/AqlFunctionsInternalCache.h"
@@ -163,6 +164,7 @@ struct DocumentProducingFunctionContext {
   std::unique_ptr<DocumentProducingExpressionContext> _expressionContext;
 
   /// @brief Builder that is reused to generate projection results
+  arangodb::velocypack::SupervisedBuffer _supervisedObjectBuffer;
   velocypack::Builder _objectBuilder;
 
   /// @brief set of already returned documents. Used to make the result distinct
