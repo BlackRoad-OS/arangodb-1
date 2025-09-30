@@ -30,6 +30,7 @@
 #include "Aql/RegisterInfos.h"
 #include "Aql/SingleRowFetcher.h"
 #include "Aql/Stats.h"
+#include "Basics/SupervisedBuffer.h"
 
 #include <velocypack/Builder.h>
 
@@ -136,7 +137,7 @@ class SubqueryEndExecutor {
    private:
     arangodb::ResourceMonitor& _resourceMonitor;
     velocypack::Options const* _options;
-    arangodb::velocypack::Buffer<uint8_t> _buffer;
+    arangodb::velocypack::SupervisedBuffer _buffer;
     velocypack::Builder _builder;
     size_t _memoryUsage{0};
     size_t _numValues{0};
