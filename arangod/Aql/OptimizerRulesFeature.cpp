@@ -190,11 +190,6 @@ void OptimizerRulesFeature::addRules() {
       R"(Replace FOR ... ENTRIES(obj) enumeration with proper object iteration
 to avoid copying a lot of key/value pairs and storing intermediate results.)");
 
-  registerRule("short-traversal-to-join", shortTraversalToJoinRule,
-               OptimizerRule::shortTraversalToJoinRule,
-               OptimizerRule::makeFlags(OptimizerRule::Flags::CanBeDisabled),
-               R"(Transform 1-step traversals into join)");
-
   // inline subqueries one level higher
   registerRule("inline-subqueries", inlineSubqueriesRule,
                OptimizerRule::inlineSubqueriesRule,
@@ -465,6 +460,11 @@ loading the vertex documents if they are not accessed in the query.)");
                OptimizerRule::makeFlags(OptimizerRule::Flags::CanBeDisabled),
                R"(Replace or remove `FilterNode` if the filter conditions are
 already covered by `TraversalNode`.)");
+
+  registerRule("short-traversal-to-join", shortTraversalToJoinRule,
+               OptimizerRule::shortTraversalToJoinRule,
+               OptimizerRule::makeFlags(OptimizerRule::Flags::CanBeDisabled),
+               R"(Transform 1-step traversals into join)");
 
   // move search and scorers into views
   registerRule(

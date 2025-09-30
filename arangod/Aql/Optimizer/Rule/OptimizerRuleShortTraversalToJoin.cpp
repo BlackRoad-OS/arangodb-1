@@ -73,7 +73,8 @@ void arangodb::aql::shortTraversalToJoinRule(
     if (opts->minDepth == 1 and opts->maxDepth == 1) {
       LOG_RULE << "FOUND ONE DEPZ TRAVERSAL";
       LOG_RULE << "prune " << opts->usesPrune()
-               << " postFilter: " << opts->usesPostFilter();
+               << " postFilter: " << opts->usesPostFilter()
+               << " depth: " << opts->hasDepthLookupInfo();
     }
   }
 
