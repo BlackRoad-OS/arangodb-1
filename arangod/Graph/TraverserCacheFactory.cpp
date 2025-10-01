@@ -49,6 +49,7 @@ TraverserCache* CacheFactory::CreateCache(
     return nullptr;
   }
   if (activateDocumentCache) {
+    TRI_ASSERT(false);
     auto cacheManager =
         query.vocbase().server().getFeature<CacheManagerFeature>().manager();
     if (cacheManager != nullptr) {
