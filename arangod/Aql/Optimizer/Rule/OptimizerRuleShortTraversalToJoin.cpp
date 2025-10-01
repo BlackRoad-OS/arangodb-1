@@ -53,8 +53,6 @@ void arangodb::aql::shortTraversalToJoinRule(
   auto modified = false;
   auto builder = VPackBuilder{};
 
-  LOG_RULE << "shortTraversalToJoin executed";
-
   auto traversalNodes = containers::SmallVector<ExecutionNode*, 8>{};
   plan->findNodesOfType(traversalNodes, ExecutionNode::TRAVERSAL, true);
 
@@ -76,8 +74,7 @@ void arangodb::aql::shortTraversalToJoinRule(
         opts->minDepth == 1 and                   //
         opts->maxDepth == 1 and                   //
         true /* direction is important here */) {
-      traversal->toVelocyPack(builder, true);
-      LOG_RULE << "traverser optimisation would fire " << builder.toJson();
+      //      traversal->toVelocyPack(builder, true);
       THROW_ARANGO_EXCEPTION_MESSAGE(
           TRI_ERROR_QUERY_PARSE,
           fmt::format("1 step traversal replacement fired"));
