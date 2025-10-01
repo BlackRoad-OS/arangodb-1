@@ -47,8 +47,6 @@ class Methods;
 namespace velocypack {
 class Builder;
 class Slice;
-// forward-declare to keep this header light; the .cpp includes
-// SupervisedBuffer.h
 class SupervisedBuffer;
 }  // namespace velocypack
 class PhysicalCollection;
