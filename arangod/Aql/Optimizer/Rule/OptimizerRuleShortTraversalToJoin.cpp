@@ -51,6 +51,7 @@ void arangodb::aql::shortTraversalToJoinRule(
     Optimizer* opt, std::unique_ptr<ExecutionPlan> plan,
     OptimizerRule const& rule) {
   auto modified = false;
+  auto builder = VPackBuilder{};
 
   LOG_RULE << "shortTraversalToJoin executed";
 
@@ -65,18 +66,22 @@ void arangodb::aql::shortTraversalToJoinRule(
 
   for (auto const& node : traversalNodes) {
     auto* traversal = EN::castTo<TraversalNode*>(node);
-
     auto const* opts = traversal->options();
 
+    TRI_ASSERT(traversal != nullptr);
     TRI_ASSERT(opts != nullptr);
 
-    if (opts->minDepth == 1 and opts->maxDepth == 1) {
-      LOG_RULE << "FOUND ONE DEPZ TRAVERSAL";
-      LOG_RULE << "prune " << opts->usesPrune()
-               << " postFilter: " << opts->usesPostFilter()
-               << " depth: " << opts->hasDepthLookupInfo();
+    if (traversal->vertexColls().size() == 1 and  //
+        traversal->edgeColls().size() == 1 and    //
+        opts->minDepth == 1 and                   //
+        opts->maxDepth == 1 and                   //
+        true /* direction is important here */) {
+      traversal->toVelocyPack(builder, true);
+      LOG_RULE << "traverser optimisation would fire " << builder.toJson();
+      THROW_ARANGO_EXCEPTION_MESSAGE(
+          TRI_ERROR_QUERY_PARSE,
+          fmt::format("1 step traversal replacement fired"));
     }
   }
-
   opt->addPlan(std::move(plan), rule, modified);
 }

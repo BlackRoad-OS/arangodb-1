@@ -105,8 +105,6 @@ struct OptimizerRule {
 
     replaceLikeWithRange,
 
-    shortTraversalToJoinRule,
-
     // replace iteration over an ENTRIES array with an object iteration
     replaceEntriesWithObjectIteration,
 
@@ -231,6 +229,9 @@ struct OptimizerRule {
 
     // remove redundant filters statements
     removeFiltersCoveredByTraversal,
+
+    // try replacing short traversals by a join
+    shortTraversalToJoinRule,
 
     // move filters and sort conditions into views and remove them
     handleArangoSearchViewsRule,
