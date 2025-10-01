@@ -30,7 +30,6 @@
 #include <vector>
 
 #include <velocypack/Builder.h>
-#include "Basics/SupervisedBuffer.h"
 
 #include "Aql/types.h"
 #include "Aql/AqlFunctionsInternalCache.h"
@@ -48,6 +47,9 @@ class Methods;
 namespace velocypack {
 class Builder;
 class Slice;
+// forward-declare to keep this header light; the .cpp includes
+// SupervisedBuffer.h
+class SupervisedBuffer;
 }  // namespace velocypack
 class PhysicalCollection;
 struct ResourceMonitor;
@@ -163,8 +165,9 @@ struct DocumentProducingFunctionContext {
 
   std::unique_ptr<DocumentProducingExpressionContext> _expressionContext;
 
+  std::unique_ptr<arangodb::velocypack::SupervisedBuffer>
+      _supervisedObjectBuffer;
   /// @brief Builder that is reused to generate projection results
-  arangodb::velocypack::SupervisedBuffer _supervisedObjectBuffer;
   velocypack::Builder _objectBuilder;
 
   /// @brief set of already returned documents. Used to make the result distinct

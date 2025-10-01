@@ -32,6 +32,7 @@
 #include "Aql/Projections.h"
 #include "Aql/Query.h"
 #include "Basics/DownCast.h"
+#include "Basics/SupervisedBuffer.h"
 #include "StorageEngine/PhysicalCollection.h"
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
@@ -222,14 +223,16 @@ DocumentProducingFunctionContext::DocumentProducingFunctionContext(
       _numScanned(0),
       _numFiltered(0),
       _numLookups(0),
+      _supervisedObjectBuffer(
+          std::make_unique<arangodb::velocypack::SupervisedBuffer>(
+              _resourceMonitor)),
+      _objectBuilder(*_supervisedObjectBuffer),
       _outputVariable(infos.getOutVariable()),
       _outputRegister(infos.getOutputRegisterId()),
       _readOwnWrites(infos.canReadOwnWrites()),
       _checkUniqueness(false),
       _allowCoveringIndexOptimization(false),
-      _isLastIndex(false),
-      _supervisedObjectBuffer(_resourceMonitor),
-      _objectBuilder(_supervisedObjectBuffer) {
+      _isLastIndex(false) {
   // now erase all projections for which there is no output register
   _projectionsForRegisters.erase(
       [](Projections::Projection& p) { return p.variable == nullptr; });
@@ -284,12 +287,16 @@ DocumentProducingFunctionContext::DocumentProducingFunctionContext(
       _numScanned(0),
       _numFiltered(0),
       _numLookups(0),
+      _supervisedObjectBuffer(
+          std::make_unique<arangodb::velocypack::SupervisedBuffer>(
+              _resourceMonitor)),
+      _objectBuilder(*_supervisedObjectBuffer),
       _outputVariable(infos.getOutVariable()),
       _outputRegister(infos.getOutputRegisterId()),
       _readOwnWrites(infos.canReadOwnWrites()),
       _checkUniqueness(infos.getIndexes().size() > 1 ||
                        infos.hasMultipleExpansions()),
-      _allowCoveringIndexOptimization(false),  // can be updated later
+      _allowCoveringIndexOptimization(false),
       _isLastIndex(false) {
   // now erase all projections for which there is no output register
   _projectionsForRegisters.erase(
