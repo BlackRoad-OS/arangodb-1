@@ -91,8 +91,7 @@ uint16_t getCoveringPosition(std::shared_ptr<Index> const& index,
 auto arangodb::graph::createDBServerIndexCursors(
     std::vector<BaseOptions::LookupInfo> const& lookupInfos,
     aql::Variable const* tmpVar, transaction::Methods* trx,
-    TraverserCache* traverserCache, ResourceMonitor& monitor)
-    -> std::vector<DBServerIndexCursor> {
+    ResourceMonitor& monitor) -> std::vector<DBServerIndexCursor> {
   std::vector<DBServerIndexCursor> cursors;
   // there are at least lookupInfo.size() many cursors
   cursors.reserve(lookupInfos.size());
@@ -107,7 +106,7 @@ auto arangodb::graph::createDBServerIndexCursors(
           info.conditionNeedUpdate
               ? std::optional<size_t>{info.conditionMemberToUpdate}
               : std::nullopt,
-          trx, traverserCache, tmpVar, monitor});
+          trx, tmpVar, monitor});
     }
     infoCount++;
   }
@@ -136,8 +135,8 @@ void DBServerIndexCursor::all(EdgeCursor::Callback const& callback) {
 
   // update cache hits and misses
   auto [ch, cm] = _cursor->getAndResetCacheStats();
-  _traverserCache->incrCacheHits(ch);
-  _traverserCache->incrCacheMisses(cm);
+  _stats.incrCacheHits(ch);
+  _stats.incrCacheMisses(cm);
 }
 
 bool DBServerIndexCursor::next(EdgeCursor::Callback const& callback) {
@@ -240,13 +239,14 @@ void DBServerIndexCursor::rearm(std::string_view vertex) {
 
   // steal cache hits and misses before the cursor is recycled
   auto [ch, cm] = _cursor->getAndResetCacheStats();
-  _traverserCache->incrCacheHits(ch);
-  _traverserCache->incrCacheMisses(cm);
+
+  _stats.incrCacheHits(ch);
+  _stats.incrCacheMisses(cm);
 
   // check if the underlying index iterator supports rearming
   if (_cursor->canRearm()) {
     // rearming supported
-    _traverserCache->incrCursorsRearmed();
+    _stats.incrCursorsRearmed();
     if (!_cursor->rearm(_indexCondition, _tmpVar,
                         defaultIndexIteratorOptions)) {
       _cursor =
@@ -255,7 +255,7 @@ void DBServerIndexCursor::rearm(std::string_view vertex) {
   } else {
     // rearming not supported - we need to throw away the index iterator
     // and create a new one
-    _traverserCache->incrCursorsCreated();
+    _stats.incrCursorsCreated();
     _cursor = _trx->indexScanForCondition(
         _monitor, _idxHandle, _indexCondition, _tmpVar,
         defaultIndexIteratorOptions, ReadOwnWrites::no,
@@ -298,7 +298,8 @@ DBServerIndexCursor::nonCoveringCallback(DataSourceId const& sourceId,
       }
     }
 #endif
-    _traverserCache->incrDocuments();
+    // TODO  -- DO NOT MERGE WITHOUT THIS BEING ADDRESSED
+    // stats.incrDocuments();
     callback(EdgeDocumentToken(sourceId, token), edgeDoc, cursorId);
     return true;
   };
@@ -322,7 +323,9 @@ DBServerIndexCursor::coveringCallback(uint64_t& operationSuccessful,
       }
 #endif
       operationSuccessful++;
-      _traverserCache->incrDocuments();
+
+      // TODO  -- DO NOT MERGE WITHOUT THIS BEING ADDRESSED
+      // stats.incrDocuments();
       callback(EdgeDocumentToken(sourceId, token), edge, cursorId);
       return true;
     }

@@ -196,15 +196,13 @@ double ShortestPathOptions::weightEdge(VPackSlice edge) const {
 }
 
 std::unique_ptr<EdgeCursor> ShortestPathOptions::buildCursor(bool backward) {
-  ensureCache();
-
   TRI_ASSERT(not _isCoordinator);
 
   return std::make_unique<
       graph::DBServerEdgeCursor<graph::DBServerIndexCursor>>(
       graph::DBServerEdgeCursor(graph::createDBServerIndexCursors(
           backward ? _reverseLookupInfos : _baseLookupInfos, _tmpVar, trx(),
-          cache(), query().resourceMonitor())));
+          query().resourceMonitor())));
 }
 
 auto ShortestPathOptions::estimateDepth() const noexcept -> uint64_t {

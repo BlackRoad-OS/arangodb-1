@@ -29,6 +29,7 @@
 #include "Aql/FixedVarExpressionContext.h"
 #include "Aql/NonConstExpressionContainer.h"
 #include "Aql/Projections.h"
+#include "Aql/TraversalStats.h"
 #include "Aql/VarInfoMap.h"
 #include "Basics/MemoryTypes/MemoryTypes.h"
 #include "Transaction/Methods.h"
@@ -188,14 +189,6 @@ struct BaseOptions {
 
   arangodb::ResourceMonitor& resourceMonitor() const;
 
-  TraverserCache* cache();
-
-  TraverserCache* cache() const;
-  void ensureCache();
-
-  void activateCache(
-      std::unordered_map<ServerID, aql::EngineId> const* engines);
-
   MonitoredCollectionToShardMap const& collectionToShard() const {
     return _collectionToShard;
   }
@@ -264,6 +257,8 @@ struct BaseOptions {
   void toVelocyPackBase(VPackBuilder& builder) const;
 
   void parseShardIndependentFlags(arangodb::velocypack::Slice info);
+
+  aql::TraversalStats& stats() { return _stats; }
 
  protected:
   mutable transaction::Methods _trx;
@@ -338,6 +333,9 @@ struct BaseOptions {
 
   /// @brief user hint regarding which indexes to use
   aql::IndexHint _hint;
+
+  /// @brief statistics collected by certain nodes
+  aql::TraversalStats _stats;
 };
 
 }  // namespace graph

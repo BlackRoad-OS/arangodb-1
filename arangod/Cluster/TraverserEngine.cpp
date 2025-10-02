@@ -375,6 +375,7 @@ void BaseTraverserEngine::allEdges(std::vector<std::string> const& vertices,
   }
   builder.close();
   // statistics
+  /*
   builder.add("readIndex",
               VPackValue(_opts->cache()->getAndResetInsertedDocuments()));
   builder.add("filtered", VPackValue(_opts->cache()->getAndResetFiltered()));
@@ -385,6 +386,7 @@ void BaseTraverserEngine::allEdges(std::vector<std::string> const& vertices,
               VPackValue(_opts->cache()->getAndResetCursorsCreated()));
   builder.add("cursorsRearmed",
               VPackValue(_opts->cache()->getAndResetCursorsRearmed()));
+  */
   builder.close();
 }
 
@@ -436,6 +438,7 @@ Result BaseTraverserEngine::nextEdgeBatch(size_t batchId,
 }
 
 void BaseTraverserEngine::addStatistics(VPackBuilder& builder) {
+  /*
   builder.add("readIndex",
               VPackValue(_opts->cache()->getAndResetInsertedDocuments()));
   builder.add("filtered", VPackValue(_opts->cache()->getAndResetFiltered()));
@@ -446,6 +449,7 @@ void BaseTraverserEngine::addStatistics(VPackBuilder& builder) {
               VPackValue(_opts->cache()->getAndResetCursorsCreated()));
   builder.add("cursorsRearmed",
               VPackValue(_opts->cache()->getAndResetCursorsRearmed()));
+  */
 }
 
 bool BaseTraverserEngine::produceVertices() const {
@@ -507,8 +511,6 @@ ShortestPathEngine::ShortestPathEngine(TRI_vocbase_t& vocbase,
   }
   TRI_ASSERT(type.isEqualString("shortestPath"));
   _opts = std::make_unique<ShortestPathOptions>(_query, optsSlice, edgesSlice);
-  // We create the cache, but we do not need any engines.
-  _opts->activateCache(nullptr);
 
   _forwardCursor = _opts->buildCursor(false);
   _backwardCursor = _opts->buildCursor(true);
@@ -540,6 +542,7 @@ void ShortestPathEngine::getEdges(VPackSlice vertex, bool backward,
   builder.close();
 
   // statistics
+  /*
   builder.add("readIndex",
               VPackValue(_opts->cache()->getAndResetInsertedDocuments()));
   builder.add("filtered", VPackValue(0));
@@ -550,6 +553,7 @@ void ShortestPathEngine::getEdges(VPackSlice vertex, bool backward,
               VPackValue(_opts->cache()->getAndResetCursorsCreated()));
   builder.add("cursorsRearmed",
               VPackValue(_opts->cache()->getAndResetCursorsRearmed()));
+  */
   builder.close();
 }
 
@@ -604,8 +608,6 @@ TraverserEngine::TraverserEngine(TRI_vocbase_t& vocbase,
   }
   TRI_ASSERT(type.isEqualString("traversal"));
   _opts = std::make_unique<TraverserOptions>(_query, optsSlice, edgesSlice);
-  // We create the cache, but we do not need any engines.
-  _opts->activateCache(nullptr);
 }
 
 TraverserEngine::~TraverserEngine() = default;
