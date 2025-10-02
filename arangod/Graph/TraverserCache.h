@@ -92,15 +92,6 @@ class TraverserCache {
     return std::exchange(_cacheMisses, 0);
   }
 
-  //////////////////////////////////////////////////////////////////////////////
-  /// @brief Persist the given id string. The return value is guaranteed to
-  ///        stay valid as long as this cache is valid
-  //////////////////////////////////////////////////////////////////////////////
-  std::string_view persistString(std::string_view idString);
-
-  arangodb::velocypack::HashedStringRef persistString(
-      arangodb::velocypack::HashedStringRef idString);
-
   void incrDocuments(std::uint64_t value = 1) noexcept {
     _insertedDocuments += value;
   }
