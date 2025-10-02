@@ -82,29 +82,3 @@ void TraverserCache::clear() {
   _docBuilder.clear();
   _stringHeap.clear();
 }
-
-std::string_view TraverserCache::persistString(std::string_view idString) {
-  return persistString(
-             arangodb::velocypack::HashedStringRef(
-                 idString.data(), static_cast<uint32_t>(idString.size())))
-      .stringView();
-}
-
-arangodb::velocypack::HashedStringRef TraverserCache::persistString(
-    arangodb::velocypack::HashedStringRef idString) {
-  auto it = _persistedStrings.find(idString);
-  if (it != _persistedStrings.end()) {
-    return *it;
-  }
-  auto res = _stringHeap.registerString(idString);
-  {
-    ResourceUsageScope guard(_query.resourceMonitor(),
-                             ::costPerPersistedString);
-
-    _persistedStrings.emplace(res);
-
-    // now make the TraverserCache responsible for memory tracking
-    guard.steal();
-  }
-  return res;
-}
