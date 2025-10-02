@@ -28,7 +28,9 @@
 #include <unordered_map>
 
 #include "Aql/Collections.h"
+#include "Aql/Projections.h"
 #include "Basics/MemoryTypes/MemoryTypes.h"
+#include "Graph/Cache/RefactoredTraverserCache.h"
 
 struct TRI_vocbase_t;
 
@@ -121,6 +123,10 @@ class BaseEngine {
   arangodb::aql::QueryContext& _query;
   std::unique_ptr<transaction::Methods> _trx;
   MonitoredCollectionToShardMap _vertexShards;
+
+  aql::Projections _vertexProjections;
+  aql::Projections _edgeProjections;
+  graph::RefactoredTraverserCache _cache;
 };
 
 class BaseTraverserEngine : public BaseEngine {

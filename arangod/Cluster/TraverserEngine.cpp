@@ -92,7 +92,11 @@ BaseEngine::BaseEngine(TRI_vocbase_t& vocbase, aql::QueryContext& query,
                        VPackSlice info)
     : _engineId(TRI_NewTickServer()),
       _query(query),
-      _vertexShards{_query.resourceMonitor()} {
+      _vertexShards{_query.resourceMonitor()},
+      _vertexProjections{},
+      _edgeProjections{},
+      _cache(_trx.get(), &_query, _query.resourceMonitor(), _vertexShards,
+             _vertexProjections, _edgeProjections, false) {
   VPackSlice shardsSlice = info.get(SHARDS);
 
   if (!shardsSlice.isObject()) {
