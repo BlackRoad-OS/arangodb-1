@@ -223,10 +223,8 @@ DocumentProducingFunctionContext::DocumentProducingFunctionContext(
       _numScanned(0),
       _numFiltered(0),
       _numLookups(0),
-      _supervisedObjectBuffer(
-          std::make_unique<arangodb::velocypack::SupervisedBuffer>(
-              _resourceMonitor)),
-      _objectBuilder(*_supervisedObjectBuffer),
+      _objectBuilder(
+          std::make_shared<velocypack::SupervisedBuffer>(_resourceMonitor)),
       _outputVariable(infos.getOutVariable()),
       _outputRegister(infos.getOutputRegisterId()),
       _readOwnWrites(infos.canReadOwnWrites()),
@@ -287,10 +285,8 @@ DocumentProducingFunctionContext::DocumentProducingFunctionContext(
       _numScanned(0),
       _numFiltered(0),
       _numLookups(0),
-      _supervisedObjectBuffer(
-          std::make_unique<arangodb::velocypack::SupervisedBuffer>(
-              _resourceMonitor)),
-      _objectBuilder(*_supervisedObjectBuffer),
+      _objectBuilder(
+          std::make_shared<velocypack::SupervisedBuffer>(_resourceMonitor)),
       _outputVariable(infos.getOutVariable()),
       _outputRegister(infos.getOutputRegisterId()),
       _readOwnWrites(infos.canReadOwnWrites()),

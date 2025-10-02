@@ -47,7 +47,6 @@ class Methods;
 namespace velocypack {
 class Builder;
 class Slice;
-class SupervisedBuffer;
 }  // namespace velocypack
 class PhysicalCollection;
 struct ResourceMonitor;
@@ -163,8 +162,6 @@ struct DocumentProducingFunctionContext {
 
   std::unique_ptr<DocumentProducingExpressionContext> _expressionContext;
 
-  std::unique_ptr<arangodb::velocypack::SupervisedBuffer>
-      _supervisedObjectBuffer;
   /// @brief Builder that is reused to generate projection results
   velocypack::Builder _objectBuilder;
 
