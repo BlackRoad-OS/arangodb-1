@@ -28,6 +28,7 @@
 #include "Basics/MemoryTypes/MemoryTypes.h"
 #include "Basics/Result.h"
 #include "Basics/StaticStrings.h"
+#include "VocBase/vocbase.h"
 #include "Graph/Cursors/EdgeCursor.h"
 #include "Graph/EdgeDocumentToken.h"
 #include "Graph/ShortestPathOptions.h"
@@ -35,6 +36,8 @@
 #include "Graph/TraverserOptions.h"
 #include "Transaction/Context.h"
 #include "Utils/CollectionNameResolver.h"
+#include "VocBase/LogicalCollection.h"
+#include "StorageEngine/PhysicalCollection.h"
 
 #include <absl/strings/str_cat.h>
 #include <velocypack/Iterator.h>
@@ -92,11 +95,7 @@ BaseEngine::BaseEngine(TRI_vocbase_t& vocbase, aql::QueryContext& query,
                        VPackSlice info)
     : _engineId(TRI_NewTickServer()),
       _query(query),
-      _vertexShards{_query.resourceMonitor()},
-      _vertexProjections{},
-      _edgeProjections{},
-      _cache(_trx.get(), &_query, _query.resourceMonitor(), _vertexShards,
-             _vertexProjections, _edgeProjections, false) {
+      _vertexShards{_query.resourceMonitor()} {
   VPackSlice shardsSlice = info.get(SHARDS);
 
   if (!shardsSlice.isObject()) {
@@ -307,6 +306,39 @@ graph::EdgeCursor* BaseTraverserEngine::getCursor(uint64_t currentDepth) {
   return cursor;
 }
 
+VPackSlice BaseEngine::lookupToken(EdgeDocumentToken const& idToken) {
+  TRI_ASSERT(!ServerState::instance()->isCoordinator());
+  // TODO: DO NOT LEAVE THIS HERE IT WILL LEAK
+
+  auto col = _trx->vocbase().lookupCollection(idToken.cid());
+
+  if (col == nullptr) {
+    // collection gone... should not happen
+    LOG_TOPIC("3b2ba", ERR, arangodb::Logger::GRAPHS)
+        << "Could not extract indexed edge document. collection not found";
+    TRI_ASSERT(col != nullptr);  // for maintainer mode
+    return arangodb::velocypack::Slice::nullSlice();
+  }
+
+  _docBuilder.clear();
+  auto cb = IndexIterator::makeDocumentCallback(_docBuilder);
+  if (col->getPhysical()
+          ->lookup(_trx.get(), idToken.localDocumentId(), cb,
+                   {.countBytes = true})
+          .fail()) {
+    // We already had this token, inconsistent state. Return NULL in Production
+    LOG_TOPIC("3acb3", ERR, arangodb::Logger::GRAPHS)
+        << "Could not extract indexed edge document, return 'null' instead. "
+        << "This is most likely a caching issue. Try: 'db." << col->name()
+        << ".unload(); db." << col->name()
+        << ".load()' in arangosh to fix this.";
+    TRI_ASSERT(false);  // for maintainer mode
+    return arangodb::velocypack::Slice::nullSlice();
+  }
+
+  return _docBuilder.slice();
+}
+
 void BaseTraverserEngine::allEdges(std::vector<std::string> const& vertices,
                                    size_t depth, VPackBuilder& builder) {
   auto outputVertex = [this](VPackBuilder& builder, std::string_view vertex,
@@ -318,7 +350,7 @@ void BaseTraverserEngine::allEdges(std::vector<std::string> const& vertices,
     cursor->readAll(
         [&](EdgeDocumentToken&& eid, VPackSlice edge, size_t cursorId) {
           if (edge.isString()) {
-            edge = _opts->cache()->lookupToken(eid);
+            edge = lookupToken(eid);
           }
           if (edge.isNull()) {
             return;
@@ -374,7 +406,7 @@ Result BaseTraverserEngine::nextEdgeBatch(size_t batchId,
     _cursor->_cursor->nextBatch(
         [&](EdgeDocumentToken&& eid, VPackSlice edge, size_t cursorId) {
           if (edge.isString()) {
-            edge = _opts->cache()->lookupToken(eid);
+            edge = lookupToken(eid);
           }
           if (edge.isNull()) {
             return;
@@ -535,7 +567,7 @@ void ShortestPathEngine::addEdgeData(VPackBuilder& builder, bool backward,
   cursor->readAll(
       [&](EdgeDocumentToken&& eid, VPackSlice edge, size_t /*cursorId*/) {
         if (edge.isString()) {
-          edge = _opts->cache()->lookupToken(eid);
+          edge = lookupToken(eid);
         }
         if (edge.isNull()) {
           return;
