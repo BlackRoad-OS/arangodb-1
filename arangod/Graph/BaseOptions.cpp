@@ -37,11 +37,11 @@
 #include "Basics/ResourceUsage.h"
 #include "Basics/ScopeGuard.h"
 #include "Basics/VelocyPackHelper.h"
+#include "Basics/StaticStrings.h"
 #include "Containers/HashSet.h"
 #include "Graph/Cache/RefactoredClusterTraverserCache.h"
 #include "Graph/ShortestPathOptions.h"
 #include "Graph/TraverserCache.h"
-#include "Graph/TraverserCacheFactory.h"
 #include "Graph/TraverserOptions.h"
 #include "Indexes/Index.h"
 
