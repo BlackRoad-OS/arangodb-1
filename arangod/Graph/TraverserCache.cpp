@@ -84,33 +84,7 @@ void TraverserCache::clear() {
 }
 
 VPackSlice TraverserCache::lookupToken(EdgeDocumentToken const& idToken) {
-  TRI_ASSERT(!ServerState::instance()->isCoordinator());
-  auto col = _trx->vocbase().lookupCollection(idToken.cid());
-
-  if (col == nullptr) {
-    // collection gone... should not happen
-    LOG_TOPIC("3b2ba", ERR, arangodb::Logger::GRAPHS)
-        << "Could not extract indexed edge document. collection not found";
-    TRI_ASSERT(col != nullptr);  // for maintainer mode
-    return arangodb::velocypack::Slice::nullSlice();
-  }
-
-  _docBuilder.clear();
-  auto cb = IndexIterator::makeDocumentCallback(_docBuilder);
-  if (col->getPhysical()
-          ->lookup(_trx, idToken.localDocumentId(), cb, {.countBytes = true})
-          .fail()) {
-    // We already had this token, inconsistent state. Return NULL in Production
-    LOG_TOPIC("3acb3", ERR, arangodb::Logger::GRAPHS)
-        << "Could not extract indexed edge document, return 'null' instead. "
-        << "This is most likely a caching issue. Try: 'db." << col->name()
-        << ".unload(); db." << col->name()
-        << ".load()' in arangosh to fix this.";
-    TRI_ASSERT(false);  // for maintainer mode
-    return arangodb::velocypack::Slice::nullSlice();
-  }
-
-  return _docBuilder.slice();
+  TRI_ASSERT(false) << "This function is gone";
 }
 
 void TraverserCache::insertEdgeIntoResult(EdgeDocumentToken const& idToken,
