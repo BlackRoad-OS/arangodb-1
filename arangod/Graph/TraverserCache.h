@@ -68,19 +68,6 @@ class TraverserCache {
   /// @brief clears all allocated memory in the underlying StringHeap
   void clear();
 
-  //////////////////////////////////////////////////////////////////////////////
-  /// @brief Inserts the real document stored within the token
-  ///        into the given builder.
-  //////////////////////////////////////////////////////////////////////////////
-  virtual void insertEdgeIntoResult(graph::EdgeDocumentToken const& etkn,
-                                    velocypack::Builder& builder);
-
-  //////////////////////////////////////////////////////////////////////////////
-  /// @brief Return AQL value containing the result
-  ///        The document will be looked up in the StorageEngine
-  //////////////////////////////////////////////////////////////////////////////
-  virtual aql::AqlValue fetchEdgeAqlResult(graph::EdgeDocumentToken const&);
-
   [[nodiscard]] std::uint64_t getAndResetInsertedDocuments() {
     return std::exchange(_insertedDocuments, 0);
   }
@@ -128,9 +115,6 @@ class TraverserCache {
   void incrCacheMisses(std::uint64_t value = 1) noexcept {
     _cacheMisses += value;
   }
-
-  /// Only valid until the next call to this class
-  virtual velocypack::Slice lookupToken(EdgeDocumentToken const& token);
 
  protected:
   velocypack::Builder _docBuilder;

@@ -83,22 +83,6 @@ void TraverserCache::clear() {
   _stringHeap.clear();
 }
 
-VPackSlice TraverserCache::lookupToken(EdgeDocumentToken const& idToken) {
-  TRI_ASSERT(false) << "This function is gone";
-}
-
-void TraverserCache::insertEdgeIntoResult(EdgeDocumentToken const& idToken,
-                                          VPackBuilder& builder) {
-  TRI_ASSERT(!ServerState::instance()->isCoordinator());
-  builder.add(lookupToken(idToken));
-}
-
-aql::AqlValue TraverserCache::fetchEdgeAqlResult(
-    EdgeDocumentToken const& idToken) {
-  TRI_ASSERT(!ServerState::instance()->isCoordinator());
-  return aql::AqlValue(lookupToken(idToken));
-}
-
 std::string_view TraverserCache::persistString(std::string_view idString) {
   return persistString(
              arangodb::velocypack::HashedStringRef(
