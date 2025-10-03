@@ -431,22 +431,27 @@ OperationResult GraphManager::storeGraph(Graph const& graph, bool waitForSync,
 
 Result GraphManager::applyOnAllGraphs(
     std::function<Result(std::unique_ptr<Graph>)> const& callback) const {
-  std::string const queryStr{"FOR g IN _graphs RETURN g"};
-  auto query = arangodb::aql::Query::create(
-      transaction::StandaloneContext::create(_vocbase, _operationOrigin),
-      arangodb::aql::QueryString{queryStr}, nullptr);
-  query->queryOptions().skipAudit = true;
-  aql::QueryResult queryResult = query->executeSync();
-
-  if (queryResult.result.fail()) {
-    if (queryResult.result.is(TRI_ERROR_REQUEST_CANCELED) ||
-        (queryResult.result.is(TRI_ERROR_QUERY_KILLED))) {
-      return {TRI_ERROR_REQUEST_CANCELED};
-    }
-    return queryResult.result;
+  auto options = OperationOptions(ExecContext::current());
+  auto trx = SingleCollectionTransaction(ctx(), StaticStrings::GraphsCollection,
+                                         AccessMode::Type::READ);
+  auto trxRes = trx.begin();
+  if (!trxRes.ok()) {
+    return trxRes;
   }
 
-  VPackSlice graphsSlice = queryResult.data->slice();
+  auto graphResult =
+      trx.all(StaticStrings::GraphsCollection, 0, 0, options).waitAndGet();
+
+  auto trxFinishRes = trx.finish(graphResult.result);
+  if (!trxFinishRes.ok()) {
+    return trxFinishRes;
+  }
+
+  if (!graphResult.ok()) {
+    return graphResult.result;
+  }
+
+  auto graphsSlice = graphResult.slice();
   if (graphsSlice.isNone()) {
     return {TRI_ERROR_OUT_OF_MEMORY};
   } else if (!graphsSlice.isArray()) {
