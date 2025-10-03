@@ -78,8 +78,10 @@ JoinExecutor::JoinExecutor(Fetcher& fetcher, Infos& infos)
       _infos(infos),
       _trx{_infos.query->newTrxContext()},
       _resourceMonitor(_infos.query->resourceMonitor()),
-      _projectionsBuilder(std::make_shared<velocypack::SupervisedBuffer>(_infos.query->resourceMonitor())),
-      _constantBuilder(std::make_shared<velocypack::SupervisedBuffer>(_infos.query->resourceMonitor())) {
+      _projectionsBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          _infos.query->resourceMonitor())),
+      _constantBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          _infos.query->resourceMonitor())) {
   constructStrategy();
   _documents.resize(_infos.indexes.size());
 }
@@ -245,9 +247,9 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                                                      &_trx);
               _projectionsBuilder.close();
               LOG_JOIN_MEMORY
-                    << "(buildProjections1) Increased memory usage by: "
-                    << _projectionsBuilder.size()
-                    << "for the projections builder";
+                  << "(buildProjections1) Increased memory usage by: "
+                  << _projectionsBuilder.size()
+                  << "for the projections builder";
 
             } else {
               // write projections into individual output registers
@@ -264,9 +266,9 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                   });
 
               LOG_JOIN_MEMORY
-                    << "(buildProjections2) Increased memory usage by: "
-                    << _projectionsBuilder.size()
-                    << " for the projections builder";
+                  << "(buildProjections2) Increased memory usage by: "
+                  << _projectionsBuilder.size()
+                  << " for the projections builder";
             }
           };
 
@@ -409,8 +411,8 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                 _projectionsBuilder.close();
 
                 LOG_JOIN_MEMORY << "(docCB1) Increased memory usage by: "
-                                  << _projectionsBuilder.size()
-                                  << "for the projections builder";
+                                << _projectionsBuilder.size()
+                                << "for the projections builder";
 
                 output.moveValueInto(_infos.indexes[k].documentOutputRegister,
                                      _currentRow, _projectionsBuilder.slice());
@@ -432,9 +434,8 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                     });
 
                 LOG_JOIN_MEMORY << "(docCB2) Increased memory usage by: "
-                                  << _projectionsBuilder.size()
-                                  << "for the projections builder";
-
+                                << _projectionsBuilder.size()
+                                << "for the projections builder";
               }
             };
 
