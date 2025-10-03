@@ -28,6 +28,7 @@
 #include "Aql/ExecutionNode/GraphNode.h"
 #include "Aql/ExecutionState.h"
 #include "Aql/InputAqlItemRow.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Aql/RegisterInfos.h"
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
@@ -35,6 +36,7 @@
 #include <velocypack/Builder.h>
 
 namespace arangodb {
+struct ResourceMonitor;
 namespace velocypack {
 class Slice;
 }
@@ -72,6 +74,8 @@ class ShortestPathExecutorInfos {
   [[nodiscard]] auto finder() const -> FinderType&;
 
   aql::QueryContext& query() noexcept;
+
+  ResourceMonitor& resourceMonitor() const;
 
   /**
    * @brief test if we use a register or a constant input
@@ -129,6 +133,8 @@ class ShortestPathExecutorInfos {
 
   /// @brief Information about the target vertex
   GraphNode::InputVertex _target;
+
+  ResourceMonitor& _resourceMonitor;
 };
 
 /**

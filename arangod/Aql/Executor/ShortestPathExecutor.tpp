@@ -41,7 +41,8 @@ ShortestPathExecutorInfos<FinderType>::ShortestPathExecutorInfos(
       _finder(std::move(finder)),
       _registerMapping(std::move(registerMapping)),
       _source(std::move(source)),
-      _target(std::move(target)) {}
+      _target(std::move(target)),
+      _resourceMonitor(query.resourceMonitor()) {}
 
 template<class FinderType>
 FinderType& ShortestPathExecutorInfos<FinderType>::finder() const {
@@ -52,6 +53,12 @@ FinderType& ShortestPathExecutorInfos<FinderType>::finder() const {
 template<class FinderType>
 QueryContext& ShortestPathExecutorInfos<FinderType>::query() noexcept {
   return _query;
+}
+
+template<class FinderType>
+ResourceMonitor& ShortestPathExecutorInfos<FinderType>::resourceMonitor()
+    const {
+  return _resourceMonitor;
 }
 
 template<class FinderType>
@@ -154,8 +161,10 @@ ShortestPathExecutor<FinderType>::ShortestPathExecutor(Fetcher&, Infos& infos)
       _pathBuilder{&_trx},
       _posInPath(0),
       _pathLength(0),
-      _sourceBuilder{},
-      _targetBuilder{} {
+      _sourceBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          infos.resourceMonitor())),
+      _targetBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          infos.resourceMonitor())) {
   if (!_infos.useRegisterForSourceInput()) {
     _sourceBuilder.add(VPackValue(_infos.getSourceInputValue()));
   }
