@@ -32,7 +32,6 @@
 #include "Cluster/ServerState.h"
 #include "Graph/Cache/RefactoredClusterTraverserCache.h"
 #include "Graph/TraverserCache.h"
-#include "Graph/TraverserDocumentCache.h"
 #include "VocBase/vocbase.h"
 
 namespace arangodb::graph {
@@ -47,19 +46,6 @@ TraverserCache* CacheFactory::CreateCache(
     //
     // The CacheFactory should be removed eventually.
     return nullptr;
-  }
-  if (activateDocumentCache) {
-    auto cacheManager =
-        query.vocbase().server().getFeature<CacheManagerFeature>().manager();
-    if (cacheManager != nullptr) {
-      std::shared_ptr<arangodb::cache::Cache> cache =
-          cacheManager->createCache<cache::BinaryKeyHasher>(
-              cache::CacheType::Plain);
-      if (cache != nullptr) {
-        return new TraverserDocumentCache(query, std::move(cache), opts);
-      }
-    }
-    // fallthrough intentional
   }
   return new TraverserCache(query, opts);
 }
