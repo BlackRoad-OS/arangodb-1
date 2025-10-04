@@ -27,6 +27,7 @@
 #include "Aql/OutputAqlItemRow.h"
 #include "Aql/Query.h"
 #include "Aql/SingleRowFetcher.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Graph/Providers/ClusterProvider.h"
 #include "Graph/Providers/SingleServerProvider.h"
 #include "Graph/Queues/FifoQueue.h"
@@ -142,8 +143,10 @@ EnumeratePathsExecutor<FinderType>::EnumeratePathsExecutor(Fetcher& fetcher,
       _inputRow{CreateInvalidInputRowHint{}},
       _rowState(ExecutionState::HASMORE),
       _finder{infos.finder()},
-      _sourceBuilder{},
-      _targetBuilder{} {
+      _sourceBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          infos.query().resourceMonitor())),
+      _targetBuilder(std::make_shared<velocypack::SupervisedBuffer>(
+          infos.query().resourceMonitor())) {
   if (!_infos.useRegisterForSourceInput()) {
     _sourceBuilder.add(VPackValue(_infos.getSourceInputValue()));
   }
