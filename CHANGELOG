@@ -1,6 +1,11 @@
 devel
 -----
 
+* Introduced supervised buffer to Aql files in cases where it was relevant 
+  and the query's memory monitor was accessible. The memory consumption in 
+  query runtime is more precisely accounted now, which may cause some queries
+  to run out of memory more easily.
+
 * Upgraded OpenSSL to 3.5.4.
 
 * Fix BTS-2203: Fix part of it by introducing memory supervision to COLLECT 
