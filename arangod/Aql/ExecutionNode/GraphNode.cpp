@@ -48,6 +48,7 @@
 #include "Utils/CollectionNameResolver.h"
 #include "VocBase/LogicalCollection.h"
 #include "VocBase/ticks.h"
+#include "Basics/SupervisedBuffer.h"
 #ifdef USE_ENTERPRISE
 #include "Enterprise/Aql/LocalEnumeratePathsNode.h"
 #include "Enterprise/Aql/LocalShortestPathNode.h"
@@ -192,6 +193,9 @@ GraphNode::GraphNode(ExecutionPlan* plan, ExecutionNodeId id,
       _isDisjoint(false),
       _enabledClusterOneShardRule(false),
       _options(std::move(options)) {
+  _graphInfo =
+      velocypack::Builder(std::make_shared<velocypack::SupervisedBuffer>(
+          plan->getAst()->query().resourceMonitor()));
   // Direction is already the correct Integer.
   // Is not inserted by user but by enum.
 
@@ -382,6 +386,9 @@ GraphNode::GraphNode(ExecutionPlan* plan, velocypack::Slice base)
       _enabledClusterOneShardRule(
           arangodb::basics::VelocyPackHelper::getBooleanValue(
               base, StaticStrings::ForceOneShardAttributeValue, false)) {
+  _graphInfo =
+      velocypack::Builder(std::make_shared<velocypack::SupervisedBuffer>(
+          plan->getAst()->query().resourceMonitor()));
   if (!ServerState::instance()->isDBServer()) {
     // Graph Information. Do we need to reload the graph here?
     std::string graphName;
@@ -562,6 +569,9 @@ GraphNode::GraphNode(ExecutionPlan* plan, ExecutionNodeId id,
       _enabledClusterOneShardRule(false),
       _directions(std::move(directions)),
       _options(std::move(options)) {
+  _graphInfo =
+      velocypack::Builder(std::make_shared<velocypack::SupervisedBuffer>(
+          plan->getAst()->query().resourceMonitor()));
   setGraphInfoAndCopyColls(edgeColls, vertexColls);
 }
 
@@ -630,6 +640,9 @@ GraphNode::GraphNode(ExecutionPlan& plan, GraphNode const& other,
       _directions(other._directions),
       _options(std::move(options)),
       _collectionToShard(other._collectionToShard) {
+  _graphInfo =
+      velocypack::Builder(std::make_shared<velocypack::SupervisedBuffer>(
+          plan.getAst()->query().resourceMonitor()));
   setGraphInfoAndCopyColls(other.edgeColls(), other.vertexColls());
 }
 
