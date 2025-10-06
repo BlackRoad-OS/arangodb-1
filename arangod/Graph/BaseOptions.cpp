@@ -34,10 +34,10 @@
 #include "Aql/OptimizerUtils.h"
 #include "Aql/Projections.h"
 #include "Aql/Query.h"
+#include "Aql/TraversalStats.h"
 #include "Basics/ResourceUsage.h"
 #include "Basics/ScopeGuard.h"
 #include "Basics/VelocyPackHelper.h"
-#include "Cluster/ClusterEdgeCursor.h"
 #include "Containers/HashSet.h"
 #include "Graph/Cache/RefactoredClusterTraverserCache.h"
 #include "Graph/ShortestPathOptions.h"
@@ -278,7 +278,8 @@ BaseOptions::BaseOptions(arangodb::aql::QueryContext& query)
       _useCache(true),
       _isCoordinator(arangodb::ServerState::instance()->isCoordinator()),
       _vertexProjections{},
-      _edgeProjections{} {}
+      _edgeProjections{},
+      _stats(std::make_shared<TraversalStats>()) {}
 
 BaseOptions::BaseOptions(BaseOptions const& other, bool allowAlreadyBuiltCopy)
     : _trx(other._query.newTrxContext()),
@@ -391,16 +392,17 @@ void BaseOptions::addLookupInfo(aql::ExecutionPlan* plan,
                                 std::string const& attributeName,
                                 aql::AstNode* condition, bool onlyEdgeIndexes,
                                 TRI_edge_direction_e direction) {
-  injectLookupInfoInList(_baseLookupInfos, plan, collectionName, attributeName,
-                         condition, onlyEdgeIndexes, direction,
-                         /*depth*/ std::nullopt);
+  _baseLookupInfos.emplace_back(createLookupInfo(plan, collectionName,
+                                                 attributeName, condition,
+                                                 onlyEdgeIndexes, direction,
+                                                 /*depth*/ std::nullopt));
 }
 
-void BaseOptions::injectLookupInfoInList(
-    std::vector<LookupInfo>& list, aql::ExecutionPlan* plan,
-    std::string const& collectionName, std::string const& attributeName,
-    aql::AstNode* condition, bool onlyEdgeIndexes,
-    TRI_edge_direction_e direction, std::optional<uint64_t> depth) {
+BaseOptions::LookupInfo BaseOptions::createLookupInfo(
+    aql::ExecutionPlan* plan, std::string const& collectionName,
+    std::string const& attributeName, aql::AstNode* condition,
+    bool onlyEdgeIndexes, TRI_edge_direction_e direction,
+    std::optional<uint64_t> depth) {
   TRI_ASSERT(
       (direction == TRI_EDGE_IN && attributeName == StaticStrings::ToString) ||
       (direction == TRI_EDGE_OUT &&
@@ -483,7 +485,7 @@ void BaseOptions::injectLookupInfoInList(
     info.expression =
         std::make_unique<aql::Expression>(plan->getAst(), condition);
   }
-  list.emplace_back(std::move(info));
+  return info;
 }
 
 void BaseOptions::clearVariableValues() noexcept {
@@ -557,7 +559,7 @@ bool BaseOptions::evaluateExpression(arangodb::aql::Expression* expression,
   TRI_ASSERT(res.isBoolean());
   bool result = res.toBoolean();
   if (!result) {
-    cache()->incrFiltered();
+    stats()->incrFiltered();
   }
   return result;
 }
@@ -587,9 +589,7 @@ double BaseOptions::costForLookupInfoList(
   return cost;
 }
 
-arangodb::graph::TraverserCache* BaseOptions::cache() const {
-  return _cache.get();
-}
+TraverserCache* BaseOptions::cache() const { return _cache.get(); }
 
 TraverserCache* BaseOptions::cache() {
   ensureCache();
@@ -604,18 +604,16 @@ void BaseOptions::ensureCache() {
     TRI_ASSERT(!arangodb::ServerState::instance()->isCoordinator());
     // In production just gracefully initialize
     // the cache without document cache, s.t. system does not crash
-    activateCache(false, nullptr);
+    activateCache(nullptr);
   }
   TRI_ASSERT(_cache != nullptr);
 }
 
 void BaseOptions::activateCache(
-    bool enableDocumentCache,
     std::unordered_map<ServerID, aql::EngineId> const* engines) {
   // Do not call this twice.
   TRI_ASSERT(_cache == nullptr);
-  _cache.reset(
-      CacheFactory::CreateCache(_query, enableDocumentCache, engines, this));
+  _cache.reset(CacheFactory::CreateCache(_query, false, engines, this));
 }
 
 arangodb::aql::FixedVarExpressionContext& BaseOptions::getExpressionCtx() {

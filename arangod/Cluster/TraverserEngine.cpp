@@ -28,7 +28,7 @@
 #include "Basics/MemoryTypes/MemoryTypes.h"
 #include "Basics/Result.h"
 #include "Basics/StaticStrings.h"
-#include "Graph/EdgeCursor.h"
+#include "Graph/Cursors/EdgeCursor.h"
 #include "Graph/EdgeDocumentToken.h"
 #include "Graph/ShortestPathOptions.h"
 #include "Graph/TraverserCache.h"
@@ -75,6 +75,18 @@ static const std::string TYPE = "type";
                                  "be traversal or shortestPath");
 }
 #endif
+
+auto EdgeCursorForMultipleVertices::rearm() -> bool {
+  if (_nextVertex == _vertices.end()) {
+    return false;
+  }
+  _cursor->rearm(*_nextVertex, _depth);
+  _nextVertex++;
+  return true;
+}
+auto EdgeCursorForMultipleVertices::hasMore() -> bool {
+  return _cursor->hasMore() || rearm();
+}
 
 BaseEngine::BaseEngine(TRI_vocbase_t& vocbase, aql::QueryContext& query,
                        VPackSlice info)
@@ -261,8 +273,16 @@ BaseTraverserEngine::BaseTraverserEngine(TRI_vocbase_t& vocbase,
 
 BaseTraverserEngine::~BaseTraverserEngine() = default;
 
-graph::EdgeCursor* BaseTraverserEngine::getCursor(std::string_view nextVertex,
-                                                  uint64_t currentDepth) {
+void BaseTraverserEngine::rearm(size_t depth, uint64_t batchSize,
+                                std::vector<std::string> vertices,
+                                VPackSlice variables) {
+  injectVariables(variables);
+  _cursor = EdgeCursorForMultipleVertices{
+      _nextCursorId, depth, batchSize, std::move(vertices), getCursor(depth)};
+  _nextCursorId++;
+}
+
+graph::EdgeCursor* BaseTraverserEngine::getCursor(uint64_t currentDepth) {
   graph::EdgeCursor* cursor = nullptr;
   if (_opts->hasSpecificCursorForDepth(currentDepth)) {
     auto it = _depthSpecificCursors.find(currentDepth);
@@ -280,19 +300,16 @@ graph::EdgeCursor* BaseTraverserEngine::getCursor(std::string_view nextVertex,
     TRI_ASSERT(_generalCursor != nullptr);
     cursor = _generalCursor.get();
   }
-  TRI_ASSERT(cursor != nullptr);
-
-  cursor->rearm(nextVertex, currentDepth);
   return cursor;
 }
 
-void BaseTraverserEngine::getEdges(VPackSlice vertex, size_t depth,
-                                   VPackBuilder& builder) {
-  auto outputVertex = [this](VPackBuilder& builder, VPackSlice vertex,
+void BaseTraverserEngine::allEdges(std::vector<std::string> const& vertices,
+                                   size_t depth, VPackBuilder& builder) {
+  auto outputVertex = [this](VPackBuilder& builder, std::string_view vertex,
                              size_t depth) {
-    TRI_ASSERT(vertex.isString());
-
-    graph::EdgeCursor* cursor = getCursor(vertex.stringView(), depth);
+    graph::EdgeCursor* cursor = getCursor(depth);
+    cursor->rearm(vertex, depth);
+    _nextCursorId++;
 
     cursor->readAll(
         [&](EdgeDocumentToken&& eid, VPackSlice edge, size_t cursorId) {
@@ -302,8 +319,7 @@ void BaseTraverserEngine::getEdges(VPackSlice vertex, size_t depth,
           if (edge.isNull()) {
             return;
           }
-          if (_opts->evaluateEdgeExpression(edge, vertex.stringView(), depth,
-                                            cursorId)) {
+          if (_opts->evaluateEdgeExpression(edge, vertex, depth, cursorId)) {
             if (!options().getEdgeProjections().empty()) {
               VPackObjectBuilder guard(&builder);
               options().getEdgeProjections().toVelocyPackFromDocument(
@@ -315,33 +331,75 @@ void BaseTraverserEngine::getEdges(VPackSlice vertex, size_t depth,
         });
   };
 
-  TRI_ASSERT(vertex.isString() || vertex.isArray());
   builder.openObject();
   builder.add(VPackValue(StaticStrings::GraphQueryEdges));
   builder.openArray(true);
-  if (vertex.isArray()) {
-    for (VPackSlice v : VPackArrayIterator(vertex)) {
-      outputVertex(builder, v, depth);
-    }
-  } else if (vertex.isString()) {
-    outputVertex(builder, vertex, depth);
-    // Result now contains all valid edges, probably multiples.
-  } else {
-    THROW_ARANGO_EXCEPTION(TRI_ERROR_BAD_PARAMETER);
+  for (auto const& v : vertices) {
+    outputVertex(builder, v, depth);
   }
   builder.close();
   // statistics
-  builder.add("readIndex",
-              VPackValue(_opts->cache()->getAndResetInsertedDocuments()));
-  builder.add("filtered", VPackValue(_opts->cache()->getAndResetFiltered()));
-  builder.add("cacheHits", VPackValue(_opts->cache()->getAndResetCacheHits()));
-  builder.add("cacheMisses",
-              VPackValue(_opts->cache()->getAndResetCacheMisses()));
-  builder.add("cursorsCreated",
-              VPackValue(_opts->cache()->getAndResetCursorsCreated()));
-  builder.add("cursorsRearmed",
-              VPackValue(_opts->cache()->getAndResetCursorsRearmed()));
+  addAndClearStatistics(builder);
   builder.close();
+}
+
+Result BaseTraverserEngine::nextEdgeBatch(size_t batchId,
+                                          VPackBuilder& builder) {
+  TRI_ASSERT(_cursor.has_value());
+  if (_cursor->_nextBatch != batchId) {
+    return Result{TRI_ERROR_HTTP_BAD_PARAMETER, ""};
+  }
+  uint64_t count = 0;
+  auto batchSize = _cursor->_batchSize;
+
+  builder.add(VPackValue(StaticStrings::GraphQueryEdges));
+  builder.openArray(true);
+  while (count != batchSize && _cursor->hasMore()) {
+    auto vertex = _cursor->_cursor->currentVertex();
+    auto depth = _cursor->_cursor->currentDepth();
+
+    _cursor->_cursor->nextBatch(
+        [&](EdgeDocumentToken&& eid, VPackSlice edge, size_t cursorId) {
+          if (edge.isString()) {
+            edge = _opts->cache()->lookupToken(eid);
+          }
+          if (edge.isNull()) {
+            return;
+          }
+          if (_opts->evaluateEdgeExpression(edge, *vertex, *depth, cursorId)) {
+            if (!options().getEdgeProjections().empty()) {
+              VPackObjectBuilder guard(&builder);
+              options().getEdgeProjections().toVelocyPackFromDocument(
+                  builder, edge, _trx.get());
+            } else {
+              builder.add(edge);
+            }
+          }
+          count++;
+        },
+        batchSize);
+  }
+  builder.close();
+  builder.add("done", VPackValue(not _cursor->hasMore()));
+  builder.add("cursorId", VPackValue(_cursor->_cursorId));
+  builder.add("batchId", VPackValue(_cursor->_nextBatch));
+
+  if (count > 0) {
+    _cursor->_nextBatch++;
+  }
+  return {};
+}
+
+void BaseTraverserEngine::addAndClearStatistics(VPackBuilder& builder) {
+  // Copy & clear is intentional
+  auto stats = *_opts->stats();
+  _opts->stats()->clear();
+  builder.add("readIndex", VPackValue(stats.getScannedIndex()));
+  builder.add("filtered", VPackValue(stats.getFiltered()));
+  builder.add("cacheHits", VPackValue(stats.getCacheHits()));
+  builder.add("cacheMisses", VPackValue(stats.getCacheMisses()));
+  builder.add("cursorsCreated", VPackValue(stats.getCursorsCreated()));
+  builder.add("cursorsRearmed", VPackValue(stats.getCursorsRearmed()));
 }
 
 bool BaseTraverserEngine::produceVertices() const {
@@ -404,7 +462,7 @@ ShortestPathEngine::ShortestPathEngine(TRI_vocbase_t& vocbase,
   TRI_ASSERT(type.isEqualString("shortestPath"));
   _opts = std::make_unique<ShortestPathOptions>(_query, optsSlice, edgesSlice);
   // We create the cache, but we do not need any engines.
-  _opts->activateCache(false, nullptr);
+  _opts->activateCache(nullptr);
 
   _forwardCursor = _opts->buildCursor(false);
   _backwardCursor = _opts->buildCursor(true);
@@ -435,17 +493,18 @@ void ShortestPathEngine::getEdges(VPackSlice vertex, bool backward,
   }
   builder.close();
 
+  // intentional; copy & clear
+  auto stats = *_opts->stats();
+  _opts->stats()->clear();
+
   // statistics
-  builder.add("readIndex",
-              VPackValue(_opts->cache()->getAndResetInsertedDocuments()));
+  builder.add("readIndex", VPackValue(stats.getScannedIndex()));
   builder.add("filtered", VPackValue(0));
-  builder.add("cacheHits", VPackValue(_opts->cache()->getAndResetCacheHits()));
-  builder.add("cacheMisses",
-              VPackValue(_opts->cache()->getAndResetCacheMisses()));
-  builder.add("cursorsCreated",
-              VPackValue(_opts->cache()->getAndResetCursorsCreated()));
-  builder.add("cursorsRearmed",
-              VPackValue(_opts->cache()->getAndResetCursorsRearmed()));
+  builder.add("cacheHits", VPackValue(stats.getCacheHits()));
+  builder.add("cacheMisses", VPackValue(stats.getCacheMisses()));
+  builder.add("cursorsCreated", VPackValue(stats.getCursorsCreated()));
+  builder.add("cursorsRearmed", VPackValue(stats.getCursorsRearmed()));
+
   builder.close();
 }
 
@@ -501,7 +560,7 @@ TraverserEngine::TraverserEngine(TRI_vocbase_t& vocbase,
   TRI_ASSERT(type.isEqualString("traversal"));
   _opts = std::make_unique<TraverserOptions>(_query, optsSlice, edgesSlice);
   // We create the cache, but we do not need any engines.
-  _opts->activateCache(false, nullptr);
+  _opts->activateCache(nullptr);
 }
 
 TraverserEngine::~TraverserEngine() = default;
