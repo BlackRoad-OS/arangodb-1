@@ -289,7 +289,9 @@ class InstanceManager:
         )
 
     def shutdown_deployment(self, timeout: float = 120.0) -> None:
-        """Shutdown all deployed servers.
+        """Shutdown all deployed servers in correct order.
+
+        For clusters, agents are shut down LAST after all other servers.
 
         Args:
             timeout: Maximum time to wait for shutdown
@@ -306,28 +308,55 @@ class InstanceManager:
                 "Shutting down deployment with %s servers", len(self.state.servers)
             )
 
-            # Shutdown in reverse order
+            # Shutdown in reverse startup order, but agents go LAST
             shutdown_order = list(reversed(self.state.startup_order))
 
-            # Stop servers concurrently but with ordering constraints
-            futures = []
+            # Separate agents from non-agents
+            agents = []
+            non_agents = []
             for server_id in shutdown_order:
                 if server_id in self.state.servers:
                     server = self.state.servers[server_id]
-                    future = self._threading.executor.submit(
-                        self._shutdown_server, server, 30.0
-                    )
-                    futures.append((server_id, future))
+                    if server.role == ServerRole.AGENT:
+                        agents.append(server)
+                    else:
+                        non_agents.append(server)
 
-            # Wait for all shutdowns to complete
+            # Log shutdown order
+            if non_agents or agents:
+                order_names = [s.server_id for s in non_agents] + [
+                    s.server_id for s in agents
+                ]
+                logger.info("Shutdown order: %s", " -> ".join(order_names))
+
             failed_shutdowns = []
-            for server_id, future in futures:
-                try:
-                    future.result(timeout=30.0)
-                    logger.debug("Server %s shutdown completed", server_id)
-                except (TimeoutError, OSError, ServerShutdownError) as e:
-                    logger.error("Failed to shutdown server %s: %s", server_id, e)
-                    failed_shutdowns.append(server_id)
+
+            # Phase 1: Shutdown non-agent servers (coordinators, dbservers, single servers)
+            if non_agents:
+                logger.debug(
+                    "Phase 1: Shutting down %d non-agent servers", len(non_agents)
+                )
+                for server in non_agents:
+                    try:
+                        self._shutdown_server(server, timeout=30.0)
+                    except (OSError, ServerShutdownError) as e:
+                        logger.error(
+                            "Failed to shutdown server %s: %s", server.server_id, e
+                        )
+                        failed_shutdowns.append(server.server_id)
+
+            # Phase 2: Shutdown agents AFTER all non-agents are down
+            if agents:
+                logger.debug("Phase 2: Shutting down %d agent servers", len(agents))
+                for server in agents:
+                    try:
+                        # Agents get extra timeout
+                        self._shutdown_server(server, timeout=90.0)
+                    except (OSError, ServerShutdownError) as e:
+                        logger.error(
+                            "Failed to shutdown agent %s: %s", server.server_id, e
+                        )
+                        failed_shutdowns.append(server.server_id)
 
             if failed_shutdowns:
                 logger.warning(
@@ -348,12 +377,24 @@ class InstanceManager:
             logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
 
     def _shutdown_server(self, server: "ArangoServer", timeout: float = 30.0) -> None:
-        """Shutdown a single server instance with bulletproof termination.
+        """Shutdown a single server with bulletproof termination and polling.
+
+        Combines graceful shutdown with emergency force kill fallback and
+        polling to ensure the server actually stops before continuing.
 
         Args:
             server: The server instance to shutdown
             timeout: Maximum time to wait for shutdown
         """
+        if not server.is_running():
+            logger.debug("Server %s already stopped", server.server_id)
+            return
+
+        logger.info(
+            "Shutting down server: %s (role: %s)", server.server_id, server.role.value
+        )
+        start_time = time.time()
+
         try:
             log_server_event(
                 logger, "stopping", server_id=server.server_id, timeout=timeout
@@ -361,22 +402,36 @@ class InstanceManager:
 
             # Try to stop the server gracefully first
             if hasattr(server, "stop") and callable(server.stop):
-                # Use server's own stop method (should use graceful=True by default)
                 server.stop(timeout=timeout)
             else:
-                # Fallback: stop via process supervisor with graceful escalation
+                # Fallback: stop via process supervisor
                 if server.is_running():
                     stop_supervised_process(
                         server.server_id, graceful=True, timeout=timeout
                     )
-                else:
-                    logger.warning(
-                        "Server %s has no process info - may already be stopped",
-                        server.server_id,
-                    )
 
+            # Poll to ensure server actually stops
+            poll_interval = 1.0
+            while server.is_running():
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    raise ServerShutdownError(
+                        f"Server {server.server_id} failed to stop within {timeout}s"
+                    )
+                logger.debug(
+                    "Waiting for server %s to stop (%.1fs elapsed)...",
+                    server.server_id,
+                    elapsed,
+                )
+                time.sleep(poll_interval)
+
+            shutdown_time = time.time() - start_time
             log_server_event(logger, "stopped", server_id=server.server_id)
-            logger.debug("Server %s shutdown completed successfully", server.server_id)
+            logger.info(
+                "Server %s stopped successfully (%.2fs)",
+                server.server_id,
+                shutdown_time,
+            )
 
         except Exception as e:
             log_server_event(
@@ -396,18 +451,12 @@ class InstanceManager:
                     logger.info(
                         "Emergency force kill of server %s succeeded", server.server_id
                     )
-                else:
-                    logger.debug(
-                        "Server %s has no process info for force kill", server.server_id
-                    )
-
             except (OSError, PermissionError, ProcessError) as force_e:
                 logger.error(
                     "CRITICAL: Emergency force kill failed for server %s: %s",
                     server.server_id,
                     force_e,
                 )
-                # Don't re-raise - we want to continue shutting down other servers
 
             # Re-raise the original error for the caller to handle
             raise
@@ -982,20 +1031,6 @@ class InstanceManager:
             )
 
         logger.info("Deployment health verification passed")
-
-    def _shutdown_server(self, server: ArangoServer, timeout: float) -> None:
-        """Shutdown a single server.
-
-        Args:
-            server: Server to shutdown
-            timeout: Shutdown timeout
-        """
-        try:
-            if server.is_running():
-                server.stop(timeout=timeout)
-        except Exception as e:
-            logger.error("Error shutting down server %s: %s", server.server_id, e)
-            raise
 
     def _release_ports(self) -> None:
         """Release all allocated ports for this deployment."""
