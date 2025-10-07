@@ -8,8 +8,13 @@ from pathlib import Path
 from typing import List
 
 from armadillo.test_management import (
-    SuiteOrganizer, Suite, SuiteConfig, SuitePriority,
-    Selector, FilterOperation, create_pattern_selector
+    SuiteOrganizer,
+    Suite,
+    SuiteConfig,
+    SuitePriority,
+    Selector,
+    FilterOperation,
+    create_pattern_selector,
 )
 
 
@@ -27,35 +32,30 @@ def create_shell_api_suite() -> Suite:
         description="Shell client tests - API endpoints and functionality",
         priority=SuitePriority.NORMAL,
         tags={"shell", "api", "client", "converted_from_js"},
-
         # Configuration from original JS suite
         timeout=300.0,  # 5 minutes timeout for API tests
         max_parallel=4,  # Can run multiple API tests in parallel
         requires_isolation=False,  # API tests don't need full isolation
         setup_timeout=60.0,
         teardown_timeout=30.0,
-
         # Resource requirements - API tests are lightweight
         min_memory_mb=256,
         max_cpu_cores=2,
         requires_network=True,  # API tests need network access to server
         requires_filesystem=False,  # No special filesystem requirements
-
         # Custom metadata
         metadata={
             "converted_from": "js/client/modules/@arangodb/testsuites/aql.js:shellApiClient",
             "original_test_path": "tests/js/client/shell/api",
             "python_test_path": "tests/shell_api",
             "framework_version": "1.0.0",
-            "test_categories": ["api", "statistics", "endpoints"]
-        }
+            "test_categories": ["api", "statistics", "endpoints"],
+        },
     )
 
     # Create selector for shell API tests
     # Select all test files in the shell_api directory
-    selector = create_pattern_selector(
-        include_patterns=["**/shell_api/**"]
-    )
+    selector = create_pattern_selector(include_patterns=["**/shell_api/**"])
 
     suite = Suite(config=config, selector=selector)
     return suite
@@ -86,9 +86,9 @@ def create_shell_api_organizer() -> SuiteOrganizer:
             "test_file": "test_statistics.py",
             "endpoints_tested": [
                 "/_admin/statistics",
-                "/_admin/statistics-description"
-            ]
-        }
+                "/_admin/statistics-description",
+            ],
+        },
     )
 
     statistics_selector = create_pattern_selector(
@@ -164,18 +164,18 @@ if __name__ == "__main__":
     print(f"Execution order: {summary['execution_order']}")
 
     print("\nSuites:")
-    for suite_name, suite_info in summary['suites'].items():
+    for suite_name, suite_info in summary["suites"].items():
         suite = organizer.get_suite(suite_name)
         description = suite.config.description if suite else "No description"
         print(f"  - {suite_name}: {description}")
-        if suite_info['tags']:
+        if suite_info["tags"]:
             print(f"    Tags: {', '.join(suite_info['tags'])}")
-        if suite_info['children_count'] > 0:
+        if suite_info["children_count"] > 0:
             print(f"    Children: {suite_info['children_count']}")
 
     print(f"\nHierarchy: {summary['hierarchy']}")
 
-    validation_errors = summary['validation_errors']
+    validation_errors = summary["validation_errors"]
     if validation_errors:
         print(f"\nValidation errors: {validation_errors}")
     else:

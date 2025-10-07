@@ -19,6 +19,7 @@ import sys
 import subprocess
 from pathlib import Path
 
+
 def main():
     """Run framework tests using pytest."""
 
@@ -28,8 +29,11 @@ def main():
 
     # Build pytest command
     pytest_args = [
-        sys.executable, "-m", "pytest",
-        "-c", str(armadillo_dir / "framework_tests" / "pytest.ini"),
+        sys.executable,
+        "-m",
+        "pytest",
+        "-c",
+        str(armadillo_dir / "framework_tests" / "pytest.ini"),
         str(armadillo_dir / "framework_tests" / "unit"),
     ]
 
@@ -51,6 +55,7 @@ def main():
     except Exception as e:
         print(f"Error running tests: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
