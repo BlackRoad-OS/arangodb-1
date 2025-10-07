@@ -90,7 +90,7 @@ class ArmadilloConfig(BaseModel):
     def validate_config(self) -> "ArmadilloConfig":
         """Validate and normalize configuration."""
         # Import here to avoid circular imports
-        import inspect
+        import inspect  # pylint: disable=import-outside-toplevel
         from .build_detection import detect_build_directory, normalize_build_directory
         from .errors import ConfigurationError, PathError
 
@@ -127,11 +127,11 @@ class ArmadilloConfig(BaseModel):
 
         # Validate cluster configuration
         if self.deployment_mode == DeploymentMode.CLUSTER:
-            if self.cluster.agents < 1:
+            if self.cluster.agents < 1:  # pylint: disable=no-member
                 raise ConfigurationError("Cluster must have at least 1 agent")
-            if self.cluster.dbservers < 1:
+            if self.cluster.dbservers < 1:  # pylint: disable=no-member
                 raise ConfigurationError("Cluster must have at least 1 dbserver")
-            if self.cluster.coordinators < 1:
+            if self.cluster.coordinators < 1:  # pylint: disable=no-member
                 raise ConfigurationError("Cluster must have at least 1 coordinator")
 
         # Validate timeouts

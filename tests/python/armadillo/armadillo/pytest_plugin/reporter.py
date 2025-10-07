@@ -82,7 +82,7 @@ class ArmadilloReporter:
         parts = nodeid.split("::")
         if len(parts) >= 2:
             test_file = parts[0]
-            test_class = parts[1] if len(parts) > 1 else ""
+            _ = parts[1] if len(parts) > 1 else ""  # test_class, for future use
 
             # Extract meaningful name from file path
             file_name = test_file.split("/")[-1].replace("test_", "").replace(".py", "")

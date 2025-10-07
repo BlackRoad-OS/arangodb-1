@@ -17,7 +17,7 @@ class ConfigurationError(ArmadilloError):
     """Error in framework configuration."""
 
 
-class EnvironmentError(ArmadilloError):
+class ArmadilloEnvironmentError(ArmadilloError):
     """Error in environment setup or detection."""
 
 
@@ -202,11 +202,11 @@ class AnalysisError(ResultProcessingError):
 
 
 # Timeout Management Errors
-class TimeoutError(ArmadilloError):
+class ArmadilloTimeoutError(ArmadilloError):
     """Timeout management error."""
 
 
-class DeadlineExceededError(TimeoutError):
+class DeadlineExceededError(ArmadilloTimeoutError):
     """Global deadline exceeded."""
 
     def __init__(
@@ -221,7 +221,7 @@ class DeadlineExceededError(TimeoutError):
         self.elapsed = elapsed
 
 
-class WatchdogTimeoutError(TimeoutError):
+class WatchdogTimeoutError(ArmadilloTimeoutError):
     """Watchdog timeout triggered."""
 
     def __init__(

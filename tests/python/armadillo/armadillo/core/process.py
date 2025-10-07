@@ -15,7 +15,7 @@ from .errors import (
     ProcessError,
     ProcessStartupError,
     ProcessTimeoutError,
-    TimeoutError as ArmadilloTimeoutError,
+    ArmadilloTimeoutError,
 )
 from .time import clamp_timeout, timeout_scope
 from .log import get_logger, log_process_event
@@ -250,7 +250,8 @@ class ProcessSupervisor:
                         stdout, _ = proc.communicate(timeout=1.0)
                         if stdout:
                             error_output = f"\nProcess output:\n{stdout}"
-            except:
+            except Exception:  # pylint: disable=broad-exception-caught
+                # Ignore errors when trying to get process output for error message
                 pass
             log_process_event(
                 logger, "supervisor.start_failed", process_id=process_id, error=str(e)
@@ -306,7 +307,8 @@ class ProcessSupervisor:
                     )
                     try:
                         process.terminate()
-                    except:
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        # Ignore errors during fallback termination
                         pass
                 try:
                     process.wait(timeout=timeout)
@@ -560,7 +562,7 @@ class ProcessSupervisor:
 
     def _handle_process_exit(self, process_id: str, exit_code: int) -> None:
         """Handle unexpected process exit."""
-        process_info = self._process_info.get(process_id)
+        _ = self._process_info.get(process_id)  # For future crash analysis
         if exit_code == 0:
             log_process_event(
                 logger, "supervisor.exited", process_id=process_id, exit_code=exit_code

@@ -248,7 +248,7 @@ class EnvironmentTestFactory:
         with self._lock:
             contexts = list(self._active_contexts.items())
             self._active_contexts.clear()
-        for test_name, context in contexts:
+        for _, context in contexts:
             try:
                 context.cleanup()
             except (RuntimeError, OSError, AttributeError):

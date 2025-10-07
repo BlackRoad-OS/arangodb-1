@@ -80,7 +80,7 @@ def main(
     # Propagate global options to subcommands via environment variables
     # This allows subcommands to access them without triggering premature config loading
     if cli_options.build_dir:
-        bin_dir = cli_options.build_dir.resolve()
+        bin_dir = cli_options.build_dir.resolve()  # pylint: disable=no-member
         os.environ["ARMADILLO_BIN_DIR"] = str(bin_dir)
         console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
 

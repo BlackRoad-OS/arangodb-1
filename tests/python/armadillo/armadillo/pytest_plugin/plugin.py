@@ -4,11 +4,10 @@ import asyncio
 import atexit
 import logging
 import pytest
-import sys
 import time
 import traceback
 from typing import Generator, Optional, Dict, Any, List
-from ..core.config import load_config, get_config
+from ..core.config import get_config
 from ..core.log import (
     configure_logging,
     get_logger,
@@ -115,7 +114,7 @@ class ArmadilloPlugin:
                 logger.error(
                     "Error during plugin cleanup of deployment %s: %s", deployment_id, e
                 )
-        for orchestrator_id, orchestrator in orchestrators_to_clean:
+        for orchestrator_id, _ in orchestrators_to_clean:
             try:
                 logger.debug(
                     "Plugin safety cleanup: cleaning up orchestrator %s",
@@ -222,21 +221,6 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     _plugin.pytest_unconfigure(config)
 
 
-def pytest_runtest_setup(item: pytest.Item) -> None:
-    """Test setup entry point."""
-    _plugin.pytest_runtest_setup(item)
-
-
-def pytest_runtest_teardown(item: pytest.Item, nextitem: Optional[pytest.Item]) -> None:
-    """Test teardown entry point."""
-    _plugin.pytest_runtest_teardown(item, nextitem)
-
-
-def pytest_runtest_call(item: pytest.Item) -> None:
-    """Test call entry point."""
-    _plugin.pytest_runtest_call(item)
-
-
 @pytest.fixture(scope="session")
 def arango_single_server() -> Generator[ArangoServer, None, None]:
     """Provide a single ArangoDB server for testing."""
@@ -323,13 +307,13 @@ def _create_configured_server(server_id: str) -> ArangoServer:
     Returns:
         Configured ArangoServer instance (not started)
     """
-    from ..core.config import get_config
-    from ..core.log import get_logger
+    from ..core.config import get_config as get_framework_config
+    from ..core.log import get_logger as get_framework_logger
     from ..instances.server_config_builder import ServerConfigBuilder
     from ..instances.server_factory import MinimalConfig
 
-    config = get_config()
-    server_logger = get_logger(__name__)
+    config = get_framework_config()
+    server_logger = get_framework_logger(__name__)
 
     # Use centralized server configuration logic
     config_builder = ServerConfigBuilder(config, server_logger)
@@ -419,29 +403,37 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
 
 
 @pytest.fixture
-def arango_orchestrator(arango_cluster) -> ClusterOrchestrator:
+def arango_orchestrator(
+    arango_cluster,
+) -> ClusterOrchestrator:  # pylint: disable=redefined-outer-name
     """Provide cluster orchestrator for advanced cluster operations."""
     # Use the cluster's deployment_id to get the proper orchestrator
     # instead of relying on global state lookup
-    from ..instances.orchestrator import get_cluster_orchestrator
+    from ..instances.orchestrator import get_cluster_orchestrator as get_orchestrator
 
-    return get_cluster_orchestrator(arango_cluster.deployment_id)
+    return get_orchestrator(arango_cluster.deployment_id)
 
 
 @pytest.fixture
-def arango_coordinators(arango_cluster) -> List[ArangoServer]:
+def arango_coordinators(
+    arango_cluster,
+) -> List[ArangoServer]:  # pylint: disable=redefined-outer-name
     """Provide list of coordinator servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.COORDINATOR)
 
 
 @pytest.fixture
-def arango_dbservers(arango_cluster) -> List[ArangoServer]:
+def arango_dbservers(
+    arango_cluster,
+) -> List[ArangoServer]:  # pylint: disable=redefined-outer-name
     """Provide list of database servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.DBSERVER)
 
 
 @pytest.fixture
-def arango_agents(arango_cluster) -> List[ArangoServer]:
+def arango_agents(
+    arango_cluster,
+) -> List[ArangoServer]:  # pylint: disable=redefined-outer-name
     """Provide list of agent servers from cluster."""
     return arango_cluster.get_servers_by_role(ServerRole.AGENT)
 
@@ -518,14 +510,14 @@ def pytest_sessionstart(session):
     session_id = set_test_session_id()
     logger.info("Test session started with ID: %s", session_id)
     atexit.register(_emergency_cleanup)
-    from ..core.config import get_config
-    from ..core.types import DeploymentMode
+    from ..core.config import get_config as get_framework_config
+    from ..core.types import DeploymentMode as DepMode
 
-    framework_config = get_config()
+    framework_config = get_framework_config()
     deployment_mode = framework_config.deployment_mode
     logger.info("Starting %s deployment for test session...", deployment_mode.value)
     try:
-        if deployment_mode == DeploymentMode.CLUSTER:
+        if deployment_mode == DepMode.CLUSTER:
             _plugin._get_or_create_cluster()
             logger.info("Cluster deployment ready for tests")
         else:
@@ -549,9 +541,9 @@ def pytest_sessionstart(session):
 
 def _is_verbose_output_enabled():
     """Check if verbose output is enabled (default) or compact mode is requested."""
-    from ..core.config import get_config
+    from ..core.config import get_config as get_framework_config
 
-    framework_config = get_config()
+    framework_config = get_framework_config()
     return not framework_config.compact_mode
 
 

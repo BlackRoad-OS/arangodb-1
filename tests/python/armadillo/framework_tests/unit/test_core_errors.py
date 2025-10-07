@@ -5,7 +5,7 @@ import pytest
 from armadillo.core.errors import (
     ArmadilloError,
     ConfigurationError,
-    EnvironmentError,
+    ArmadilloEnvironmentError,
     ProcessError,
     ProcessStartupError,
     ProcessTimeoutError,
@@ -39,7 +39,7 @@ from armadillo.core.errors import (
     ResultProcessingError,
     ResultExportError,
     AnalysisError,
-    TimeoutError,
+    ArmadilloTimeoutError,
     DeadlineExceededError,
     WatchdogTimeoutError,
     CheckerError,

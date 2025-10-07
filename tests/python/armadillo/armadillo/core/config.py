@@ -3,9 +3,9 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, Type, TypeVar, Protocol
+from typing import Dict, Any, Optional, TypeVar, Protocol
 
-from .types import ArmadilloConfig, DeploymentMode, ClusterConfig, MonitoringConfig
+from .types import ArmadilloConfig, ClusterConfig
 from .errors import ConfigurationError
 
 T = TypeVar("T")
@@ -150,7 +150,7 @@ class ConfigManager:
     def _load_from_file(self, config_file: Path) -> Dict[str, Any]:
         """Load configuration from YAML file."""
         try:
-            with open(config_file, "r") as f:
+            with open(config_file, "r", encoding="utf-8") as f:
                 if config_file.suffix.lower() in (".yml", ".yaml"):
                     return yaml.safe_load(f) or {}
                 else:

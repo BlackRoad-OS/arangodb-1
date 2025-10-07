@@ -166,12 +166,12 @@ class TestArmadilloPluginSessionManagement:
 class TestArmadilloPluginErrorHandling:
     """Test plugin error handling."""
 
-    @patch("armadillo.pytest_plugin.plugin.load_config")
-    def test_sessionstart_handles_config_error(self, mock_load_config):
+    @patch("armadillo.pytest_plugin.plugin.get_config")
+    def test_sessionstart_handles_config_error(self, mock_get_config):
         """Test sessionstart handles configuration errors gracefully."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
-        mock_load_config.side_effect = Exception("Config failed")
+        mock_get_config.side_effect = Exception("Config failed")
 
         # Should not crash even if config fails
         try:

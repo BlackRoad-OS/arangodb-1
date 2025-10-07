@@ -9,7 +9,7 @@ import typer
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from rich.console import Console
 from rich.table import Table
-from ...core.config import get_config, load_config
+from ...core.config import load_config
 from ...core.log import get_logger
 from ...core.types import DeploymentMode
 
@@ -266,7 +266,7 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
 
     # Execute tests
     console.print(f"[cyan]Running tests with command:[/cyan] {' '.join(pytest_args)}")
-    result = subprocess.run(pytest_args, cwd=Path.cwd())
+    result = subprocess.run(pytest_args, cwd=Path.cwd(), check=False)
 
     if result.returncode == 0:
         console.print("[green]✅ All tests passed![/green]")
@@ -275,8 +275,8 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
     sys.exit(result.returncode)
 
 
-@test_app.command()
-def list():
+@test_app.command(name="list")
+def list_markers():
     """List available test markers and fixtures."""
     table = Table(title="Available Test Markers")
     table.add_column("Marker", style="cyan")

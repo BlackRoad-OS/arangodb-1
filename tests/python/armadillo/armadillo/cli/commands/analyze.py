@@ -125,7 +125,7 @@ def _load_results(result_files: List[Path]) -> Dict[str, Any]:
 
 def _display_rich_summary(results: Dict[str, Any]) -> None:
     """Display rich formatted summary."""
-    summary = results["summary"]
+    test_summary = results["summary"]
     stats_table = Table(title="Test Summary")
     stats_table.add_column("Metric", style="cyan")
     stats_table.add_column("Value", style="green")
@@ -133,22 +133,22 @@ def _display_rich_summary(results: Dict[str, Any]) -> None:
     stats_table.add_row("Total Tests", str(results["total_tests"]))
     stats_table.add_row("Total Duration", f"{results['total_duration']:.2f}s")
     stats_table.add_row("", "")
-    stats_table.add_row("Passed", f"[green]{summary['passed']}[/green]")
-    stats_table.add_row("Failed", f"[red]{summary['failed']}[/red]")
-    stats_table.add_row("Errors", f"[red]{summary['error']}[/red]")
-    stats_table.add_row("Skipped", f"[yellow]{summary['skipped']}[/yellow]")
-    stats_table.add_row("Timeouts", f"[magenta]{summary['timeout']}[/magenta]")
-    stats_table.add_row("Crashed", f"[red bold]{summary['crashed']}[/red bold]")
+    stats_table.add_row("Passed", f"[green]{test_summary['passed']}[/green]")
+    stats_table.add_row("Failed", f"[red]{test_summary['failed']}[/red]")
+    stats_table.add_row("Errors", f"[red]{test_summary['error']}[/red]")
+    stats_table.add_row("Skipped", f"[yellow]{test_summary['skipped']}[/yellow]")
+    stats_table.add_row("Timeouts", f"[magenta]{test_summary['timeout']}[/magenta]")
+    stats_table.add_row("Crashed", f"[red bold]{test_summary['crashed']}[/red bold]")
     console.print(stats_table)
-    total = summary["total"]
+    total = test_summary["total"]
     if total > 0:
-        success_rate = summary["passed"] / total * 100
+        success_rate = test_summary["passed"] / total * 100
         color = (
             "green" if success_rate >= 90 else "yellow" if success_rate >= 70 else "red"
         )
         console.print(
             Panel(
-                f"[{color}]Success Rate: {success_rate:.1f}% ({summary['passed']}/{total})[/{color}]",
+                f"[{color}]Success Rate: {success_rate:.1f}% ({test_summary['passed']}/{total})[/{color}]",
                 title="Overall Result",
             )
         )
@@ -174,20 +174,20 @@ def _display_rich_summary(results: Dict[str, Any]) -> None:
 
 def _display_plain_summary(results: Dict[str, Any]) -> None:
     """Display plain text summary."""
-    summary = results["summary"]
-    print(f"Test Results Summary:")
+    test_summary = results["summary"]
+    print("Test Results Summary:")
     print(f"Files: {results['total_files']}")
     print(f"Tests: {results['total_tests']}")
     print(f"Duration: {results['total_duration']:.2f}s")
-    print(f"Passed: {summary['passed']}")
-    print(f"Failed: {summary['failed']}")
-    print(f"Errors: {summary['error']}")
-    print(f"Skipped: {summary['skipped']}")
-    print(f"Timeouts: {summary['timeout']}")
-    print(f"Crashed: {summary['crashed']}")
-    total = summary["total"]
+    print(f"Passed: {test_summary['passed']}")
+    print(f"Failed: {test_summary['failed']}")
+    print(f"Errors: {test_summary['error']}")
+    print(f"Skipped: {test_summary['skipped']}")
+    print(f"Timeouts: {test_summary['timeout']}")
+    print(f"Crashed: {test_summary['crashed']}")
+    total = test_summary["total"]
     if total > 0:
-        success_rate = summary["passed"] / total * 100
+        success_rate = test_summary["passed"] / total * 100
         print(f"Success Rate: {success_rate:.1f}%")
 
 
