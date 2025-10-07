@@ -976,6 +976,71 @@ function ahuacatMemoryLimitCollectMemoryLeakTestSuite() {
   };
 }
 
+function ahuacatMemoryLimitJoinTestSuite() {
+  const L = "joinLeft";
+  const R = "joinRight";
+  let left, right;
+
+  function teadDown() {
+    db._drop(L);
+    db._drop(R);
+  }
+
+  return {
+    setUpAll: function() {
+      teadDown();
+
+      left = db._create(L);
+      right = db._create(R);
+
+      const LARGE_STR = "x".repeat(2048);
+
+      const leftDocs = [];
+      const rightDocs = [];
+
+      for (let i = 0; i < 10000; ++i) {
+        leftDocs.push({ k: i, grp: "g" + (i % 1000), payload: LARGE_STR, num: i});
+        rightDocs.push({ k: i * 2, grp: "g" + (i % 1000), payload: LARGE_STR, bool: (i % 2 === 0)});
+      }
+      left.save(leftDocs);
+      right.save(rightDocs);
+
+      left.ensureIndex({ type: "hash", fields: ["k"], unique: false });
+      right.ensureIndex({ type: "hash", fields: ["k"], unique: false });
+      left.ensureIndex({ type: "hash", fields: ["grp"], unique: false });
+      right.ensureIndex({ type: "hash", fields: ["grp"], unique: false });
+    },
+
+    tearDownAll: teadDown,
+
+    testJoinEqualWithinLimit: function () {
+      const q = `
+        FOR l IN ${L}
+          FOR r IN ${R}
+            FILTER l.k == r.k
+            RETURN [l.k, r.flag]
+      `;
+      const res = db._query(q, null, { memoryLimit: 2000000}).toArray();
+      assertTrue(Array.isArray(res));
+      assertTrue(res.length > 4000 && res.length < 6000, "unexpected result size: " + res.length);
+    },
+
+    testJoinEqualExceedLimit: function () {
+      const q = `
+        FOR l IN ${L}
+          FOR r IN ${R}
+            FILTER l.k == r.k
+            RETURN [l.k, r.flag]
+      `;
+      try {
+        db._query(q, null, { memoryLimit: 1000}).toArray();
+        fail();
+      } catch (err) {
+        assertEqual(errors.ERROR_RESOURCE_LIMIT.code, err.errorNum);
+      }
+    },
+  };
+}
 
 jsunity.run(ahuacatlMemoryLimitStaticQueriesTestSuite);
 jsunity.run(ahuacatlMemoryLimitReadOnlyQueriesTestSuite);
@@ -984,6 +1049,6 @@ jsunity.run(ahuacatlMemoryLimitSkipTestSuite);
 jsunity.run(ahuacatMemoryLimitSortedCollectTestSuite);
 jsunity.run(ahuacatMemoryLimitMergeTestSuite);
 jsunity.run(ahuacatMemoryLimitCollectMemoryLeakTestSuite);
-
+jsunity.run(ahuacatMemoryLimitJoinTestSuite);
 
 return jsunity.done();
