@@ -94,12 +94,9 @@ class TestArmadilloPluginConfiguration:
                 expected in marker for marker in marker_names
             ), f"Marker '{expected}' not registered"
 
-    @patch("armadillo.pytest_plugin.plugin.load_config")
     @patch("armadillo.pytest_plugin.plugin.configure_logging")
     @patch("armadillo.pytest_plugin.plugin.set_test_session_id")
-    def test_pytest_sessionstart_basic(
-        self, mock_set_session, mock_logging, mock_load_config
-    ):
+    def test_pytest_sessionstart_basic(self, mock_set_session, mock_logging):
         """Test pytest_sessionstart performs setup."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
@@ -107,7 +104,7 @@ class TestArmadilloPluginConfiguration:
         plugin.pytest_sessionstart(mock_session)
 
         # Should have called setup functions
-        mock_load_config.assert_called_once()
+        # Note: load_config() is no longer called here - config is loaded by CLI and pytest_configure
         mock_logging.assert_called_once()
         mock_set_session.assert_called_once()
 

@@ -79,6 +79,42 @@ class BuildDetector:
             logger.debug("Filesystem search failed: %s", e)
         return None
 
+    def normalize_build_directory(self, build_dir: Path) -> Optional[Path]:
+        """Normalize build directory to the directory containing arangod binary.
+
+        Accepts both:
+        - Direct path to directory containing arangod: /path/to/build/bin
+        - Build root directory: /path/to/build (will check bin/ subdirectory)
+
+        Args:
+            build_dir: User-provided build directory path
+
+        Returns:
+            Path to directory containing arangod binary, or None if not found
+        """
+        if not build_dir.exists() or not build_dir.is_dir():
+            return None
+
+        # Try common locations for arangod binary
+        # Check bin/ subdirectory first (more specific, avoids confusion with arangod/ source dir)
+        candidate_paths = [
+            build_dir / "bin" / "arangod",  # Standard CMake: /build/bin/arangod
+            build_dir
+            / "arangod",  # Direct: /build/bin/arangod (if user points to bin dir)
+        ]
+
+        for arangod_path in candidate_paths:
+            # Check if it's a file (not directory) and executable
+            if arangod_path.is_file() and os.access(arangod_path, os.X_OK):
+                bin_dir = arangod_path.parent
+                logger.debug(
+                    "Found arangod at %s, using bin_dir: %s", arangod_path, bin_dir
+                )
+                return bin_dir
+
+        # Not found
+        return None
+
     def validate_build_directory(self, build_dir: Path) -> bool:
         """Validate that a directory contains a usable arangod binary.
 
@@ -118,6 +154,14 @@ class BuildDetector:
 
 
 _build_detector = BuildDetector()
+
+
+def normalize_build_directory(build_dir: Path) -> Optional[Path]:
+    """Normalize build directory to the directory containing arangod binary.
+
+    Accepts both build root (/path/to/build) and bin directory (/path/to/build/bin).
+    """
+    return _build_detector.normalize_build_directory(build_dir)
 
 
 def detect_build_directory(search_from: Optional[Path] = None) -> Optional[Path]:

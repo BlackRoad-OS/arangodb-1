@@ -39,6 +39,8 @@ class ArmadilloPlugin:
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
+        # In pytest subprocess, config needs to be loaded from environment variables
+        # get_config() will call load_config() if not already loaded
         framework_config = get_config()
         if framework_config.log_level != "DEBUG":
             logging.getLogger("faker").setLevel(logging.WARNING)
@@ -48,7 +50,19 @@ class ArmadilloPlugin:
             logging.getLogger("aiohttp").setLevel(logging.WARNING)
         self._deployment_mode = framework_config.deployment_mode.value
         self._compact_mode = framework_config.compact_mode
+        self._armadillo_config = framework_config
         self._register_markers(config)
+        configure_logging(
+            level="DEBUG" if config.option.verbose > 0 else "INFO",
+            enable_console=True,
+            enable_json=True,
+        )
+        set_global_deadline(self._armadillo_config.test_timeout)
+        logger.info(
+            "Armadillo pytest plugin configured with timeout=%.1fs",
+            self._armadillo_config.test_timeout,
+        )
+        self._maybe_start_session_servers(config)
 
     def _register_markers(self, config: pytest.Config) -> None:
         """Register custom markers for Armadillo tests."""
@@ -80,20 +94,6 @@ class ArmadilloPlugin:
         config.addinivalue_line("markers", "smoke_test: Basic smoke test")
         config.addinivalue_line("markers", "regression: Regression test")
         config.addinivalue_line("markers", "performance: Performance measurement test")
-        # Don't pass pytest's verbose level to load_config - let it load from environment variables
-        # (ARMADILLO_VERBOSE) set by the CLI process
-        self._armadillo_config = load_config()
-        configure_logging(
-            level="DEBUG" if config.option.verbose > 0 else "INFO",
-            enable_console=True,
-            enable_json=True,
-        )
-        set_global_deadline(self._armadillo_config.test_timeout)
-        logger.info(
-            "Armadillo pytest plugin configured with timeout=%.1fs",
-            self._armadillo_config.test_timeout,
-        )
-        self._maybe_start_session_servers(config)
 
     def pytest_unconfigure(self, _config: pytest.Config) -> None:
         """Clean up after pytest run."""
@@ -162,7 +162,8 @@ class ArmadilloPlugin:
     def pytest_sessionstart(self, _session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
         logger.debug("ArmadilloPlugin: Session start")
-        load_config()
+        # Config already loaded by CLI and pytest_configure
+        # Don't call load_config() again to avoid duplicate build detection
         configure_logging()
         set_test_session_id()
 

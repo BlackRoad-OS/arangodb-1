@@ -91,7 +91,7 @@ class ArmadilloConfig(BaseModel):
         """Validate and normalize configuration."""
         # Import here to avoid circular imports
         import inspect
-        from .build_detection import detect_build_directory
+        from .build_detection import detect_build_directory, normalize_build_directory
         from .errors import ConfigurationError, PathError
 
         # Set default temp directory if not specified
@@ -101,15 +101,26 @@ class ArmadilloConfig(BaseModel):
         # Create temp directory
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
-        # Auto-detect build directory if not explicitly set
-        if self.bin_dir is None and not self._is_unit_test_context():
+        # Handle bin_dir: normalize or auto-detect
+        if self.bin_dir is not None:
+            # User explicitly provided a build directory
+            # Normalize it to find the actual bin directory containing arangod
+            normalized_bin_dir = normalize_build_directory(self.bin_dir)
+            if normalized_bin_dir is None:
+                # Directory exists but no arangod found
+                raise PathError(
+                    f"Could not find arangod binary in build directory: {self.bin_dir}\n"
+                    f"Looked in:\n"
+                    f"  - {self.bin_dir}/arangod\n"
+                    f"  - {self.bin_dir}/bin/arangod\n"
+                    f"Please ensure the build directory contains a compiled arangod executable."
+                )
+            self.bin_dir = normalized_bin_dir
+        elif not self._is_unit_test_context():
+            # No explicit bin_dir, try auto-detection
             detected_build_dir = detect_build_directory()
             if detected_build_dir:
                 self.bin_dir = detected_build_dir
-
-        # Validate paths exist
-        if self.bin_dir and not self.bin_dir.exists():
-            raise PathError(f"Binary directory does not exist: {self.bin_dir}")
 
         if self.work_dir and not self.work_dir.exists():
             self.work_dir.mkdir(parents=True, exist_ok=True)

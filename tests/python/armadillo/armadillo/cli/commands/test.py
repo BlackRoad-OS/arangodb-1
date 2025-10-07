@@ -184,19 +184,27 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
     deployment_mode = (
         DeploymentMode.CLUSTER if options.cluster else DeploymentMode.SINGLE_SERVER
     )
-    config = load_config(
-        deployment_mode=deployment_mode,
-        log_level=options.log_level,
-        compact_mode=options.compact,
-    )
 
-    # Logging is configured once in the main CLI callback.
+    # Build config kwargs - pass bin_dir to load_config so validation happens first
+    config_kwargs = {
+        "deployment_mode": deployment_mode,
+        "log_level": options.log_level,
+        "compact_mode": options.compact,
+    }
 
     if options.build_dir:
-        config.bin_dir = options.build_dir.resolve()
-        console.print(
-            f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]"
-        )
+        bin_dir = options.build_dir.resolve()
+        config_kwargs["bin_dir"] = bin_dir
+        console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
+
+    config = load_config(**config_kwargs)
+
+    # Always propagate bin_dir to pytest subprocess (whether explicitly set or auto-detected)
+    # This prevents duplicate build detection in the subprocess
+    if config.bin_dir:
+        os.environ["ARMADILLO_BIN_DIR"] = str(config.bin_dir)
+
+    # Logging is configured once in the main CLI callback.
 
     # Build pytest arguments
     pytest_args = ["python", "-m", "pytest"]

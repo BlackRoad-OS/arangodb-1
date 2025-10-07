@@ -1,5 +1,6 @@
 """Main CLI entry point for Armadillo framework."""
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -7,7 +8,6 @@ import typer
 from pydantic import BaseModel, Field, ConfigDict
 from rich.console import Console
 from rich.table import Table
-from ..core.config import load_config
 from ..core.log import configure_logging, get_logger
 from ..core.types import DeploymentMode
 from .commands.test import test_app
@@ -76,20 +76,16 @@ def main(
     configure_logging(
         level=cli_options.log_level, enable_console=True, enable_json=False
     )
-    try:
-        config = load_config(
-            config_file=cli_options.config_file,
-            verbose=cli_options.verbose,
-            log_level=cli_options.log_level,
-        )
-        if cli_options.build_dir:
-            config.bin_dir = cli_options.build_dir.resolve()
-            console.print(
-                f"[green]Using ArangoDB build directory: {config.bin_dir}[/green]"
-            )
-    except Exception as e:
-        console.print(f"[red]Configuration error: {e}[/red]")
-        raise typer.Exit(1)
+
+    # Propagate global options to subcommands via environment variables
+    # This allows subcommands to access them without triggering premature config loading
+    if cli_options.build_dir:
+        bin_dir = cli_options.build_dir.resolve()
+        os.environ["ARMADILLO_BIN_DIR"] = str(bin_dir)
+        console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
+
+    # Don't load config here - let subcommands load it with their specific options
+    # This avoids duplicate config loading and premature build detection
 
 
 @app.command()
