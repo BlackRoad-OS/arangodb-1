@@ -48,6 +48,7 @@ class Isolate;
 namespace arangodb {
 
 class CollectionNameResolver;
+struct SupervisedHeader;
 
 namespace velocypack {
 
@@ -135,6 +136,8 @@ struct AqlValue final {
     VPACK_MANAGED_STRING,  // contains vpack in std::string*,
                            // std::string always bigger than 15 bytes,
                            // std::string* allocated via new
+    VPACK_SUPERVISED_SLICE,
+    VPACK_SUPERVISED_STRING,
     RANGE,  // a pointer to a range remembering lower and upper bound, managed
     VPACK_INLINE_INT64,   // contains vpack data, inline and unpacked 64bit int
                           // number value (in little-endian)
@@ -272,6 +275,22 @@ struct AqlValue final {
     } longNumberMeta;
     static_assert(sizeof(longNumberMeta) == 16,
                   "VPACK_INLINE_INT64 layout is not 16 bytes!");
+
+    // VPACK_SUPERVISED_SLICE
+    struct {
+      uint64_t lengthOrigin;     // | AT | MO | 6 x ML |
+      SupervisedHeader* header;  // PD -> header {rm + dataPtr}
+    } supervisedSliceMeta;
+    static_assert(sizeof(supervisedSliceMeta) == 16,
+                  "VPACK_SUPERVISED_SLICE layout must be 16 bytes!");
+
+    // VPACK_SUPERVISED_STRING
+    struct {
+      uint64_t lengthOrigin;     // | AT | MO | 6 x ML |
+      SupervisedHeader* header;  // PD -> header {rm + dataPtr}
+    } supervisedStringMeta;
+    static_assert(sizeof(supervisedStringMeta) == 16,
+                  "VPACK_SUPERVISED_STRING layout must be 16 bytes!");
   } _data;
 
   /// @brief type of memory that we are dealing with for values of type

@@ -49,6 +49,13 @@
 
 namespace arangodb::aql {
 
+struct SupervisedHeader {
+  arangodb::ResourceMonitor* rm;
+  void* dataPtr;  // payload in the heap
+};
+static_assert(sizeof(SupervisedHeader) == 16,
+              "SupervisedHeader must be two pointers");
+
 void AqlValue::setPointer(uint8_t const* pointer) noexcept {
   setType(AqlValueType::VPACK_SLICE_POINTER);
   _data.slicePointerMeta.pointer = pointer;
