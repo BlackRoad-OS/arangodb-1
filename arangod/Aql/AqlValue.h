@@ -28,6 +28,7 @@
 #include "Aql/RegisterId.h"
 #include "Aql/RegIdFlatSet.h"
 #include "Basics/Endian.h"
+#include "Basics/ResourceUsage.h"
 #include "IResearch/Misc.h"
 
 #include <velocypack/Slice.h>
@@ -48,7 +49,13 @@ class Isolate;
 namespace arangodb {
 
 class CollectionNameResolver;
-struct SupervisedHeader;
+
+struct SupervisedHeader {
+  arangodb::ResourceMonitor* rm;
+  void* dataPtr;  // payload in the heap
+};
+static_assert(sizeof(SupervisedHeader) == 16,
+              "SupervisedHeader must be two pointers");
 
 namespace velocypack {
 
@@ -278,6 +285,25 @@ struct AqlValue final {
 
     // VPACK_SUPERVISED_SLICE
     struct {
+      uint64_t getLength() const noexcept {
+        if constexpr (basics::isLittleEndian()) {
+          return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
+        } else {
+          return (lengthOrigin & 0x0000ffffffffffffULL);
+        }
+      }
+      uint64_t getOrigin() const noexcept {
+        if constexpr (basics::isLittleEndian()) {
+          return (lengthOrigin & 0x000000000000ff00ULL) >> 8;
+        } else {
+          return (lengthOrigin & 0x00ff000000000000ULL) >> 48;
+        }
+      }
+      arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
+        return header->rm;
+      }
+      void* getPointer() const noexcept { return header->dataPtr; }
+
       uint64_t lengthOrigin;     // | AT | MO | 6 x ML |
       SupervisedHeader* header;  // PD -> header {rm + dataPtr}
     } supervisedSliceMeta;
@@ -286,6 +312,25 @@ struct AqlValue final {
 
     // VPACK_SUPERVISED_STRING
     struct {
+      uint64_t getLength() const noexcept {
+        if constexpr (basics::isLittleEndian()) {
+          return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
+        } else {
+          return (lengthOrigin & 0x0000ffffffffffffULL);
+        }
+      }
+      uint64_t getOrigin() const noexcept {
+        if constexpr (basics::isLittleEndian()) {
+          return (lengthOrigin & 0x000000000000ff00ULL) >> 8;
+        } else {
+          return (lengthOrigin & 0x00ff000000000000ULL) >> 48;
+        }
+      }
+      arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
+        return header->rm;
+      }
+      void* getPointer() const noexcept { return header->dataPtr; }
+
       uint64_t lengthOrigin;     // | AT | MO | 6 x ML |
       SupervisedHeader* header;  // PD -> header {rm + dataPtr}
     } supervisedStringMeta;
@@ -492,6 +537,37 @@ struct AqlValue final {
     return static_cast<AqlValueType>(_data.aqlValueType);
   }
 
+  /// Temporary static factory method
+  AqlValue FromSliceForSupervisedAV(arangodb::ResourceMonitor* resourceMonitor,
+                                    uint8_t consts* bytes, uint64_t n,
+                                    bool adopt) {
+    auto* sh = static_cast<SupervisedHeader*>(
+        ::operator new(sizeof(SupervisedHeader)));
+    resourceMonitor->increaseMemoryUsage(sizeof(SupervisedHeader));
+    sh->rm = resourceMonitor;
+
+    void* p = nullptr;
+    if (adopt) {
+      p = const_cast<uint8_t*>(bytes);
+      if (n != 0) {
+        resourceMonitor->increaseMemoryUsage(static_cast<size_t>(n));
+      }
+    } else {
+      if (n != 0) {
+        p = ::operator new(static_cast<size_t>(n));
+        std::memcpy(p, bytes, static_cast<size_t>(n));
+        resourceMonitor->increaseMemoryUsage(static_cast<size_t>(n));
+      }
+    }
+    sh->dataPtr = p;
+
+    AqlValue v;
+    v._data.supervisedSliceMeta.header = sh;
+    v._data.supervisedSliceMeta.lengthOrigin = encodeTypeOriginLength(
+        AqlValueType::VPACK_SUPERVISED_SLICE, adopt ? 1 : 0, n);
+    return v;
+  }
+
  private:
   /// @brief initializes value from a slice, when the length is already known
   void initFromSlice(velocypack::Slice slice, velocypack::ValueLength length);
@@ -510,6 +586,22 @@ struct AqlValue final {
   /// @brief store meta information for values of type VPACK_MANAGED_SLICE
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
+
+
+  /// Temporary helper function
+  uint64_t encodeTypeOriginLength(AqlValueType type, uint8_t origin, uint64_t len) {
+    uint64_t lo = 0;
+    if constexpr (arangodb::basics::isLittleEndian()) {
+      lo |= static_cast<uint64_t>(static_cast<uint8_t>(type));
+      lo |= static_cast<uint64_t>(origin) << 8;
+      lo |= (len & 0xFFFFFFFFFFFFULL) << 16;
+    } else {
+      lo |= static_cast<uint64_t>(static_cast<uint8_t>(type)) << 56;
+      lo |= static_cast<uint64_t>(origin) << 48;
+      lo |= (len & 0xFFFFFFFFFFFFULL);
+    }
+    return lo;
+  }
 };
 
 static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
