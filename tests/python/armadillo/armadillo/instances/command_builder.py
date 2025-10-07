@@ -86,9 +86,9 @@ class ServerCommandBuilder:
                         command.extend([f"--{key}", str(item)])
                 else:
                     command.extend([f"--{key}", str(value)])
-        self._logger.info(">>> ARANGOD COMMAND FOR %s <<<", params.server_id)
-        self._logger.info("Command: %s", " ".join(command))
-        self._logger.info(">>> END ARANGOD COMMAND <<<")
+        self._logger.debug(">>> ARANGOD COMMAND FOR %s <<<", params.server_id)
+        self._logger.debug("Command: %s", " ".join(command))
+        self._logger.debug(">>> END ARANGOD COMMAND <<<")
         return command
 
     def get_repository_root(self) -> Path:

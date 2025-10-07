@@ -267,7 +267,7 @@ class TestLoggingEventFunctions:
             "command": "test",
         }
         self.mock_logger.info.assert_called_once_with(
-            "Process %s", "started", extra=expected_extra
+            "Process %s %s", 1234, "started", extra=expected_extra
         )
 
     def test_log_process_event_without_pid(self):
@@ -276,7 +276,7 @@ class TestLoggingEventFunctions:
 
         expected_extra = {"event_type": "process", "process_event": "failed"}
         self.mock_logger.info.assert_called_once_with(
-            "Process %s", "failed", extra=expected_extra
+            "Process %s %s", None, "failed", extra=expected_extra
         )
 
     def test_log_server_event(self):
@@ -290,7 +290,7 @@ class TestLoggingEventFunctions:
             "port": 8529,
         }
         self.mock_logger.info.assert_called_once_with(
-            "Server %s", "startup", extra=expected_extra
+            "Server %s %s", "srv_1", "startup", extra=expected_extra
         )
 
     def test_log_server_event_without_id(self):
@@ -299,7 +299,7 @@ class TestLoggingEventFunctions:
 
         expected_extra = {"event_type": "server", "server_event": "shutdown"}
         self.mock_logger.info.assert_called_once_with(
-            "Server %s", "shutdown", extra=expected_extra
+            "Server %s %s", None, "shutdown", extra=expected_extra
         )
 
     def test_log_test_event(self):
@@ -315,7 +315,7 @@ class TestLoggingEventFunctions:
             "suite": "integration",
         }
         self.mock_logger.info.assert_called_once_with(
-            "Test %s", "started", extra=expected_extra
+            "Test %s %s", "test_feature", "started", extra=expected_extra
         )
 
     def test_log_test_event_without_name(self):
@@ -324,7 +324,7 @@ class TestLoggingEventFunctions:
 
         expected_extra = {"event_type": "test", "test_event": "completed"}
         self.mock_logger.info.assert_called_once_with(
-            "Test %s", "completed", extra=expected_extra
+            "Test %s %s", None, "completed", extra=expected_extra
         )
 
 

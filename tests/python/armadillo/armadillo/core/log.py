@@ -171,7 +171,7 @@ def log_process_event(
     if pid is not None:
         extra["pid"] = pid
     extra.update(kwargs)
-    logger.info("Process %s", event, extra=extra)
+    logger.info("Process %s %s", pid, event, extra=extra)
 
 
 def log_server_event(
@@ -182,7 +182,7 @@ def log_server_event(
     if server_id is not None:
         extra["server_id"] = server_id
     extra.update(kwargs)
-    logger.info("Server %s", event, extra=extra)
+    logger.info("Server %s %s", server_id, event, extra=extra)
 
 
 def log_test_event(
@@ -193,7 +193,7 @@ def log_test_event(
     if test_name is not None:
         extra["test_name"] = test_name
     extra.update(kwargs)
-    logger.info("Test %s", event, extra=extra)
+    logger.info("Test %s %s", test_name, event, extra=extra)
 
 
 # Context management shortcuts

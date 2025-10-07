@@ -257,10 +257,10 @@ class TestServerCommandBuilder:
         self.builder.build_command(params)
 
         # Should have called logger with command information
-        self.mock_logger.info.assert_called()
+        self.mock_logger.debug.assert_called()
 
         # Check specific log messages (now with lazy formatting)
-        log_calls = self.mock_logger.info.call_args_list
+        log_calls = self.mock_logger.debug.call_args_list
         # Check for format string and args separately
         command_header_found = any(
             ">>> ARANGOD COMMAND FOR %s <<<" == call.args[0]

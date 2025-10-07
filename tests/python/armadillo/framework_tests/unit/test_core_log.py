@@ -457,7 +457,7 @@ class TestModuleLevelFunctions:
             "command": "test_cmd",
         }
         mock_logger.info.assert_called_once_with(
-            "Process %s", "started", extra=expected_extra
+            "Process %s %s", 12345, "started", extra=expected_extra
         )
 
     def test_log_server_event_function(self):
@@ -473,7 +473,7 @@ class TestModuleLevelFunctions:
             "port": 8529,
         }
         mock_logger.info.assert_called_once_with(
-            "Server %s", "ready", extra=expected_extra
+            "Server %s %s", "server_1", "ready", extra=expected_extra
         )
 
     def test_log_test_event_function(self):
@@ -489,7 +489,7 @@ class TestModuleLevelFunctions:
             "duration": 1.23,
         }
         mock_logger.info.assert_called_once_with(
-            "Test %s", "passed", extra=expected_extra
+            "Test %s %s", "test_example", "passed", extra=expected_extra
         )
 
 
