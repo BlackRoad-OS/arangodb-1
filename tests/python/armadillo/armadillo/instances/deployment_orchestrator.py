@@ -62,7 +62,7 @@ class DeploymentOrchestrator:
         self._logger.info(
             "Executing %s deployment with %d server(s)",
             plan.deployment_mode.value,
-            len(plan.server_configs),
+            len(plan.servers),
         )
         start_time = time.time()
 
@@ -191,11 +191,10 @@ class DeploymentOrchestrator:
         Args:
             plan: DeploymentPlan to create servers from
         """
-        self._logger.info(
-            "Creating %d server instance(s) from plan", len(plan.server_configs)
-        )
+        self._logger.info("Creating %d server instance(s) from plan", len(plan.servers))
 
-        for server_id, config in plan.server_configs.items():
+        for config in plan.servers:
+            server_id = config.server_id
             self._logger.debug(
                 "Creating server: %s (role: %s)", server_id, config.role.value
             )

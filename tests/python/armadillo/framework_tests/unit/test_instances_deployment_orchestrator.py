@@ -34,7 +34,8 @@ class TestDeploymentOrchestrator:
         mock_plan = Mock()
         mock_config1 = Mock()
         mock_config1.role = ServerRole.SINGLE
-        mock_plan.server_configs = {"server1": mock_config1}
+        mock_config1.server_id = "server1"
+        mock_plan.servers = [mock_config1]
 
         # Mock server creation
         mock_server = Mock()
@@ -197,7 +198,8 @@ class TestDeploymentOrchestrator:
         mock_plan.deployment_mode = DeploymentMode.SINGLE_SERVER
         mock_config = Mock()
         mock_config.role = ServerRole.SINGLE
-        mock_plan.server_configs = {"server1": mock_config}
+        mock_config.server_id = "server1"
+        mock_plan.servers = [mock_config]
 
         # Mock server
         mock_server = Mock()
@@ -227,7 +229,8 @@ class TestDeploymentOrchestrator:
         mock_plan.deployment_mode = DeploymentMode.SINGLE_SERVER
         mock_config = Mock()
         mock_config.role = ServerRole.SINGLE
-        mock_plan.server_configs = {"server1": mock_config}
+        mock_config.server_id = "server1"
+        mock_plan.servers = [mock_config]
 
         # Mock server and health
         mock_server = Mock()
