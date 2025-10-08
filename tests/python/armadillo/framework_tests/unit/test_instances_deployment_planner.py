@@ -40,39 +40,9 @@ class TestStandardDeploymentPlanner:
         self._port_counter += 1
         return port
 
-    def test_create_single_server_deployment(self):
-        """Test creating single server deployment plan."""
-        plan = self.planner.create_deployment_plan(
-            deployment_id="test_single", mode=DeploymentMode.SINGLE_SERVER
-        )
-
-        assert plan.deployment_mode == DeploymentMode.SINGLE_SERVER
-        assert len(plan.servers) == 1
-        assert len(plan.coordination_endpoints) == 1
-        assert len(plan.agency_endpoints) == 0
-
-        server = plan.servers[0]
-        assert server.role == ServerRole.SINGLE
-        assert server.port == 8529
-        # Check that data_dir contains the expected path structure
-        assert str(server.data_dir).endswith("test_single/single/data")
-        assert str(server.log_file).endswith("test_single/single/arangod.log")
-
-        # Check coordination endpoint
-        assert plan.coordination_endpoints[0] == "http://127.0.0.1:8529"
-
-        # Verify logger was called
-        self.mock_logger.info.assert_called_once()
-        # Check for lazy formatting: info('Created deployment plan: %s with %s servers', 'single_server', 1)
-        self.mock_logger.info.assert_called_with(
-            "Created deployment plan: %s with %s servers", "single_server", 1
-        )
-
     def test_create_cluster_deployment_default_config(self):
         """Test creating cluster deployment with default configuration."""
-        plan = self.planner.create_deployment_plan(
-            deployment_id="test_cluster", mode=DeploymentMode.CLUSTER
-        )
+        plan = self.planner.create_deployment_plan(deployment_id="test_cluster")
 
         assert plan.deployment_mode == DeploymentMode.CLUSTER
 
@@ -93,7 +63,6 @@ class TestStandardDeploymentPlanner:
 
         plan = self.planner.create_deployment_plan(
             deployment_id="test_custom_cluster",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=custom_config,
         )
 
@@ -107,7 +76,6 @@ class TestStandardDeploymentPlanner:
         """Test agent server configuration details."""
         plan = self.planner.create_deployment_plan(
             deployment_id="test_agents",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=ClusterConfig(agents=2, dbservers=1, coordinators=1),
         )
 
@@ -134,7 +102,6 @@ class TestStandardDeploymentPlanner:
         """Test database server configuration details."""
         plan = self.planner.create_deployment_plan(
             deployment_id="test_dbservers",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=ClusterConfig(agents=1, dbservers=2, coordinators=1),
         )
 
@@ -164,7 +131,6 @@ class TestStandardDeploymentPlanner:
         """Test coordinator configuration details."""
         plan = self.planner.create_deployment_plan(
             deployment_id="test_coordinators",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=2),
         )
 
@@ -204,7 +170,6 @@ class TestStandardDeploymentPlanner:
         """Test that agency endpoints are properly set on all agents."""
         plan = self.planner.create_deployment_plan(
             deployment_id="test_agency",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=ClusterConfig(agents=3, dbservers=1, coordinators=1),
         )
 
@@ -225,20 +190,11 @@ class TestStandardDeploymentPlanner:
         """Test that port allocator is called for each server."""
         self.planner.create_deployment_plan(
             deployment_id="test_ports",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=ClusterConfig(agents=2, dbservers=2, coordinators=1),
         )
 
         # Should allocate ports for: 2 agents + 2 dbservers + 1 coordinator = 5 calls
         assert self.mock_port_allocator.allocate_port.call_count == 5
-
-    def test_unsupported_deployment_mode(self):
-        """Test error handling for unsupported deployment modes."""
-        with pytest.raises(ValueError, match="Unsupported deployment mode"):
-            self.planner.create_deployment_plan(
-                deployment_id="test_error",
-                mode="INVALID_MODE",  # This should cause a ValueError
-            )
 
     def test_deployment_planner_protocol_compliance(self):
         """Test that StandardDeploymentPlanner implements DeploymentPlanner protocol."""
@@ -246,21 +202,10 @@ class TestStandardDeploymentPlanner:
         assert hasattr(self.planner, "create_deployment_plan")
         assert callable(self.planner.create_deployment_plan)
 
-    def test_plan_single_server_directory_structure(self):
-        """Test single server directory structure."""
-        plan = self.planner.create_deployment_plan(
-            deployment_id="dir_test", mode=DeploymentMode.SINGLE_SERVER
-        )
-
-        server = plan.servers[0]
-        assert str(server.data_dir).endswith("dir_test/single/data")
-        assert str(server.log_file).endswith("dir_test/single/arangod.log")
-
     def test_cluster_directory_structure(self):
         """Test cluster directory structure."""
         plan = self.planner.create_deployment_plan(
             deployment_id="cluster_dir_test",
-            mode=DeploymentMode.CLUSTER,
             cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1),
         )
 

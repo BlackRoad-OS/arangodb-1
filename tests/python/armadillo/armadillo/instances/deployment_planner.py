@@ -17,10 +17,9 @@ class DeploymentPlanner(Protocol):
     def create_deployment_plan(
         self,
         deployment_id: str,
-        mode: DeploymentMode,
         cluster_config: Optional[ClusterConfig] = None,
     ) -> "DeploymentPlan":
-        """Create a deployment plan for the specified mode."""
+        """Create a deployment plan for cluster mode."""
 
 
 class StandardDeploymentPlanner:
@@ -40,58 +39,36 @@ class StandardDeploymentPlanner:
     def create_deployment_plan(
         self,
         deployment_id: str,
-        mode: DeploymentMode,
         cluster_config: Optional[ClusterConfig] = None,
     ) -> "DeploymentPlan":
-        """Create deployment plan for the specified mode.
+        """Create deployment plan for cluster mode.
 
         Args:
             deployment_id: Unique identifier for this deployment
-            mode: Deployment mode
-            cluster_config: Cluster configuration (for cluster mode)
+            cluster_config: Cluster configuration
 
         Returns:
             Deployment plan with server configurations
-
-        Raises:
-            ValueError: If deployment mode is not supported
         """
-        plan = DeploymentPlan(deployment_mode=mode)
+        plan = DeploymentPlan(deployment_mode=DeploymentMode.CLUSTER)
+        self._plan_cluster(plan, deployment_id, cluster_config)
 
-        if mode == DeploymentMode.SINGLE_SERVER:
-            self._plan_single_server(plan, deployment_id)
-        elif mode == DeploymentMode.CLUSTER:
-            self._plan_cluster(plan, deployment_id, cluster_config)
-        else:
-            raise ValueError(f"Unsupported deployment mode: {mode}")
-
+        agents = len(plan.get_agents())
+        dbservers = len(plan.get_dbservers())
+        coordinators = len(plan.get_coordinators())
         self._logger.info(
-            "Created deployment plan: %s with %s servers", mode.value, len(plan.servers)
+            "Created deployment plan: cluster with %d agents, %d dbservers, %d coordinators",
+            agents,
+            dbservers,
+            coordinators,
         )
+
         return plan
 
     def _configure_server_logging(self, args: dict) -> None:
         """Configure server logging arguments based on framework verbose mode."""
         server_args = self._server_config_builder.build_server_args()
         args.update(server_args)
-
-    def _plan_single_server(self, plan: "DeploymentPlan", deployment_id: str) -> None:
-        """Plan single server deployment."""
-        port = self._port_allocator.allocate_port()
-
-        # Configure server arguments including logging
-        args = {}
-        self._configure_server_logging(args)
-
-        server_config = ServerConfig(
-            role=ServerRole.SINGLE,
-            port=port,
-            data_dir=server_dir(deployment_id) / "single" / "data",
-            log_file=server_dir(deployment_id) / "single" / "arangod.log",
-            args=args,
-        )
-        plan.servers.append(server_config)
-        plan.coordination_endpoints.append(f"http://127.0.0.1:{port}")
 
     def _plan_cluster(
         self,

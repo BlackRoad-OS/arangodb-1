@@ -276,7 +276,7 @@ def _get_or_create_cluster(self) -> "InstanceManager":
         manager = get_instance_manager(deployment_id)
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-        _ = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
+        manager.create_deployment_plan(cluster_config)
         manager.deploy_servers(timeout=300.0)
         logger.info("Session cluster deployment ready")
         self._session_deployments["cluster"] = manager
@@ -361,7 +361,7 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
     try:
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-        _ = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
+        manager.create_deployment_plan(cluster_config)
         manager.deploy_servers(timeout=300.0)
         logger.info("Session cluster deployment %s ready", deployment_id)
         _plugin._session_deployments[deployment_id] = manager
@@ -389,7 +389,7 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
     try:
         logger.info("Starting function cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)
-        _ = manager.create_deployment_plan(DeploymentMode.CLUSTER, cluster_config)
+        manager.create_deployment_plan(cluster_config)
         manager.deploy_servers(timeout=180.0)
         orchestrator = get_cluster_orchestrator(deployment_id)
         asyncio.run(orchestrator.initialize_cluster_coordination(timeout=60.0))

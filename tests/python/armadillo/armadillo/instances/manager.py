@@ -224,23 +224,22 @@ class InstanceManager:
             self._threading.executor.shutdown(wait=True)
 
     def create_deployment_plan(
-        self, mode: DeploymentMode, cluster_config: Optional[ClusterConfig] = None
+        self, cluster_config: Optional[ClusterConfig] = None
     ) -> DeploymentPlan:
-        """Create deployment plan for the specified mode using injected planner.
+        """Create deployment plan for cluster using injected planner.
 
         Args:
-            mode: Deployment mode
-            cluster_config: Cluster configuration (for cluster mode)
+            cluster_config: Cluster configuration (uses default if None)
 
         Returns:
             Deployment plan
         """
-        # Use default cluster config if none provided for cluster mode
-        if mode == DeploymentMode.CLUSTER and cluster_config is None:
+        # Use default cluster config if none provided
+        if cluster_config is None:
             cluster_config = self._deps.config.cluster
 
         plan = self._deps.deployment_planner.create_deployment_plan(
-            deployment_id=self.deployment_id, mode=mode, cluster_config=cluster_config
+            deployment_id=self.deployment_id, cluster_config=cluster_config
         )
 
         self.state.deployment_plan = plan
