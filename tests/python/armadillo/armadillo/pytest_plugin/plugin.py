@@ -3,6 +3,8 @@
 import asyncio
 import atexit
 import logging
+import signal
+import sys
 import pytest
 import time
 import traceback
@@ -509,7 +511,22 @@ def pytest_sessionstart(session):
     logger.debug("Starting pytest plugin setup")
     session_id = set_test_session_id()
     logger.info("Test session started with ID: %s", session_id)
+
+    # Register cleanup handlers for both normal and abnormal exits
     atexit.register(_emergency_cleanup)
+
+    # Install signal handlers for Ctrl+C and SIGTERM to ensure cleanup
+    def _signal_handler(signum, frame):
+        """Handle interrupt signals by performing emergency cleanup."""
+        signal_name = (
+            signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
+        )
+        logger.warning(f"Received {signal_name}, performing emergency cleanup...")
+        _emergency_cleanup()
+        sys.exit(128 + signum)  # Standard exit code for signal termination
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
     from ..core.config import get_config as get_framework_config
     from ..core.types import DeploymentMode as DepMode
 
@@ -659,8 +676,22 @@ def _cleanup_all_deployments():
                             "Attempting direct process cleanup for failed deployment %s",
                             deployment_id,
                         )
-                        if hasattr(manager, "_servers"):
-                            for server_id, server in manager._servers.items():
+                        # Try to get servers from registry (new architecture) or state (old architecture)
+                        servers = {}
+                        if (
+                            hasattr(manager, "_server_registry")
+                            and manager._server_registry
+                        ):
+                            servers = manager._server_registry.get_all_servers()
+                        elif hasattr(manager, "state") and hasattr(
+                            manager.state, "servers"
+                        ):
+                            servers = manager.state.servers
+                        elif hasattr(manager, "_servers"):
+                            servers = manager._servers
+
+                        if servers:
+                            for server_id, server in servers.items():
                                 try:
                                     if (
                                         hasattr(server, "_process_info")
