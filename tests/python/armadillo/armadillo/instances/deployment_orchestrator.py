@@ -193,15 +193,18 @@ class DeploymentOrchestrator:
         """
         self._logger.info("Creating %d server instance(s) from plan", len(plan.servers))
 
-        for config in plan.servers:
-            server_id = config.server_id
+        # Delegate to ServerFactory to create all servers
+        # The factory generates server IDs based on role and index
+        servers = self._server_factory.create_server_instances(plan.servers)
+
+        # Register all created servers
+        for server_id, server in servers.items():
             self._logger.debug(
-                "Creating server: %s (role: %s)", server_id, config.role.value
+                "Registering server: %s (role: %s)", server_id, server.role.value
             )
-            server = self._server_factory.create_server(server_id, config)
             self._server_registry.register_server(server_id, server)
 
-        self._logger.info("All server instances created")
+        self._logger.info("All server instances created and registered")
 
     def _start_single_server(self, timeout: float) -> None:
         """Start a single server deployment.

@@ -171,19 +171,26 @@ class ClusterBootstrapper:
                 agents
             )
 
+            # Reset counters if consensus is invalid
+            if not consensus_valid:
+                have_leader = 0
+                have_config = 0
+
             # Log progress periodically
             if time.time() - last_log_time > 5.0:
                 self._logger.debug(
-                    "Agency status: leader=%d, config=%d, consensus=%s",
+                    "Agency status: leader=%d, config=%d/%d, consensus=%s",
                     have_leader,
                     have_config,
+                    len(agents),
                     consensus_valid,
                 )
                 last_log_time = time.time()
 
-            # Check if agency is ready (like JS framework)
-            if consensus_valid and have_leader >= len(agents) // 2 + 1:
-                self._logger.info("Agency has elected a leader with consensus")
+            # Check if agency is ready (matches original JavaScript condition)
+            # Need at least one leader AND all agents must have config
+            if have_leader >= 1 and have_config == len(agents):
+                self._logger.info("Agency is ready with leader and full config")
                 return
 
             time.sleep(0.5)
