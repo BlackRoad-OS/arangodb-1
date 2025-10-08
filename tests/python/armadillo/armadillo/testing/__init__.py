@@ -3,12 +3,8 @@
 from .test_context import (
     TestContext,
     IsolatedTestContext,
-    EnvironmentTestFactory,
-    get_test_environment_factory,
     create_test_context,
     temp_test_context,
-    cleanup_test_context,
-    cleanup_all_test_contexts,
     reset_test_environment,
 )
 
@@ -22,13 +18,9 @@ __all__ = [
     # Core test context
     "TestContext",
     "IsolatedTestContext",
-    "EnvironmentTestFactory",
     # Factory functions
-    "get_test_environment_factory",
     "create_test_context",
     "temp_test_context",
-    "cleanup_test_context",
-    "cleanup_all_test_contexts",
     "reset_test_environment",
     # Pytest integration
     "isolated_test_context",

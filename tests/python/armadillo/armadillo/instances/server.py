@@ -21,7 +21,7 @@ from ..core.process import (
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import server_dir
-from ..utils.ports import allocate_port, release_port, PortAllocator
+from ..utils.ports import PortAllocator, PortManager
 from ..utils.auth import get_auth_provider
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
@@ -96,7 +96,7 @@ class ServerDependencies:
         return cls(
             config_provider=config_provider,
             logger=logger_instance,
-            port_allocator=port_allocator,
+            port_allocator=port_allocator or PortManager(),
             command_builder=ServerCommandBuilder(
                 config_provider=config_provider, logger=logger_instance
             ),
@@ -190,7 +190,7 @@ class ArangoServer:
             self._deps = ServerDependencies(
                 config_provider=final_config_provider,
                 logger=final_logger,
-                port_allocator=port_allocator,
+                port_allocator=port_allocator or PortManager(),
                 command_builder=command_builder
                 or ServerCommandBuilder(
                     config_provider=final_config_provider, logger=final_logger
@@ -224,17 +224,12 @@ class ArangoServer:
         )
 
     def _allocate_port(self, preferred: Optional[int] = None) -> int:
-        """Allocate a port using injected allocator or fallback to global function."""
-        if self._deps.port_allocator:
-            return self._deps.port_allocator.allocate_port(preferred)
-        return allocate_port(preferred)
+        """Allocate a port using injected allocator."""
+        return self._deps.port_allocator.allocate_port(preferred)
 
     def _release_port(self, port: int) -> None:
-        """Release a port using injected allocator or fallback to global function."""
-        if self._deps.port_allocator:
-            self._deps.port_allocator.release_port(port)
-        else:
-            release_port(port)
+        """Release a port using injected allocator."""
+        self._deps.port_allocator.release_port(port)
 
     def start(self, timeout: Optional[float] = None) -> None:
         """Start the ArangoDB server."""
