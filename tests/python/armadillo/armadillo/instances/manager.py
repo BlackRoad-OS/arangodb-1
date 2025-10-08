@@ -1,11 +1,10 @@
 """Instance Manager for multi-server orchestration and lifecycle management."""
 
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 import time
 from concurrent.futures import ThreadPoolExecutor
 import threading
 from dataclasses import dataclass, field
-import requests
 
 from ..core.types import (
     DeploymentMode,
@@ -16,13 +15,9 @@ from ..core.types import (
 )
 from ..core.errors import (
     ServerError,
-    ClusterError,
     ServerStartupError,
     ServerShutdownError,
-    HealthCheckError,
-    AgencyError,
     ProcessError,
-    NetworkError,
 )
 from ..core.log import get_logger, Logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
@@ -351,11 +346,11 @@ class InstanceManager:
             shutdown_time = time.time() - self.state.timing.shutdown_time
             logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
 
-    def _direct_shutdown_deployment(self, timeout: float) -> None:
+    def _direct_shutdown_deployment(self, _timeout: float) -> None:
         """Direct shutdown implementation as fallback when orchestrator fails.
 
         Args:
-            timeout: Maximum time to wait for shutdown
+            _timeout: Maximum time to wait for shutdown (currently unused; using fixed timeouts)
         """
         logger.info("Using direct shutdown for %d servers", len(self.state.servers))
 

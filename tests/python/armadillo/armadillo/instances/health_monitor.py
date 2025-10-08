@@ -5,7 +5,7 @@ import time
 import requests
 from ..core.types import HealthStatus, ServerStats, ServerRole
 from ..core.log import Logger
-from ..core.errors import HealthCheckError, NetworkError
+from ..core.errors import HealthCheckError
 from .server import ArangoServer
 
 

@@ -1,12 +1,11 @@
 """High-level deployment orchestration and lifecycle management."""
 
-from typing import Dict, Optional
+from typing import Optional
 import time
 from ..core.types import DeploymentMode, ServerRole
 from ..core.log import Logger
 from ..core.errors import ServerError, ClusterError
 from .deployment_plan import DeploymentPlan
-from .server import ArangoServer
 from .server_registry import ServerRegistry
 from .server_factory import ServerFactory
 from .cluster_bootstrapper import ClusterBootstrapper
