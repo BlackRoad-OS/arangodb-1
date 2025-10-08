@@ -1,7 +1,6 @@
 """ArangoDB server instance wrapper with lifecycle management and health monitoring."""
 
 import asyncio
-import builtins
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -340,8 +339,11 @@ class ArangoServer:
         )
         return supervisor_result
 
-    async def health_check(self, timeout: float = 5.0) -> HealthStatus:
-        """Perform health check on the server."""
+    def health_check_sync(self, timeout: float = 5.0) -> HealthStatus:
+        """Perform health check on the server.
+
+        Delegates to the injected health_checker for actual health checking logic.
+        """
         if not self.is_running():
             return HealthStatus(
                 is_healthy=False,
@@ -349,56 +351,7 @@ class ArangoServer:
                 error_message="Server is not running",
             )
 
-        start_time = time.time()
-
-        try:
-            timeout_config = aiohttp.ClientTimeout(total=timeout)
-            async with aiohttp.ClientSession(timeout=timeout_config) as session:
-                headers = self._deps.auth_provider.get_auth_headers()
-
-                url = f"{self.endpoint}/_api/version"
-                async with session.get(url, headers=headers) as response:
-                    response_time = time.time() - start_time
-
-                    if response.status == 200:
-                        details = await response.json()
-                        return HealthStatus(
-                            is_healthy=True,
-                            response_time=response_time,
-                            details=details,
-                        )
-
-                    return HealthStatus(
-                        is_healthy=False,
-                        response_time=response_time,
-                        error_message=f"HTTP {response.status}: {response.reason}",
-                    )
-
-        except asyncio.TimeoutError:
-            response_time = time.time() - start_time
-            return HealthStatus(
-                is_healthy=False,
-                response_time=response_time,
-                error_message=f"Health check timed out after {timeout}s",
-            )
-        except (aiohttp.ClientError, OSError, builtins.ConnectionError) as e:
-            response_time = time.time() - start_time
-            return HealthStatus(
-                is_healthy=False,
-                response_time=response_time,
-                error_message=f"Health check failed: {e}",
-            )
-
-    def health_check_sync(self, timeout: float = 5.0) -> HealthStatus:
-        """Synchronous health check wrapper."""
-        try:
-            return asyncio.run(self.health_check(timeout))
-        except (asyncio.TimeoutError, RuntimeError, OSError) as e:
-            return HealthStatus(
-                is_healthy=False,
-                response_time=timeout,
-                error_message=f"Health check error: {e}",
-            )
+        return self._deps.health_checker.check_health(self.endpoint, timeout=timeout)
 
     def get_stats_sync(self) -> Optional[ServerStats]:
         """Synchronous stats wrapper."""
