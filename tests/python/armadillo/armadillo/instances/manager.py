@@ -311,20 +311,6 @@ class InstanceManager:
         # Sync startup order from orchestrator
         self.state.startup_order = self._deployment_orchestrator.get_startup_order()
 
-    def _create_server_instances(self) -> None:
-        """Create ArangoServer instances using injected server factory.
-
-        Note: This method is not used in the normal flow anymore.
-        The DeploymentOrchestrator.execute_deployment() handles server creation.
-        This is kept as a utility method for special cases.
-        """
-        if not self.state.deployment_plan:
-            raise ServerError("No deployment plan available")
-
-        self.state.servers = self._deps.server_factory.create_server_instances(
-            self.state.deployment_plan.servers
-        )
-
     def shutdown_deployment(self, timeout: float = 120.0) -> None:
         """Shutdown all deployed servers in correct order.
 

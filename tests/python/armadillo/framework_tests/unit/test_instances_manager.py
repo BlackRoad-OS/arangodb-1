@@ -5,7 +5,7 @@ Tests essential InstanceManager functionality with minimal mocking.
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from pathlib import Path
 
 from armadillo.instances.manager import InstanceManager, DeploymentPlan
@@ -198,40 +198,6 @@ class TestInstanceManagerMockIntegration:
     def setup_method(self):
         """Set up test environment."""
         self.manager = InstanceManager("mock_test")
-
-    @patch("armadillo.instances.manager.ArangoServer")
-    def test_create_server_instances_attempts_creation(self, mock_server_class):
-        """Test server instance creation is attempted."""
-        mock_server = Mock()
-        mock_server_class.return_value = mock_server
-
-        # Create a simple deployment plan
-        plan = DeploymentPlan(
-            deployment_mode=DeploymentMode.SINGLE_SERVER,
-            servers=[
-                ServerConfig(
-                    role=ServerRole.SINGLE,
-                    port=8529,
-                    data_dir=Path("/tmp/data"),
-                    log_file=Path("/tmp/log"),
-                )
-            ],
-        )
-
-        # Set the deployment plan
-        self.manager._deployment_plan = plan
-
-        try:
-            # Try to create server instances
-            self.manager._create_server_instances()
-
-            # If successful, server should have been created
-            assert (
-                len(self.manager.state.servers) >= 0
-            )  # Should have attempted creation
-        except Exception:
-            # If it fails for other reasons, that's acceptable
-            pass
 
     def test_shutdown_deployment_handles_no_deployment(self):
         """Test shutdown when no deployment exists."""
