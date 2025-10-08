@@ -149,7 +149,12 @@ class ArangoServer:
         role: ServerRole = ServerRole.SINGLE,
         port: Optional[int] = None,
         dependencies: Optional[ServerDependencies] = None,
-        **legacy_kwargs,
+        config_provider=None,
+        logger=None,
+        port_allocator=None,
+        command_builder=None,
+        health_checker=None,
+        config=None,
     ) -> None:
         """Initialize ArangoDB server with composition-based design.
 
@@ -158,8 +163,12 @@ class ArangoServer:
             role: Server role (SINGLE, AGENT, DBSERVER, COORDINATOR)
             port: Port number (auto-allocated if None)
             dependencies: Injected dependencies (recommended approach)
-            **legacy_kwargs: Backward compatibility support for:
-                config_provider, logger, port_allocator, command_builder, health_checker, config
+            config_provider: Optional config provider (alternative to dependencies)
+            logger: Optional logger (alternative to dependencies)
+            port_allocator: Optional port allocator (alternative to dependencies)
+            command_builder: Optional command builder (alternative to dependencies)
+            health_checker: Optional health checker (alternative to dependencies)
+            config: Optional server configuration
         """
         self.server_id = server_id
         self.role = role
@@ -168,20 +177,15 @@ class ArangoServer:
         if port is not None and not isinstance(port, int):
             raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
 
-        # Initialize dependencies - handle both new and legacy parameter styles
+        # Initialize dependencies - handle both composed and individual parameters
         if dependencies is not None:
             self._deps = dependencies
-        elif legacy_kwargs:
-            # Legacy constructor - extract parameters from kwargs
-            config_provider = legacy_kwargs.get("config_provider")
-            logger_param = legacy_kwargs.get("logger")
-            port_allocator = legacy_kwargs.get("port_allocator")
-            command_builder = legacy_kwargs.get("command_builder")
-            health_checker = legacy_kwargs.get("health_checker")
-            config = legacy_kwargs.get("config")
-
+        elif any(
+            [config_provider, logger, port_allocator, command_builder, health_checker]
+        ):
+            # Individual parameters provided - compose them
             final_config_provider = config_provider or get_config()
-            final_logger = logger_param or get_logger(__name__)
+            final_logger = logger or get_logger(__name__)
             final_auth_provider = get_auth_provider()
 
             self._deps = ServerDependencies(
@@ -205,9 +209,6 @@ class ArangoServer:
         # Port allocation
         self.port = port or self._allocate_port()
         self.endpoint = f"http://127.0.0.1:{self.port}"
-
-        # Extract config from legacy_kwargs for path setup
-        config = legacy_kwargs.get("config") if legacy_kwargs else None
 
         # Set up file system paths (which will store config if needed)
         self.paths = ServerPaths.from_config(server_id, config)

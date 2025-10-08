@@ -149,36 +149,45 @@ class InstanceManager:
         deployment_id: str,
         *,
         dependencies: Optional[ManagerDependencies] = None,
-        **legacy_kwargs,
+        config_provider=None,
+        logger=None,
+        port_allocator=None,
+        deployment_planner=None,
+        server_factory=None,
     ) -> None:
         """Initialize instance manager with composition-based design.
 
         Args:
             deployment_id: Unique identifier for this deployment
             dependencies: Composed dependencies object (recommended)
-            **legacy_kwargs: Backward compatibility support for:
-                config_provider, logger, port_allocator, deployment_planner, server_factory
+            config_provider: Optional config provider (alternative to dependencies)
+            logger: Optional logger (alternative to dependencies)
+            port_allocator: Optional port allocator (alternative to dependencies)
+            deployment_planner: Optional deployment planner (alternative to dependencies)
+            server_factory: Optional server factory (alternative to dependencies)
         """
         self.deployment_id = deployment_id
 
-        # Initialize dependencies - handle both new and legacy styles
+        # Initialize dependencies - handle both composed and individual parameters
         if dependencies is not None:
             self._deps = dependencies
-        elif legacy_kwargs:
-            # Legacy constructor style - extract from kwargs
-            config_provider = legacy_kwargs.get("config_provider")
-            legacy_logger = legacy_kwargs.get("logger")
-            port_allocator = legacy_kwargs.get("port_allocator")
-            deployment_planner = legacy_kwargs.get("deployment_planner")
-            server_factory = legacy_kwargs.get("server_factory")
-
+        elif any(
+            [
+                config_provider,
+                logger,
+                port_allocator,
+                deployment_planner,
+                server_factory,
+            ]
+        ):
+            # Individual parameters provided - compose them
             self._deps = ManagerDependencies.create_defaults(
                 deployment_id=deployment_id,
                 config=config_provider,
-                custom_logger=legacy_logger,
+                custom_logger=logger,
                 port_allocator=port_allocator,
             )
-            # Override with explicitly provided legacy parameters
+            # Override with explicitly provided parameters
             if deployment_planner is not None:
                 self._deps.deployment_planner = deployment_planner
             if server_factory is not None:
@@ -305,8 +314,9 @@ class InstanceManager:
     def _create_server_instances(self) -> None:
         """Create ArangoServer instances using injected server factory.
 
-        Note: This method is deprecated and kept for backward compatibility.
-        New code should use DeploymentOrchestrator.execute_deployment().
+        Note: This method is not used in the normal flow anymore.
+        The DeploymentOrchestrator.execute_deployment() handles server creation.
+        This is kept as a utility method for special cases.
         """
         if not self.state.deployment_plan:
             raise ServerError("No deployment plan available")
@@ -340,7 +350,7 @@ class InstanceManager:
             except Exception as e:
                 logger.error("Shutdown via orchestrator failed: %s", e)
                 # Fallback to direct shutdown if orchestrator fails
-                self._legacy_shutdown_deployment(timeout)
+                self._direct_shutdown_deployment(timeout)
 
             # Release allocated ports
             self._release_ports()
@@ -355,13 +365,13 @@ class InstanceManager:
             shutdown_time = time.time() - self.state.timing.shutdown_time
             logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
 
-    def _legacy_shutdown_deployment(self, timeout: float) -> None:
-        """Legacy shutdown implementation for backward compatibility and fallback.
+    def _direct_shutdown_deployment(self, timeout: float) -> None:
+        """Direct shutdown implementation as fallback when orchestrator fails.
 
         Args:
             timeout: Maximum time to wait for shutdown
         """
-        logger.info("Using legacy shutdown for %d servers", len(self.state.servers))
+        logger.info("Using direct shutdown for %d servers", len(self.state.servers))
 
         # Shutdown in reverse startup order, but agents go LAST
         shutdown_order = list(reversed(self.state.startup_order))
