@@ -276,8 +276,8 @@ def _get_or_create_cluster(self) -> "InstanceManager":
         manager = get_instance_manager(deployment_id)
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-        manager.create_deployment_plan(cluster_config)
-        manager.deploy_servers(timeout=300.0)
+        plan = manager.create_deployment_plan(cluster_config)
+        manager.deploy_servers(plan, timeout=300.0)
         logger.info("Session cluster deployment ready")
         self._session_deployments["cluster"] = manager
     return self._session_deployments["cluster"]
@@ -361,8 +361,8 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
     try:
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-        manager.create_deployment_plan(cluster_config)
-        manager.deploy_servers(timeout=300.0)
+        plan = manager.create_deployment_plan(cluster_config)
+        manager.deploy_servers(plan, timeout=300.0)
         logger.info("Session cluster deployment %s ready", deployment_id)
         _plugin._session_deployments[deployment_id] = manager
         logger.debug("Cluster deployment %s registered with plugin", deployment_id)
@@ -389,8 +389,8 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
     try:
         logger.info("Starting function cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)
-        manager.create_deployment_plan(cluster_config)
-        manager.deploy_servers(timeout=180.0)
+        plan = manager.create_deployment_plan(cluster_config)
+        manager.deploy_servers(plan, timeout=180.0)
         orchestrator = get_cluster_orchestrator(deployment_id)
         asyncio.run(orchestrator.initialize_cluster_coordination(timeout=60.0))
         asyncio.run(orchestrator.wait_for_cluster_ready(timeout=90.0))

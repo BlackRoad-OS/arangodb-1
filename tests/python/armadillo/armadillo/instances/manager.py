@@ -228,6 +228,8 @@ class InstanceManager:
     ) -> DeploymentPlan:
         """Create deployment plan for cluster using injected planner.
 
+        This is a pure function that creates and returns a plan without side effects.
+
         Args:
             cluster_config: Cluster configuration (uses default if None)
 
@@ -238,30 +240,26 @@ class InstanceManager:
         if cluster_config is None:
             cluster_config = self._deps.config.cluster
 
-        plan = self._deps.deployment_planner.create_deployment_plan(
+        return self._deps.deployment_planner.create_deployment_plan(
             deployment_id=self.deployment_id, cluster_config=cluster_config
         )
 
-        self.state.deployment_plan = plan
-        return plan
-
-    def deploy_servers(self, timeout: float = 300.0) -> None:
-        """Deploy all servers according to the current plan.
+    def deploy_servers(self, plan: DeploymentPlan, timeout: float = 300.0) -> None:
+        """Deploy all servers according to the provided plan.
 
         Args:
+            plan: Deployment plan with server configurations
             timeout: Maximum time to wait for deployment
 
         Raises:
             ServerStartupError: If server deployment fails
             TimeoutError: If deployment times out
         """
-        if not self.state.deployment_plan:
-            raise ServerError("No deployment plan created")
-
         if self.state.status.is_deployed:
             raise ServerError("Deployment already active")
 
-        plan = self.state.deployment_plan
+        # Store the plan being deployed
+        self.state.deployment_plan = plan
         timeout = clamp_timeout(timeout, "deployment")
 
         with timeout_scope(timeout, f"deploy_servers_{self.deployment_id}"):
