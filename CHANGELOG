@@ -1,10 +1,10 @@
 devel
 -----
 
-* Introduced supervised buffer to Aql files in cases where it was relevant 
-  and the query's memory monitor was accessible. The memory consumption in 
-  query runtime is more precisely accounted now, which may cause some queries
-  to run out of memory more easily.
+* Improved memory accounting in several places in AQL where temporary JSON 
+  objects where created. Those temporary objects are now accounted for. This 
+  can cause some AQL queries to rightfully report higher memory consumption and 
+  therefore reaching a limit, which they silently leaped before.
 
 * Upgraded OpenSSL to 3.5.4.
 
