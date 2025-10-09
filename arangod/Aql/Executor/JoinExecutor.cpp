@@ -503,12 +503,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
   return {inputRange.upstreamState(), stats, upstreamCall};
 }
 
-void JoinExecutor::clearProjectionsBuilder() noexcept {
-  auto const& buffer = _projectionsBuilder.bufferRef();
-  resourceMonitor().decreaseMemoryUsage(buffer.byteSize());
-  _projectionsBuilder.clear();
-}
-
 auto JoinExecutor::skipRowsRange(AqlItemBlockInputRange& inputRange,
                                  AqlCall& clientCall)
     -> std::tuple<ExecutorState, Stats, size_t, AqlCall> {
