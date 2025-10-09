@@ -50,6 +50,11 @@ def main(
     verbose: int = typer.Option(
         0, "--verbose", "-v", count=True, help="Increase verbosity level"
     ),
+    log_level: Optional[str] = typer.Option(
+        None,
+        "--log-level",
+        help="Framework logging level (DEBUG, INFO, WARNING, ERROR) - explicit level",
+    ),
     config_file: Optional[Path] = typer.Option(
         None, "--config", "-c", help="Configuration file path"
     ),
@@ -61,12 +66,25 @@ def main(
     ),
 ):
     """Armadillo: Modern ArangoDB Testing Framework."""
+    # Validate verbose and log_level are not both specified
+    if verbose > 0 and log_level is not None:
+        console.print("[red]Error: Cannot specify both --verbose and --log-level[/red]")
+        raise typer.Exit(1)
+
+    # Resolve log level from verbose if not explicitly specified
+    if log_level is None:
+        resolved_log_level = (
+            "DEBUG" if verbose >= 2 else "INFO" if verbose == 1 else "WARNING"
+        )
+    else:
+        resolved_log_level = log_level
+
     # Create CLI options model from the parsed arguments
     cli_options = GlobalCliOptions(
         verbose=verbose,
         config_file=config_file,
         build_dir=build_dir,
-        log_level="DEBUG" if verbose >= 2 else "INFO" if verbose == 1 else "WARNING",
+        log_level=resolved_log_level,
     )
 
     # Store CLI options in typer context for access by subcommands
@@ -134,7 +152,7 @@ def config():
         table.add_row(
             "Keep Instances on Failure", str(current_config.keep_instances_on_failure)
         )
-        table.add_row("Verbose Level", str(current_config.verbose))
+        table.add_row("Log Level", current_config.log_level)
         if current_config.deployment_mode == DeploymentMode.CLUSTER:
             table.add_row("Agents", str(current_config.cluster.agents))
             table.add_row("DB Servers", str(current_config.cluster.dbservers))

@@ -54,7 +54,7 @@ class ArmadilloPlugin:
         self._armadillo_config = framework_config
         self._register_markers(config)
         configure_logging(
-            level="DEBUG" if config.option.verbose > 0 else "INFO",
+            level=framework_config.log_level,
             enable_console=True,
             enable_json=True,
         )

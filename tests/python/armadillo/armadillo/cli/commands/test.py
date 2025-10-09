@@ -132,11 +132,6 @@ def run(
     extra_args: Optional[List[str]] = typer.Option(
         None, "--pytest-arg", help="Additional arguments to pass to pytest"
     ),
-    log_level: str = typer.Option(
-        "WARNING",
-        "--log-level",
-        help="Framework logging level (DEBUG, INFO, WARNING, ERROR)",
-    ),
     show_server_logs: bool = typer.Option(
         False, "--show-server-logs", help="Show ArangoDB server log output"
     ),
@@ -149,6 +144,10 @@ def run(
 ):
     """Run tests with ArangoDB instances."""
     try:
+        # Get global log level from CLI context (already resolved from verbose if needed)
+        cli_options = ctx.obj.get("cli_options", {}) if ctx.obj else {}
+        log_level = getattr(cli_options, "log_level", "WARNING")
+
         # Create and validate options using pydantic model
         # If no test paths provided, use default
         if not test_paths:
@@ -170,12 +169,8 @@ def run(
             compact=compact,
         )
 
-        # Get verbose level from CLI context
-        cli_options = ctx.obj.get("cli_options", {}) if ctx.obj else {}
-        verbose = getattr(cli_options, "verbose", 0)
-
         # Use the validated options for the rest of the function
-        _execute_test_run(options, verbose=verbose)
+        _execute_test_run(options)
 
     except Exception as e:
         logger.error("Test execution failed: %s", e)
@@ -183,7 +178,7 @@ def run(
         raise typer.Exit(1)
 
 
-def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
+def _execute_test_run(options: TestRunOptions) -> None:
     """Execute test run with validated options."""
     # Load and configure the framework
     deployment_mode = (
@@ -236,8 +231,8 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
     os.environ["ARMADILLO_DEPLOYMENT_MODE"] = deployment_mode.value
     console.print(f"[cyan]🚀 Using {deployment_mode.value} deployment mode[/cyan]")
 
-    # Configure verbose level for pytest subprocess
-    os.environ["ARMADILLO_VERBOSE"] = str(verbose)
+    # Propagate log level to pytest subprocess
+    os.environ["ARMADILLO_LOG_LEVEL"] = options.log_level
 
     # Configure server log visibility for pytest subprocess
     os.environ["ARMADILLO_SHOW_SERVER_LOGS"] = str(int(options.show_server_logs))
@@ -259,10 +254,6 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
     options.output_dir.mkdir(parents=True, exist_ok=True)
     if "junit" in options.formats:
         pytest_args.extend(["--junitxml", str(options.output_dir / "junit.xml")])
-
-    # Configure verbosity
-    if config.verbose > 0:
-        pytest_args.append("-" + "v" * min(config.verbose, 3))
 
     # Configure parallel execution
     if options.parallel:

@@ -83,10 +83,6 @@ class ConfigProvider(Protocol):
         """Cluster configuration."""
 
     @property
-    def verbose(self) -> int:
-        """Verbosity level."""
-
-    @property
     def keep_instances_on_failure(self) -> bool:
         """Whether to keep instances running on failure."""
 
