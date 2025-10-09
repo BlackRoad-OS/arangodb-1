@@ -4,13 +4,13 @@ Provides detailed verbose output with timestamps, test phases, and comprehensive
 """
 
 import os
-import sys
 import time
 from datetime import datetime
 from typing import Dict
 from _pytest.reports import TestReport
 
 from ..core.log import get_logger
+from ..utils.output import write_stdout
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,7 @@ class Colors:
     @staticmethod
     def is_color_supported():
         """Check if terminal supports colors."""
-        return hasattr(os.sys.stderr, "isatty") and os.sys.stderr.isatty()
+        return hasattr(os.sys.stdout, "isatty") and os.sys.stdout.isatty()
 
 
 class ArmadilloReporter:
@@ -65,10 +65,9 @@ class ArmadilloReporter:
         """Write message directly to terminal.
 
         Since pytest is run with -s (no output capture), we can write directly
-        to stderr without needing /dev/tty hacks.
+        to stdout without needing /dev/tty hacks.
         """
-        sys.stderr.write(message)
-        sys.stderr.flush()
+        write_stdout(message)
 
     def _get_timestamp(self) -> str:
         """Get formatted timestamp."""
@@ -143,14 +142,13 @@ class ArmadilloReporter:
         total_time = int((end_time - self.session_start_time) * 1000)
         summary_color = Colors.GREEN if self.failed_tests == 0 else Colors.RED
         status_text = "PASSED" if self.failed_tests == 0 else "FAILED"
-        sys.stderr.write(
+        write_stdout(
             f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n"
         )
-        sys.stderr.write(
+        write_stdout(
             f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} Ran: {self.total_tests} tests "
             f"({self._colorize(f'{self.passed_tests} passed', Colors.GREEN)}, {self._colorize(f'{self.failed_tests} failed', Colors.RED if self.failed_tests > 0 else Colors.GREEN)}) ({total_time}ms total)\n"
         )
-        sys.stderr.flush()
 
     def pytest_sessionstart(self, _session):
         """Handle session start."""
@@ -244,18 +242,16 @@ class ArmadilloReporter:
                     self.test_times.get(test_name, {}).get("teardown", 0)
                 )
 
-                # Use sys.stderr to bypass pytest's output capture
-                sys.stderr.write(
+                # Write directly to stdout
+                write_stdout(
                     f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
                     f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: {teardown_time}ms)\n"
                 )
-                sys.stderr.flush()
             else:
                 self.failed_tests += 1
-                sys.stderr.write(
+                write_stdout(
                     f"{self._get_timestamp()} {self._colorize('[     FAILED ]', Colors.RED)} {test_name}\n"
                 )
-                sys.stderr.flush()
 
             # Print file summary immediately after each test to ensure proper timing
             # This happens in teardown phase to ensure all timing is complete
@@ -291,16 +287,15 @@ class ArmadilloReporter:
             file_path_normalized = self._get_file_path(file_items[0].nodeid)
             self.file_expected_counts[file_path_normalized] = len(file_items)
 
-        # Print file information using sys.stderr to bypass pytest's output capture
+        # Print file information to stdout
         for file_path, file_items in files.items():
             suite_name = self._get_suite_name(file_items[0].nodeid)
-            sys.stderr.write(
+            write_stdout(
                 f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} {self._colorize('armadillo:', Colors.BOLD)} Trying {file_path} ... 1\n"
             )
-            sys.stderr.write(
+            write_stdout(
                 f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {len(file_items)} tests from {self._colorize(suite_name, Colors.BOLD)} (setUpAll: 0ms)\n"
             )
-            sys.stderr.flush()
 
     def pytest_sessionfinish(self, _session, exitstatus):
         """Handle session finish - store data for later summary."""
