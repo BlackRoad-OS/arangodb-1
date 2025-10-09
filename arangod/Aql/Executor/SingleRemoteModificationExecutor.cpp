@@ -166,9 +166,7 @@ auto SingleRemoteModificationExecutor<
     inSlice = inBuilder.slice();
   }
 
-  velocypack::SupervisedBuffer sbForMergedBuilder(_info.resourceMonitor());
-  auto mergedBuilder = std::make_unique<VPackBuilder>(sbForMergedBuilder);
-  // std::unique_ptr<VPackBuilder> mergedBuilder = nullptr;
+  std::unique_ptr<VPackBuilder> mergedBuilder = nullptr;
   if (!_info._key.empty()) {
     mergedBuilder =
         merge(inSlice, _info._key, RevisionId::none(), _info.resourceMonitor());
