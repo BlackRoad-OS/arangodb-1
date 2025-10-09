@@ -28,7 +28,6 @@
 #include "Aql/ExecutionNode/GraphNode.h"
 #include "Aql/ExecutionState.h"
 #include "Aql/InputAqlItemRow.h"
-#include "Basics/SupervisedBuffer.h"
 #include "Aql/RegisterInfos.h"
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
