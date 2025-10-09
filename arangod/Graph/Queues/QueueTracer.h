@@ -26,6 +26,7 @@
 #include "Graph/Helpers/TraceEntry.h"
 #include "Basics/ResourceUsage.h"
 #include "Containers/FlatHashMap.h"
+#include "Graph/Queues/NextBatchMarker.h"
 
 #include <unordered_map>
 #include <vector>
@@ -42,7 +43,7 @@ class QueueTracer {
   ~QueueTracer();
 
   void clear();
-  void append(Step step);
+  void append(QueueEntry<Step> step);
   void setStartContent(std::vector<Step> startSteps);
   bool firstIsVertexFetched() const;
   bool hasProcessableElement() const;
@@ -50,7 +51,7 @@ class QueueTracer {
   bool isEmpty() const;
   std::vector<Step*> getLooseEnds();
 
-  Step pop();
+  QueueEntry<Step> pop();
   Step const& peek() const;
 
   // Return all Steps where the Provider needs to call fetchVertices()

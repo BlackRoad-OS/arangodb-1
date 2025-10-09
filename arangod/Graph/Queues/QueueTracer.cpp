@@ -63,13 +63,13 @@ void QueueTracer<QueueImpl>::clear() {
 }
 
 template<class QueueImpl>
-void QueueTracer<QueueImpl>::append(typename QueueImpl::Step step) {
+void QueueTracer<QueueImpl>::append(QueueEntry<typename QueueImpl::Step> step) {
   double start = TRI_microtime();
   // umpfh, this can extend _stats, thus requires mutability, may allocate
   // dynamic memory and can throw
   auto sg = arangodb::scopeGuard(
       [&]() noexcept { _stats["append"].addTiming(TRI_microtime() - start); });
-  return _impl.append(std::move(step));
+  return _impl.append({std::move(step)});
 }
 
 template<class QueueImpl>
@@ -157,7 +157,7 @@ auto QueueTracer<QueueImpl>::getLooseEnds()
 }
 
 template<class QueueImpl>
-auto QueueTracer<QueueImpl>::pop() -> typename QueueImpl::Step {
+auto QueueTracer<QueueImpl>::pop() -> QueueEntry<typename QueueImpl::Step> {
   double start = TRI_microtime();
   // umpfh, this can extend _stats, thus requires mutability, may allocate
   // dynamic memory and can throw

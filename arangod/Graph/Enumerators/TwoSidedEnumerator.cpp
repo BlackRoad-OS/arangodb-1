@@ -151,7 +151,7 @@ auto TwoSidedEnumerator<QueueType, PathStoreType, ProviderType,
   // based on the shell contents.
   TRI_ASSERT(_queue.isEmpty());
   for (auto& step : _shell) {
-    _queue.append(std::move(step));
+    _queue.append({std::move(step)});
   }
   _shell.clear();
   _depth++;
@@ -211,7 +211,9 @@ auto TwoSidedEnumerator<QueueType, PathStoreType, ProviderType, PathValidator>::
     TRI_ASSERT(_queue.hasProcessableElement());
   }
 
-  auto step = _queue.pop();
+  auto tmp = _queue.pop();
+  TRI_ASSERT(std::holds_alternative<Step>(tmp));
+  auto step = std::get<Step>(tmp);
   auto previous = _interior.append(step);
 
   _provider.expand(step, previous, [&](Step n) -> void {
