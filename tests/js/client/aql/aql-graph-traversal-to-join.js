@@ -150,7 +150,14 @@ function enumeratePathsFilter() {
                        RETURN p`;
       assertRuleFires(query);
       assertSameResults(query);
+    },
+
+    testRuleDoesNotFire: function() {
+      const query = `FOR v,e,p IN 1..2 OUTBOUND "${vName}/0" GRAPH ${graphName}
+                       RETURN p`;
+      assertRuleDoesNotFire(query);
     }
+
   };
 
   return testObj;

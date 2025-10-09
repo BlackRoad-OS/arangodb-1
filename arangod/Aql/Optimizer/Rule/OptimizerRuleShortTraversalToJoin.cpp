@@ -51,6 +51,47 @@ using EN = arangodb::aql::ExecutionNode;
 #define LOG_RULE LOG_DEVEL_IF(true)
 
 namespace {
+
+/*
+
+  INPUTVAR: startVertex can be a string, an object, or a
+            variable (that contains a string or a document...).
+
+  FOR v,e,p IN 1..1 OUTBOUND startVertex $graphSubject
+      ...
+
+  OUTPUTVARS v (vertex in target vertex collection)
+             e (current edge)
+             p = {vertices: [startVertex, v], edges: [e]} (object with vertices
+and edges; might have to materialize startVertex?))
+
+
+->
+
+
+
+ FOR e IN $edgeColl
+   FILTER e._from == startVertex (here we need the vertex id)
+   FOR v IN $vertexColl
+     FILTER v._id == e._from
+     p = ...
+
+
+     But if additional filters happen we need them to happen possibly on v.
+
+
+
+LET vids = [ id1, id2, id3 ]
+FOR s IN vids
+  FOR v,e,p IN 1..1 OUTBOUND s  GRAPH G
+  // Whats the semantics here, is FILTER v.x === foo applied to startvertex?
+    FILTER v.blubb... -> FILTER DOCUMENT(s).blubb... AND v.blubb
+    FILTER e.blabb -> no problem
+    FILTER p.vertices[*].yadda -> no problem (I think, could rewirte to 2
+filters again) FILTER p.edges[*].uymml -> no problem (could rewrite to FILTER
+e.uymml)
+
+ */
 auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
                   TraversalNode* traversal) {
   auto* ast = plan->getAst();
@@ -71,21 +112,23 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   enumerateEdges->addDependency(traversal->getFirstDependency());
   traversal->removeDependencies();
 
+  auto startVertex = std::invoke([&]() -> AstNode const* {
+    if (traversal->usesInVariable()) {
+      return ast->createNodeReference(traversal->inVariable());
+    } else {
+      auto const& sv = traversal->getStartVertex();
+      return ast->createNodeValueString(sv.c_str(), sv.size());
+    }
+  });
+
   // for FILTER e._from == startVertex._id
   auto startVertexCondition = std::invoke([&]() -> AstNode* {
-    auto rhs = std::invoke([&]() -> AstNode const* {
-      if (traversal->usesInVariable()) {
-        auto ref = ast->createNodeReference(traversal->inVariable());
-        return ast->createNodeAttributeAccess(ref, StaticStrings::IdString);
-      } else {
-        auto const& sv = traversal->getStartVertex();
-        return ast->createNodeValueString(sv.c_str(), sv.size());
-      }
-    });
-
     auto ref = ast->createNodeReference(edgeOutputVariable);
     auto const* access =
         ast->createNodeAttributeAccess(ref, StaticStrings::FromString);
+
+    auto const rhs =
+        ast->createNodeAttributeAccess(startVertex, StaticStrings::IdString);
 
     return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
                                          rhs);
@@ -135,10 +178,26 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
       plan.get(), plan->nextId(), targetVertexConditionVariable);
   filterTargetVertex->addDependency(calculateTargetVertexCondition);
 
+  auto calculatePathExpression = std::invoke([&]() -> AstNode* {
+    auto* obj = ast->createNodeObject();
+
+    auto* vertexArray = ast->createNodeArray();
+    vertexArray->addMember(startVertex);
+    vertexArray->addMember(ast->createNodeReference(vertexOutputVariable));
+    auto vertices = ast->createNodeObjectElement("vertices", vertexArray);
+    obj->addMember(vertices);
+
+    auto* edgeArray = ast->createNodeArray();
+    edgeArray->addMember(ast->createNodeReference(edgeOutputVariable));
+    auto edges = ast->createNodeObjectElement("edges", edgeArray);
+    obj->addMember(edges);
+    return obj;
+  });
+
   // TODO: calculate path
   auto calculatePath = plan->createNode<CalculationNode>(
       plan.get(), plan->nextId(),
-      std::make_unique<Expression>(ast, targetVertexCondition),
+      std::make_unique<Expression>(ast, calculatePathExpression),
       pathOutputVariable);
   calculatePath->addDependency(filterTargetVertex);
 
@@ -146,35 +205,12 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   parent->removeDependencies();
   parent->addDependency(calculatePath);
 }
-/*
-
-  INPUTVAR: startVertex
-
-  FOR v,e,p IN 1..1 OUTBOUND startVertex $graphSubject
-      ...
-
-  OUTPUTVARS v (vertex in target vertex collection)
-             e (current edge)
-             p (object with vertices and edges)
-
-->
-
-
-
- FOR e IN $edgeColl
-   FILTER e._from == startVertex
-   FOR v IN $vertexColl
-     FILTER v._id == e._from
-     p = ...
-
- */
 }  // namespace
 
 void arangodb::aql::shortTraversalToJoinRule(
     Optimizer* opt, std::unique_ptr<ExecutionPlan> plan,
     OptimizerRule const& rule) {
   auto modified = false;
-  auto builder = VPackBuilder{};
 
   auto traversalNodes = containers::SmallVector<ExecutionNode*, 8>{};
   plan->findNodesOfType(traversalNodes, ExecutionNode::TRAVERSAL, true);
@@ -201,26 +237,9 @@ void arangodb::aql::shortTraversalToJoinRule(
         true /* direction is important here */) {
       //      buildSnippet();
 
-      auto parent = traversal->getFirstParent();
-      auto dep = traversal->getFirstDependency();
-
-      builder.clear();
-      parent->toVelocyPack(builder, 0);
-      LOG_RULE << "parent " << builder.toJson();
-
-      builder.clear();
-      dep->toVelocyPack(builder, 0);
-      LOG_RULE << "dep " << builder.toJson();
-
       buildSnippet(plan, traversal);
-
-      builder.clear();
       plan->show();
-
       modified = true;
-      //      THROW_ARANGO_EXCEPTION_MESSAGE(
-      //    TRI_ERROR_QUERY_PARSE,
-      //    fmt::format("1 step traversal replacement fired"));
     }
   }
   opt->addPlan(std::move(plan), rule, modified);
