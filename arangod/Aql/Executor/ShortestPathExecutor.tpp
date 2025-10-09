@@ -21,6 +21,8 @@
 /// @author Markus Pfeiffer
 ////////////////////////////////////////////////////////////////////////////////
 
+#include "Basics/SupervisedBuffer.h"
+
 using namespace arangodb;
 using namespace arangodb::aql;
 using namespace arangodb::graph;
