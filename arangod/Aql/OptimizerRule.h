@@ -101,6 +101,9 @@ struct OptimizerRule {
     // ========================================================
     replaceNearWithinFulltext,
 
+    // try replacing short traversals by a join
+    shortTraversalToJoinRule,
+
     inlineSubqueriesRule,
 
     replaceLikeWithRange,
@@ -229,9 +232,6 @@ struct OptimizerRule {
 
     // remove redundant filters statements
     removeFiltersCoveredByTraversal,
-
-    // try replacing short traversals by a join
-    shortTraversalToJoinRule,
 
     // move filters and sort conditions into views and remove them
     handleArangoSearchViewsRule,
