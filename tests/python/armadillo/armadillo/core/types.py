@@ -85,6 +85,7 @@ class ArmadilloConfig(BaseModel):
     # Test execution configuration
     log_level: str = "INFO"
     compact_mode: bool = False
+    show_server_logs: bool = False
 
     @model_validator(mode="after")
     def validate_config(self) -> "ArmadilloConfig":

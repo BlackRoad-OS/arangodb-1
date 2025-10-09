@@ -16,32 +16,26 @@ class ServerConfigBuilder:
         self._logger = logger
 
     def build_server_args(self) -> dict:
-        """Build server arguments based on framework verbose mode.
+        """Build server arguments based on framework configuration.
 
-        Logging configuration:
-        - verbose >= 2: log.level=debug + log.output=- (full debug logs to stdout)
-        - verbose >= 1: log.output=- (all logs to stdout, default level)
-        - verbose == 0: log.output=-;all=error + log.level=crash=info (quiet mode)
+        Logging configuration based on show_server_logs setting:
+        - show_server_logs=True: log.output=- (all logs to stdout)
+        - show_server_logs=False: log.output=-;all=error (only errors to stdout, quiet mode)
 
         Returns:
             Dictionary of server arguments to pass to ArangoDB server
         """
-        verbose = self._config_provider.verbose
+        show_logs = self._config_provider.show_server_logs
         args = {}
 
-        if verbose >= 2:
-            # Very verbose: enable debug logging with full stdout output
-            args["log.level"] = "debug"
-            args["log.output"] = "-"  # All debug logs to stdout
-            self._logger.debug("Configured server for debug logging (verbose >= 2)")
-        elif verbose >= 1:
-            # Verbose: all logs to stdout but default log level
-            args["log.output"] = "-"  # All logs to stdout
-            self._logger.debug("Configured server for verbose logging (verbose >= 1)")
+        if show_logs:
+            # Show server logs: all logs to stdout
+            args["log.output"] = "-"
+            self._logger.debug("Configured server to show logs on stdout")
         else:
-            # Normal mode (quiet): only errors to stdout, reduce noise
+            # Quiet mode: only errors to stdout, reduce noise
             args["log.output"] = "-;all=error"  # Only error level to stdout
             args["log.level"] = "crash=info"  # Crash info to log file
-            self._logger.debug("Configured server for quiet logging (verbose == 0)")
+            self._logger.debug("Configured server for quiet mode (errors only)")
 
         return args

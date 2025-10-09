@@ -46,6 +46,7 @@ class TestRunOptions(BaseModel):
     log_level: str = Field(
         "WARNING", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
     )
+    show_server_logs: bool = Field(False, description="Show ArangoDB server log output")
     compact: bool = Field(
         False,
         description="Use compact pytest-style output instead of detailed verbose output",
@@ -136,6 +137,9 @@ def run(
         "--log-level",
         help="Framework logging level (DEBUG, INFO, WARNING, ERROR)",
     ),
+    show_server_logs: bool = typer.Option(
+        False, "--show-server-logs", help="Show ArangoDB server log output"
+    ),
     compact: bool = typer.Option(
         False,
         "--compact",
@@ -162,6 +166,7 @@ def run(
             max_workers=max_workers,
             extra_args=extra_args,
             log_level=log_level,
+            show_server_logs=show_server_logs,
             compact=compact,
         )
 
@@ -189,6 +194,7 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
     config_kwargs = {
         "deployment_mode": deployment_mode,
         "log_level": options.log_level,
+        "show_server_logs": options.show_server_logs,
         "compact_mode": options.compact,
     }
 
@@ -232,6 +238,9 @@ def _execute_test_run(options: TestRunOptions, verbose: int = 0) -> None:
 
     # Configure verbose level for pytest subprocess
     os.environ["ARMADILLO_VERBOSE"] = str(verbose)
+
+    # Configure server log visibility for pytest subprocess
+    os.environ["ARMADILLO_SHOW_SERVER_LOGS"] = str(int(options.show_server_logs))
 
     # Configure instance retention on failure
     if options.keep_instances_on_failure:
