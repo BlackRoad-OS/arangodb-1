@@ -29,6 +29,7 @@
 #include "Aql/ExecutionState.h"
 #include "Aql/InputAqlItemRow.h"
 #include "Aql/RegisterInfos.h"
+#include "Basics/SupervisedBuffer.h"
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
 
