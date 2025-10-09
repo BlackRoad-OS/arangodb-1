@@ -139,7 +139,6 @@ class SubqueryEndExecutor {
     velocypack::Options const* _options;
     arangodb::velocypack::SupervisedBuffer _buffer;
     velocypack::Builder _builder;
-    size_t _memoryUsage{0};
     size_t _numValues{0};
   };
 
