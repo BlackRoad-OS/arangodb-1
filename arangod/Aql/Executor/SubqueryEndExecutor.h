@@ -124,7 +124,7 @@ class SubqueryEndExecutor {
    public:
     explicit Accumulator(arangodb::ResourceMonitor& resourceMonitor,
                          velocypack::Options const* options);
-    ~Accumulator() {}
+    ~Accumulator() = default;
 
     void reset() noexcept;
 
