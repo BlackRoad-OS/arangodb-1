@@ -34,8 +34,6 @@
 #include "Logger/LogMacros.h"
 #include "VocBase/LogicalCollection.h"
 
-#include "Logger/LogMacros.h"
-
 namespace arangodb::aql {
 
 #define LOG_JOIN LOG_DEVEL_IF(false)
@@ -244,12 +242,10 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
             if (!hasProjectionsForRegisters) {
               // write all projections combined into the global output register
               // recycle our Builder object _projectionsBuilder.clear();
-              LOG_DEVEL << "_projectionsBuilder: Before: " << resourceMonitor().current();
               _projectionsBuilder.openObject(true);
               proj.toVelocyPackFromIndexCompactArray(_projectionsBuilder, data,
                                                      &_trx);
               _projectionsBuilder.close();
-              LOG_DEVEL << "_projectionsBuilder: After: " << resourceMonitor().current();
               LOG_JOIN_MEMORY
                   << "(buildProjections1) Increased memory usage by: "
                   << _projectionsBuilder.size()
@@ -257,7 +253,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
 
             } else {
               // write projections into individual output registers
-              LOG_DEVEL << "_projectionsBuilder: Before: " << resourceMonitor().current();
               proj.produceFromIndexCompactArray(
                   _projectionsBuilder, data, &_trx,
                   [&](Variable const* variable, velocypack::Slice slice) {
@@ -269,8 +264,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                     TRI_ASSERT(registerId != RegisterId::maxRegisterId);
                     output.moveValueInto(registerId, _currentRow, slice);
                   });
-
-              LOG_DEVEL << "_projectionsBuilder: After: " << resourceMonitor().current();
 
               LOG_JOIN_MEMORY
                   << "(buildProjections2) Increased memory usage by: "
@@ -407,7 +400,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                                       _infos.indexes[k].documentOutputRegister,
                                       _currentRow, docPtr);
               } else if (!idx.hasProjectionsForRegisters) {
-                LOG_DEVEL << "_projectionsBuilder: Before: " << resourceMonitor().current();
                 _projectionsBuilder.clear();
 
                 // write all projections combined into the
@@ -417,7 +409,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                 idx.projections.toVelocyPackFromDocument(_projectionsBuilder,
                                                          doc, &_trx);
                 _projectionsBuilder.close();
-                LOG_DEVEL << "_projectionsBuilder: After: " << resourceMonitor().current();
 
                 LOG_JOIN_MEMORY << "(docCB1) Increased memory usage by: "
                                 << _projectionsBuilder.size()
@@ -426,7 +417,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                 output.moveValueInto(_infos.indexes[k].documentOutputRegister,
                                      _currentRow, _projectionsBuilder.slice());
               } else {
-                LOG_DEVEL << "_projectionsBuilder: Before: " << resourceMonitor().current();
                 _projectionsBuilder.clear();
 
                 // write projections into individual
@@ -442,8 +432,6 @@ auto JoinExecutor::produceRows(AqlItemBlockInputRange& inputRange,
                       TRI_ASSERT(registerId != RegisterId::maxRegisterId);
                       output.moveValueInto(registerId, _currentRow, slice);
                     });
-
-                LOG_DEVEL << "_projectionsBuilder: After: " << resourceMonitor().current();
 
                 LOG_JOIN_MEMORY << "(docCB2) Increased memory usage by: "
                                 << _projectionsBuilder.size()
