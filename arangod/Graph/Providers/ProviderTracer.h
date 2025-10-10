@@ -69,6 +69,14 @@ class ProviderTracer {
       -> futures::Future<std::vector<Step*>>;
   auto expand(Step const& from, size_t previous,
               std::function<void(Step)> callback) -> void;
+  auto addNextBatch(Step const& from, std::function<void()> const& callback)
+      -> void {
+    return;
+  }
+  auto expandNextBatch(Step const& step, size_t previous,
+                       std::function<void(Step)> const& callback) -> bool {
+    return true;
+  }
 
   auto clear() -> void;
 
