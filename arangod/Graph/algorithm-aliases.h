@@ -29,6 +29,7 @@
 #include "Graph/Enumerators/WeightedShortestPathEnumerator.h"
 #include "Graph/Enumerators/YenEnumerator.h"
 
+#include "Graph/Queues/BatchedLifoQueue.h"
 #include "Graph/Queues/FifoQueue.h"
 #include "Graph/Queues/LifoQueue.h"
 #include "Graph/Queues/QueueTracer.h"
@@ -227,7 +228,7 @@ struct DFSConfiguration {
   using Step = typename Provider::Step;
   using Queue =
       typename std::conditional<useTracing, QueueTracer<LifoQueue<Step>>,
-                                LifoQueue<Step>>::type;
+                                BatchedLifoQueue<Step>>::type;
   using Store =
       typename std::conditional<useTracing, PathStoreTracer<PathStore<Step>>,
                                 PathStore<Step>>::type;
