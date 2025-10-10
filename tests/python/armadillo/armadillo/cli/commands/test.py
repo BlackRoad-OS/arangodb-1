@@ -229,7 +229,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
     # Configure deployment mode for pytest subprocess
     os.environ["ARMADILLO_DEPLOYMENT_MODE"] = deployment_mode.value
-    console.print(f"[cyan]🚀 Using {deployment_mode.value} deployment mode[/cyan]")
+    console.print(f"[cyan]Using {deployment_mode.value} deployment mode[/cyan]")
 
     # Propagate log level to pytest subprocess
     os.environ["ARMADILLO_LOG_LEVEL"] = options.log_level

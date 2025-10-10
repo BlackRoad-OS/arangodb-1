@@ -5,6 +5,7 @@ import time
 from ..core.types import DeploymentMode, ServerRole
 from ..core.log import Logger
 from ..core.errors import ServerError, ClusterError
+from ..utils import print_status
 from .deployment_plan import DeploymentPlan
 from .server_registry import ServerRegistry
 from .server_factory import ServerFactory
@@ -125,7 +126,7 @@ class DeploymentOrchestrator:
         if shutdown_order is None:
             shutdown_order = list(reversed(self._startup_order))
 
-        self._logger.info("Shutting down %d server(s)", len(servers))
+        print_status(f"Shutting down cluster with {len(servers)} servers")
 
         # Separate agents from other servers for proper cluster shutdown
         agents = []
@@ -236,7 +237,17 @@ class DeploymentOrchestrator:
             raise ClusterError("ClusterBootstrapper required for cluster deployments")
 
         servers = self._server_registry.get_all_servers()
-        self._logger.info("Starting cluster with %d servers", len(servers))
+
+        # Count servers by role
+        agents = sum(1 for s in servers.values() if s.role == ServerRole.AGENT)
+        dbservers = sum(1 for s in servers.values() if s.role == ServerRole.DBSERVER)
+        coordinators = sum(
+            1 for s in servers.values() if s.role == ServerRole.COORDINATOR
+        )
+
+        print_status(
+            f"Starting cluster with {agents} agents, {dbservers} dbservers, {coordinators} coordinators"
+        )
 
         # Delegate to cluster bootstrapper
         self._cluster_bootstrapper.bootstrap_cluster(

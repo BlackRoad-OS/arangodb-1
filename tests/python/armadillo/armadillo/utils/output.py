@@ -6,7 +6,7 @@ from typing import Optional
 
 def write_stdout(message: str, flush: bool = True) -> None:
     """Write message to stdout with optional flushing.
-    
+
     Args:
         message: Message to write
         flush: Whether to flush after writing (default: True)
@@ -18,7 +18,7 @@ def write_stdout(message: str, flush: bool = True) -> None:
 
 def write_stderr(message: str, flush: bool = True) -> None:
     """Write message to stderr with optional flushing.
-    
+
     Args:
         message: Message to write
         flush: Whether to flush after writing (default: True)
@@ -30,10 +30,10 @@ def write_stderr(message: str, flush: bool = True) -> None:
 
 def print_status(message: str, prefix: Optional[str] = None) -> None:
     """Print a status message to stdout.
-    
+
     Status messages are always visible and provide important user-facing
     information about framework operations (e.g., "Starting cluster").
-    
+
     Args:
         message: Status message to print
         prefix: Optional prefix (e.g., "🚀", "✅", "🧹")
@@ -47,11 +47,10 @@ def print_status(message: str, prefix: Optional[str] = None) -> None:
 
 def print_error(message: str, prefix: str = "❌") -> None:
     """Print an error message to stderr.
-    
+
     Args:
         message: Error message to print
         prefix: Prefix for the error (default: "❌")
     """
     full_message = f"{prefix} {message}\n"
     write_stderr(full_message)
-
