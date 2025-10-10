@@ -42,6 +42,7 @@ class QueueTracer {
   explicit QueueTracer(arangodb::ResourceMonitor& resourceMonitor);
   ~QueueTracer();
 
+  bool isBatched() { return false; }
   void clear();
   void append(QueueEntry<Step> step);
   void setStartContent(std::vector<Step> startSteps);
