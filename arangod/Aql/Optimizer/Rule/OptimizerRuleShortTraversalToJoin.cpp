@@ -91,6 +91,27 @@ FOR s IN vids
 filters again) FILTER p.edges[*].uymml -> no problem (could rewrite to FILTER
 e.uymml)
 
+
+// Should this really be done as an operation anyway? What would be the
+performance impact?
+
+// LET id = DOCUMENT_ID_FROM(x)
+
+
+FOR v,e,p IN 1..1 OUTBOUND "v/foo" GRAPH G ...
+
+FOR v,e,p IN 1..1 OUTBOUND s GRAPH g
+
+->
+
+LET s_id = DOCUMENT_ID_FROM(s);
+FOR e IN E
+  FILTER e._from == s_id
+  FOR v IN vertex_collection
+    FILTER e._to == v._id (// (or such a vertex does not exist; now one could
+check whether v is filtered by equality for an attribute, which would ensure
+correct semantics)
+
  */
 auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
                   TraversalNode* traversal) {
@@ -228,15 +249,17 @@ void arangodb::aql::shortTraversalToJoinRule(
     TRI_ASSERT(traversal != nullptr);
     TRI_ASSERT(opts != nullptr);
 
-    if (traversal->vertexColls().size() ==
-            1 and  // TODO: not quite correct; one collection either side is ok;
-                   // not sure how to tell this
-        traversal->edgeColls().size() == 1 and  //
-        opts->minDepth == 1 and                 //
-        opts->maxDepth == 1 and                 //
-        true /* direction is important here */) {
-      //      buildSnippet();
+    if (traversal->vertexColls().size() == 1 and  // TODO: not quite correct;
+                                                  // one collection either side
+                                                  // is ok; not sure how to tell
+                                                  // this
+        traversal->edgeColls().size() == 1 and    //
+        opts->minDepth == 1 and                   //
+        opts->maxDepth == 1 and                   //
+        true /* direction: can handle INBOUND/OUTBOUND not ANY */ and     //
+        true /* one vertex attribute has to be accessed by == filter */)  //
 
+    {
       buildSnippet(plan, traversal);
       plan->show();
       modified = true;
