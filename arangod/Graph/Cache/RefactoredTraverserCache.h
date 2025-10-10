@@ -119,6 +119,8 @@ class RefactoredTraverserCache {
   arangodb::velocypack::HashedStringRef persistString(
       arangodb::velocypack::HashedStringRef idString);
 
+  void validateVertexIdCollection(velocypack::HashedStringRef id) const;
+
  private:
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Lookup a document from the database.
