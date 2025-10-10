@@ -51,10 +51,10 @@ namespace arangodb {
 class CollectionNameResolver;
 
 struct SupervisedHeader {
-  arangodb::ResourceMonitor* rm;
-  void* dataPtr;  // payload in the heap
+  arangodb::ResourceMonitor* rm;  // part of the accounted memory
+  void* dataPtr;                  // payload in the heap
 };
-static_assert(sizeof(SupervisedHeader) == 16,
+static_assert(sizeof(SupervisedHeader) == 2 * sizeof(void*),
               "SupervisedHeader must be two pointers");
 
 namespace velocypack {
@@ -380,6 +380,17 @@ struct AqlValue final {
 
   explicit AqlValue(AqlValueHintEmptyObject) noexcept;
 
+  /// @brief construct a supervised AqlValue from a VPack slice.
+  /// If the slice can be stored inline, this will behave like the normal
+  /// constructor and not allocate any memory or account it to the resource
+  /// monitor.
+  AqlValue(arangodb::ResourceMonitor& resourceMonitor, velocypack::Slice slice,
+           bool adopt);
+
+  /// @brief construct a supervised AqlValue from raw bytes.
+  AqlValue(arangodb::ResourceMonitor& resourceMonitor, uint8_t const* bytes,
+           velocypack::ValueLength length, bool adopt);
+
   // construct from Buffer, potentially taking over its ownership
   explicit AqlValue(velocypack::Buffer<uint8_t>&& buffer);
 
@@ -538,34 +549,17 @@ struct AqlValue final {
   }
 
   /// Temporary static factory method
-  AqlValue FromSliceForSupervisedAV(arangodb::ResourceMonitor* resourceMonitor,
-                                    uint8_t consts* bytes, uint64_t n,
-                                    bool adopt) {
-    auto* sh = static_cast<SupervisedHeader*>(
-        ::operator new(sizeof(SupervisedHeader)));
-    resourceMonitor->increaseMemoryUsage(sizeof(SupervisedHeader));
-    sh->rm = resourceMonitor;
-
-    void* p = nullptr;
-    if (adopt) {
-      p = const_cast<uint8_t*>(bytes);
-      if (n != 0) {
-        resourceMonitor->increaseMemoryUsage(static_cast<size_t>(n));
-      }
-    } else {
-      if (n != 0) {
-        p = ::operator new(static_cast<size_t>(n));
-        std::memcpy(p, bytes, static_cast<size_t>(n));
-        resourceMonitor->increaseMemoryUsage(static_cast<size_t>(n));
-      }
-    }
-    sh->dataPtr = p;
-
-    AqlValue v;
-    v._data.supervisedSliceMeta.header = sh;
-    v._data.supervisedSliceMeta.lengthOrigin = encodeTypeOriginLength(
-        AqlValueType::VPACK_SUPERVISED_SLICE, adopt ? 1 : 0, n);
-    return v;
+  ///
+  /// This helper is retained for backwards compatibility. It forwards to
+  /// the new constructor that accepts a ResourceMonitor reference.  Note
+  /// that the caller must not pass a nullptr for `resourceMonitor`.
+  static AqlValue FromSliceForSupervisedAV(
+      arangodb::ResourceMonitor* resourceMonitor, uint8_t const* bytes,
+      uint64_t n, bool adopt) {
+    TRI_ASSERT(resourceMonitor != nullptr);
+    // delegate to the ResourceMonitor-based constructor
+    return AqlValue(*resourceMonitor, bytes,
+                    static_cast<velocypack::ValueLength>(n), adopt);
   }
 
  private:
@@ -587,9 +581,9 @@ struct AqlValue final {
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
 
-
   /// Temporary helper function
-  uint64_t encodeTypeOriginLength(AqlValueType type, uint8_t origin, uint64_t len) {
+  uint64_t encodeTypeOriginLength(AqlValueType type, uint8_t origin,
+                                  uint64_t len) {
     uint64_t lo = 0;
     if constexpr (arangodb::basics::isLittleEndian()) {
       lo |= static_cast<uint64_t>(static_cast<uint8_t>(type));
