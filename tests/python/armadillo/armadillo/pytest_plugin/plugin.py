@@ -578,11 +578,11 @@ def pytest_sessionfinish(session, exitstatus):
         reporter.pytest_sessionfinish(session, exitstatus)
 
     try:
-        _cleanup_all_deployments()
-        _cleanup_all_processes()
+        _cleanup_all_deployments(emergency=False)
+        _cleanup_all_processes(emergency=False)
         cleanup_work_dir()
         clear_test_session()
-        logger.info("Armadillo pytest plugin cleanup completed")
+        logger.debug("Armadillo pytest plugin cleanup completed")
     except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
         logger.error("Error during pytest plugin cleanup: %s", e)
     finally:
@@ -654,15 +654,19 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
             reporter.summary_printed = True
 
 
-def _cleanup_all_deployments():
-    """Emergency cleanup of all tracked deployments with bulletproof shutdown."""
+def _cleanup_all_deployments(emergency=True):
+    """Cleanup all tracked deployments with bulletproof shutdown."""
     if hasattr(_plugin, "_session_deployments"):
         deployments = list(_plugin._session_deployments.items())
         if deployments:
-            logger.warning("Emergency cleanup of %s deployments", len(deployments))
+            if emergency:
+                logger.warning("Emergency cleanup of %s deployments", len(deployments))
             for deployment_id, manager in deployments:
                 try:
-                    logger.info("Emergency shutdown of deployment: %s", deployment_id)
+                    if emergency:
+                        logger.info(
+                            "Emergency shutdown of deployment: %s", deployment_id
+                        )
                     manager.shutdown_deployment(timeout=15.0)
                     logger.debug("Deployment %s shutdown completed", deployment_id)
                 except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
@@ -719,22 +723,24 @@ def _cleanup_all_deployments():
                         )
         _plugin._session_deployments.clear()
         _plugin._session_orchestrators.clear()
-        logger.info("Emergency deployment cleanup completed")
+        if emergency:
+            logger.info("Emergency deployment cleanup completed")
 
 
-def _cleanup_all_processes():
-    """Emergency cleanup of all supervised processes with bulletproof termination."""
+def _cleanup_all_processes(emergency=True):
+    """Cleanup all supervised processes with bulletproof termination."""
     try:
         from ..core.process import _process_supervisor
 
         if hasattr(_process_supervisor, "_processes"):
             process_ids = list(_process_supervisor._processes.keys())
             if process_ids:
-                logger.warning(
-                    "Emergency cleanup of %s processes: %s",
-                    len(process_ids),
-                    process_ids,
-                )
+                if emergency:
+                    logger.warning(
+                        "Emergency cleanup of %s processes: %s",
+                        len(process_ids),
+                        process_ids,
+                    )
                 logger.info(
                     "Phase 1: Attempting graceful shutdown (SIGTERM, 3s timeout)"
                 )
@@ -774,14 +780,40 @@ def _cleanup_all_processes():
 
 def _emergency_cleanup():
     """Emergency cleanup function registered with atexit."""
-    logger.warning("Emergency cleanup triggered via atexit")
-    try:
-        _cleanup_all_deployments()
-        _cleanup_all_processes()
-        try:
-            from ..core.process import kill_all_supervised_processes
+    # Check if there's actually anything to clean up
+    has_deployments = (
+        hasattr(_plugin, "_session_deployments") and _plugin._session_deployments
+    )
 
-            kill_all_supervised_processes()
+    try:
+        from ..core.process import _process_supervisor
+
+        has_processes = (
+            hasattr(_process_supervisor, "_processes")
+            and _process_supervisor._processes
+        )
+    except (ImportError, AttributeError):
+        has_processes = False
+
+    # Only print emergency message if there's actually something left to clean up
+    if has_deployments or has_processes:
+        logger.warning("Emergency cleanup triggered via atexit")
+
+    try:
+        _cleanup_all_deployments(emergency=True)
+        _cleanup_all_processes(emergency=True)
+
+        # Only use nuclear option if processes still remain after normal emergency cleanup
+        try:
+            from ..core.process import _process_supervisor
+
+            if (
+                hasattr(_process_supervisor, "_processes")
+                and _process_supervisor._processes
+            ):
+                from ..core.process import kill_all_supervised_processes
+
+                kill_all_supervised_processes()
         except (OSError, ProcessLookupError, AttributeError, RuntimeError) as nuclear_e:
             logger.error("Nuclear cleanup failed: %s", nuclear_e)
     except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
