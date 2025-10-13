@@ -1,6 +1,11 @@
 3.12.5.5 (XXXX-XX-XX)
 ---------------------
 
+* Fix BTS-2233: Starting an AQL query inside a streaming transaction could
+  result in a race where two threads could try to work with the same
+  ExecutionBlock. There are safeguards in place to detect that, which would log
+  some backtraces and abort the query with an error.
+
 * Updated ArangoDB Starter to v0.19.13.
 
 * Rebuilt included rclone v1.65.2 with go1.23.12 and non-vulnerable
@@ -8,8 +13,8 @@
 
 * Upgraded OpenSSL to 3.5.4.
 
-* Fix BTS-2231: Fix a divide-by-zero crash in case a smart edge collection is used in a
-  collect query with a custom index.
+* Fix BTS-2231: Fix a divide-by-zero crash in case a smart edge collection is
+  used in a collect query with a custom index.
 
 
 3.12.5.4 (2025-09-22)
