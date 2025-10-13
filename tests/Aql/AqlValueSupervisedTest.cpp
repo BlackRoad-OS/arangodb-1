@@ -14,7 +14,7 @@ using namespace arangodb::aql;
 using namespace arangodb::velocypack;
 
 namespace {
-inline size_t ptrOverhead() { return sizeof(void*); }
+inline size_t ptrOverhead() { return sizeof(arangodb::ResourceMonitor*); }
 }  // namespace
 
 TEST(AqlValueSupervisedTest, CopyLargePayloadAndAccountPayloadAndPointer) {
@@ -30,15 +30,13 @@ TEST(AqlValueSupervisedTest, CopyLargePayloadAndAccountPayloadAndPointer) {
 
   AqlValue v(monitor, s, false);
 
-  const size_t payload = v.memoryUsage();
-  const size_t expected = payload + ptrOverhead();
-  EXPECT_EQ(monitor.current(), expected)
-      << "must account for the payload + resource monitor ptr";
+  EXPECT_EQ(monitor.current(), v.memoryUsage())
+      << "must account for the payload + resource monitor pointer (once)";
   v.destroy();
   EXPECT_EQ(monitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, InlineNoPayloadOnlyAccountPointer) {
+TEST(AqlValueSupervisedTest, InlineNoPayloadDontAccountPointer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor(global);
 
@@ -47,11 +45,11 @@ TEST(AqlValueSupervisedTest, InlineNoPayloadOnlyAccountPointer) {
   Slice s = b.slice();
 
   AqlValue v(monitor, s, false);
-  EXPECT_EQ(v.memoryUsage(), 0);
-  EXPECT_EQ(monitor.current(), ptrOverhead());
+  EXPECT_EQ(v.memoryUsage(), 0u);
+  EXPECT_EQ(monitor.current(), 0u);
 
   v.destroy();
-  EXPECT_EQ(monitor.current(), 0);
+  EXPECT_EQ(monitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
@@ -66,17 +64,17 @@ TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
 
   AqlValue v(monitor, s, false);
   const size_t base = monitor.current();
-  ASSERT_EQ(base, v.memoryUsage() + ptrOverhead());
+  ASSERT_EQ(base, v.memoryUsage());
 
   AqlValue c = v.clone();
   EXPECT_EQ(monitor.current(), base + ptrOverhead())
-      << "clone must add only overhead of the resource monitor ptr";
+      << "clone must add only the overhead of the resource monitor pointer";
 
   c.destroy();
   EXPECT_EQ(monitor.current(), base);
 
   v.destroy();
-  EXPECT_EQ(monitor.current(), 0);
+  EXPECT_EQ(monitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest,
@@ -97,10 +95,10 @@ TEST(AqlValueSupervisedTest,
   EXPECT_GE(monitor.current(), ptrOverhead());
 
   c.destroy();
-  EXPECT_EQ(monitor.current(), 0);
+  EXPECT_EQ(monitor.current(), 0u);
 }
 
-TEST(AqlValueSupervisedTest, AdoptmSupervisedBufferAccountOnlyPtr) {
+TEST(AqlValueSupervisedTest, AdoptSupervisedBufferAccountOnlyPtr) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor(global);
 
@@ -109,12 +107,12 @@ TEST(AqlValueSupervisedTest, AdoptmSupervisedBufferAccountOnlyPtr) {
   b.openArray();
   b.add(Value(std::string(1500, 'a')));
   b.close();
-  const size_t before = monitor.current();
+  const size_t before =
+      monitor.current();  // supervised buffer already accounted the payload
 
   AqlValue v(monitor, b.slice(), true);
 
   EXPECT_EQ(monitor.current(), before + ptrOverhead());
-
   v.destroy();
   EXPECT_EQ(monitor.current(), before);
 }

@@ -28,7 +28,6 @@
 #include "Aql/RegisterId.h"
 #include "Aql/RegIdFlatSet.h"
 #include "Basics/Endian.h"
-#include "Basics/ResourceUsage.h"
 #include "IResearch/Misc.h"
 
 #include <velocypack/Slice.h>
@@ -52,7 +51,7 @@ class CollectionNameResolver;
 
 struct SupervisedHeader {
   arangodb::ResourceMonitor* rm;  // part of the accounted memory
-  void* dataPtr;                  // payload in the heap
+  void* dataPtr;                  // payload in the heap GET RID OF IT
 };
 static_assert(sizeof(SupervisedHeader) == 2 * sizeof(void*),
               "SupervisedHeader must be two pointers");

@@ -28,6 +28,7 @@
 #include "Basics/ResourceUsage.h"
 #include "Basics/SupervisedBuffer.h"
 #include "Basics/GlobalResourceMonitor.h"
+#include "Basics/ResourceUsage.h"
 #include "Basics/VelocyPackHelper.h"
 #include "Transaction/Context.h"
 #include "Transaction/Helpers.h"
@@ -1530,9 +1531,9 @@ size_t AqlValue::memoryUsage() const noexcept {
       // It should be length, because in case of clone
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
-    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_SLICE:  // + monitor
       return static_cast<size_t>(_data.supervisedSliceMeta.getLength());
-    case VPACK_SUPERVISED_STRING:
+    case VPACK_SUPERVISED_STRING:  // + monitor
       return static_cast<size_t>(_data.supervisedStringMeta.getLength());
     case RANGE:
       return sizeof(Range);
