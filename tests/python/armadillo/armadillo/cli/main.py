@@ -19,9 +19,6 @@ class GlobalCliOptions(BaseModel):
 
     verbose: int = Field(0, description="Increase verbosity level")
     config_file: Optional[Path] = Field(None, description="Configuration file path")
-    build_dir: Optional[Path] = Field(
-        None, description="ArangoDB build directory (auto-detected if not specified)"
-    )
     log_level: str = Field(
         "INFO", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
     )
@@ -58,12 +55,6 @@ def main(
     config_file: Optional[Path] = typer.Option(
         None, "--config", "-c", help="Configuration file path"
     ),
-    build_dir: Optional[Path] = typer.Option(
-        None,
-        "--build-dir",
-        "-b",
-        help="ArangoDB build directory (auto-detected if not specified)",
-    ),
 ):
     """Armadillo: Modern ArangoDB Testing Framework."""
     # Validate verbose and log_level are not both specified
@@ -83,7 +74,6 @@ def main(
     cli_options = GlobalCliOptions(
         verbose=verbose,
         config_file=config_file,
-        build_dir=build_dir,
         log_level=resolved_log_level,
     )
 
@@ -94,16 +84,6 @@ def main(
     configure_logging(
         level=cli_options.log_level, enable_console=True, enable_json=False
     )
-
-    # Propagate global options to subcommands via environment variables
-    # This allows subcommands to access them without triggering premature config loading
-    if cli_options.build_dir:
-        bin_dir = cli_options.build_dir.resolve()  # pylint: disable=no-member
-        os.environ["ARMADILLO_BIN_DIR"] = str(bin_dir)
-        console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
-
-    # Don't load config here - let subcommands load it with their specific options
-    # This avoids duplicate config loading and premature build detection
 
 
 @app.command()

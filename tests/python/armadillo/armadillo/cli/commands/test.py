@@ -196,7 +196,8 @@ def _execute_test_run(options: TestRunOptions) -> None:
     if options.build_dir:
         bin_dir = options.build_dir.resolve()
         config_kwargs["bin_dir"] = bin_dir
-        console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
+        if bin_dir and bin_dir.exists():
+            console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
 
     config = load_config(**config_kwargs)
 
