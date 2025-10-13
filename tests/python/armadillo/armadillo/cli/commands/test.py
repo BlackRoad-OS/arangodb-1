@@ -216,9 +216,10 @@ def _execute_test_run(options: TestRunOptions) -> None:
     pytest_args.append("-s")
 
     if options.compact:
-        pytest_args.extend(["-q", "--tb=no"])
+        # Use pytest's default output format (shows filenames and dots)
+        pytest_args.append("--tb=no")
     else:
-        # Even in verbose mode, suppress pytest's filename output since we have our own
+        # In verbose mode with custom reporter, suppress pytest's filename output
         pytest_args.append("-q")
 
     for path in options.test_paths:
