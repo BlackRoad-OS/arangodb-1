@@ -238,6 +238,9 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Configure server log visibility for pytest subprocess
     os.environ["ARMADILLO_SHOW_SERVER_LOGS"] = str(int(options.show_server_logs))
 
+    # Configure compact mode for pytest subprocess
+    os.environ["ARMADILLO_COMPACT_MODE"] = str(int(options.compact))
+
     # Configure instance retention on failure
     if options.keep_instances_on_failure:
         os.environ["ARMADILLO_KEEP_INSTANCES_ON_FAILURE"] = "1"
