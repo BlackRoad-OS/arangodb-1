@@ -146,7 +146,7 @@ void ModificationExecutorHelpers::buildKeyAndRevDocument(
 bool ModificationExecutorHelpers::writeRequired(
     ModificationExecutorInfos const& infos, velocypack::Slice doc,
     std::string const& key) {
-  return (!infos._consultAqlWriteFilter ||
+  return (/* let's see whether this is !infos._consultAqlWriteFilter || */
           !infos._aqlCollection->getCollection()->skipForAqlWrite(doc, key));
 }
 
