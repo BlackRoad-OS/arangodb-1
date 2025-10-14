@@ -171,6 +171,11 @@ class ArmadilloPlugin:
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug("ArmadilloPlugin: Session finish with exit status %s", exitstatus)
+        # Print shutdown message for single server mode
+        if self._session_servers:
+            from ..utils import print_status
+
+            print_status("\nShutting down server")
         for server_id, server in list(self._session_servers.items()):
             try:
                 logger.debug("Stopping session server %s", server_id)
@@ -238,6 +243,9 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
         yield server
     finally:
         logger.info("Stopping session single server")
+        from ..utils import print_status
+
+        print_status("\nShutting down server")
         try:
             server.stop(timeout=30.0)
             logger.debug("Session single server stopped successfully")
@@ -577,7 +585,28 @@ def pytest_sessionfinish(session, exitstatus):
         reporter.print_final_summary()
         reporter.pytest_sessionfinish(session, exitstatus)
 
+    # Print shutdown message before cleanup
     try:
+        from ..core.process import _process_supervisor
+
+        if (
+            hasattr(_process_supervisor, "_processes")
+            and _process_supervisor._processes
+        ):
+            from ..utils import print_status
+
+            # Check if it's a single server (1 process) or cluster (multiple)
+            process_count = len(_process_supervisor._processes)
+            if process_count == 1:
+                print_status("\nShutting down server")
+            elif process_count > 1:
+                # Cluster shutdown message is handled by DeploymentOrchestrator
+                pass
+    except (ImportError, AttributeError):
+        pass
+
+    try:
+        logger.debug("Starting pytest session cleanup")
         _cleanup_all_deployments(emergency=False)
         _cleanup_all_processes(emergency=False)
         cleanup_work_dir()
@@ -658,6 +687,11 @@ def _cleanup_all_deployments(emergency=True):
     """Cleanup all tracked deployments with bulletproof shutdown."""
     if hasattr(_plugin, "_session_deployments"):
         deployments = list(_plugin._session_deployments.items())
+        logger.debug(
+            "_cleanup_all_deployments: found %d deployments, emergency=%s",
+            len(deployments),
+            emergency,
+        )
         if deployments:
             if emergency:
                 logger.warning("Emergency cleanup of %s deployments", len(deployments))

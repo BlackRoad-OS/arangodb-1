@@ -118,6 +118,10 @@ class DeploymentOrchestrator:
             ServerError: If shutdown fails critically
         """
         servers = self._server_registry.get_all_servers()
+        self._logger.debug(
+            "DeploymentOrchestrator.shutdown_deployment called: %d servers registered",
+            len(servers),
+        )
         if not servers:
             self._logger.debug("No servers to shutdown")
             return
@@ -126,7 +130,8 @@ class DeploymentOrchestrator:
         if shutdown_order is None:
             shutdown_order = list(reversed(self._startup_order))
 
-        print_status(f"Shutting down cluster with {len(servers)} servers")
+        # Print shutdown message with newline to separate from test output
+        print_status(f"\nShutting down cluster with {len(servers)} servers")
 
         # Separate agents from other servers for proper cluster shutdown
         agents = []

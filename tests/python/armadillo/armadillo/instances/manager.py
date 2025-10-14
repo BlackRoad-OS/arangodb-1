@@ -318,12 +318,25 @@ class InstanceManager:
         timeout = clamp_timeout(timeout, "shutdown")
         self.state.timing.shutdown_time = time.time()
 
+        logger.debug(
+            "InstanceManager.shutdown_deployment: deployment_id=%s, servers=%d",
+            self.deployment_id,
+            len(self.state.servers),
+        )
+
         with timeout_scope(timeout, f"shutdown_deployment_{self.deployment_id}"):
             try:
                 # Delegate to DeploymentOrchestrator for shutdown
                 shutdown_order = list(reversed(self.state.startup_order))
+                logger.debug(
+                    "Calling DeploymentOrchestrator.shutdown_deployment with order: %s",
+                    shutdown_order,
+                )
                 self._deployment_orchestrator.shutdown_deployment(
                     shutdown_order=shutdown_order, timeout=timeout
+                )
+                logger.debug(
+                    "DeploymentOrchestrator.shutdown_deployment completed successfully"
                 )
             except Exception as e:
                 logger.error("Shutdown via orchestrator failed: %s", e)

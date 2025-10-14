@@ -270,6 +270,13 @@ class ArangoServer:
                     server_id=self.server_id,
                     pid=process_info.pid,
                 )
+                self._deps.logger.debug(
+                    "Server %s started: pid=%d, port=%d, endpoint=%s",
+                    self.server_id,
+                    process_info.pid,
+                    self.port,
+                    self.endpoint,
+                )
 
         except (OSError, TimeoutError, ProcessLookupError) as e:
             log_server_event(
@@ -293,10 +300,18 @@ class ArangoServer:
         log_server_event(
             self._deps.logger, "stopping", server_id=self.server_id, graceful=graceful
         )
+        self._deps.logger.debug(
+            "Stopping server %s: pid=%d, graceful=%s, timeout=%.1fs",
+            self.server_id,
+            self._runtime.process_info.pid if self._runtime.process_info else 0,
+            graceful,
+            timeout,
+        )
 
         try:
             stop_supervised_process(self.server_id, graceful=graceful, timeout=timeout)
             log_server_event(self._deps.logger, "stopped", server_id=self.server_id)
+            self._deps.logger.debug("Server %s stopped successfully", self.server_id)
         except (OSError, ProcessLookupError, TimeoutError) as e:
             log_server_event(
                 self._deps.logger, "stop_failed", server_id=self.server_id, error=str(e)
