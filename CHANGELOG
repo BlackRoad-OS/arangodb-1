@@ -1,6 +1,11 @@
 devel
 -----
 
+* Fix a race when collecting list ongoing transactions.
+  The GET /_api/transaction API was missing a lock which could lead to undefined
+  behavior if a transaction would update its state at the same time while we are
+  collecting its details.
+
 * Fix defaults for inverted indexes and views. Consolidations 5 times
   less frequently, with minimum of 50(1 before) segments and 24M bytes
   (2M before), maximum 200 (10 before) segments and 8G bytes (800M
