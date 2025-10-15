@@ -500,12 +500,12 @@ def pytest_sessionstart(session):
         reporter.session_start_time = time.time()
 
 
-def _is_verbose_output_enabled():
-    """Check if verbose output is enabled (i.e., compact mode is disabled)."""
+def _is_compact_mode_enabled():
+    """Check if compact test output mode is enabled."""
     from ..core.config import get_config as get_framework_config
 
     framework_config = get_framework_config()
-    return not framework_config.compact_mode
+    return framework_config.compact_mode
 
 
 @pytest.hookimpl(trylast=True)
@@ -514,7 +514,7 @@ def pytest_sessionfinish(session, exitstatus):
     logger.debug("Starting pytest plugin cleanup")
 
     # Capture the test end time BEFORE server shutdown begins
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.session_finish_time = time.time()
         # Print the final summary immediately, before any server cleanup
@@ -539,35 +539,35 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_runtest_setup(item):
     """Handle test setup start."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_setup(item)
 
 
 def pytest_runtest_call(item):
     """Handle test call start."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_call(item)
 
 
 def pytest_runtest_teardown(item, nextitem):
     """Handle test teardown start."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_teardown(item)
 
 
 def pytest_runtest_logreport(report):
     """Handle test report."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_logreport(report)
 
 
 def pytest_runtest_logstart(nodeid, location):
     """Override pytest's default test file output to suppress filename printing."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         # Call our reporter but suppress pytest's default filename output
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_logstart(nodeid, location)
@@ -578,7 +578,7 @@ def pytest_runtest_logstart(nodeid, location):
 
 def pytest_report_teststatus(report, config):
     """Override test status reporting to suppress pytest's progress dots and status."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         if report.when == "call":
             if report.passed:
                 return ("passed", "", "")
@@ -592,7 +592,7 @@ def pytest_report_teststatus(report, config):
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
-    if _is_verbose_output_enabled():
+    if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         if not reporter.summary_printed:
             reporter.print_final_summary()
