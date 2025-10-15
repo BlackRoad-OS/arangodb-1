@@ -311,7 +311,7 @@ auto isRuleApplicable(TraversalNode* traversal) -> bool {
   if (opts->maxDepth != 1) {
     return false;
   }
-  if (traversal->edgeDirections().at(0) == TRI_EDGE_ANY) {
+  if (traversal->edgeDirections().at(0) != TRI_EDGE_OUT) {
     return false;
   }
   return true;

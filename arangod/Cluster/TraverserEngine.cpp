@@ -179,8 +179,6 @@ void BaseEngine::getVertexData(VPackSlice vertex, VPackBuilder& builder,
   TRI_ASSERT(ServerState::instance()->isDBServer());
   TRI_ASSERT(vertex.isString() || vertex.isArray());
 
-  LOG_DEVEL << "VERRTEKS " << vertex.toJson();
-
   std::uint64_t read = 0;
   bool shouldProduceVertices = this->produceVertices();
 
