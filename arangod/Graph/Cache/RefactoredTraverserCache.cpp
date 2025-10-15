@@ -389,11 +389,6 @@ void RefactoredTraverserCache::validateVertexCollection(
 */
 arangodb::velocypack::HashedStringRef RefactoredTraverserCache::persistString(
     arangodb::velocypack::HashedStringRef idString) {
-  LOG_DEVEL << "bla";
-  for (auto&& xx : _collectionToShardMap) {
-    LOG_DEVEL << "collection" << xx.first;
-  }
-
   auto it = _persistedStrings.find(idString);
   if (it != _persistedStrings.end()) {
     return *it;
