@@ -500,7 +500,8 @@ def pytest_sessionstart(session):
         reporter.session_start_time = time.time()
 
 
-def _is_compact_mode_enabled():
+def _is_verbose_output_enabled():
+    """Check if verbose output is enabled (i.e., compact mode is disabled)."""
     from ..core.config import get_config as get_framework_config
 
     framework_config = get_framework_config()
@@ -513,7 +514,7 @@ def pytest_sessionfinish(session, exitstatus):
     logger.debug("Starting pytest plugin cleanup")
 
     # Capture the test end time BEFORE server shutdown begins
-    if _is_compact_mode_enabled():
+    if _is_verbose_output_enabled():
         reporter = get_armadillo_reporter()
         reporter.session_finish_time = time.time()
         # Print the final summary immediately, before any server cleanup
@@ -629,38 +630,30 @@ def _cleanup_all_deployments(emergency=True):
                             "Attempting direct process cleanup for failed deployment %s",
                             deployment_id,
                         )
-                        # Try to get servers from available manager interfaces
-                        servers = {}
-                        if (
-                            hasattr(manager, "_server_registry")
-                            and manager._server_registry
-                        ):
-                            servers = manager._server_registry.get_all_servers()
-                        elif hasattr(manager, "state") and hasattr(
-                            manager.state, "servers"
-                        ):
-                            servers = manager.state.servers
-                        elif hasattr(manager, "_servers"):
-                            servers = manager._servers
+                        # Try to get servers using the public API for force cleanup
+                        try:
+                            servers = manager.get_all_servers()
+                        except (AttributeError, RuntimeError) as get_e:
+                            logger.warning(
+                                "Could not get servers from manager %s: %s",
+                                deployment_id,
+                                get_e,
+                            )
+                            servers = {}
 
                         if servers:
                             for server_id, server in servers.items():
                                 try:
-                                    if (
-                                        hasattr(server, "_process_info")
-                                        and server._process_info
-                                    ):
-                                        from ..core.process import _process_supervisor
-
-                                        _process_supervisor.stop(
-                                            server_id, graceful=False, timeout=5.0
-                                        )
-                                        logger.debug(
-                                            "Force killed server %s", server_id
-                                        )
-                                except (OSError, ProcessLookupError) as server_e:
+                                    # Use the public API to force stop the server
+                                    server.stop(graceful=False, timeout=5.0)
+                                    logger.debug("Force stopped server %s", server_id)
+                                except (
+                                    OSError,
+                                    ProcessLookupError,
+                                    AttributeError,
+                                ) as server_e:
                                     logger.error(
-                                        "Failed to force kill server %s: %s",
+                                        "Failed to force stop server %s: %s",
                                         server_id,
                                         server_e,
                                     )
