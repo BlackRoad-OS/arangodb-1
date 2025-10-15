@@ -268,13 +268,9 @@ AqlValue functions::ToDocumentId(ExpressionContext* cxt, AstNode const&,
     return in;
   } else {
     if (in.isObject()) {
-      /*
-      VPackValue(transaction::helpers::extractIdString(
-                                                       cxt->trx().resolver(),
-      value, objectSlice)));
-
-      auto id = in.getObjec
-      */
+      auto id = transaction::helpers::extractIdString(cxt->trx().resolver(),
+                                                      in.slice(), in.slice());
+      return AqlValue(id);
     }
   }
 
