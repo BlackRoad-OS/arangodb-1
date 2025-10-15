@@ -5,7 +5,7 @@ from typing import Generator
 
 from .test_context import (
     IsolatedTestContext,
-    get_test_environment_factory,
+    create_test_context,
     reset_test_environment,
 )
 
@@ -32,8 +32,7 @@ def isolated_test_context(request) -> Generator[IsolatedTestContext, None, None]
         test_name = f"{request.node.cls.__name__}.{test_name}"
 
     # Create isolated context
-    factory = get_test_environment_factory()
-    context = factory.create_context(
+    context = create_test_context(
         test_name=test_name,
         enable_persistence=False,  # Don't persist logs for unit tests
         cleanup_on_exit=False,  # We'll clean up manually
@@ -44,7 +43,6 @@ def isolated_test_context(request) -> Generator[IsolatedTestContext, None, None]
     finally:
         # Clean up the context
         context.cleanup()
-        factory.cleanup_context(test_name)
 
 
 @pytest.fixture
@@ -66,8 +64,7 @@ def test_environment(request) -> Generator[IsolatedTestContext, None, None]:
         test_name = f"{request.node.cls.__name__}.{test_name}"
 
     # Create isolated context with persistence
-    factory = get_test_environment_factory()
-    context = factory.create_context(
+    context = create_test_context(
         test_name=test_name,
         enable_persistence=True,  # Enable persistence for debugging
         cleanup_on_exit=False,  # We'll clean up manually
@@ -78,7 +75,6 @@ def test_environment(request) -> Generator[IsolatedTestContext, None, None]:
     finally:
         # Clean up the context
         context.cleanup()
-        factory.cleanup_context(test_name)
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -105,8 +101,6 @@ def cleanup_test_session():
 
     # Final cleanup at end of session
     try:
-        factory = get_test_environment_factory()
-        factory.cleanup_all()
         reset_test_environment()
     except (RuntimeError, OSError):
         # Ignore errors during final cleanup
@@ -129,8 +123,7 @@ class ContextTestManager:
 
     def __enter__(self) -> IsolatedTestContext:
         """Enter the test context."""
-        factory = get_test_environment_factory()
-        self._context = factory.create_context(
+        self._context = create_test_context(
             test_name=self._test_name,
             cleanup_on_exit=False,  # We'll clean up manually
             **self._context_kwargs,
@@ -141,8 +134,6 @@ class ContextTestManager:
         """Exit the test context with cleanup."""
         if self._context:
             self._context.cleanup()
-            factory = get_test_environment_factory()
-            factory.cleanup_context(self._test_name)
 
         # Reset global state
         reset_test_environment()
@@ -166,14 +157,12 @@ def create_test_environment(test_name: str, **kwargs) -> IsolatedTestContext:
 
     Note: Remember to call cleanup() or use the context manager instead.
     """
-    factory = get_test_environment_factory()
-    return factory.create_context(test_name, **kwargs)
+    return create_test_context(test_name, **kwargs)
 
 
 def cleanup_test_environment(test_name: str) -> None:
     """Clean up a specific test environment."""
-    factory = get_test_environment_factory()
-    factory.cleanup_context(test_name)
+    # Individual context cleanup is handled by the context itself
     reset_test_environment()
 
 
