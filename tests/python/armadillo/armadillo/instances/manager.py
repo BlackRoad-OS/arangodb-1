@@ -263,7 +263,13 @@ class InstanceManager:
         timeout = clamp_timeout(timeout, "deployment")
 
         with timeout_scope(timeout, f"deploy_servers_{self.deployment_id}"):
-            logger.info("Starting deployment of %s servers", len(plan.servers))
+            from .deployment_plan import SingleServerDeploymentPlan
+
+            # Determine number of servers based on plan type
+            num_servers = (
+                1 if isinstance(plan, SingleServerDeploymentPlan) else len(plan.servers)
+            )
+            logger.info("Starting deployment of %s servers", num_servers)
             self.state.timing.startup_time = time.time()
 
             try:
@@ -558,9 +564,13 @@ class InstanceManager:
         Returns:
             List of coordination endpoints
         """
+        from .deployment_plan import ClusterDeploymentPlan
+
         if not self.state.deployment_plan:
             return []
-        return self.state.deployment_plan.coordination_endpoints
+        if isinstance(self.state.deployment_plan, ClusterDeploymentPlan):
+            return self.state.deployment_plan.coordination_endpoints
+        return []
 
     def get_agency_endpoints(self) -> List[str]:
         """Get agency endpoints.
@@ -568,9 +578,13 @@ class InstanceManager:
         Returns:
             List of agency endpoints
         """
+        from .deployment_plan import ClusterDeploymentPlan
+
         if not self.state.deployment_plan:
             return []
-        return self.state.deployment_plan.agency_endpoints
+        if isinstance(self.state.deployment_plan, ClusterDeploymentPlan):
+            return self.state.deployment_plan.agency_endpoints
+        return []
 
     def check_deployment_health(self, timeout: float = 30.0) -> HealthStatus:
         """Check health of the entire deployment.
@@ -643,11 +657,23 @@ class InstanceManager:
         }
 
         if self.state.deployment_plan:
+            from .deployment_plan import (
+                SingleServerDeploymentPlan,
+                ClusterDeploymentPlan,
+            )
+
+            # Determine deployment mode from plan type
+            deployment_mode = (
+                "single_server"
+                if isinstance(self.state.deployment_plan, SingleServerDeploymentPlan)
+                else "cluster"
+            )
+
             info.update(
                 {
-                    "deployment_mode": self.state.deployment_plan.deployment_mode.value,
-                    "coordination_endpoints": self.state.deployment_plan.coordination_endpoints,
-                    "agency_endpoints": self.state.deployment_plan.agency_endpoints,
+                    "deployment_mode": deployment_mode,
+                    "coordination_endpoints": self.get_coordination_endpoints(),
+                    "agency_endpoints": self.get_agency_endpoints(),
                 }
             )
 

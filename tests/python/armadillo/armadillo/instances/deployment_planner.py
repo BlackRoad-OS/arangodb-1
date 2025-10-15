@@ -2,12 +2,12 @@
 
 from typing import Optional, List, Protocol
 
-from ..core.types import DeploymentMode, ServerRole, ServerConfig, ClusterConfig
+from ..core.types import ServerRole, ServerConfig, ClusterConfig
 from ..core.log import Logger
 from ..core.config import ConfigProvider
 from ..utils.ports import PortAllocator
 from ..utils.filesystem import server_dir
-from .deployment_plan import DeploymentPlan
+from .deployment_plan import ClusterDeploymentPlan
 from .server_config_builder import ServerConfigBuilder
 
 
@@ -18,7 +18,7 @@ class DeploymentPlanner(Protocol):
         self,
         deployment_id: str,
         cluster_config: Optional[ClusterConfig] = None,
-    ) -> "DeploymentPlan":
+    ) -> ClusterDeploymentPlan:
         """Create a deployment plan for cluster mode."""
 
 
@@ -40,7 +40,7 @@ class StandardDeploymentPlanner:
         self,
         deployment_id: str,
         cluster_config: Optional[ClusterConfig] = None,
-    ) -> "DeploymentPlan":
+    ) -> ClusterDeploymentPlan:
         """Create deployment plan for cluster mode.
 
         Args:
@@ -48,19 +48,16 @@ class StandardDeploymentPlanner:
             cluster_config: Cluster configuration
 
         Returns:
-            Deployment plan with server configurations
+            ClusterDeploymentPlan with server configurations and endpoints
         """
-        plan = DeploymentPlan(deployment_mode=DeploymentMode.CLUSTER)
+        plan = ClusterDeploymentPlan()
         self._plan_cluster(plan, deployment_id, cluster_config)
 
-        agents = len(plan.get_agents())
-        dbservers = len(plan.get_dbservers())
-        coordinators = len(plan.get_coordinators())
         self._logger.info(
             "Created deployment plan: cluster with %d agents, %d dbservers, %d coordinators",
-            agents,
-            dbservers,
-            coordinators,
+            len(plan.get_agents()),
+            len(plan.get_dbservers()),
+            len(plan.get_coordinators()),
         )
 
         return plan
@@ -72,7 +69,7 @@ class StandardDeploymentPlanner:
 
     def _plan_cluster(
         self,
-        plan: "DeploymentPlan",
+        plan: ClusterDeploymentPlan,
         deployment_id: str,
         cluster_config: Optional[ClusterConfig],
     ) -> None:
@@ -86,8 +83,9 @@ class StandardDeploymentPlanner:
         plan.agency_endpoints = agent_endpoints
 
         # Add agency endpoints to all agents (all endpoints, like JS framework)
-        for server in plan.get_agents():
-            server.args["agency.endpoint"] = agent_endpoints.copy()
+        for server in plan.servers:
+            if server.role == ServerRole.AGENT:
+                server.args["agency.endpoint"] = agent_endpoints.copy()
 
         # Create database servers
         self._create_dbservers(plan, deployment_id, cluster_config, agent_endpoints)
@@ -99,7 +97,10 @@ class StandardDeploymentPlanner:
         plan.coordination_endpoints = coordinator_endpoints
 
     def _create_agents(
-        self, plan: "DeploymentPlan", deployment_id: str, cluster_config: ClusterConfig
+        self,
+        plan: ClusterDeploymentPlan,
+        deployment_id: str,
+        cluster_config: ClusterConfig,
     ) -> List[str]:
         """Create agent server configurations."""
         agent_endpoints = []
@@ -129,7 +130,7 @@ class StandardDeploymentPlanner:
 
     def _create_dbservers(
         self,
-        plan: "DeploymentPlan",
+        plan: ClusterDeploymentPlan,
         deployment_id: str,
         cluster_config: ClusterConfig,
         agent_endpoints: List[str],
@@ -158,7 +159,7 @@ class StandardDeploymentPlanner:
 
     def _create_coordinators(
         self,
-        plan: "DeploymentPlan",
+        plan: ClusterDeploymentPlan,
         deployment_id: str,
         cluster_config: ClusterConfig,
         agent_endpoints: List[str],

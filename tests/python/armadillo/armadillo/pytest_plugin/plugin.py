@@ -33,7 +33,6 @@ class ArmadilloPlugin:
     """Main pytest plugin for Armadillo framework."""
 
     def __init__(self) -> None:
-        self._session_servers: Dict[str, ArangoServer] = {}
         self._session_deployments: Dict[str, InstanceManager] = {}
         self._session_orchestrators: Dict[str, ClusterOrchestrator] = {}
         self._armadillo_config: Optional[Any] = None
@@ -101,7 +100,6 @@ class ArmadilloPlugin:
         logger.debug("Starting pytest plugin cleanup")
         deployments_to_clean = list(self._session_deployments.items())
         orchestrators_to_clean = list(self._session_orchestrators.items())
-        servers_to_clean = list(self._session_servers.items())
         for deployment_id, manager in deployments_to_clean:
             try:
                 if manager.is_deployed():
@@ -129,20 +127,8 @@ class ArmadilloPlugin:
                     orchestrator_id,
                     e,
                 )
-        for server_id, server in servers_to_clean:
-            try:
-                if server.is_running():
-                    logger.info("Plugin safety cleanup: stopping server %s", server_id)
-                    server.stop()
-                else:
-                    logger.debug("Server %s already stopped", server_id)
-            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-                logger.error(
-                    "Error during plugin cleanup of server %s: %s", server_id, e
-                )
         self._session_deployments.clear()
         self._session_orchestrators.clear()
-        self._session_servers.clear()
         stop_watchdog()
         logger.info("Armadillo pytest plugin unconfigured")
 
@@ -171,21 +157,10 @@ class ArmadilloPlugin:
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug("ArmadilloPlugin: Session finish with exit status %s", exitstatus)
-        # Print shutdown message for single server mode
-        if self._session_servers:
-            from ..utils import print_status
-
-            print_status("\nShutting down server")
-        for server_id, server in list(self._session_servers.items()):
-            try:
-                logger.debug("Stopping session server %s", server_id)
-                server.stop(timeout=30.0)
-            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-                logger.error("Error stopping session server %s: %s", server_id, e)
         for deployment_id, manager in list(self._session_deployments.items()):
             try:
                 logger.debug("Stopping session deployment %s", deployment_id)
-                manager.destroy_all_servers(timeout=60.0)
+                manager.shutdown_deployment(timeout=60.0)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping session deployment %s: %s", deployment_id, e
@@ -230,29 +205,47 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 
 @pytest.fixture(scope="session")
 def arango_single_server() -> Generator[ArangoServer, None, None]:
-    """Provide a single ArangoDB server for testing."""
-    server = _create_configured_server("test_single_server")
+    """Provide a single ArangoDB server for testing using unified infrastructure."""
+    from ..instances.manager import get_instance_manager
+    from ..instances.deployment_plan import create_single_server_plan
+    from ..instances.server_config_builder import ServerConfigBuilder
+    from ..core.config import get_config as get_framework_config
+    from ..utils.ports import get_port_manager
+
+    deployment_id = "test_single_server_session"
+    manager = get_instance_manager(deployment_id)
+
     try:
-        logger.info("Starting session single server")
-        server.start(timeout=60.0)
-        health = server.health_check_sync(timeout=10.0)
-        if not health.is_healthy:
-            raise RuntimeError(f"Server health check failed: {health.error_message}")
+        config = get_framework_config()
+        config_builder = ServerConfigBuilder(config, logger)
+        server_args = config_builder.build_server_args()
+
+        port_manager = get_port_manager()
+        port = port_manager.allocate_port()
+
+        logger.info("Starting session single server on port %d", port)
+
+        plan = create_single_server_plan(deployment_id, port, server_args)
+        manager.deploy_servers(plan, timeout=60.0)
+
+        # Store manager for tracking and cleanup
+        _plugin._session_deployments[deployment_id] = manager
+
+        # Get the server instance to yield
+        servers = manager.get_all_servers()
+        server = next(iter(servers.values()))
         logger.info("Session single server ready at %s", server.endpoint)
-        _plugin._session_servers["single"] = server
+
         yield server
     finally:
         logger.info("Stopping session single server")
-        from ..utils import print_status
-
-        print_status("\nShutting down server")
         try:
-            server.stop(timeout=30.0)
+            manager.shutdown_deployment(timeout=30.0)
             logger.debug("Session single server stopped successfully")
         except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.error("Error stopping session server: %s", e)
         finally:
-            _plugin._session_servers.pop("single", None)
+            _plugin._session_deployments.pop(deployment_id, None)
             logger.debug("Session single server removed from plugin tracking")
 
 
@@ -292,48 +285,39 @@ def _get_or_create_cluster(self) -> "InstanceManager":
 
 
 def _get_or_create_single_server(self) -> ArangoServer:
-    """Get or create session single server."""
-    if "single" not in self._session_servers:
-        server = _create_configured_server("test_single_server")
-        logger.info("Starting session single server")
-        server.start(timeout=60.0)
-        health = server.health_check_sync(timeout=10.0)
-        if not health.is_healthy:
-            raise RuntimeError(f"Server health check failed: {health.error_message}")
-        logger.info("Session single server ready at %s", server.endpoint)
-        self._session_servers["single"] = server
-    return self._session_servers["single"]
+    """Get or create session single server using unified infrastructure."""
+    if "single" not in self._session_deployments:
+        from ..instances.manager import get_instance_manager
+        from ..instances.deployment_plan import create_single_server_plan
+        from ..instances.server_config_builder import ServerConfigBuilder
+        from ..core.config import get_config as get_framework_config
+        from ..utils.ports import get_port_manager
 
+        deployment_id = "test_single_server"
+        manager = get_instance_manager(deployment_id)
 
-def _create_configured_server(server_id: str) -> ArangoServer:
-    """Create an ArangoDB server with proper logging configuration.
+        config = get_framework_config()
+        config_builder = ServerConfigBuilder(config, logger)
+        server_args = config_builder.build_server_args()
 
-    This centralizes the server creation logic to eliminate duplication across
-    all the pytest plugin's server creation functions.
+        port_manager = get_port_manager()
+        port = port_manager.allocate_port()
 
-    Args:
-        server_id: Unique identifier for the server
+        logger.info("Starting session single server on port %d", port)
 
-    Returns:
-        Configured ArangoServer instance (not started)
-    """
-    from ..core.config import get_config as get_framework_config
-    from ..core.log import get_logger as get_framework_logger
-    from ..instances.server_config_builder import ServerConfigBuilder
-    from ..instances.server_factory import MinimalConfig
+        plan = create_single_server_plan(deployment_id, port, server_args)
+        manager.deploy_servers(plan, timeout=60.0)
 
-    config = get_framework_config()
-    server_logger = get_framework_logger(__name__)
+        # Store manager (not individual server) for cleanup
+        self._session_deployments["single"] = manager
+        logger.info("Session single server ready")
 
-    # Use centralized server configuration logic
-    config_builder = ServerConfigBuilder(config, server_logger)
-    server_args = config_builder.build_server_args()
-
-    # Create minimal config with logging arguments
-    minimal_config = MinimalConfig(args=server_args)
-
-    # Create configured server (caller is responsible for starting)
-    return ArangoServer(server_id, role=ServerRole.SINGLE, config=minimal_config)
+    # Return the single server from the manager
+    manager = self._session_deployments["single"]
+    servers = manager.get_all_servers()
+    if not servers:
+        raise RuntimeError("Single server deployment has no servers")
+    return next(iter(servers.values()))
 
 
 ArmadilloPlugin._get_or_create_cluster = _get_or_create_cluster
@@ -342,23 +326,41 @@ ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 
 @pytest.fixture(scope="function")
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
-    """Provide a function-scoped single ArangoDB server."""
-    server_id = f"test_func_{random_id(8)}"
-    server = _create_configured_server(server_id)
+    """Provide a function-scoped single ArangoDB server using unified infrastructure."""
+    from ..instances.manager import get_instance_manager
+    from ..instances.deployment_plan import create_single_server_plan
+    from ..instances.server_config_builder import ServerConfigBuilder
+    from ..core.config import get_config as get_framework_config
+    from ..utils.ports import get_port_manager
+
+    deployment_id = f"test_func_{random_id(8)}"
+    manager = get_instance_manager(deployment_id)
+
     try:
-        logger.info("Starting function server %s", server_id)
-        server.start(timeout=30.0)
-        health = server.health_check_sync(timeout=5.0)
-        if not health.is_healthy:
-            raise RuntimeError(f"Server health check failed: {health.error_message}")
-        logger.info("Function server %s ready at %s", server_id, server.endpoint)
+        config = get_framework_config()
+        config_builder = ServerConfigBuilder(config, logger)
+        server_args = config_builder.build_server_args()
+
+        port_manager = get_port_manager()
+        port = port_manager.allocate_port()
+
+        logger.info("Starting function server %s on port %d", deployment_id, port)
+
+        plan = create_single_server_plan(deployment_id, port, server_args)
+        manager.deploy_servers(plan, timeout=30.0)
+
+        # Get the server instance to yield
+        servers = manager.get_all_servers()
+        server = next(iter(servers.values()))
+        logger.info("Function server %s ready at %s", deployment_id, server.endpoint)
+
         yield server
     finally:
-        logger.info("Stopping function server %s", server_id)
+        logger.info("Stopping function server %s", deployment_id)
         try:
-            server.stop(timeout=15.0)
+            manager.shutdown_deployment(timeout=15.0)
         except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-            logger.error("Error stopping function server %s: %s", server_id, e)
+            logger.error("Error stopping function server %s: %s", deployment_id, e)
 
 
 @pytest.fixture(scope="session")

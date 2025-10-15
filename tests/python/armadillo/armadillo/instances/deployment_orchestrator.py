@@ -2,15 +2,24 @@
 
 from typing import Optional
 import time
-from ..core.types import DeploymentMode, ServerRole
+from ..core.types import ServerRole
 from ..core.log import Logger
-from ..core.errors import ServerError, ClusterError
+from ..core.errors import ServerError
 from ..utils import print_status
-from .deployment_plan import DeploymentPlan
+from .deployment_plan import (
+    DeploymentPlan,
+    SingleServerDeploymentPlan,
+    ClusterDeploymentPlan,
+)
 from .server_registry import ServerRegistry
 from .server_factory import ServerFactory
 from .cluster_bootstrapper import ClusterBootstrapper
 from .health_monitor import HealthMonitor
+from .deployment_strategy import (
+    DeploymentStrategy,
+    SingleServerStrategy,
+    ClusterStrategy,
+)
 
 
 class DeploymentOrchestrator:
@@ -20,6 +29,7 @@ class DeploymentOrchestrator:
     - Executing deployments based on a DeploymentPlan
     - Managing deployment lifecycle (start, stop, restart)
     - Coordinating between specialized components
+    - Delegating mode-specific logic to deployment strategies
     """
 
     def __init__(
@@ -46,48 +56,56 @@ class DeploymentOrchestrator:
         self._health_monitor = health_monitor
         self._startup_order: list[str] = []
 
+    def _create_strategy(self, plan: DeploymentPlan) -> DeploymentStrategy:
+        """Create deployment strategy based on plan type."""
+        if isinstance(plan, SingleServerDeploymentPlan):
+            return SingleServerStrategy(self._logger)
+        elif isinstance(plan, ClusterDeploymentPlan):
+            if not self._cluster_bootstrapper:
+                raise ServerError(
+                    "ClusterBootstrapper required for cluster deployments"
+                )
+            return ClusterStrategy(self._logger, self._cluster_bootstrapper)
+        else:
+            raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
+
     def execute_deployment(self, plan: DeploymentPlan, timeout: float = 300.0) -> None:
-        """Execute a deployment based on the provided plan.
+        """Execute deployment based on plan using strategy pattern."""
+        num_servers = (
+            1 if isinstance(plan, SingleServerDeploymentPlan) else len(plan.servers)
+        )
+        plan_type = (
+            "single_server"
+            if isinstance(plan, SingleServerDeploymentPlan)
+            else "cluster"
+        )
 
-        This is the key method that actually USES the DeploymentPlan to drive
-        the deployment process.
-
-        Args:
-            plan: DeploymentPlan to execute
-            timeout: Total timeout for deployment
-
-        Raises:
-            ServerError: If deployment fails
-        """
         self._logger.info(
             "Executing %s deployment with %d server(s)",
-            plan.deployment_mode.value,
-            len(plan.servers),
+            plan_type,
+            num_servers,
         )
         start_time = time.time()
 
         try:
-            # 1. Create server instances from plan
-            self._create_servers_from_plan(plan)
+            strategy = self._create_strategy(plan)
 
-            # 2. Start servers based on deployment mode
+            self._create_servers_from_plan(plan)
+            servers = self._server_registry.get_all_servers()
+
             elapsed = time.time() - start_time
             remaining = max(60.0, timeout - elapsed)
+            strategy.start_servers(
+                servers, plan, self._startup_order, timeout=remaining
+            )
 
-            if plan.deployment_mode == DeploymentMode.SINGLE_SERVER:
-                self._start_single_server(remaining)
-            elif plan.deployment_mode == DeploymentMode.CLUSTER:
-                self._start_cluster(remaining)
-            else:
-                raise ServerError(
-                    f"Unsupported deployment mode: {plan.deployment_mode}"
-                )
+            elapsed = time.time() - start_time
+            remaining = max(30.0, timeout - elapsed)
+            strategy.verify_readiness(servers, timeout=remaining)
 
-            # 3. Optional health verification
             if self._health_monitor:
                 elapsed = time.time() - start_time
                 remaining = max(30.0, timeout - elapsed)
-                servers = self._server_registry.get_all_servers()
                 health = self._health_monitor.check_deployment_health(
                     servers, timeout=remaining
                 )
@@ -131,7 +149,11 @@ class DeploymentOrchestrator:
             shutdown_order = list(reversed(self._startup_order))
 
         # Print shutdown message with newline to separate from test output
-        print_status(f"\nShutting down cluster with {len(servers)} servers")
+        # Distinguish between single server and cluster shutdown
+        if len(servers) == 1:
+            print_status("\nShutting down server")
+        else:
+            print_status(f"\nShutting down cluster with {len(servers)} servers")
 
         # Separate agents from other servers for proper cluster shutdown
         agents = []
@@ -191,18 +213,18 @@ class DeploymentOrchestrator:
         )
 
     def _create_servers_from_plan(self, plan: DeploymentPlan) -> None:
-        """Create server instances from deployment plan.
+        """Create and register server instances from plan."""
+        if isinstance(plan, SingleServerDeploymentPlan):
+            server_configs = [plan.server]
+            num_servers = 1
+        else:
+            server_configs = plan.servers
+            num_servers = len(server_configs)
 
-        Args:
-            plan: DeploymentPlan to create servers from
-        """
-        self._logger.info("Creating %d server instance(s) from plan", len(plan.servers))
+        self._logger.info("Creating %d server instance(s) from plan", num_servers)
 
-        # Delegate to ServerFactory to create all servers
-        # The factory generates server IDs based on role and index
-        servers = self._server_factory.create_server_instances(plan.servers)
+        servers = self._server_factory.create_server_instances(server_configs)
 
-        # Register all created servers
         for server_id, server in servers.items():
             self._logger.debug(
                 "Registering server: %s (role: %s)", server_id, server.role.value
@@ -210,54 +232,6 @@ class DeploymentOrchestrator:
             self._server_registry.register_server(server_id, server)
 
         self._logger.info("All server instances created and registered")
-
-    def _start_single_server(self, timeout: float) -> None:
-        """Start a single server deployment.
-
-        Args:
-            timeout: Timeout for startup
-        """
-        servers = self._server_registry.get_all_servers()
-        if len(servers) != 1:
-            raise ServerError(f"Expected 1 server for single mode, got {len(servers)}")
-
-        server_id, server = next(iter(servers.items()))
-        self._logger.info("Starting single server: %s", server_id)
-
-        server.start(timeout=timeout)
-        self._startup_order.append(server_id)
-
-        self._logger.info("Single server %s started successfully", server_id)
-
-    def _start_cluster(self, timeout: float) -> None:
-        """Start a cluster deployment.
-
-        Args:
-            timeout: Timeout for startup
-
-        Raises:
-            ClusterError: If cluster bootstrapping fails
-        """
-        if not self._cluster_bootstrapper:
-            raise ClusterError("ClusterBootstrapper required for cluster deployments")
-
-        servers = self._server_registry.get_all_servers()
-
-        # Count servers by role
-        agents = sum(1 for s in servers.values() if s.role == ServerRole.AGENT)
-        dbservers = sum(1 for s in servers.values() if s.role == ServerRole.DBSERVER)
-        coordinators = sum(
-            1 for s in servers.values() if s.role == ServerRole.COORDINATOR
-        )
-
-        print_status(
-            f"Starting cluster with {agents} agents, {dbservers} dbservers, {coordinators} coordinators"
-        )
-
-        # Delegate to cluster bootstrapper
-        self._cluster_bootstrapper.bootstrap_cluster(
-            servers, self._startup_order, timeout=timeout
-        )
 
     def get_startup_order(self) -> list[str]:
         """Get the order in which servers were started.

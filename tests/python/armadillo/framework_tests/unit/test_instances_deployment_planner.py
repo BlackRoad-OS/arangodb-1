@@ -4,9 +4,9 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock
 
-from armadillo.core.types import DeploymentMode, ServerRole, ClusterConfig
+from armadillo.core.types import ServerRole, ClusterConfig
 from armadillo.instances.deployment_planner import StandardDeploymentPlanner
-from armadillo.instances.manager import DeploymentPlan
+from armadillo.instances.deployment_plan import ClusterDeploymentPlan
 
 
 class TestStandardDeploymentPlanner:
@@ -44,14 +44,17 @@ class TestStandardDeploymentPlanner:
         """Test creating cluster deployment with default configuration."""
         plan = self.planner.create_deployment_plan(deployment_id="test_cluster")
 
-        assert plan.deployment_mode == DeploymentMode.CLUSTER
+        # Verify plan type
+        assert isinstance(plan, ClusterDeploymentPlan)
 
         # Default cluster config: 3 agents, 3 dbservers, 1 coordinator
-        total_servers = 3 + 3 + 1  # agents + dbservers + coordinators
+        total_servers = 3 + 3 + 1
         assert len(plan.servers) == total_servers
         assert len(plan.get_agents()) == 3
         assert len(plan.get_dbservers()) == 3
         assert len(plan.get_coordinators()) == 1
+
+        # Check cluster endpoints (directly on plan, no metadata wrapper)
         assert len(plan.coordination_endpoints) == 1
         assert len(plan.agency_endpoints) == 3
 
@@ -69,6 +72,8 @@ class TestStandardDeploymentPlanner:
         assert len(plan.get_agents()) == 1
         assert len(plan.get_dbservers()) == 2
         assert len(plan.get_coordinators()) == 2
+
+        # Check cluster endpoints
         assert len(plan.coordination_endpoints) == 2
         assert len(plan.agency_endpoints) == 1
 
@@ -180,7 +185,6 @@ class TestStandardDeploymentPlanner:
             "tcp://127.0.0.1:8531",
         ]
 
-        # All agents should have the same agency endpoints
         for agent in agents:
             agency_endpoint_str = agent.args["agency.endpoint"]
             for endpoint in expected_agency_endpoints:
