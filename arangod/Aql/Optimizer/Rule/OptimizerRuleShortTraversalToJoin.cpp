@@ -20,6 +20,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "Aql/Ast.h"
+#include "Aql/AstNode.h"
 #include "Aql/Collection.h"
 #include "Aql/Condition.h"
 #include "Aql/ExecutionEngine.h"
@@ -40,6 +41,7 @@
 #include "Basics/StaticStrings.h"
 #include "Indexes/Index.h"
 #include "Logger/LogMacros.h"
+#include "VocBase/voc-types.h"
 
 #include <functional>
 
@@ -133,23 +135,31 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   enumerateEdges->addDependency(traversal->getFirstDependency());
   traversal->removeDependencies();
 
-  auto startVertex = std::invoke([&]() -> AstNode const* {
+  auto startVertex = std::invoke([&]() -> AstNode* {
     if (traversal->usesInVariable()) {
+      // TODO: fun complication: we can get input via a variable, and that
+      // variable might contain a string *or* an object with an ID.
+      // That means that we actually have to extract the document id from a
+      // variable here which requires a calculationnode
       return ast->createNodeReference(traversal->inVariable());
     } else {
-      auto const& sv = traversal->getStartVertex();
-      return ast->createNodeValueString(sv.c_str(), sv.size());
+      auto* sv = ast->resources().registerString(traversal->getStartVertex());
+      return ast->createNodeValueString(sv, traversal->getStartVertex().size());
     }
   });
 
-  // for FILTER e._from == startVertex._id
+  // FILTER e._from == startVertex._id
   auto startVertexCondition = std::invoke([&]() -> AstNode* {
     auto ref = ast->createNodeReference(edgeOutputVariable);
     auto const* access =
         ast->createNodeAttributeAccess(ref, StaticStrings::FromString);
 
-    auto const rhs =
-        ast->createNodeAttributeAccess(startVertex, StaticStrings::IdString);
+    auto const rhs = std::invoke([&]() -> AstNode* {
+      auto args = ast->createNodeArray();
+      args->addMember(startVertex);
+
+      return ast->createNodeFunctionCall("TO_DOCUMENT_ID", args, true);
+    });
 
     return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
                                          rhs);
@@ -215,7 +225,6 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
     return obj;
   });
 
-  // TODO: calculate path
   auto calculatePath = plan->createNode<CalculationNode>(
       plan.get(), plan->nextId(),
       std::make_unique<Expression>(ast, calculatePathExpression),
@@ -225,6 +234,34 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   auto parent = traversal->getFirstParent();
   parent->removeDependencies();
   parent->addDependency(calculatePath);
+}
+
+// TODO: This function should explain why the optimisation rule
+// is or is not applicable
+auto isRuleApplicable(TraversalNode* traversal) -> bool {
+  auto const* opts = traversal->options();
+
+  // TODO: at the moment really only one vertex collection is good enough.
+  // as we cannot distinguish which of the 2 collections would be from and
+  // which would be to!
+  // For experiments lets just :yolo: it and say the first one is from and
+  // the second one is to
+  if (traversal->vertexColls().size() > 2) {
+    return false;
+  }
+  if (traversal->edgeColls().size() != 1) {
+    return false;
+  }
+  if (opts->minDepth != 1) {
+    return false;
+  }
+  if (opts->maxDepth != 1) {
+    return false;
+  }
+  if (traversal->edgeDirections().at(0) == TRI_EDGE_ANY) {
+    return false;
+  }
+  return true;
 }
 }  // namespace
 
@@ -249,17 +286,7 @@ void arangodb::aql::shortTraversalToJoinRule(
     TRI_ASSERT(traversal != nullptr);
     TRI_ASSERT(opts != nullptr);
 
-    if (traversal->vertexColls().size() == 1 and  // TODO: not quite correct;
-                                                  // one collection either side
-                                                  // is ok; not sure how to tell
-                                                  // this
-        traversal->edgeColls().size() == 1 and    //
-        opts->minDepth == 1 and                   //
-        opts->maxDepth == 1 and                   //
-        true /* direction: can handle INBOUND/OUTBOUND not ANY */ and     //
-        true /* one vertex attribute has to be accessed by == filter */)  //
-
-    {
+    if (isRuleApplicable(traversal)) {
       buildSnippet(plan, traversal);
       plan->show();
       modified = true;
