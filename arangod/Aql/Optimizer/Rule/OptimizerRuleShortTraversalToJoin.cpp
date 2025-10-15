@@ -30,6 +30,8 @@
 #include "Aql/ExecutionNode/FilterNode.h"
 #include "Aql/ExecutionNode/IndexNode.h"
 #include "Aql/ExecutionNode/JoinNode.h"
+#include "Aql/ExecutionNode/MaterializeNode.h"
+#include "Aql/ExecutionNode/MaterializeRocksDBNode.h"
 #include "Aql/ExecutionNode/TraversalNode.h"
 #include "Aql/ExecutionNode/SubqueryNode.h"
 #include "Aql/ExecutionPlan.h"
@@ -120,33 +122,87 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   auto* ast = plan->getAst();
   /* Replace the traversal node with this snippet */
 
+  Variable const* startVertexDocumentVariable =
+      ast->variables()
+          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
   Variable const* vertexOutputVariable = traversal->vertexOutVariable();
   Variable const* edgeOutputVariable = traversal->edgeOutVariable();
   Variable const* pathOutputVariable = traversal->pathOutVariable();
 
   // Enumerate Edge Collection
   // TODO: this is not correct yet
+  Collection* sourceVertexCollection = traversal->vertexColls()[0];
   Collection* targetVertexCollection = traversal->vertexColls()[0];
   Collection* edgeCollection = traversal->edgeColls()[0];
 
+  Variable const* startVertexIdVariable =
+      ast->variables()
+          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
+
+  auto startVertexIdCalculation = std::invoke([&]() -> AstNode* {
+    auto startVertex = std::invoke([&]() -> AstNode* {
+      if (traversal->usesInVariable()) {
+        // TODO: fun complication: we can get input via a variable, and that
+        // variable might contain a string *or* an object with an ID.
+        // That means that we actually have to extract the document id from a
+        // variable here which requires a calculationnode
+        return ast->createNodeReference(traversal->inVariable());
+      } else {
+        auto* sv = ast->resources().registerString(traversal->getStartVertex());
+        return ast->createNodeValueString(sv,
+                                          traversal->getStartVertex().size());
+      }
+    });
+
+    auto args = ast->createNodeArray();
+    args->addMember(startVertex);
+
+    return ast->createNodeFunctionCall("TO_DOCUMENT_ID", args, true);
+  });
+
+  auto calculateStartVertexId = plan->createNode<CalculationNode>(
+      plan.get(), plan->nextId(),
+      std::make_unique<Expression>(ast, startVertexIdCalculation),
+      startVertexIdVariable);
+  calculateStartVertexId->addDependency(traversal->getFirstDependency());
+  traversal->removeDependencies();
+
+  auto enumerateStartVertex = plan->createNode<EnumerateCollectionNode>(
+      plan.get(), plan->nextId(), sourceVertexCollection,
+      startVertexDocumentVariable, false, IndexHint{});
+  enumerateStartVertex->addDependency(calculateStartVertexId);
+
+  //// FILTER startVertexDocumentVariable._id == startVertexId
+  auto startVertexDocumentCondition = std::invoke([&]() -> AstNode* {
+    auto ref = ast->createNodeReference(startVertexDocumentVariable);
+    auto const* access =
+        ast->createNodeAttributeAccess(ref, StaticStrings::IdString);
+
+    auto const rhs = ast->createNodeReference(startVertexIdVariable);
+    return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
+                                         rhs);
+  });
+  Variable const* startVertexDocumentConditionVariable =
+      ast->variables()
+          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
+
+  auto calculateStartVertexDocumentCondition =
+      plan->createNode<CalculationNode>(
+          plan.get(), plan->nextId(),
+          std::make_unique<Expression>(ast, startVertexDocumentCondition),
+          startVertexDocumentConditionVariable);
+  calculateStartVertexDocumentCondition->addDependency(enumerateStartVertex);
+
+  auto filterStartVertexDocument = plan->createNode<FilterNode>(
+      plan.get(), plan->nextId(), startVertexDocumentConditionVariable);
+  filterStartVertexDocument->addDependency(
+      calculateStartVertexDocumentCondition);
+
+  /////
   auto enumerateEdges = plan->createNode<EnumerateCollectionNode>(
       plan.get(), plan->nextId(), edgeCollection, edgeOutputVariable,
       false /*random*/, IndexHint{});
-  enumerateEdges->addDependency(traversal->getFirstDependency());
-  traversal->removeDependencies();
-
-  auto startVertex = std::invoke([&]() -> AstNode* {
-    if (traversal->usesInVariable()) {
-      // TODO: fun complication: we can get input via a variable, and that
-      // variable might contain a string *or* an object with an ID.
-      // That means that we actually have to extract the document id from a
-      // variable here which requires a calculationnode
-      return ast->createNodeReference(traversal->inVariable());
-    } else {
-      auto* sv = ast->resources().registerString(traversal->getStartVertex());
-      return ast->createNodeValueString(sv, traversal->getStartVertex().size());
-    }
-  });
+  enumerateEdges->addDependency(filterStartVertexDocument);
 
   // FILTER e._from == startVertex._id
   auto startVertexCondition = std::invoke([&]() -> AstNode* {
@@ -154,13 +210,7 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
     auto const* access =
         ast->createNodeAttributeAccess(ref, StaticStrings::FromString);
 
-    auto const rhs = std::invoke([&]() -> AstNode* {
-      auto args = ast->createNodeArray();
-      args->addMember(startVertex);
-
-      return ast->createNodeFunctionCall("TO_DOCUMENT_ID", args, true);
-    });
-
+    auto const rhs = ast->createNodeReference(startVertexIdVariable);
     return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
                                          rhs);
   });
@@ -213,7 +263,8 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
     auto* obj = ast->createNodeObject();
 
     auto* vertexArray = ast->createNodeArray();
-    vertexArray->addMember(startVertex);
+    vertexArray->addMember(
+        ast->createNodeReference(startVertexDocumentVariable));
     vertexArray->addMember(ast->createNodeReference(vertexOutputVariable));
     auto vertices = ast->createNodeObjectElement("vertices", vertexArray);
     obj->addMember(vertices);
@@ -222,6 +273,8 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
     edgeArray->addMember(ast->createNodeReference(edgeOutputVariable));
     auto edges = ast->createNodeObjectElement("edges", edgeArray);
     obj->addMember(edges);
+
+    // TODO dummy weights
     return obj;
   });
 
@@ -288,6 +341,7 @@ void arangodb::aql::shortTraversalToJoinRule(
 
     if (isRuleApplicable(traversal)) {
       buildSnippet(plan, traversal);
+      plan->show();
       modified = true;
     }
   }

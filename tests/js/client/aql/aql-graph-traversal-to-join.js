@@ -48,28 +48,30 @@ const tearDownAll = () => {
 };
 
 const createGraph = () => {
-  gm._create(graphName, [gm._relation(eName, vName1, vName2)
+  gm._create(graphName, [gm._relation(eName, vName1, vName1)
   ], [], {});
 
   {
     const vertices = [];
     vertices.push({ _key: "A" });
     vertices.push({ _key: "B" });
+    vertices.push({ _key: "C" });
     db[vName1].save(vertices);
   }
 
-  {
+/*  {
     const vertices = [];
     vertices.push({ _key: "1" });
     vertices.push({ _key: "2" });
     db[vName2].save(vertices);
-  }
+  } */
 
   {
     const edges = [];
-    edges.push({ _from: vName1 + "/A", _to: vName2 + "/1"});
-    edges.push({ _from: vName1 + "/A", _to: vName2 + "/2"});
-    edges.push({ _from: vName1 + "/B", _to: vName2 + "/1"});
+    edges.push({ _from: vName1 + "/A", _to: vName1 + "/A"});
+    edges.push({ _from: vName1 + "/A", _to: vName1 + "/B"});
+    edges.push({ _from: vName1 + "/B", _to: vName1 + "/doesnaeexist"});
+    edges.push({ _from: vName1 + "/A", _to: vName1 + "/C"});
     db[eName].save(edges);
   }
 };
@@ -112,30 +114,30 @@ function enumeratePathsFilter() {
     tearDownAll,
 
     testRuleFires_basic: function() {
-      const query = `FOR v,e,p IN 1..1 OUTBOUND "${vName1}/0" GRAPH ${graphName}
+      const query = `FOR v,e,p IN 1..1 OUTBOUND "${vName1}/A" GRAPH ${graphName}
                        RETURN p`;
       assertRuleFires(query);
       assertSameResults(query);
     },
     testRuleFires_inbound: function() {
-      const query = `FOR v,e,p IN 1..1 INBOUND "${vName1}/0" GRAPH ${graphName}
+      const query = `FOR v,e,p IN 1..1 INBOUND "${vName1}/A" GRAPH ${graphName}
                        RETURN p`;
       assertRuleFires(query);
       assertSameResults(query);
     },
 
     testRuleDoesNotFire_variableDepth: function() {
-      const query = `FOR v,e,p IN 1..2 OUTBOUND "${vName1}/0" GRAPH ${graphName}
+      const query = `FOR v,e,p IN 1..2 OUTBOUND "${vName1}/A" GRAPH ${graphName}
                        RETURN p`;
       assertRuleDoesNotFire(query);
     },
     testRuleDoesNotFire_directionAny: function() {
-      const query = `FOR v,e,p IN 1..1 ANY "${vName1}/0" GRAPH ${graphName}
+      const query = `FOR v,e,p IN 1..1 ANY "${vName1}/A" GRAPH ${graphName}
                        RETURN p`;
       assertRuleDoesNotFire(query);
     },
     testRuleDoesNotFire_depth2: function() {
-      const query = `FOR v,e,p IN 2..2 OUTBOUND "${vName1}/0" GRAPH ${graphName}
+      const query = `FOR v,e,p IN 2..2 OUTBOUND "${vName1}/A" GRAPH ${graphName}
                        RETURN p`;
       assertRuleDoesNotFire(query);
     },
