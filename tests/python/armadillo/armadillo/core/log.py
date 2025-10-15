@@ -30,8 +30,7 @@ class Logger(Protocol):
 class LogManager:
     """Central logging configuration and management.
 
-    This class maintains backward compatibility while using the new
-    IsolatedLogManager architecture under the hood.
+    This class provides a simplified interface to the IsolatedLogManager architecture.
     """
 
     def __init__(self) -> None:
@@ -69,7 +68,7 @@ class LogManager:
         )
 
         if configure_root_compat:
-            # Configure root logger for backward compatibility with code
+            # Configure root logger for compatibility with code
             # that might use logging.getLogger() directly
             root_logger = logging.getLogger()
             root_logger.setLevel(logging.DEBUG)
@@ -78,7 +77,7 @@ class LogManager:
             for handler in root_logger.handlers[:]:
                 root_logger.removeHandler(handler)
 
-            # Add handlers to root logger for backward compatibility
+            # Add handlers to root logger for compatibility
             if enable_json and log_file:
                 json_handler = logging.FileHandler(log_file)
                 json_handler.setFormatter(StructuredFormatter())
@@ -104,7 +103,7 @@ class LogManager:
         """Shutdown logging system."""
         self._manager.shutdown()
 
-        # Also shutdown root logger for backward compatibility
+        # Also shutdown root logger for compatibility
         root_logger = logging.getLogger()
         for handler in root_logger.handlers[:]:
             try:

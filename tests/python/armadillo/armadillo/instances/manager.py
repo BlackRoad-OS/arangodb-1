@@ -276,7 +276,7 @@ class InstanceManager:
                 # Delegate to DeploymentOrchestrator for the actual deployment
                 self._deployment_orchestrator.execute_deployment(plan, timeout=timeout)
 
-                # Sync state from registry to maintain backward compatibility
+                # Sync state from registry for facade pattern
                 self._sync_state_from_registry()
 
                 # Mark deployment as active
@@ -298,10 +298,10 @@ class InstanceManager:
                 raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
     def _sync_state_from_registry(self) -> None:
-        """Synchronize state from ServerRegistry to maintain backward compatibility.
+        """Synchronize state from ServerRegistry for facade pattern.
 
-        This allows existing code that accesses self.state.servers and self.state.startup_order
-        to continue working while the actual deployment is managed by new components.
+        This allows the InstanceManager facade to provide access to servers and startup order
+        while the actual deployment is managed by specialized components.
         """
         # Sync servers from registry
         self.state.servers = self._server_registry.get_all_servers()

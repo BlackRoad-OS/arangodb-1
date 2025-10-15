@@ -500,8 +500,7 @@ def pytest_sessionstart(session):
         reporter.session_start_time = time.time()
 
 
-def _is_verbose_output_enabled():
-    """Check if verbose output is enabled (default) or compact mode is requested."""
+def _is_compact_mode_enabled():
     from ..core.config import get_config as get_framework_config
 
     framework_config = get_framework_config()
@@ -514,32 +513,12 @@ def pytest_sessionfinish(session, exitstatus):
     logger.debug("Starting pytest plugin cleanup")
 
     # Capture the test end time BEFORE server shutdown begins
-    if _is_verbose_output_enabled():
+    if _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.session_finish_time = time.time()
         # Print the final summary immediately, before any server cleanup
         reporter.print_final_summary()
         reporter.pytest_sessionfinish(session, exitstatus)
-
-    # Print shutdown message before cleanup
-    try:
-        from ..core.process import _process_supervisor
-
-        if (
-            hasattr(_process_supervisor, "_processes")
-            and _process_supervisor._processes
-        ):
-            from ..utils import print_status
-
-            # Check if it's a single server (1 process) or cluster (multiple)
-            process_count = len(_process_supervisor._processes)
-            if process_count == 1:
-                print_status("\nShutting down server")
-            elif process_count > 1:
-                # Cluster shutdown message is handled by DeploymentOrchestrator
-                pass
-    except (ImportError, AttributeError):
-        pass
 
     try:
         logger.debug("Starting pytest session cleanup")
@@ -650,7 +629,7 @@ def _cleanup_all_deployments(emergency=True):
                             "Attempting direct process cleanup for failed deployment %s",
                             deployment_id,
                         )
-                        # Try to get servers from registry (new architecture) or state (old architecture)
+                        # Try to get servers from available manager interfaces
                         servers = {}
                         if (
                             hasattr(manager, "_server_registry")

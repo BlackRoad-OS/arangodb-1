@@ -123,7 +123,7 @@ class ClusterOrchestrator:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         try:
-            self._cancel_all_operations()
+            self.cancel_all_operations()
         finally:
             self._executor.shutdown(wait=True)
             if self._http_session:
@@ -562,10 +562,6 @@ class ClusterOrchestrator:
                     operation.status = "cancelled"
                     operation.end_time = time.time()
             logger.info("Cancelled %s active operations", len(self._active_operations))
-
-    def _cancel_all_operations(self) -> None:
-        """Cancel all active operations (deprecated - use cancel_all_operations)."""
-        self.cancel_all_operations()
 
 
 _cluster_orchestrators: Dict[str, ClusterOrchestrator] = {}
