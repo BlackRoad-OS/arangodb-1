@@ -341,7 +341,6 @@ void arangodb::aql::shortTraversalToJoinRule(
 
     if (isRuleApplicable(traversal)) {
       buildSnippet(plan, traversal);
-      plan->show();
       modified = true;
     }
   }
