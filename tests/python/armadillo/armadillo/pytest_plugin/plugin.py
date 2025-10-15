@@ -207,25 +207,14 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 def arango_single_server() -> Generator[ArangoServer, None, None]:
     """Provide a single ArangoDB server for testing using unified infrastructure."""
     from ..instances.manager import get_instance_manager
-    from ..instances.deployment_plan import create_single_server_plan
-    from ..instances.server_config_builder import ServerConfigBuilder
-    from ..core.config import get_config as get_framework_config
-    from ..utils.ports import get_port_manager
 
     deployment_id = "test_single_server_session"
     manager = get_instance_manager(deployment_id)
 
     try:
-        config = get_framework_config()
-        config_builder = ServerConfigBuilder(config, logger)
-        server_args = config_builder.build_server_args()
+        logger.info("Starting session single server")
 
-        port_manager = get_port_manager()
-        port = port_manager.allocate_port()
-
-        logger.info("Starting session single server on port %d", port)
-
-        plan = create_single_server_plan(deployment_id, port, server_args)
+        plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
         manager.deploy_servers(plan, timeout=60.0)
 
         # Store manager for tracking and cleanup
@@ -288,24 +277,13 @@ def _get_or_create_single_server(self) -> ArangoServer:
     """Get or create session single server using unified infrastructure."""
     if "single" not in self._session_deployments:
         from ..instances.manager import get_instance_manager
-        from ..instances.deployment_plan import create_single_server_plan
-        from ..instances.server_config_builder import ServerConfigBuilder
-        from ..core.config import get_config as get_framework_config
-        from ..utils.ports import get_port_manager
 
         deployment_id = "test_single_server"
         manager = get_instance_manager(deployment_id)
 
-        config = get_framework_config()
-        config_builder = ServerConfigBuilder(config, logger)
-        server_args = config_builder.build_server_args()
+        logger.info("Starting session single server")
 
-        port_manager = get_port_manager()
-        port = port_manager.allocate_port()
-
-        logger.info("Starting session single server on port %d", port)
-
-        plan = create_single_server_plan(deployment_id, port, server_args)
+        plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
         manager.deploy_servers(plan, timeout=60.0)
 
         # Store manager (not individual server) for cleanup
@@ -328,25 +306,14 @@ ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
 def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     """Provide a function-scoped single ArangoDB server using unified infrastructure."""
     from ..instances.manager import get_instance_manager
-    from ..instances.deployment_plan import create_single_server_plan
-    from ..instances.server_config_builder import ServerConfigBuilder
-    from ..core.config import get_config as get_framework_config
-    from ..utils.ports import get_port_manager
 
     deployment_id = f"test_func_{random_id(8)}"
     manager = get_instance_manager(deployment_id)
 
     try:
-        config = get_framework_config()
-        config_builder = ServerConfigBuilder(config, logger)
-        server_args = config_builder.build_server_args()
+        logger.info("Starting function server %s", deployment_id)
 
-        port_manager = get_port_manager()
-        port = port_manager.allocate_port()
-
-        logger.info("Starting function server %s on port %d", deployment_id, port)
-
-        plan = create_single_server_plan(deployment_id, port, server_args)
+        plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
         manager.deploy_servers(plan, timeout=30.0)
 
         # Get the server instance to yield

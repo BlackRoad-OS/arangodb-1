@@ -5,11 +5,14 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from armadillo.core.types import ServerRole, ClusterConfig
-from armadillo.instances.deployment_planner import StandardDeploymentPlanner
-from armadillo.instances.deployment_plan import ClusterDeploymentPlan
+from armadillo.instances.deployment_planner import DeploymentPlanner
+from armadillo.instances.deployment_plan import (
+    SingleServerDeploymentPlan,
+    ClusterDeploymentPlan,
+)
 
 
-class TestStandardDeploymentPlanner:
+class TestDeploymentPlanner:
     """Test deployment planning functionality."""
 
     def setup_method(self):
@@ -28,7 +31,7 @@ class TestStandardDeploymentPlanner:
         self.mock_config_provider = Mock()
         self.mock_config_provider.verbose = 0  # Default to quiet mode for tests
 
-        self.planner = StandardDeploymentPlanner(
+        self.planner = DeploymentPlanner(
             port_allocator=self.mock_port_allocator,
             logger=self.mock_logger,
             config_provider=self.mock_config_provider,
@@ -40,9 +43,39 @@ class TestStandardDeploymentPlanner:
         self._port_counter += 1
         return port
 
+    def test_create_single_server_plan(self):
+        """Test creating single server deployment plan."""
+        plan = self.planner.create_single_server_plan(server_id="test_single")
+
+        # Verify plan type
+        assert isinstance(plan, SingleServerDeploymentPlan)
+
+        # Verify server configuration
+        server = plan.server
+        assert server.role == ServerRole.SINGLE
+        assert server.port == 8529  # First allocated port
+        assert server.args["server.authentication"] == "false"
+        assert "data" in str(server.data_dir)
+        assert "arangod.log" in str(server.log_file)
+
+        # Verify port allocator was called
+        self.mock_port_allocator.allocate_port.assert_called_once()
+
+    def test_create_single_server_plan_with_custom_args(self):
+        """Test creating single server plan with custom arguments."""
+        custom_args = {"custom.setting": "value"}
+        plan = self.planner.create_single_server_plan(
+            server_id="test_custom_single", server_args=custom_args
+        )
+
+        # Verify custom args are included
+        server = plan.server
+        assert server.args["custom.setting"] == "value"
+        assert server.args["server.authentication"] == "false"  # Still has defaults
+
     def test_create_cluster_deployment_default_config(self):
         """Test creating cluster deployment with default configuration."""
-        plan = self.planner.create_deployment_plan(deployment_id="test_cluster")
+        plan = self.planner.create_cluster_plan(deployment_id="test_cluster")
 
         # Verify plan type
         assert isinstance(plan, ClusterDeploymentPlan)
@@ -64,7 +97,7 @@ class TestStandardDeploymentPlanner:
             agents=1, dbservers=2, coordinators=2, replication_factor=1
         )
 
-        plan = self.planner.create_deployment_plan(
+        plan = self.planner.create_cluster_plan(
             deployment_id="test_custom_cluster",
             cluster_config=custom_config,
         )
@@ -79,7 +112,7 @@ class TestStandardDeploymentPlanner:
 
     def test_agent_configuration(self):
         """Test agent server configuration details."""
-        plan = self.planner.create_deployment_plan(
+        plan = self.planner.create_cluster_plan(
             deployment_id="test_agents",
             cluster_config=ClusterConfig(agents=2, dbservers=1, coordinators=1),
         )
@@ -105,7 +138,7 @@ class TestStandardDeploymentPlanner:
 
     def test_dbserver_configuration(self):
         """Test database server configuration details."""
-        plan = self.planner.create_deployment_plan(
+        plan = self.planner.create_cluster_plan(
             deployment_id="test_dbservers",
             cluster_config=ClusterConfig(agents=1, dbservers=2, coordinators=1),
         )
@@ -134,7 +167,7 @@ class TestStandardDeploymentPlanner:
 
     def test_coordinator_configuration(self):
         """Test coordinator configuration details."""
-        plan = self.planner.create_deployment_plan(
+        plan = self.planner.create_cluster_plan(
             deployment_id="test_coordinators",
             cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=2),
         )
@@ -173,7 +206,7 @@ class TestStandardDeploymentPlanner:
 
     def test_agency_endpoint_propagation(self):
         """Test that agency endpoints are properly set on all agents."""
-        plan = self.planner.create_deployment_plan(
+        plan = self.planner.create_cluster_plan(
             deployment_id="test_agency",
             cluster_config=ClusterConfig(agents=3, dbservers=1, coordinators=1),
         )
@@ -192,7 +225,7 @@ class TestStandardDeploymentPlanner:
 
     def test_port_allocation_calls(self):
         """Test that port allocator is called for each server."""
-        self.planner.create_deployment_plan(
+        self.planner.create_cluster_plan(
             deployment_id="test_ports",
             cluster_config=ClusterConfig(agents=2, dbservers=2, coordinators=1),
         )
@@ -203,12 +236,12 @@ class TestStandardDeploymentPlanner:
     def test_deployment_planner_protocol_compliance(self):
         """Test that StandardDeploymentPlanner implements DeploymentPlanner protocol."""
         # This test verifies that the class implements the expected interface
-        assert hasattr(self.planner, "create_deployment_plan")
-        assert callable(self.planner.create_deployment_plan)
+        assert hasattr(self.planner, "create_cluster_plan")
+        assert callable(self.planner.create_cluster_plan)
 
     def test_cluster_directory_structure(self):
         """Test cluster directory structure."""
-        plan = self.planner.create_deployment_plan(
+        plan = self.planner.create_cluster_plan(
             deployment_id="cluster_dir_test",
             cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1),
         )

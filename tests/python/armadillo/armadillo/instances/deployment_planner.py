@@ -1,29 +1,18 @@
-"""Deployment planning for ArangoDB multi-server setups."""
+"""Deployment planning for ArangoDB single server and cluster setups."""
 
-from typing import Optional, List, Protocol
+from typing import Optional, List
 
 from ..core.types import ServerRole, ServerConfig, ClusterConfig
 from ..core.log import Logger
 from ..core.config import ConfigProvider
 from ..utils.ports import PortAllocator
 from ..utils.filesystem import server_dir
-from .deployment_plan import ClusterDeploymentPlan
+from .deployment_plan import SingleServerDeploymentPlan, ClusterDeploymentPlan
 from .server_config_builder import ServerConfigBuilder
 
 
-class DeploymentPlanner(Protocol):
-    """Protocol for deployment planners to enable dependency injection."""
-
-    def create_deployment_plan(
-        self,
-        deployment_id: str,
-        cluster_config: Optional[ClusterConfig] = None,
-    ) -> ClusterDeploymentPlan:
-        """Create a deployment plan for cluster mode."""
-
-
-class StandardDeploymentPlanner:
-    """Creates deployment plans for ArangoDB server configurations."""
+class DeploymentPlanner:
+    """Creates deployment plans for both single server and cluster configurations."""
 
     def __init__(
         self,
@@ -36,25 +25,41 @@ class StandardDeploymentPlanner:
         self._config_provider = config_provider
         self._server_config_builder = ServerConfigBuilder(config_provider, logger)
 
-    def create_deployment_plan(
+    def create_single_server_plan(
+        self, server_id: str, server_args: Optional[dict] = None
+    ) -> SingleServerDeploymentPlan:
+        """Create a deployment plan for a single server."""
+        args = server_args or {}
+
+        # Use server config builder for consistent configuration
+        server_config_args = self._server_config_builder.build_server_args()
+        args.update(server_config_args)
+        args["server.authentication"] = "false"
+
+        port = self._port_allocator.allocate_port()
+
+        server_config = ServerConfig(
+            role=ServerRole.SINGLE,
+            port=port,
+            data_dir=server_dir(server_id) / "data",
+            log_file=server_dir(server_id) / "arangod.log",
+            args=args,
+        )
+
+        self._logger.info("Created single server plan on port %d", port)
+        return SingleServerDeploymentPlan(server=server_config)
+
+    def create_cluster_plan(
         self,
         deployment_id: str,
         cluster_config: Optional[ClusterConfig] = None,
     ) -> ClusterDeploymentPlan:
-        """Create deployment plan for cluster mode.
-
-        Args:
-            deployment_id: Unique identifier for this deployment
-            cluster_config: Cluster configuration
-
-        Returns:
-            ClusterDeploymentPlan with server configurations and endpoints
-        """
+        """Create deployment plan for cluster mode."""
         plan = ClusterDeploymentPlan()
         self._plan_cluster(plan, deployment_id, cluster_config)
 
         self._logger.info(
-            "Created deployment plan: cluster with %d agents, %d dbservers, %d coordinators",
+            "Created cluster plan: %d agents, %d dbservers, %d coordinators",
             len(plan.get_agents()),
             len(plan.get_dbservers()),
             len(plan.get_coordinators()),

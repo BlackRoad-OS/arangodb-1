@@ -28,7 +28,6 @@ class TestArmadilloPluginBasic:
         plugin = ArmadilloPlugin()
 
         assert plugin is not None
-        assert hasattr(plugin, "_session_servers")
         assert hasattr(plugin, "_session_deployments")
         assert hasattr(plugin, "_session_orchestrators")
         assert hasattr(plugin, "_armadillo_config")
@@ -37,10 +36,8 @@ class TestArmadilloPluginBasic:
         """Test plugin initial state."""
         plugin = ArmadilloPlugin()
 
-        assert isinstance(plugin._session_servers, dict)
         assert isinstance(plugin._session_deployments, dict)
         assert isinstance(plugin._session_orchestrators, dict)
-        assert len(plugin._session_servers) == 0
         assert len(plugin._session_deployments) == 0
         assert len(plugin._session_orchestrators) == 0
         assert plugin._armadillo_config is None
@@ -133,12 +130,12 @@ class TestArmadilloPluginSessionManagement:
         """Test plugin can track servers."""
         plugin = ArmadilloPlugin()
 
-        # Add mock server
-        mock_server = Mock()
-        plugin._session_servers["test_server"] = mock_server
+        # Add mock deployment
+        mock_manager = Mock()
+        plugin._session_deployments["test_deployment"] = mock_manager
 
-        assert len(plugin._session_servers) == 1
-        assert plugin._session_servers["test_server"] == mock_server
+        assert len(plugin._session_deployments) == 1
+        assert plugin._session_deployments["test_deployment"] == mock_manager
 
     def test_plugin_tracks_deployments(self):
         """Test plugin can track deployments."""
@@ -219,11 +216,11 @@ class TestArmadilloPluginIntegration:
         plugin2 = ArmadilloPlugin()
 
         # Add data to one plugin
-        plugin1._session_servers["server1"] = Mock()
+        plugin1._session_deployments["deployment1"] = Mock()
         plugin1._armadillo_config = {"test": "config"}
 
         # Other plugin should be unaffected
-        assert len(plugin2._session_servers) == 0
+        assert len(plugin2._session_deployments) == 0
         assert plugin2._armadillo_config is None
 
     def test_plugin_config_persistence(self):

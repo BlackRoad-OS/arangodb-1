@@ -8,7 +8,11 @@ import pytest
 from unittest.mock import Mock
 from pathlib import Path
 
-from armadillo.instances.manager import InstanceManager, DeploymentPlan
+from armadillo.instances.manager import InstanceManager
+from armadillo.instances.deployment_plan import (
+    SingleServerDeploymentPlan,
+    ClusterDeploymentPlan,
+)
 from armadillo.core.types import DeploymentMode, ServerRole, ServerConfig
 
 
@@ -62,14 +66,19 @@ class TestInstanceManagerBasic:
 class TestDeploymentPlan:
     """Test DeploymentPlan dataclass functionality."""
 
-    def test_deployment_plan_can_be_created(self):
-        """Test DeploymentPlan can be instantiated."""
-        plan = DeploymentPlan(deployment_mode=DeploymentMode.SINGLE_SERVER)
+    def test_single_server_deployment_plan_can_be_created(self):
+        """Test SingleServerDeploymentPlan can be instantiated."""
+        server_config = ServerConfig(
+            role=ServerRole.SINGLE,
+            port=8529,
+            data_dir=Path("/tmp/single"),
+            log_file=Path("/tmp/single.log"),
+        )
+        plan = SingleServerDeploymentPlan(server=server_config)
 
         assert plan is not None
-        assert plan.deployment_mode == DeploymentMode.SINGLE_SERVER
-        assert isinstance(plan.servers, list)
-        assert len(plan.servers) == 0
+        assert plan.server == server_config
+        assert plan.server.role == ServerRole.SINGLE
 
     def test_deployment_plan_with_servers(self):
         """Test DeploymentPlan with server configurations."""
@@ -89,10 +98,9 @@ class TestDeploymentPlan:
             ),
         ]
 
-        plan = DeploymentPlan(deployment_mode=DeploymentMode.CLUSTER, servers=servers)
+        plan = ClusterDeploymentPlan(servers=servers)
 
         assert len(plan.servers) == 2
-        assert plan.deployment_mode == DeploymentMode.CLUSTER
 
     def test_deployment_plan_server_filtering(self):
         """Test DeploymentPlan server filtering methods."""
@@ -117,7 +125,7 @@ class TestDeploymentPlan:
             ),
         ]
 
-        plan = DeploymentPlan(deployment_mode=DeploymentMode.CLUSTER, servers=servers)
+        plan = ClusterDeploymentPlan(servers=servers)
 
         agents = plan.get_agents()
         coordinators = plan.get_coordinators()

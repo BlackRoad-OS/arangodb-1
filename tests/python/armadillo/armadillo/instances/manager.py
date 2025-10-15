@@ -23,7 +23,7 @@ from ..core.log import get_logger, Logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.process import stop_supervised_process
 from .server import ArangoServer
-from .deployment_planner import DeploymentPlanner, StandardDeploymentPlanner
+from .deployment_planner import DeploymentPlanner
 from .server_factory import ServerFactory, StandardServerFactory
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
@@ -73,7 +73,7 @@ class ManagerDependencies:
             logger=final_logger,
             port_manager=final_port_manager,
             auth_provider=get_auth_provider(),
-            deployment_planner=StandardDeploymentPlanner(
+            deployment_planner=DeploymentPlanner(
                 port_allocator=final_port_manager,
                 logger=final_logger,
                 config_provider=final_config,
@@ -240,7 +240,7 @@ class InstanceManager:
         if cluster_config is None:
             cluster_config = self._deps.config.cluster
 
-        return self._deps.deployment_planner.create_deployment_plan(
+        return self._deps.deployment_planner.create_cluster_plan(
             deployment_id=self.deployment_id, cluster_config=cluster_config
         )
 
