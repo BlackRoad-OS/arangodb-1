@@ -30,7 +30,8 @@ const gm = require("@arangodb/general-graph");
 const th = require("@arangodb/test-helper");
 
 const graphName = "UnitTestGraph";
-const vName = "UnitTestVertices";
+const vName1 = "UnitTestVertices1";
+const vName2 = "UnitTestVertices2";
 const eName = "UnitTestEdges";
 
 const optimizerRuleName = "short-traversal-to-join";
@@ -42,70 +43,35 @@ const tearDownAll = () => {
     // Don't care for error, we might runinitially with no graph exist
   }
   db._drop(eName);
-  db._drop(vName);
+  db._drop(vName1);
+  db._drop(vName2);
 };
 
 const createGraph = () => {
-  gm._create(graphName, [gm._relation(eName, vName, vName)
+  gm._create(graphName, [gm._relation(eName, vName1, vName2)
   ], [], {});
 
-  const vertices = [];
-  const edges = [];
-
-  for (var i = 0; i < 19; i++) {
-    vertices.push({
-      _key: i.toString(),
-      colour: "green"
-    });
-  }
-  for (var j = 19; j < 29; j++) {
-    vertices.push({
-      _key: j.toString(),
-      colour: "red"
-    });
+  {
+    const vertices = [];
+    vertices.push({ _key: "A" });
+    vertices.push({ _key: "B" });
+    db[vName1].save(vertices);
   }
 
-  edges.push({ _from: `${vName}/0`, _to: `${vName}/1`, weight: 0, colour: "green" });
-  edges.push({ _from: `${vName}/1`, _to: `${vName}/2`, weight: 1, colour: "green" });
-  edges.push({ _from: `${vName}/2`, _to: `${vName}/3`, weight: 0, colour: "green" });
+  {
+    const vertices = [];
+    vertices.push({ _key: "1" });
+    vertices.push({ _key: "2" });
+    db[vName2].save(vertices);
+  }
 
-  edges.push({ _from: `${vName}/4`, _to: `${vName}/5`, weight: 0.5, colour: "red" });
-  edges.push({ _from: `${vName}/5`, _to: `${vName}/6`, weight: 0, colour: "red" });
-  edges.push({ _from: `${vName}/6`, _to: `${vName}/7`, weight: 2.5, colour: "red" });
-
-  edges.push({ _from: `${vName}/8`, _to: `${vName}/9`, weight: 0.5, colour: "red"});
-  edges.push({ _from: `${vName}/9`, _to: `${vName}/10`, weight: 0, colour: "green"});
-  edges.push({ _from: `${vName}/10`, _to: `${vName}/11`, weight: 2.5, colour: "red"});
-  edges.push({ _from: `${vName}/11`, _to: `${vName}/12`, weight: 0, colour: "green"});
-  edges.push({ _from: `${vName}/12`, _to: `${vName}/13`, weight: 1.0, colour: "purple"});
-  edges.push({ _from: `${vName}/13`, _to: `${vName}/14`, weight: 2, colour: "banana"});
-
-  edges.push({ _from: `${vName}/9`, _to: `${vName}/15`, weight: 0, colour: "green"});
-  edges.push({ _from: `${vName}/15`, _to: `${vName}/16`, weight: 1, colour: "green"});
-  edges.push({ _from: `${vName}/16`, _to: `${vName}/11`, weight: 1, colour: "green"});
-
-  edges.push({ _from: `${vName}/9`, _to: `${vName}/17`, weight: 0, colour: "purple"});
-  edges.push({ _from: `${vName}/17`, _to: `${vName}/18`, weight: 0, colour: "purple"});
-  edges.push({ _from: `${vName}/18`, _to: `${vName}/14`, weight: 1, colour: "purple"});
-
-
-  /* there is a path of length 5 with green edges and a path of length 4 with purple
-     the test below ascertains that the path with purple edges is actually skipped
-     and the path with green edges is found if there is a filter on edges only
-     letting green edges pass. */
-  edges.push({ _from: `${vName}/19`, _to: `${vName}/20`, weight: 1, colour: "green" });
-  edges.push({ _from: `${vName}/20`, _to: `${vName}/21`, weight: 1, colour: "green" });
-  edges.push({ _from: `${vName}/21`, _to: `${vName}/22`, weight: 1, colour: "green" });
-  edges.push({ _from: `${vName}/22`, _to: `${vName}/23`, weight: 1, colour: "green" });
-
-  edges.push({ _from: `${vName}/19`, _to: `${vName}/20`, weight: 1, colour: "purple" });
-  edges.push({ _from: `${vName}/20`, _to: `${vName}/21`, weight: 1, colour: "purple" });
-  edges.push({ _from: `${vName}/21`, _to: `${vName}/23`, weight: 1, colour: "purple" });
-
-
-
-  db[vName].save(vertices);
-  db[eName].save(edges);
+  {
+    const edges = [];
+    edges.push({ _from: vName1 + "/A", _to: vName2 + "/1"});
+    edges.push({ _from: vName1 + "/A", _to: vName2 + "/2"});
+    edges.push({ _from: vName1 + "/B", _to: vName2 + "/1"});
+    db[eName].save(edges);
+  }
 };
 
 function assertRuleFires(query) {
@@ -145,19 +111,34 @@ function enumeratePathsFilter() {
     },
     tearDownAll,
 
-    testRuleFires: function() {
-      const query = `FOR v,e,p IN 1..1 OUTBOUND "${vName}/0" GRAPH ${graphName}
+    testRuleFires_basic: function() {
+      const query = `FOR v,e,p IN 1..1 OUTBOUND "${vName1}/0" GRAPH ${graphName}
+                       RETURN p`;
+      assertRuleFires(query);
+      assertSameResults(query);
+    },
+    testRuleFires_inbound: function() {
+      const query = `FOR v,e,p IN 1..1 INBOUND "${vName1}/0" GRAPH ${graphName}
                        RETURN p`;
       assertRuleFires(query);
       assertSameResults(query);
     },
 
-    testRuleDoesNotFire: function() {
-      const query = `FOR v,e,p IN 1..2 OUTBOUND "${vName}/0" GRAPH ${graphName}
+    testRuleDoesNotFire_variableDepth: function() {
+      const query = `FOR v,e,p IN 1..2 OUTBOUND "${vName1}/0" GRAPH ${graphName}
                        RETURN p`;
       assertRuleDoesNotFire(query);
-    }
-
+    },
+    testRuleDoesNotFire_directionAny: function() {
+      const query = `FOR v,e,p IN 1..1 ANY "${vName1}/0" GRAPH ${graphName}
+                       RETURN p`;
+      assertRuleDoesNotFire(query);
+    },
+    testRuleDoesNotFire_depth2: function() {
+      const query = `FOR v,e,p IN 2..2 OUTBOUND "${vName1}/0" GRAPH ${graphName}
+                       RETURN p`;
+      assertRuleDoesNotFire(query);
+    },
   };
 
   return testObj;
