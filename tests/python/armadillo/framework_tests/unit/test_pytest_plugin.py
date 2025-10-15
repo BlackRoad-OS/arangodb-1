@@ -29,7 +29,6 @@ class TestArmadilloPluginBasic:
 
         assert plugin is not None
         assert hasattr(plugin, "_session_deployments")
-        assert hasattr(plugin, "_session_orchestrators")
         assert hasattr(plugin, "_armadillo_config")
 
     def test_plugin_initial_state(self):
@@ -37,9 +36,7 @@ class TestArmadilloPluginBasic:
         plugin = ArmadilloPlugin()
 
         assert isinstance(plugin._session_deployments, dict)
-        assert isinstance(plugin._session_orchestrators, dict)
         assert len(plugin._session_deployments) == 0
-        assert len(plugin._session_orchestrators) == 0
         assert plugin._armadillo_config is None
 
     def test_plugin_has_expected_methods(self):
@@ -147,17 +144,6 @@ class TestArmadilloPluginSessionManagement:
 
         assert len(plugin._session_deployments) == 1
         assert plugin._session_deployments["test_deployment"] == mock_deployment
-
-    def test_plugin_tracks_orchestrators(self):
-        """Test plugin can track orchestrators."""
-        plugin = ArmadilloPlugin()
-
-        # Add mock orchestrator
-        mock_orchestrator = Mock()
-        plugin._session_orchestrators["test_orchestrator"] = mock_orchestrator
-
-        assert len(plugin._session_orchestrators) == 1
-        assert plugin._session_orchestrators["test_orchestrator"] == mock_orchestrator
 
 
 class TestArmadilloPluginErrorHandling:

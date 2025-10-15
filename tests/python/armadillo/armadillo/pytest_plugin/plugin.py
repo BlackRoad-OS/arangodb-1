@@ -1,6 +1,5 @@
 """Main pytest plugin for Armadillo framework integration."""
 
-import asyncio
 import atexit
 import logging
 import signal
@@ -22,7 +21,6 @@ from ..core.types import ServerRole, DeploymentMode, ClusterConfig
 from ..instances.server import ArangoServer
 from ..instances.manager import InstanceManager, get_instance_manager
 from .reporter import get_armadillo_reporter
-from ..instances.orchestrator import ClusterOrchestrator, get_cluster_orchestrator
 from ..utils.crypto import random_id
 from ..utils.filesystem import set_test_session_id, clear_test_session, cleanup_work_dir
 
@@ -34,7 +32,6 @@ class ArmadilloPlugin:
 
     def __init__(self) -> None:
         self._session_deployments: Dict[str, InstanceManager] = {}
-        self._session_orchestrators: Dict[str, ClusterOrchestrator] = {}
         self._armadillo_config: Optional[Any] = None
 
     def pytest_configure(self, config: pytest.Config) -> None:
@@ -99,7 +96,6 @@ class ArmadilloPlugin:
         """Clean up after pytest run."""
         logger.debug("Starting pytest plugin cleanup")
         deployments_to_clean = list(self._session_deployments.items())
-        orchestrators_to_clean = list(self._session_orchestrators.items())
         for deployment_id, manager in deployments_to_clean:
             try:
                 if manager.is_deployed():
@@ -114,21 +110,7 @@ class ArmadilloPlugin:
                 logger.error(
                     "Error during plugin cleanup of deployment %s: %s", deployment_id, e
                 )
-        for orchestrator_id, orchestrator in orchestrators_to_clean:
-            try:
-                logger.debug(
-                    "Plugin safety cleanup: cleaning up orchestrator %s",
-                    orchestrator_id,
-                )
-                orchestrator.cancel_all_operations()
-            except (OSError, RuntimeError) as e:
-                logger.error(
-                    "Error during plugin cleanup of orchestrator %s: %s",
-                    orchestrator_id,
-                    e,
-                )
         self._session_deployments.clear()
-        self._session_orchestrators.clear()
         stop_watchdog()
         logger.info("Armadillo pytest plugin unconfigured")
 
@@ -368,9 +350,6 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
         cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)
         plan = manager.create_deployment_plan(cluster_config)
         manager.deploy_servers(plan, timeout=180.0)
-        orchestrator = get_cluster_orchestrator(deployment_id)
-        asyncio.run(orchestrator.initialize_cluster_coordination(timeout=60.0))
-        asyncio.run(orchestrator.wait_for_cluster_ready(timeout=90.0))
         logger.info("Function cluster deployment %s ready", deployment_id)
         yield manager
     finally:
@@ -379,18 +358,6 @@ def arango_cluster_function() -> Generator[InstanceManager, None, None]:
             manager.shutdown_deployment(timeout=60.0)
         except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.error("Error stopping function cluster %s: %s", deployment_id, e)
-
-
-@pytest.fixture
-def arango_orchestrator(
-    arango_cluster,
-) -> ClusterOrchestrator:  # pylint: disable=redefined-outer-name
-    """Provide cluster orchestrator for advanced cluster operations."""
-    # Use the cluster's deployment_id to get the proper orchestrator
-    # instead of relying on global state lookup
-    from ..instances.orchestrator import get_cluster_orchestrator as get_orchestrator
-
-    return get_orchestrator(arango_cluster.deployment_id)
 
 
 @pytest.fixture
@@ -725,7 +692,6 @@ def _cleanup_all_deployments(emergency=True):
                             force_e,
                         )
         _plugin._session_deployments.clear()
-        _plugin._session_orchestrators.clear()
         if emergency:
             logger.info("Emergency deployment cleanup completed")
 
