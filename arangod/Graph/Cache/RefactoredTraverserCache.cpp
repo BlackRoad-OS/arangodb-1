@@ -368,25 +368,7 @@ void RefactoredTraverserCache::insertVertexIntoResult(
     }
   }
 }
-/*
-void RefactoredTraverserCache::validateVertexCollection(
-    velocypack::HashedStringRef const& id) {
-  auto collectionNameResult = extractCollectionName(id);
-  if (collectionNameResult.fail()) {
-    THROW_ARANGO_EXCEPTION(collectionNameResult.result());
-  }
 
-  auto [collectionName, _] = collectionNameResult.get();
-  if (!_query->collectionNames().contains(collectionName)) {
-    // Connected to a vertex where we do not know the Shard to.
-    THROW_ARANGO_EXCEPTION_MESSAGE(TRI_ERROR_QUERY_COLLECTION_LOCK_FAILED,
-                                   "collection not known to traversal: '" +
-                                       collectionName + "'. please add 'WITH " +
-                                       collectionName +
-                                       "' as the first line in your AQL");
-  }
-}
-*/
 arangodb::velocypack::HashedStringRef RefactoredTraverserCache::persistString(
     arangodb::velocypack::HashedStringRef idString) {
   auto it = _persistedStrings.find(idString);
