@@ -1,10 +1,15 @@
 devel
 -----
 
+<<<<<<< HEAD
 * Fix a race when collecting list ongoing transactions.
   The GET /_api/transaction API was missing a lock which could lead to
   undefined behavior if a transaction would update its state at the same time
   while we are collecting its details.
+=======
+* Improved performance of filtered vector index queries by batching document
+  fetches during index iteration.
+>>>>>>> origin/devel
 
 * Fix BTS-2226: Fix INSERT with overwriteMode: "ignore" failing when run
   multiple times on smart graph edge collections in cluster mode. The issue
