@@ -324,6 +324,9 @@ auto isRuleApplicable(TraversalNode* traversal) -> bool {
   // which would be to!
   // For experiments lets just :yolo: it and say the first one is from and
   // the second one is to
+  if (traversal->isSmart()) {
+    return false;
+  }
   if (traversal->vertexColls().size() != 1) {
     return false;
   }
@@ -366,7 +369,6 @@ void arangodb::aql::shortTraversalToJoinRule(
 
     if (isRuleApplicable(traversal)) {
       buildSnippet(plan, traversal);
-      plan->show();
       modified = true;
     }
   }
