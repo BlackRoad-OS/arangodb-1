@@ -1,6 +1,8 @@
 devel
 -----
 
+* Disabled array expansion operator [*] for inverted indexes.
+
 * Improved performance of filtered vector index queries by batching document
   fetches during index iteration.
 
