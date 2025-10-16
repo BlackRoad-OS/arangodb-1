@@ -299,6 +299,12 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
     auto edges = ast->createNodeObjectElement("edges", edgeArray);
     obj->addMember(edges);
 
+    auto* weightArray = ast->createNodeArray();
+    weightArray->addMember(ast->createNodeValueInt(0));
+    weightArray->addMember(ast->createNodeValueInt(1));
+    auto weights = ast->createNodeObjectElement("weights", weightArray);
+    obj->addMember(weights);
+
     // TODO dummy weights
     return obj;
   });
