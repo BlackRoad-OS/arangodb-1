@@ -129,6 +129,15 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   Variable const* edgeOutputVariable = traversal->edgeOutVariable();
   Variable const* pathOutputVariable = traversal->pathOutVariable();
 
+  // TODO: Find out why.
+  if (edgeOutputVariable == nullptr) {
+    edgeOutputVariable = ast->variables()->createTemporaryVariable();
+  }
+
+  if (pathOutputVariable == nullptr) {
+    pathOutputVariable = ast->variables()->createTemporaryVariable();
+  }
+
   // Enumerate Edge Collection
   // TODO: this is not correct yet
   Collection* sourceVertexCollection = traversal->vertexColls()[0];
