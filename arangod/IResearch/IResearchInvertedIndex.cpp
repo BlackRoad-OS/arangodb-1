@@ -1106,6 +1106,18 @@ Index::FilterCosts IResearchInvertedIndex::supportsFilterCondition(
   TRI_ASSERT(reference);
   auto filterCosts = Index::FilterCosts::defaultCosts(itemsInIndex);
 
+  // We don't support [*] expansion in inverted indexes.
+  for (const auto& field : fields) {
+    for (const auto& attribute : field) {
+
+      if (attribute.shouldExpand) {
+        LOG_TOPIC("b635a", TRACE, iresearch::TOPIC)
+        << "Array expansion not supported in inverted indexes. Skipping index " << id.id();
+        return filterCosts;
+      }
+    }
+  }
+
   // non-deterministic condition will mean full-scan. So we should
   // not use index here.
   // FIXME: maybe in the future we will be able to optimize just deterministic

@@ -1025,6 +1025,13 @@ Result fromBinaryEq(irs::boolean_filter* filter, FilterContext const& filterCtx,
     });
   }
 
+  //  disable [*] expansion with == for inverted indexes
+  if (normalized.attribute->type == aql::NODE_TYPE_EXPANSION) {
+    auto rv = error::failedToEvaluate(node);
+    return rv.reset(
+        TRI_ERROR_NOT_IMPLEMENTED, "inverted indexes don't support array expansion");
+  }
+
   irs::by_term* termFilter = nullptr;
 
   if (filter) {
