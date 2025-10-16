@@ -333,6 +333,10 @@ auto isRuleApplicable(TraversalNode* traversal) -> bool {
   if (traversal->edgeColls().size() != 1) {
     return false;
   }
+  // TODO: I don't even.
+  if (traversal->edgeColls().at(0) == traversal->vertexColls().at(0)) {
+    return false;
+  }
   if (opts->minDepth != 1) {
     return false;
   }
