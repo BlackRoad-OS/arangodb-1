@@ -125,25 +125,40 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   Variable const* startVertexDocumentVariable =
       ast->variables()
           ->createTemporaryVariable(); /* or a constant :rolling eyes: */
+
   Variable const* vertexOutputVariable = traversal->vertexOutVariable();
   Variable const* edgeOutputVariable = traversal->edgeOutVariable();
   Variable const* pathOutputVariable = traversal->pathOutVariable();
 
-  // TODO: Find out why.
+  // Traversal syntax allows not to give edge or path variable in which case
+  // these variables are null here.
+  // The snippet needs them though, so we create them again.
+  // TODO: maybe name them e and p in the plan
   if (edgeOutputVariable == nullptr) {
     edgeOutputVariable = ast->variables()->createTemporaryVariable();
   }
 
+  // TODO: if this is null we can just skip computing the path output further
+  // down.
   if (pathOutputVariable == nullptr) {
     pathOutputVariable = ast->variables()->createTemporaryVariable();
   }
 
-  // Enumerate Edge Collection
-  // TODO: this is not correct yet
   Collection* sourceVertexCollection = traversal->vertexColls()[0];
   Collection* targetVertexCollection = traversal->vertexColls()[0];
   Collection* edgeCollection = traversal->edgeColls()[0];
 
+  LOG_DEVEL << "vertexColls";
+  for (auto&& c : traversal->vertexColls()) {
+    LOG_RULE << c->name();
+  }
+  LOG_DEVEL << "///";
+
+  LOG_RULE << "svc: " << sourceVertexCollection->name();
+  LOG_RULE << "tvc: " << targetVertexCollection->name();
+  LOG_RULE << "ecn: " << edgeCollection->name();
+
+  // Calculate start vertex id
   Variable const* startVertexIdVariable =
       ast->variables()
           ->createTemporaryVariable(); /* or a constant :rolling eyes: */
@@ -176,6 +191,7 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   calculateStartVertexId->addDependency(traversal->getFirstDependency());
   traversal->removeDependencies();
 
+  // "materialize" start vertex
   auto enumerateStartVertex = plan->createNode<EnumerateCollectionNode>(
       plan.get(), plan->nextId(), sourceVertexCollection,
       startVertexDocumentVariable, false, IndexHint{});
@@ -308,7 +324,7 @@ auto isRuleApplicable(TraversalNode* traversal) -> bool {
   // which would be to!
   // For experiments lets just :yolo: it and say the first one is from and
   // the second one is to
-  if (traversal->vertexColls().size() > 2) {
+  if (traversal->vertexColls().size() != 1) {
     return false;
   }
   if (traversal->edgeColls().size() != 1) {
@@ -350,6 +366,7 @@ void arangodb::aql::shortTraversalToJoinRule(
 
     if (isRuleApplicable(traversal)) {
       buildSnippet(plan, traversal);
+      plan->show();
       modified = true;
     }
   }
