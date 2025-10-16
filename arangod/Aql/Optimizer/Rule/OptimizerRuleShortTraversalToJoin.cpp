@@ -52,7 +52,7 @@ using namespace arangodb::aql;
 using namespace arangodb::containers;
 using EN = arangodb::aql::ExecutionNode;
 
-#define LOG_RULE LOG_DEVEL_IF(true)
+#define LOG_RULE LOG_DEVEL_IF(false)
 
 namespace {
 
@@ -148,11 +148,11 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   Collection* targetVertexCollection = traversal->vertexColls()[0];
   Collection* edgeCollection = traversal->edgeColls()[0];
 
-  LOG_DEVEL << "vertexColls";
+  LOG_RULE << "vertexColls";
   for (auto&& c : traversal->vertexColls()) {
     LOG_RULE << c->name();
   }
-  LOG_DEVEL << "///";
+  LOG_RULE << "///";
 
   LOG_RULE << "svc: " << sourceVertexCollection->name();
   LOG_RULE << "tvc: " << targetVertexCollection->name();
