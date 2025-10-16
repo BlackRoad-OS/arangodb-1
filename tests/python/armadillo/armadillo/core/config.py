@@ -5,7 +5,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, TypeVar, Protocol
 
-from .types import ArmadilloConfig, ClusterConfig
+from .types import ArmadilloConfig, ClusterConfig, TimeoutConfig
 from .errors import ConfigurationError
 
 T = TypeVar("T")
@@ -89,6 +89,10 @@ class ConfigProvider(Protocol):
     @property
     def test_timeout(self) -> float:
         """Default test timeout in seconds."""
+
+    @property
+    def timeouts(self) -> TimeoutConfig:
+        """Timeout configuration."""
 
 
 class ConfigManager:

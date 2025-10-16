@@ -16,7 +16,7 @@ from .core.types import (
     ExecutionOutcome,
     ServerConfig,
     ClusterConfig,
-    MonitoringConfig,
+    TimeoutConfig,
     ArmadilloConfig,
 )
 
@@ -27,6 +27,6 @@ __all__ = [
     "ExecutionOutcome",
     "ServerConfig",
     "ClusterConfig",
-    "MonitoringConfig",
+    "TimeoutConfig",
     "ArmadilloConfig",
 ]

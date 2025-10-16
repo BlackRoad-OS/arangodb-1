@@ -199,7 +199,9 @@ class InstanceManager:
 
         # Initialize new architectural components
         self._server_registry = ServerRegistry()
-        self._health_monitor = HealthMonitor(self._deps.logger)
+        self._health_monitor = HealthMonitor(
+            self._deps.logger, self._deps.config_provider.timeouts
+        )
         self._cluster_bootstrapper = ClusterBootstrapper(
             self._deps.logger, self._threading.executor
         )

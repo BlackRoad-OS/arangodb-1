@@ -16,7 +16,7 @@ from armadillo.core.types import (
     ArmadilloConfig,
     DeploymentMode,
     ClusterConfig,
-    MonitoringConfig,
+    TimeoutConfig,
 )
 from armadillo.core.errors import ConfigurationError, PathError
 
@@ -104,8 +104,8 @@ test_timeout: 1800.0
 cluster:
   agents: 5
   dbservers: 4
-monitoring:
-  enable_crash_analysis: false
+timeouts:
+  health_check_default: 3.0
 """
 
         with patch("builtins.open", mock_open(read_data=yaml_content)):
@@ -118,7 +118,7 @@ monitoring:
                     assert config.test_timeout == 1800.0
                     assert config.cluster.agents == 5
                     assert config.cluster.dbservers == 4
-                    assert config.monitoring.enable_crash_analysis is False
+                    assert config.timeouts.health_check_default == 3.0
 
     def test_load_config_invalid_file_format(self):
         """Test loading configuration from unsupported file format."""

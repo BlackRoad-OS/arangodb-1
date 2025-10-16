@@ -141,17 +141,18 @@ def config():
                 "Replication Factor", str(current_config.cluster.replication_factor)
             )
         table.add_row(
-            "Crash Analysis", str(current_config.monitoring.enable_crash_analysis)
+            "Health Check Timeout", f"{current_config.timeouts.health_check_default}s"
         )
         table.add_row(
-            "GDB Debugging", str(current_config.monitoring.enable_gdb_debugging)
+            "Server Startup Timeout", f"{current_config.timeouts.server_startup}s"
         )
         table.add_row(
-            "Memory Profiling", str(current_config.monitoring.enable_memory_profiling)
+            "Deployment Timeout (Single)",
+            f"{current_config.timeouts.deployment_single}s",
         )
         table.add_row(
-            "Network Monitoring",
-            str(current_config.monitoring.enable_network_monitoring),
+            "Deployment Timeout (Cluster)",
+            f"{current_config.timeouts.deployment_cluster}s",
         )
         console.print(table)
     except (ValueError, OSError) as e:

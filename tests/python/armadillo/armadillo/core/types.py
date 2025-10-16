@@ -55,15 +55,27 @@ class ClusterConfig(BaseModel):
     replication_factor: int = 2
 
 
-class MonitoringConfig(BaseModel):
-    """Monitoring and debugging configuration."""
+class TimeoutConfig(BaseModel):
+    """Centralized timeout configuration to eliminate magical constants."""
 
-    enable_crash_analysis: bool = True
-    enable_gdb_debugging: bool = True
-    enable_memory_profiling: bool = False
-    enable_network_monitoring: bool = True
-    health_check_interval: float = 1.0
-    process_stats_interval: float = 5.0
+    # Health check timeouts
+    health_check_default: float = 5.0
+    health_check_quick: float = 2.0
+    health_check_extended: float = 10.0
+
+    # Server lifecycle timeouts
+    server_startup: float = 30.0
+    server_shutdown: float = 30.0
+    server_shutdown_agent: float = 90.0  # Agents need more time
+
+    # Deployment timeouts
+    deployment_single: float = 60.0
+    deployment_cluster: float = 300.0
+
+    # Process management timeouts
+    process_graceful_stop: float = 3.0
+    process_force_kill: float = 2.0
+    emergency_cleanup: float = 15.0
 
 
 class ArmadilloConfig(BaseModel):
@@ -71,7 +83,7 @@ class ArmadilloConfig(BaseModel):
 
     deployment_mode: DeploymentMode = DeploymentMode.SINGLE_SERVER
     cluster: ClusterConfig = Field(default_factory=ClusterConfig)
-    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
     test_timeout: float = 900.0
     result_formats: List[str] = Field(default_factory=lambda: ["junit", "json"])
     temp_dir: Optional[Path] = None

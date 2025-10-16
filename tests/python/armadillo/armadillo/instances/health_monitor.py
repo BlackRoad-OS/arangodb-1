@@ -3,7 +3,7 @@
 from typing import Dict, List, Tuple, Optional
 import time
 import requests
-from ..core.types import HealthStatus, ServerStats, ServerRole
+from ..core.types import HealthStatus, ServerStats, ServerRole, TimeoutConfig
 from ..core.log import Logger
 from ..core.errors import HealthCheckError
 from .server import ArangoServer
@@ -19,28 +19,33 @@ class HealthMonitor:
     - Verifying server readiness
     """
 
-    def __init__(self, logger: Logger) -> None:
+    def __init__(
+        self, logger: Logger, timeout_config: Optional[TimeoutConfig] = None
+    ) -> None:
         """Initialize health monitor.
 
         Args:
             logger: Logger instance for health monitoring events
+            timeout_config: Timeout configuration (uses defaults if None)
         """
         self._logger = logger
+        self._timeouts = timeout_config or TimeoutConfig()
 
     def check_server_health(
-        self, server: ArangoServer, timeout: float = 10.0
+        self, server: ArangoServer, timeout: Optional[float] = None
     ) -> HealthStatus:
         """Check health of a single server.
 
         Args:
             server: ArangoServer instance to check
-            timeout: Timeout for health check in seconds
+            timeout: Timeout for health check in seconds (uses config default if None)
 
         Returns:
             HealthStatus with health information
         """
+        actual_timeout = timeout or self._timeouts.health_check_default
         try:
-            health = server.health_check_sync(timeout=timeout)
+            health = server.health_check_sync(timeout=actual_timeout)
             return health
         except Exception as e:
             self._logger.warning(
@@ -53,13 +58,13 @@ class HealthMonitor:
             )
 
     def check_deployment_health(
-        self, servers: Dict[str, ArangoServer], timeout: float = 30.0
+        self, servers: Dict[str, ArangoServer], timeout: Optional[float] = None
     ) -> HealthStatus:
         """Check health of entire deployment.
 
         Args:
             servers: Dictionary of server_id to ArangoServer instances
-            timeout: Total timeout for all health checks
+            timeout: Total timeout for all health checks (uses config default if None)
 
         Returns:
             Aggregated HealthStatus for the deployment
@@ -71,14 +76,17 @@ class HealthMonitor:
                 error_message="No servers in deployment",
             )
 
+        actual_timeout = timeout or (
+            self._timeouts.health_check_extended * len(servers)
+        )
         start_time = time.time()
         unhealthy_servers: List[str] = []
         health_errors: List[str] = []
-        per_server_timeout = timeout / len(servers)
+        per_server_timeout = actual_timeout / len(servers)
 
         for server_id, server in servers.items():
             elapsed = time.time() - start_time
-            remaining_timeout = max(1.0, timeout - elapsed)
+            remaining_timeout = max(1.0, actual_timeout - elapsed)
             server_timeout = min(per_server_timeout, remaining_timeout)
 
             try:
@@ -149,7 +157,7 @@ class HealthMonitor:
         return stats
 
     def check_server_readiness(
-        self, server: ArangoServer, timeout: float = 10.0
+        self, server: ArangoServer, timeout: Optional[float] = None
     ) -> Tuple[bool, Optional[str]]:
         """Check if a server is ready to accept requests.
 
@@ -157,17 +165,18 @@ class HealthMonitor:
 
         Args:
             server: ArangoServer instance
-            timeout: Timeout for readiness check
+            timeout: Timeout for readiness check (uses config default if None)
 
         Returns:
             Tuple of (is_ready, error_message)
         """
+        actual_timeout = timeout or self._timeouts.health_check_default
         endpoint, path = self._get_readiness_endpoint(server)
 
         try:
             response = requests.get(
                 f"{endpoint}{path}",
-                timeout=timeout,
+                timeout=actual_timeout,
                 auth=server.auth if hasattr(server, "auth") else None,
             )
 
@@ -179,7 +188,7 @@ class HealthMonitor:
                     "Server %s has service API disabled, checking health instead",
                     server.server_id,
                 )
-                health = self.check_server_health(server, timeout=timeout)
+                health = self.check_server_health(server, timeout=actual_timeout)
                 return health.is_healthy, health.error_message
             else:
                 return False, f"Unexpected status code: {response.status_code}"
@@ -233,23 +242,26 @@ class HealthMonitor:
             return False
 
     def verify_deployment_ready(
-        self, servers: Dict[str, ArangoServer], timeout: float = 60.0
+        self, servers: Dict[str, ArangoServer], timeout: Optional[float] = None
     ) -> None:
         """Verify all servers in deployment are ready.
 
         Args:
             servers: Dictionary of server_id to ArangoServer instances
-            timeout: Total timeout for verification
+            timeout: Total timeout for verification (uses config default if None)
 
         Raises:
             HealthCheckError: If servers are not ready within timeout
         """
+        actual_timeout = timeout or (
+            self._timeouts.health_check_extended * len(servers)
+        )
         start_time = time.time()
         not_ready: List[str] = []
 
         for server_id, server in servers.items():
             elapsed = time.time() - start_time
-            remaining = max(5.0, timeout - elapsed)
+            remaining = max(5.0, actual_timeout - elapsed)
 
             is_ready, error = self.check_server_readiness(server, timeout=remaining)
             if not is_ready:

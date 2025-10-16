@@ -9,7 +9,7 @@ from armadillo.core.types import (
     ExecutionOutcome,
     ServerConfig,
     ClusterConfig,
-    MonitoringConfig,
+    TimeoutConfig,
     ArmadilloConfig,
     ExecutionResult,
     SuiteExecutionResults,
@@ -105,19 +105,31 @@ class TestClusterConfig:
         assert config.replication_factor == 3
 
 
-class TestMonitoringConfig:
-    """Test MonitoringConfig dataclass."""
+class TestTimeoutConfig:
+    """Test TimeoutConfig dataclass."""
 
-    def test_monitoring_config_defaults(self):
-        """Test MonitoringConfig default values."""
-        config = MonitoringConfig()
+    def test_timeout_config_defaults(self):
+        """Test TimeoutConfig default values."""
+        config = TimeoutConfig()
 
-        assert config.enable_crash_analysis is True
-        assert config.enable_gdb_debugging is True
-        assert config.enable_memory_profiling is False
-        assert config.enable_network_monitoring is True
-        assert config.health_check_interval == 1.0
-        assert config.process_stats_interval == 5.0
+        # Health check timeouts
+        assert config.health_check_default == 5.0
+        assert config.health_check_quick == 2.0
+        assert config.health_check_extended == 10.0
+
+        # Server lifecycle timeouts
+        assert config.server_startup == 30.0
+        assert config.server_shutdown == 30.0
+        assert config.server_shutdown_agent == 90.0
+
+        # Deployment timeouts
+        assert config.deployment_single == 60.0
+        assert config.deployment_cluster == 300.0
+
+        # Process management timeouts
+        assert config.process_graceful_stop == 3.0
+        assert config.process_force_kill == 2.0
+        assert config.emergency_cleanup == 15.0
 
 
 class TestArmadilloConfig:
@@ -129,7 +141,7 @@ class TestArmadilloConfig:
 
         assert config.deployment_mode == DeploymentMode.SINGLE_SERVER
         assert isinstance(config.cluster, ClusterConfig)
-        assert isinstance(config.monitoring, MonitoringConfig)
+        assert isinstance(config.timeouts, TimeoutConfig)
         assert config.test_timeout == 900.0
         assert config.result_formats == ["junit", "json"]
         # temp_dir is now set to default by the validator
