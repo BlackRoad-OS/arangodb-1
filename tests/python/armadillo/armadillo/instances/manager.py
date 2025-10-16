@@ -200,10 +200,10 @@ class InstanceManager:
         # Initialize new architectural components
         self._server_registry = ServerRegistry()
         self._health_monitor = HealthMonitor(
-            self._deps.logger, self._deps.config_provider.timeouts
+            self._deps.logger, self._deps.config.timeouts
         )
         self._cluster_bootstrapper = ClusterBootstrapper(
-            self._deps.logger, self._threading.executor
+            self._deps.logger, self._threading.executor, self._deps.config.timeouts
         )
         self._deployment_orchestrator = DeploymentOrchestrator(
             logger=self._deps.logger,
@@ -400,7 +400,8 @@ class InstanceManager:
             logger.debug("Phase 1: Shutting down %d non-agent servers", len(non_agents))
             for server in non_agents:
                 try:
-                    self._shutdown_server(server, timeout=30.0)
+                    timeout = self._deps.config.timeouts.server_shutdown
+                    self._shutdown_server(server, timeout=timeout)
                 except (OSError, ServerShutdownError) as e:
                     logger.error(
                         "Failed to shutdown server %s: %s", server.server_id, e
@@ -413,7 +414,8 @@ class InstanceManager:
             for server in agents:
                 try:
                     # Agents get extra timeout
-                    self._shutdown_server(server, timeout=90.0)
+                    timeout = self._deps.config.timeouts.server_shutdown_agent
+                    self._shutdown_server(server, timeout=timeout)
                 except (OSError, ServerShutdownError) as e:
                     logger.error("Failed to shutdown agent %s: %s", server.server_id, e)
                     failed_shutdowns.append(server.server_id)
@@ -492,8 +494,9 @@ class InstanceManager:
                     "Attempting emergency force kill of server %s", server.server_id
                 )
                 if server.is_running():
+                    timeout = self._deps.config.timeouts.process_force_kill
                     stop_supervised_process(
-                        server.server_id, graceful=False, timeout=5.0
+                        server.server_id, graceful=False, timeout=timeout
                     )
                     logger.info(
                         "Emergency force kill of server %s succeeded", server.server_id

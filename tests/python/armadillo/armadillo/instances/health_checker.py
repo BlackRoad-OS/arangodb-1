@@ -2,11 +2,11 @@
 
 import time
 import asyncio
-from typing import Protocol
+from typing import Protocol, Optional
 import aiohttp
 from ..core.log import Logger
 from ..core.process import is_process_running
-from ..core.types import HealthStatus
+from ..core.types import HealthStatus, TimeoutConfig
 from ..core.errors import HealthCheckError, NetworkError
 from ..utils.auth import AuthProvider
 
@@ -24,9 +24,15 @@ class HealthChecker(Protocol):
 class ServerHealthChecker:
     """Handles health checking for ArangoDB server instances."""
 
-    def __init__(self, logger: Logger, auth_provider: AuthProvider) -> None:
+    def __init__(
+        self,
+        logger: Logger,
+        auth_provider: AuthProvider,
+        timeout_config: Optional[TimeoutConfig] = None,
+    ) -> None:
         self._logger = logger
         self._auth_provider = auth_provider
+        self._timeout_config = timeout_config or TimeoutConfig()
 
     def check_readiness(self, server_id: str, endpoint: str) -> bool:
         """Check if server is ready to accept connections during startup."""
@@ -36,7 +42,9 @@ class ServerHealthChecker:
                     "Readiness check failed for %s: Process not running", server_id
                 )
                 return False
-            health = self.check_health(endpoint, timeout=2.0)
+            health = self.check_health(
+                endpoint, timeout=self._timeout_config.health_check_quick
+            )
             if not health.is_healthy:
                 self._logger.debug(
                     "Readiness check failed for %s: %s", server_id, health.error_message

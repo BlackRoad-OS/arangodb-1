@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
-from ..core.types import ServerRole
+from ..core.types import ServerRole, TimeoutConfig
 from ..core.errors import (
     ClusterError,
     AgencyError,
@@ -243,7 +243,9 @@ class ClusterOrchestrator:
                     server,
                 ) in self.instance_manager.get_all_servers().items():
                     try:
-                        health = server.health_check_sync(timeout=5.0)
+                        health = server.health_check_sync(
+                            timeout=self.config.timeouts.health_check_default
+                        )
                         stats = server.collect_stats()
                         report["servers"][server_id] = {
                             "role": server.role.value,
@@ -383,13 +385,17 @@ class ClusterOrchestrator:
                         i + 1,
                         len(restart_order),
                     )
-                    server.stop(timeout=30.0)
+                    server.stop(timeout=self.config.timeouts.server_shutdown)
                     if restart_delay > 0:
                         await asyncio.sleep(restart_delay)
-                    server.start(timeout=60.0)
-                    await self._wait_for_server_healthy(server, timeout=60.0)
+                    server.start(timeout=self.config.timeouts.server_startup)
+                    await self._wait_for_server_healthy(
+                        server, timeout=self.config.timeouts.health_check_extended
+                    )
                     operation.progress[server.server_id] = "completed"
-                await self.wait_for_cluster_ready(timeout=60.0)
+                await self.wait_for_cluster_ready(
+                    timeout=self.config.timeouts.health_check_extended
+                )
                 operation.status = "completed"
                 operation.end_time = time.time()
                 logger.info(
@@ -449,7 +455,9 @@ class ClusterOrchestrator:
                 agents = self.instance_manager.get_servers_by_role(ServerRole.AGENT)
                 for agent in agents:
                     if agent.is_running():
-                        health = agent.health_check_sync(timeout=3.0)
+                        health = agent.health_check_sync(
+                            timeout=self.config.timeouts.health_check_quick
+                        )
                         if health.is_healthy:
                             logger.info("Agency leadership established")
                             return
@@ -467,7 +475,9 @@ class ClusterOrchestrator:
             ready_count = 0
             for dbserver in dbservers:
                 if dbserver.is_running():
-                    health = dbserver.health_check_sync(timeout=3.0)
+                    health = dbserver.health_check_sync(
+                        timeout=self.config.timeouts.health_check_quick
+                    )
                     if health.is_healthy:
                         ready_count += 1
             if ready_count == len(dbservers):
@@ -486,7 +496,9 @@ class ClusterOrchestrator:
             ready_count = 0
             for coordinator in coordinators:
                 if coordinator.is_running():
-                    health = coordinator.health_check_sync(timeout=3.0)
+                    health = coordinator.health_check_sync(
+                        timeout=self.config.timeouts.health_check_quick
+                    )
                     if health.is_healthy:
                         ready_count += 1
             if ready_count == len(coordinators):
@@ -501,7 +513,9 @@ class ClusterOrchestrator:
         agents = self.instance_manager.get_servers_by_role(ServerRole.AGENT)
         for agent in agents:
             if agent.is_running():
-                health = agent.health_check_sync(timeout=2.0)
+                health = agent.health_check_sync(
+                    timeout=self.config.timeouts.health_check_quick
+                )
                 if health.is_healthy:
                     if not state.agency_leader:
                         state.agency_leader = agent.server_id
@@ -513,7 +527,9 @@ class ClusterOrchestrator:
         for server_id, server in self.instance_manager.get_all_servers().items():
             try:
                 if server.is_running():
-                    health = server.health_check_sync(timeout=2.0)
+                    health = server.health_check_sync(
+                        timeout=self.config.timeouts.health_check_quick
+                    )
                     if health.is_healthy:
                         state.healthy_servers.add(server_id)
                     else:
@@ -544,7 +560,9 @@ class ClusterOrchestrator:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                health = server.health_check_sync(timeout=3.0)
+                health = server.health_check_sync(
+                    timeout=self.config.timeouts.health_check_quick
+                )
                 if health.is_healthy:
                     return
             except (HealthCheckError, ServerError, NetworkError, OSError) as e:

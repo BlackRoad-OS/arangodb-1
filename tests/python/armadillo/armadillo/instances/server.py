@@ -8,7 +8,13 @@ from typing import Optional, List
 
 import aiohttp
 
-from ..core.types import ServerRole, ServerConfig, HealthStatus, ServerStats
+from ..core.types import (
+    ServerRole,
+    ServerConfig,
+    HealthStatus,
+    ServerStats,
+    TimeoutConfig,
+)
 from ..core.errors import ServerStartupError, ServerShutdownError
 from ..core.config import get_config, ConfigProvider
 from ..core.process import (
@@ -101,7 +107,9 @@ class ServerDependencies:
                 config_provider=config_provider, logger=logger_instance
             ),
             health_checker=ServerHealthChecker(
-                logger=logger_instance, auth_provider=auth_provider
+                logger=logger_instance,
+                auth_provider=auth_provider,
+                timeout_config=config_provider.timeouts,
             ),
             auth_provider=auth_provider,
         )
@@ -197,7 +205,9 @@ class ArangoServer:
                 ),
                 health_checker=health_checker
                 or ServerHealthChecker(
-                    logger=final_logger, auth_provider=final_auth_provider
+                    logger=final_logger,
+                    auth_provider=final_auth_provider,
+                    timeout_config=final_config_provider.timeouts,
                 ),
                 auth_provider=final_auth_provider,
             )
@@ -291,11 +301,18 @@ class ArangoServer:
                 f"Failed to start server {self.server_id}: {e}"
             ) from e
 
-    def stop(self, graceful: bool = True, timeout: float = 30.0) -> None:
+    def stop(self, graceful: bool = True, timeout: Optional[float] = None) -> None:
         """Stop the ArangoDB server."""
         if not self._runtime.is_running:
             self._deps.logger.warning(f"Server {self.server_id} is not running")
             return
+
+        # Use configured timeout based on server role and graceful mode
+        if timeout is None:
+            if self.role == ServerRole.AGENT:
+                timeout = self._deps.config_provider.timeouts.server_shutdown_agent
+            else:
+                timeout = self._deps.config_provider.timeouts.server_shutdown
 
         log_server_event(
             self._deps.logger, "stopping", server_id=self.server_id, graceful=graceful
@@ -442,7 +459,8 @@ class ArangoServer:
         """Clean up resources on startup failure."""
         try:
             if self.server_id and is_process_running(self.server_id):
-                stop_supervised_process(self.server_id, graceful=False, timeout=5.0)
+                timeout = self._deps.config_provider.timeouts.process_force_kill
+                stop_supervised_process(self.server_id, graceful=False, timeout=timeout)
         except (ProcessLookupError, OSError, TimeoutError) as e:
             logger.debug("Cleanup error for %s: %s", self.server_id, e)
 

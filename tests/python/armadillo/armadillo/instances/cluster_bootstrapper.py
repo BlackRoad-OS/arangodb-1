@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from ..core.types import ServerRole
+from ..core.types import ServerRole, TimeoutConfig
 from ..core.log import Logger
 from ..core.errors import ServerStartupError, AgencyError, ClusterError
 from .server import ArangoServer
@@ -19,15 +19,22 @@ class ClusterBootstrapper:
     - Verify cluster readiness
     """
 
-    def __init__(self, logger: Logger, executor: ThreadPoolExecutor) -> None:
+    def __init__(
+        self,
+        logger: Logger,
+        executor: ThreadPoolExecutor,
+        timeout_config: Optional[TimeoutConfig] = None,
+    ) -> None:
         """Initialize cluster bootstrapper.
 
         Args:
             logger: Logger instance
             executor: Thread pool executor for parallel operations
+            timeout_config: Timeout configuration (uses defaults if None)
         """
         self._logger = logger
         self._executor = executor
+        self._timeouts = timeout_config or TimeoutConfig()
 
     def bootstrap_cluster(
         self,
@@ -233,7 +240,7 @@ class ClusterBootstrapper:
                     # Check if coordinator can access cluster state
                     response = requests.get(
                         f"{server.endpoint}/_api/version",
-                        timeout=5.0,
+                        timeout=self._timeouts.health_check_default,
                     )
                     if response.status_code != 200:
                         all_ready = False
@@ -283,7 +290,8 @@ class ClusterBootstrapper:
         try:
             self._logger.debug("Checking agent %s at %s", server_id, server.endpoint)
             response = requests.get(
-                f"{server.endpoint}/_api/agency/config", timeout=2.0
+                f"{server.endpoint}/_api/agency/config",
+                timeout=self._timeouts.health_check_quick,
             )
             self._logger.debug("Agent %s response: %s", server_id, response.status_code)
 
