@@ -265,7 +265,7 @@ AqlValue functions::ToDocumentId(ExpressionContext* cxt, AstNode const&,
                                  VPackFunctionParametersView parameters) {
   auto in = aql::functions::extractFunctionParameterValue(parameters, 0);
   if (in.isString()) {
-    return in;
+    return in.clone();
   } else {
     if (in.isObject()) {
       auto id = transaction::helpers::extractIdString(cxt->trx().resolver(),
