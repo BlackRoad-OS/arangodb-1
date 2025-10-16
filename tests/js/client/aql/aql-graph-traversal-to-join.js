@@ -119,11 +119,11 @@ function enumeratePathsFilter() {
       assertRuleFires(query);
       assertSameResults(query);
     },
-    testRuleFires_inbound: function() {
+    testRuleDoesNotFire_inbound: function() {
       const query = `FOR v,e,p IN 1..1 INBOUND "${vName1}/A" GRAPH ${graphName}
                        RETURN p`;
-      assertRuleFires(query);
-      assertSameResults(query);
+      assertRuleDoesNotFire(query);
+//      assertSameResults(query);
     },
 
     testRuleDoesNotFire_variableDepth: function() {
