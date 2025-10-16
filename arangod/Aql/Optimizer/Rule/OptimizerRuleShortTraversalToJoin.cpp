@@ -128,7 +128,6 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
 
   Variable const* vertexOutputVariable = traversal->vertexOutVariable();
   Variable const* edgeOutputVariable = traversal->edgeOutVariable();
-  Variable const* pathOutputVariable = traversal->pathOutVariable();
 
   // Traversal syntax allows not to give edge or path variable in which case
   // these variables are null here.
@@ -136,12 +135,6 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   // TODO: maybe name them e and p in the plan
   if (edgeOutputVariable == nullptr) {
     edgeOutputVariable = ast->variables()->createTemporaryVariable();
-  }
-
-  // TODO: if this is null we can just skip computing the path output further
-  // down.
-  if (pathOutputVariable == nullptr) {
-    pathOutputVariable = ast->variables()->createTemporaryVariable();
   }
 
   Collection* sourceVertexCollection = traversal->vertexColls()[0];
@@ -284,40 +277,48 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
       plan.get(), plan->nextId(), targetVertexConditionVariable);
   filterTargetVertex->addDependency(calculateTargetVertexCondition);
 
-  auto calculatePathExpression = std::invoke([&]() -> AstNode* {
-    auto* obj = ast->createNodeObject();
-
-    auto* vertexArray = ast->createNodeArray();
-    vertexArray->addMember(
-        ast->createNodeReference(startVertexDocumentVariable));
-    vertexArray->addMember(ast->createNodeReference(vertexOutputVariable));
-    auto vertices = ast->createNodeObjectElement("vertices", vertexArray);
-    obj->addMember(vertices);
-
-    auto* edgeArray = ast->createNodeArray();
-    edgeArray->addMember(ast->createNodeReference(edgeOutputVariable));
-    auto edges = ast->createNodeObjectElement("edges", edgeArray);
-    obj->addMember(edges);
-
-    auto* weightArray = ast->createNodeArray();
-    weightArray->addMember(ast->createNodeValueInt(0));
-    weightArray->addMember(ast->createNodeValueInt(1));
-    auto weights = ast->createNodeObjectElement("weights", weightArray);
-    obj->addMember(weights);
-
-    // TODO dummy weights
-    return obj;
-  });
-
-  auto calculatePath = plan->createNode<CalculationNode>(
-      plan.get(), plan->nextId(),
-      std::make_unique<Expression>(ast, calculatePathExpression),
-      pathOutputVariable);
-  calculatePath->addDependency(filterTargetVertex);
-
   auto parent = traversal->getFirstParent();
   parent->removeDependencies();
-  parent->addDependency(calculatePath);
+
+  // TODO: if this is null we can just skip computing the path output further
+  // down.
+  Variable const* pathOutputVariable = traversal->pathOutVariable();
+  if (pathOutputVariable != nullptr) {
+    auto calculatePathExpression = std::invoke([&]() -> AstNode* {
+      auto* obj = ast->createNodeObject();
+
+      auto* vertexArray = ast->createNodeArray();
+      vertexArray->addMember(
+          ast->createNodeReference(startVertexDocumentVariable));
+      vertexArray->addMember(ast->createNodeReference(vertexOutputVariable));
+      auto vertices = ast->createNodeObjectElement("vertices", vertexArray);
+      obj->addMember(vertices);
+
+      auto* edgeArray = ast->createNodeArray();
+      edgeArray->addMember(ast->createNodeReference(edgeOutputVariable));
+      auto edges = ast->createNodeObjectElement("edges", edgeArray);
+      obj->addMember(edges);
+
+      auto* weightArray = ast->createNodeArray();
+      weightArray->addMember(ast->createNodeValueInt(0));
+      weightArray->addMember(ast->createNodeValueInt(1));
+      auto weights = ast->createNodeObjectElement("weights", weightArray);
+      obj->addMember(weights);
+
+      // TODO dummy weights
+      return obj;
+    });
+
+    auto calculatePath = plan->createNode<CalculationNode>(
+        plan.get(), plan->nextId(),
+        std::make_unique<Expression>(ast, calculatePathExpression),
+        pathOutputVariable);
+    calculatePath->addDependency(filterTargetVertex);
+
+    parent->addDependency(calculatePath);
+  } else {
+    parent->addDependency(filterTargetVertex);
+  }
 }
 
 // TODO: This function should explain why the optimisation rule
@@ -352,6 +353,14 @@ auto isRuleApplicable(TraversalNode* traversal) -> bool {
   if (traversal->edgeDirections().at(0) != TRI_EDGE_OUT) {
     return false;
   }
+  // TODO
+  if (traversal->isVertexOutVariableUsedLater()) {
+    // maybe false too, for now
+  }
+  if (traversal->options()->weightAttribute != "") {
+    // No weighted
+    return false;
+  }
   return true;
 }
 }  // namespace
@@ -379,6 +388,7 @@ void arangodb::aql::shortTraversalToJoinRule(
 
     if (isRuleApplicable(traversal)) {
       buildSnippet(plan, traversal);
+      plan->show();
       modified = true;
     }
   }
