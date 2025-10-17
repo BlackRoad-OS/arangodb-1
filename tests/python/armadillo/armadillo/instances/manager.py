@@ -13,6 +13,7 @@ from ..core.types import (
     HealthStatus,
     ServerStats,
 )
+from ..core.config import get_config
 from ..core.errors import (
     ServerError,
     ServerStartupError,
@@ -124,6 +125,7 @@ class ThreadingResources:
     @classmethod
     def create_for_deployment(cls, deployment_id: str) -> "ThreadingResources":
         """Create threading resources for a deployment."""
+        config = get_config()
         return cls(
             executor=ThreadPoolExecutor(
                 max_workers=config.infrastructure.manager_max_workers,
