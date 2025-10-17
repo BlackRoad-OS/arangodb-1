@@ -143,7 +143,7 @@ function BaseTestConfig() {
         let plan = db._createStatement(query[0]).explain().plan;
         let nodes = plan.nodes;
 
-        if(!plan.rules.includes("short-traversal-to-join") {
+        if(!plan.rules.includes("short-traversal-to-join")) {
           let traversal = nodes.filter((node) => node.type === 'TraversalNode')[0];
           assertEqual("p", traversal.pathOutVariable.name);
         }
