@@ -1,28 +1,21 @@
 # Armadillo: Modern ArangoDB Testing Framework
 
-**Phase 1 Implementation - Core Foundation**
-
-Armadillo is a modern Python testing framework built on pytest that replaces ArangoDB's legacy JavaScript testing framework. This Phase 1 implementation provides the core foundation with single-server support, structured logging, timeout management, and basic result analysis.
+Armadillo is a modern Python testing framework built on pytest that replaces ArangoDB's legacy JavaScript testing framework. It provides comprehensive support for both single-server and cluster deployments with sophisticated lifecycle management, structured logging, and result analysis.
 
 ## Features
 
-### ✅ Phase 1 (Current)
-- **Single Server Management**: Start, stop, and monitor ArangoDB server instances
-- **Layered Timeout System**: Global deadlines, per-test timeouts, watchdog enforcement
+### ✅ Current Implementation
+- **Multi-Server Support**: Single server and cluster deployments with unified infrastructure
+- **Cluster Management**: Agency coordination, database server management, rolling restarts
+- **Layered Timeout System**: Global deadlines, per-test timeouts, watchdog enforcement  
 - **Structured Logging**: JSON + Rich terminal output with context tracking
-- **Process Supervision**: Robust process management with crash detection
+- **Process Supervision**: Robust process management with crash detection and cleanup
 - **Pytest Integration**: Native plugin with fixtures and markers
 - **Result Export**: JSON and JUnit XML output formats
 - **CLI Interface**: Modern Typer-based command line interface
-- **Result Analysis**: Basic summary analysis (replacing examine_results.js)
-
-### 🚧 Future Phases
-- **Phase 2**: Cluster support, agency management, SUT checkers
-- **Phase 3**: Advanced test management, multi-format results, client tools
-- **Phase 4**: Crash analysis with GDB integration, sanitizer support
-- **Phase 5**: Network monitoring, memory profiling, performance analysis
-- **Phase 6**: Production features, comprehensive documentation
-- **Phase 7**: Complex semantic test suites (traversal, CRUD divergence)
+- **Result Analysis**: Comprehensive summary analysis and reporting
+- **Health Monitoring**: Server readiness checks and deployment verification
+- **Port Management**: Automatic port allocation with collision avoidance
 
 ## Installation
 
@@ -38,11 +31,17 @@ pip install -e .
 # Single server tests (default)
 armadillo test run tests/
 
+# Cluster tests
+armadillo test run tests/ --cluster
+
 # With custom timeout and output
 armadillo test run tests/ --timeout 300 --output-dir ./results
 
-# Verbose mode
-armadillo test run tests/ -vv
+# Verbose mode with server logs
+armadillo -vv test run tests/ --show-server-logs
+
+# Compact output
+armadillo test run tests/ --compact
 ```
 
 ### Analyze Results

@@ -12,9 +12,7 @@ The Armadillo pytest plugin follows a **hybrid lifecycle management** approach t
 
 ### 2. **Plugin Safety Net Cleanup**
 - Plugin tracks all session-scoped resources in centralized dictionaries:
-  - `_session_servers`: Individual ArangoDB servers
-  - `_session_deployments`: Multi-server deployments (clusters)
-  - `_session_orchestrators`: Cluster coordination managers
+  - `_session_deployments`: All deployments (single server and clusters)
 - Plugin cleanup only activates if fixtures fail to clean up properly
 - Prevents resource leaks when tests are interrupted or fixtures fail
 
