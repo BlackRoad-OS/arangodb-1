@@ -89,20 +89,27 @@ function assertRuleDoesNotFire(query) {
 }
 
 function getVerticesAndEdgesFromPath(path) {
-  return {
-    vertices: path.vertices.map((v) => v._id),
-    edges: path.edges.map((e) => [e._from, e._to])
-  };
+  let vertices = path.vertices.map((v) => v._id);
+  let edges = path.edges.map((e) => [e._from, e._to]);
+
+  var result = [];
+  for(var v = 0; v < vertices.length - 1; v++) {
+    result.push(vertices[v]);
+    result.push(edges[v][0]);
+    result.push(edges[v][1]);
+  }
+  result.push(vertices[vertices.length - 1]);
+  return result;
 }
 
 function assertSameResults(query) {
   const resultWith = db._query(query).toArray();
-  const resultWithPaths = resultWith.map(getVerticesAndEdgesFromPath);
+  const resultWithPaths = resultWith.map(getVerticesAndEdgesFromPath).sort();
 
   const resultWithout = db._query(query, {}, {optimizer: {rules: [`-${optimizerRuleName}`]}}).toArray();
-  const resultWithoutPaths = resultWithout.map(getVerticesAndEdgesFromPath);
+  const resultWithoutPaths = resultWithout.map(getVerticesAndEdgesFromPath).sort();
 
-  assertEqual(resultWithPaths, resultWithoutPaths);
+  assertEqual(resultWithPaths, resultWithoutPaths, "first result with rule applied, second with rule not applied");
 }
 
 function enumeratePathsFilter() {
