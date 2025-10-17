@@ -334,6 +334,9 @@ auto isRuleApplicable(TraversalNode* traversal) -> bool {
   if (traversal->isSmart()) {
     return false;
   }
+  if (traversal->isEligibleAsSatelliteTraversal()) {
+    return false;
+  }
   if (traversal->vertexColls().size() != 1) {
     return false;
   }
