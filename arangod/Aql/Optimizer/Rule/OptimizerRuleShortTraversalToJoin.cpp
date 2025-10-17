@@ -117,14 +117,79 @@ check whether v is filtered by equality for an attribute, which would ensure
 correct semantics)
 
  */
-auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
-                  TraversalNode* traversal) {
+auto buildFilterSnippet(std::unique_ptr<ExecutionPlan>& plan,
+                        ExecutionNode* dependency, AstNode* condition)
+    -> ExecutionNode* {
   auto* ast = plan->getAst();
-  /* Replace the traversal node with this snippet */
 
-  Variable const* startVertexDocumentVariable =
+  Variable const* conditionVariable =
+      ast->variables()->createTemporaryVariable();
+
+  auto calculateCondition = plan->createNode<CalculationNode>(
+      plan.get(), plan->nextId(), std::make_unique<Expression>(ast, condition),
+      conditionVariable);
+  calculateCondition->addDependency(dependency);
+
+  auto filter = plan->createNode<FilterNode>(plan.get(), plan->nextId(),
+                                             conditionVariable);
+
+  filter->addDependency(calculateCondition);
+
+  return filter;
+}
+
+auto buildCalculation(std::unique_ptr<ExecutionPlan>& plan,
+                      ExecutionNode* dependency, Variable const* into,
+                      AstNode* expr) -> ExecutionNode* {
+  auto* ast = plan->getAst();
+  auto calculate = plan->createNode<CalculationNode>(
+      plan.get(), plan->nextId(), std::make_unique<Expression>(ast, expr),
+      into);
+  calculate->addDependency(dependency);
+
+  return calculate;
+}
+
+auto buildCalculationIntoTemporary(std::unique_ptr<ExecutionPlan>& plan,
+                                   ExecutionNode* dependency, AstNode* expr)
+    -> std::pair<Variable const*, ExecutionNode*> {
+  auto* ast = plan->getAst();
+
+  // Calculate start vertex id
+  auto const* variable =
       ast->variables()
           ->createTemporaryVariable(); /* or a constant :rolling eyes: */
+
+  auto calculate = buildCalculation(plan, dependency, variable, expr);
+  return {variable, calculate};
+}
+
+auto buildEnumerateIntoVariable(std::unique_ptr<ExecutionPlan>& plan,
+                                ExecutionNode* dependency,
+                                Variable const* variable,
+                                Collection* collection) -> ExecutionNode* {
+  auto enumerate = plan->createNode<EnumerateCollectionNode>(
+      plan.get(), plan->nextId(), collection, variable, false /*random*/,
+      IndexHint{});
+  enumerate->addDependency(dependency);
+
+  return enumerate;
+}
+
+auto buildEnumerateIntoNewVariable(std::unique_ptr<ExecutionPlan>& plan,
+                                   ExecutionNode* dependency,
+                                   Collection* collection)
+    -> std::pair<Variable const*, ExecutionNode*> {
+  auto* ast = plan->getAst();
+  auto variable = ast->variables()->createTemporaryVariable();
+  return {variable,
+          buildEnumerateIntoVariable(plan, dependency, variable, collection)};
+}
+
+auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
+                  ExecutionNode* dependency, TraversalNode* traversal)
+    -> ExecutionNode* {
+  auto* ast = plan->getAst();
 
   Variable const* vertexOutputVariable = traversal->vertexOutVariable();
   Variable const* edgeOutputVariable = traversal->edgeOutVariable();
@@ -141,196 +206,119 @@ auto buildSnippet(std::unique_ptr<ExecutionPlan>& plan,
   Collection* targetVertexCollection = traversal->vertexColls()[0];
   Collection* edgeCollection = traversal->edgeColls()[0];
 
-  LOG_RULE << "vertexColls";
-  for (auto&& c : traversal->vertexColls()) {
-    LOG_RULE << c->name();
-  }
-  LOG_RULE << "///";
+  auto [startVertexIdVariable, calculateStartVertexId] =
+      buildCalculationIntoTemporary(
+          plan, dependency, std::invoke([&]() -> AstNode* {
+            auto startVertex = std::invoke([&]() -> AstNode* {
+              if (traversal->usesInVariable()) {
+                // TODO: fun complication: we can get input via a variable, and
+                // that variable might contain a string *or* an object with an
+                // ID. That means that we actually have to extract the document
+                // id from a variable here which requires a calculationnode
+                return ast->createNodeReference(traversal->inVariable());
+              } else {
+                auto* sv = ast->resources().registerString(
+                    traversal->getStartVertex());
+                return ast->createNodeValueString(
+                    sv, traversal->getStartVertex().size());
+              }
+            });
 
-  LOG_RULE << "svc: " << sourceVertexCollection->name();
-  LOG_RULE << "tvc: " << targetVertexCollection->name();
-  LOG_RULE << "ecn: " << edgeCollection->name();
+            auto args = ast->createNodeArray();
+            args->addMember(startVertex);
 
-  // Calculate start vertex id
-  Variable const* startVertexIdVariable =
-      ast->variables()
-          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
+            return ast->createNodeFunctionCall("TO_DOCUMENT_ID", args, true);
+          }));
 
-  auto startVertexIdCalculation = std::invoke([&]() -> AstNode* {
-    auto startVertex = std::invoke([&]() -> AstNode* {
-      if (traversal->usesInVariable()) {
-        // TODO: fun complication: we can get input via a variable, and that
-        // variable might contain a string *or* an object with an ID.
-        // That means that we actually have to extract the document id from a
-        // variable here which requires a calculationnode
-        return ast->createNodeReference(traversal->inVariable());
-      } else {
-        auto* sv = ast->resources().registerString(traversal->getStartVertex());
-        return ast->createNodeValueString(sv,
-                                          traversal->getStartVertex().size());
-      }
-    });
+  auto [startVertexDocumentVariable, enumerateStartVertexDocument] =
+      buildEnumerateIntoNewVariable(plan, calculateStartVertexId,
+                                    sourceVertexCollection);
 
-    auto args = ast->createNodeArray();
-    args->addMember(startVertex);
+  auto filterStartVertexDocument = buildFilterSnippet(
+      plan, enumerateStartVertexDocument, std::invoke([&]() -> AstNode* {
+        auto ref = ast->createNodeReference(startVertexDocumentVariable);
+        auto const* access =
+            ast->createNodeAttributeAccess(ref, StaticStrings::IdString);
 
-    return ast->createNodeFunctionCall("TO_DOCUMENT_ID", args, true);
-  });
+        auto const rhs = ast->createNodeReference(startVertexIdVariable);
+        return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ,
+                                             access, rhs);
+      }));
 
-  auto calculateStartVertexId = plan->createNode<CalculationNode>(
-      plan.get(), plan->nextId(),
-      std::make_unique<Expression>(ast, startVertexIdCalculation),
-      startVertexIdVariable);
-  calculateStartVertexId->addDependency(traversal->getFirstDependency());
-  traversal->removeDependencies();
+  auto enumerateEdges = buildEnumerateIntoVariable(
+      plan, filterStartVertexDocument, edgeOutputVariable, edgeCollection);
 
-  // "materialize" start vertex
-  auto enumerateStartVertex = plan->createNode<EnumerateCollectionNode>(
-      plan.get(), plan->nextId(), sourceVertexCollection,
-      startVertexDocumentVariable, false, IndexHint{});
-  enumerateStartVertex->addDependency(calculateStartVertexId);
+  auto filterStartVertex = buildFilterSnippet(
+      plan, enumerateEdges, std::invoke([&]() -> AstNode* {
+        auto ref = ast->createNodeReference(edgeOutputVariable);
+        auto const* access =
+            ast->createNodeAttributeAccess(ref, StaticStrings::FromString);
 
-  //// FILTER startVertexDocumentVariable._id == startVertexId
-  auto startVertexDocumentCondition = std::invoke([&]() -> AstNode* {
-    auto ref = ast->createNodeReference(startVertexDocumentVariable);
-    auto const* access =
-        ast->createNodeAttributeAccess(ref, StaticStrings::IdString);
+        auto const rhs = ast->createNodeReference(startVertexIdVariable);
+        return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ,
+                                             access, rhs);
+      }));
 
-    auto const rhs = ast->createNodeReference(startVertexIdVariable);
-    return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
-                                         rhs);
-  });
-  Variable const* startVertexDocumentConditionVariable =
-      ast->variables()
-          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
+  auto enumerateTargetVertices = buildEnumerateIntoVariable(
+      plan, filterStartVertex, vertexOutputVariable, targetVertexCollection);
 
-  auto calculateStartVertexDocumentCondition =
-      plan->createNode<CalculationNode>(
-          plan.get(), plan->nextId(),
-          std::make_unique<Expression>(ast, startVertexDocumentCondition),
-          startVertexDocumentConditionVariable);
-  calculateStartVertexDocumentCondition->addDependency(enumerateStartVertex);
+  auto filterTargetVertex = buildFilterSnippet(
+      plan, enumerateTargetVertices, std::invoke([&]() -> AstNode* {
+        auto ref = ast->createNodeReference(edgeOutputVariable);
+        auto const* access =
+            ast->createNodeAttributeAccess(ref, StaticStrings::ToString);
 
-  auto filterStartVertexDocument = plan->createNode<FilterNode>(
-      plan.get(), plan->nextId(), startVertexDocumentConditionVariable);
-  filterStartVertexDocument->addDependency(
-      calculateStartVertexDocumentCondition);
+        auto ref2 = ast->createNodeReference(vertexOutputVariable);
+        auto const* rhs =
+            ast->createNodeAttributeAccess(ref2, StaticStrings::IdString);
+        return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ,
+                                             access, rhs);
+      }));
 
-  /////
-  auto enumerateEdges = plan->createNode<EnumerateCollectionNode>(
-      plan.get(), plan->nextId(), edgeCollection, edgeOutputVariable,
-      false /*random*/, IndexHint{});
-  enumerateEdges->addDependency(filterStartVertexDocument);
-
-  // FILTER e._from == startVertex._id
-  auto startVertexCondition = std::invoke([&]() -> AstNode* {
-    auto ref = ast->createNodeReference(edgeOutputVariable);
-    auto const* access =
-        ast->createNodeAttributeAccess(ref, StaticStrings::FromString);
-
-    auto const rhs = ast->createNodeReference(startVertexIdVariable);
-    return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
-                                         rhs);
-  });
-  Variable const* startVertexConditionVariable =
-      ast->variables()
-          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
-
-  auto calculateStartVertexCondition = plan->createNode<CalculationNode>(
-      plan.get(), plan->nextId(),
-      std::make_unique<Expression>(ast, startVertexCondition),
-      startVertexConditionVariable);
-  calculateStartVertexCondition->addDependency(enumerateEdges);
-
-  auto filterStartVertex = plan->createNode<FilterNode>(
-      plan.get(), plan->nextId(), startVertexConditionVariable);
-  filterStartVertex->addDependency(calculateStartVertexCondition);
-
-  auto enumerateTargetVertices = plan->createNode<EnumerateCollectionNode>(
-      plan.get(), plan->nextId(), targetVertexCollection, vertexOutputVariable,
-      false /*random*/, IndexHint{});
-  enumerateTargetVertices->addDependency(filterStartVertex);
-
-  auto targetVertexCondition = std::invoke([&]() -> AstNode* {
-    auto ref = ast->createNodeReference(edgeOutputVariable);
-    auto const* access =
-        ast->createNodeAttributeAccess(ref, StaticStrings::ToString);
-
-    auto ref2 = ast->createNodeReference(vertexOutputVariable);
-    auto const* rhs =
-        ast->createNodeAttributeAccess(ref2, StaticStrings::IdString);
-    return ast->createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_EQ, access,
-                                         rhs);
-  });
-
-  // FILTER e._to == v._id
-  Variable const* targetVertexConditionVariable =
-      ast->variables()
-          ->createTemporaryVariable(); /* or a constant :rolling eyes: */
-  auto calculateTargetVertexCondition = plan->createNode<CalculationNode>(
-      plan.get(), plan->nextId(),
-      std::make_unique<Expression>(ast, targetVertexCondition),
-      targetVertexConditionVariable);
-  calculateTargetVertexCondition->addDependency(enumerateTargetVertices);
-
-  auto filterTargetVertex = plan->createNode<FilterNode>(
-      plan.get(), plan->nextId(), targetVertexConditionVariable);
-  filterTargetVertex->addDependency(calculateTargetVertexCondition);
-
-  auto parent = traversal->getFirstParent();
-  parent->removeDependencies();
-
-  // TODO: if this is null we can just skip computing the path output further
-  // down.
   Variable const* pathOutputVariable = traversal->pathOutVariable();
   if (pathOutputVariable != nullptr) {
-    auto calculatePathExpression = std::invoke([&]() -> AstNode* {
-      auto* obj = ast->createNodeObject();
+    auto calculatePath = buildCalculation(
+        plan, filterTargetVertex, pathOutputVariable,
+        std::invoke([&]() -> AstNode* {
+          auto* obj = ast->createNodeObject();
 
-      auto* vertexArray = ast->createNodeArray();
-      vertexArray->addMember(
-          ast->createNodeReference(startVertexDocumentVariable));
-      vertexArray->addMember(ast->createNodeReference(vertexOutputVariable));
-      auto vertices = ast->createNodeObjectElement("vertices", vertexArray);
-      obj->addMember(vertices);
+          auto* vertexArray = ast->createNodeArray();
+          vertexArray->addMember(
+              ast->createNodeReference(startVertexDocumentVariable));
+          vertexArray->addMember(
+              ast->createNodeReference(vertexOutputVariable));
+          auto vertices = ast->createNodeObjectElement("vertices", vertexArray);
+          obj->addMember(vertices);
 
-      auto* edgeArray = ast->createNodeArray();
-      edgeArray->addMember(ast->createNodeReference(edgeOutputVariable));
-      auto edges = ast->createNodeObjectElement("edges", edgeArray);
-      obj->addMember(edges);
+          auto* edgeArray = ast->createNodeArray();
+          edgeArray->addMember(ast->createNodeReference(edgeOutputVariable));
+          auto edges = ast->createNodeObjectElement("edges", edgeArray);
+          obj->addMember(edges);
 
-      auto* weightArray = ast->createNodeArray();
-      weightArray->addMember(ast->createNodeValueInt(0));
-      weightArray->addMember(ast->createNodeValueInt(1));
-      auto weights = ast->createNodeObjectElement("weights", weightArray);
-      obj->addMember(weights);
+          auto* weightArray = ast->createNodeArray();
+          weightArray->addMember(ast->createNodeValueInt(0));
+          weightArray->addMember(ast->createNodeValueInt(1));
+          auto weights = ast->createNodeObjectElement("weights", weightArray);
+          obj->addMember(weights);
 
-      // TODO dummy weights
-      return obj;
-    });
-
-    auto calculatePath = plan->createNode<CalculationNode>(
-        plan.get(), plan->nextId(),
-        std::make_unique<Expression>(ast, calculatePathExpression),
-        pathOutputVariable);
-    calculatePath->addDependency(filterTargetVertex);
-
-    parent->addDependency(calculatePath);
+          return obj;
+        }));
+    return calculatePath;
   } else {
-    parent->addDependency(filterTargetVertex);
+    return filterTargetVertex;
   }
 }
 
 // TODO: This function should explain why the optimisation rule
 // is or is not applicable
+
+// TODO: at the moment really only one vertex collection is good enough.
+// as we cannot distinguish which of the 2 collections would be from and
+// which would be to!
+// For experiments lets just :yolo: it and say the first one is from and
+// the second one is to
 auto isRuleApplicable(TraversalNode* traversal) -> bool {
   auto const* opts = traversal->options();
-
-  // TODO: at the moment really only one vertex collection is good enough.
-  // as we cannot distinguish which of the 2 collections would be from and
-  // which would be to!
-  // For experiments lets just :yolo: it and say the first one is from and
-  // the second one is to
   if (traversal->isSmart()) {
     return false;
   }
@@ -390,8 +378,17 @@ void arangodb::aql::shortTraversalToJoinRule(
     TRI_ASSERT(opts != nullptr);
 
     if (isRuleApplicable(traversal)) {
-      buildSnippet(plan, traversal);
-      //      plan->show();
+      auto dependency = traversal->getFirstDependency();
+      traversal->removeDependencies();
+
+      auto parent = traversal->getFirstParent();
+
+      auto snippet = buildSnippet(plan, dependency, traversal);
+
+      parent->removeDependencies();
+      parent->addDependency(snippet);
+
+      plan->show();
       modified = true;
     }
   }
