@@ -17,7 +17,8 @@ from ..core.log import (
     clear_log_context,
 )
 from ..core.time import set_global_deadline, stop_watchdog
-from ..core.types import ServerRole, DeploymentMode, ClusterConfig
+from ..core.types import ServerRole, DeploymentMode, ClusterConfig, ExecutionOutcome
+from ..core.process import has_any_crash, get_crash_state, clear_crash_state
 from ..instances.server import ArangoServer
 from ..instances.manager import InstanceManager, get_instance_manager
 from .reporter import get_armadillo_reporter
@@ -25,6 +26,10 @@ from ..utils.crypto import random_id
 from ..utils.filesystem import set_test_session_id, clear_test_session, cleanup_work_dir
 
 logger = get_logger(__name__)
+
+# Global flag to track if we should abort remaining tests due to crash
+_abort_remaining_tests = False
+_crash_detected_during_test = None  # Store nodeid of test where crash was detected
 
 
 class ArmadilloPlugin:
@@ -130,11 +135,16 @@ class ArmadilloPlugin:
 
     def pytest_sessionstart(self, _session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
+        global _abort_remaining_tests, _crash_detected_during_test
         logger.debug("ArmadilloPlugin: Session start")
         # Config already loaded by CLI and pytest_configure
         # Don't call load_config() again to avoid duplicate build detection
         configure_logging()
         set_test_session_id()
+        # Clear any crash state from previous runs
+        _abort_remaining_tests = False
+        _crash_detected_during_test = None
+        clear_crash_state()
 
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
@@ -552,7 +562,16 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_runtest_setup(item):
-    """Handle test setup start."""
+    """Handle test setup - check if we should skip due to previous crash."""
+    global _abort_remaining_tests, _crash_detected_during_test
+
+    # If a crash was detected in a previous test, skip all remaining tests
+    if _abort_remaining_tests and _crash_detected_during_test != item.nodeid:
+        pytest.skip(
+            f"Skipping test due to server crash in previous test: {_crash_detected_during_test}"
+        )
+
+    # Handle reporter setup
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_setup(item)
@@ -570,6 +589,68 @@ def pytest_runtest_teardown(item, nextitem):
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.pytest_runtest_teardown(item)
+
+
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_makereport(item, call):
+    """Hook to modify test reports and detect crashes."""
+    global _abort_remaining_tests, _crash_detected_during_test
+
+    # Let pytest create the report first
+    outcome = yield
+    report = outcome.get_result()
+
+    # Check for crashes after the test phase completes
+    if call.when == "call" and has_any_crash():
+        crash_states = get_crash_state()
+
+        # Mark this test as failed due to crash
+        report.outcome = "failed"
+        _crash_detected_during_test = item.nodeid
+        _abort_remaining_tests = True
+
+        # Build comprehensive crash message
+        crash_messages = []
+        for process_id, crash_info in crash_states.items():
+            exit_code = crash_info.get("exit_code", "unknown")
+            signal_num = crash_info.get("signal")
+            stderr = crash_info.get("stderr", "")
+
+            msg = f"Process {process_id} crashed during test execution"
+            if signal_num:
+                msg += f" (signal {signal_num})"
+            msg += f" with exit code {exit_code}"
+            if stderr:
+                msg += f"\nStderr: {stderr}"
+            crash_messages.append(msg)
+
+        crash_message = "\n\n".join(crash_messages)
+
+        # Update the report
+        report.longrepr = crash_message
+        report.outcome = "failed"
+
+        # Store crash info in the report for result collection
+        if not hasattr(report, "crash_info"):
+            report.crash_info = crash_states
+
+        logger.error(
+            "Test %s failed due to server crash: %s",
+            item.nodeid,
+            crash_message
+        )
+
+        # Record the crash in the result collector
+        if not _is_compact_mode_enabled():
+            reporter = get_armadillo_reporter()
+            # Force record this as a crashed test
+            reporter.result_collector.record_test_result(
+                nodeid=item.nodeid,
+                outcome=ExecutionOutcome.CRASHED,
+                duration=getattr(report, "duration", 0.0),
+                longrepr=crash_message,
+                crash_info=crash_states,
+            )
 
 
 def pytest_runtest_logreport(report):

@@ -138,6 +138,8 @@ class ProcessSupervisor:
         self._monitoring_threads: Dict[str, threading.Thread] = {}
         self._streaming_threads: Dict[str, threading.Thread] = {}
         self._stop_monitoring = threading.Event()
+        self._crash_state: Dict[str, Dict] = {}  # Track crash information per process
+        self._lock = threading.Lock()  # Protect crash state access
 
     def _stream_output(self, process_id: str, process: subprocess.Popen) -> None:
         """Stream process output to terminal in real-time."""
@@ -582,6 +584,15 @@ class ProcessSupervisor:
             if stderr_output:
                 logger.error("Process %s stderr: %s", process_id, stderr_output[:1000])
 
+            # Record crash information for pytest integration
+            with self._lock:
+                self._crash_state[process_id] = {
+                    "exit_code": exit_code,
+                    "timestamp": time.time(),
+                    "stderr": stderr_output[:1000] if stderr_output else None,
+                    "signal": -exit_code if exit_code < 0 else None,
+                }
+
     def _cleanup_process(self, process_id: str) -> None:
         """Clean up process resources."""
         if self._processes.pop(process_id, None):
@@ -594,6 +605,38 @@ class ProcessSupervisor:
         monitor_thread = self._monitoring_threads.pop(process_id, None)
         if monitor_thread:
             logger.debug("Cleaned up monitoring thread for %s", process_id)
+
+    def get_crash_state(self, process_id: Optional[str] = None) -> Optional[Dict]:
+        """Get crash state for a process or all processes.
+
+        Args:
+            process_id: Specific process ID, or None to get all crashes
+
+        Returns:
+            Crash info dict for specific process, or dict of all crashes
+        """
+        with self._lock:
+            if process_id:
+                return self._crash_state.get(process_id)
+            # Return copy of all crash states
+            return dict(self._crash_state)
+
+    def has_any_crash(self) -> bool:
+        """Check if any process has crashed."""
+        with self._lock:
+            return len(self._crash_state) > 0
+
+    def clear_crash_state(self, process_id: Optional[str] = None) -> None:
+        """Clear crash state for a process or all processes.
+
+        Args:
+            process_id: Specific process ID, or None to clear all
+        """
+        with self._lock:
+            if process_id:
+                self._crash_state.pop(process_id, None)
+            else:
+                self._crash_state.clear()
 
 
 _process_executor = ProcessExecutor()
@@ -630,6 +673,32 @@ def get_process_info(process_id: str) -> Optional[ProcessInfo]:
 def get_process_stats(process_id: str) -> Optional[ProcessStats]:
     """Get supervised process statistics."""
     return _process_supervisor.get_stats(process_id)
+
+
+def get_crash_state(process_id: Optional[str] = None) -> Optional[Dict]:
+    """Get crash state for supervised processes.
+
+    Args:
+        process_id: Specific process ID, or None to get all crashes
+
+    Returns:
+        Crash info dict for specific process, or dict of all crashes
+    """
+    return _process_supervisor.get_crash_state(process_id)
+
+
+def has_any_crash() -> bool:
+    """Check if any supervised process has crashed."""
+    return _process_supervisor.has_any_crash()
+
+
+def clear_crash_state(process_id: Optional[str] = None) -> None:
+    """Clear crash state for supervised processes.
+
+    Args:
+        process_id: Specific process ID, or None to clear all
+    """
+    _process_supervisor.clear_crash_state(process_id)
 
 
 def stop_all_processes(**kwargs) -> None:
