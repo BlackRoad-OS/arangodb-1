@@ -4,7 +4,8 @@ from typing import Dict, List, Tuple, Optional, Any
 import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from ..core.types import ServerRole, TimeoutConfig
+from ..core.types import ServerRole, TimeoutConfig, InfrastructureConfig
+from ..core.config import get_config
 from ..core.log import Logger
 from ..core.errors import ServerStartupError, AgencyError, ClusterError
 from .server import ArangoServer
@@ -35,6 +36,7 @@ class ClusterBootstrapper:
         self._logger = logger
         self._executor = executor
         self._timeouts = timeout_config or TimeoutConfig()
+        self._infrastructure = get_config().infrastructure
 
     def bootstrap_cluster(
         self,
@@ -200,7 +202,7 @@ class ClusterBootstrapper:
                 self._logger.info("Agency is ready with leader and full config")
                 return
 
-            time.sleep(0.5)
+            time.sleep(self._infrastructure.agency_retry_interval)
 
         raise AgencyError(
             f"Agency did not become ready within {timeout}s. "
@@ -254,7 +256,7 @@ class ClusterBootstrapper:
                 self._logger.info("All coordinators are ready")
                 return
 
-            time.sleep(1.0)
+            time.sleep(self._infrastructure.cluster_retry_interval)
 
         raise ClusterError(f"Cluster did not become ready within {timeout}s")
 

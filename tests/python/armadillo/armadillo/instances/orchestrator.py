@@ -56,8 +56,8 @@ class ClusterState:
         """Get list of healthy database servers."""
         return [db for db in self.dbservers if db in self.healthy_servers]
 
-    def cluster_health_percentage(self) -> float:
-        """Calculate overall cluster health percentage."""
+    def is_cluster_fully_healthy(self) -> bool:
+        """Check if all cluster servers are healthy."""
         total_servers = (
             len(self.coordinators)
             + len(self.dbservers)
@@ -65,8 +65,8 @@ class ClusterState:
             + (1 if self.agency_leader else 0)
         )
         if total_servers == 0:
-            return 0.0
-        return len(self.healthy_servers) / total_servers * 100.0
+            return False
+        return len(self.healthy_servers) == total_servers
 
 
 @dataclass
@@ -111,7 +111,8 @@ class ClusterOrchestrator:
         self._state_last_updated: Optional[float] = None
         self._active_operations: Dict[str, ClusterOperation] = {}
         self._executor = ThreadPoolExecutor(
-            max_workers=5, thread_name_prefix=f"ClusterOrch-{deployment_id}"
+            max_workers=self.config.infrastructure.orchestrator_max_workers,
+            thread_name_prefix=f"ClusterOrch-{deployment_id}",
         )
         self._lock = threading.RLock()
         self._http_session: Optional[aiohttp.ClientSession] = None
@@ -145,8 +146,12 @@ class ClusterOrchestrator:
         with timeout_scope(timeout, f"init_cluster_{self.deployment_id}"):
             logger.info("Initializing cluster coordination")
             self._http_session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=30.0),
-                connector=aiohttp.TCPConnector(limit=20),
+                timeout=aiohttp.ClientTimeout(
+                    total=self.config.infrastructure.http_timeout_default
+                ),
+                connector=aiohttp.TCPConnector(
+                    limit=self.config.infrastructure.tcp_connection_limit
+                ),
             )
             await self._wait_for_agency_leadership()
             await self._wait_for_dbservers_ready()
@@ -206,15 +211,13 @@ class ClusterOrchestrator:
             # Build comprehensive cluster health report
             healthy_coordinators = state.get_healthy_coordinators()
             healthy_dbservers = state.get_healthy_dbservers()
-            health_percentage = state.cluster_health_percentage()
+            is_fully_healthy = state.is_cluster_fully_healthy()
 
             report = {
                 "deployment_id": self.deployment_id,
                 "timestamp": time.time(),
-                "overall_health": (
-                    "healthy" if health_percentage >= 80.0 else "degraded"
-                ),
-                "health_percentage": health_percentage,
+                "overall_health": "healthy" if is_fully_healthy else "degraded",
+                "is_fully_healthy": is_fully_healthy,
                 "agency": {
                     "has_leader": state.is_agency_healthy(),
                     "leader": state.agency_leader,
@@ -270,21 +273,26 @@ class ClusterOrchestrator:
                             "healthy": False,
                             "error": str(e),
                         }
+            healthy_count = len(state.healthy_servers)
+            total_count = (
+                len(state.coordinators)
+                + len(state.dbservers)
+                + len(state.agency_followers)
+                + (1 if state.agency_leader else 0)
+            )
             logger.info(
-                "Health check completed: %s (%s%% healthy)",
+                "Health check completed: %s (%d/%d servers healthy)",
                 report["overall_health"],
-                report["health_percentage"],
+                healthy_count,
+                total_count,
             )
             return report
 
-    async def wait_for_cluster_ready(
-        self, timeout: float = 300.0, min_healthy_percentage: float = 80.0
-    ) -> None:
-        """Wait for cluster to become ready and healthy.
+    async def wait_for_cluster_ready(self, timeout: float = 300.0) -> None:
+        """Wait for cluster to become fully ready and healthy.
 
         Args:
             timeout: Maximum time to wait
-            min_healthy_percentage: Minimum health percentage required
 
         Raises:
             ClusterError: If cluster doesn't become ready
@@ -292,27 +300,33 @@ class ClusterOrchestrator:
         """
         timeout = clamp_timeout(timeout, "cluster_ready")
         with timeout_scope(timeout, f"wait_ready_{self.deployment_id}"):
-            logger.info(
-                "Waiting for cluster to become ready (min %s%% healthy)",
-                min_healthy_percentage,
-            )
+            logger.info("Waiting for cluster to become fully ready and healthy")
             start_time = time.time()
             last_log_time = start_time
             while True:
                 try:
                     await self.update_cluster_state(force_update=True)
                     if self._cluster_state:
-                        health_pct = self._cluster_state.cluster_health_percentage()
+                        is_fully_healthy = (
+                            self._cluster_state.is_cluster_fully_healthy()
+                        )
                         current_time = time.time()
                         if current_time - last_log_time >= 10.0:
+                            healthy_count = len(self._cluster_state.healthy_servers)
+                            total_count = (
+                                len(self._cluster_state.coordinators)
+                                + len(self._cluster_state.dbservers)
+                                + len(self._cluster_state.agency_followers)
+                                + (1 if self._cluster_state.agency_leader else 0)
+                            )
                             logger.info(
-                                "Cluster health: %s%% (target: %s%%)",
-                                health_pct,
-                                min_healthy_percentage,
+                                "Cluster health: %d/%d servers healthy",
+                                healthy_count,
+                                total_count,
                             )
                             last_log_time = current_time
                         if (
-                            health_pct >= min_healthy_percentage
+                            is_fully_healthy
                             and self._cluster_state.is_agency_healthy()
                             and (
                                 len(self._cluster_state.get_healthy_coordinators()) > 0
@@ -321,14 +335,15 @@ class ClusterOrchestrator:
                         ):
                             elapsed = time.time() - start_time
                             logger.info(
-                                "Cluster is ready (%s%% healthy) after %ss",
-                                health_pct,
+                                "Cluster is fully ready (all servers healthy) after %.1fs",
                                 elapsed,
                             )
                             return
                 except (ClusterError, AgencyError, aiohttp.ClientError, OSError) as e:
                     logger.debug("Error checking cluster state: %s", e)
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(
+                    self.config.infrastructure.orchestrator_retry_interval
+                )
 
     async def perform_rolling_restart(
         self,
@@ -463,7 +478,7 @@ class ClusterOrchestrator:
                             return
             except (HealthCheckError, ServerError, NetworkError, OSError) as e:
                 logger.debug("Agency leadership check failed: %s", e)
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(self.config.infrastructure.orchestrator_retry_interval)
         raise AgencyError("Agency leadership not established within timeout")
 
     async def _wait_for_dbservers_ready(self, timeout: float = 120.0) -> None:
@@ -484,7 +499,7 @@ class ClusterOrchestrator:
                 logger.info("All %s database servers are ready", len(dbservers))
                 return
             logger.debug("Database servers ready: %s/%s", ready_count, len(dbservers))
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(self.config.infrastructure.coordinator_retry_interval)
         raise ClusterError("Database servers did not become ready within timeout")
 
     async def _wait_for_coordinators_ready(self, timeout: float = 60.0) -> None:
@@ -505,7 +520,7 @@ class ClusterOrchestrator:
                 logger.info("All %s coordinators are ready", len(coordinators))
                 return
             logger.debug("Coordinators ready: %s/%s", ready_count, len(coordinators))
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(self.config.infrastructure.coordinator_retry_interval)
         raise ClusterError("Coordinators did not become ready within timeout")
 
     async def _update_agency_state(self, state: ClusterState) -> None:
@@ -567,7 +582,7 @@ class ClusterOrchestrator:
                     return
             except (HealthCheckError, ServerError, NetworkError, OSError) as e:
                 logger.debug("Server %s health check failed: %s", server.server_id, e)
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(self.config.infrastructure.cluster_retry_interval)
         raise HealthCheckError(
             f"Server {server.server_id} did not become healthy within timeout"
         )

@@ -5,7 +5,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, TypeVar, Protocol
 
-from .types import ArmadilloConfig, ClusterConfig, TimeoutConfig
+from .types import ArmadilloConfig, ClusterConfig, TimeoutConfig, InfrastructureConfig
 from .errors import ConfigurationError
 
 T = TypeVar("T")
@@ -93,6 +93,10 @@ class ConfigProvider(Protocol):
     @property
     def timeouts(self) -> TimeoutConfig:
         """Timeout configuration."""
+
+    @property
+    def infrastructure(self) -> InfrastructureConfig:
+        """Infrastructure configuration."""
 
 
 class ConfigManager:

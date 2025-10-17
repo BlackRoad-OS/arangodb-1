@@ -78,12 +78,36 @@ class TimeoutConfig(BaseModel):
     emergency_cleanup: float = 15.0
 
 
+class InfrastructureConfig(BaseModel):
+    """Infrastructure and system-level configuration constants."""
+
+    # Thread pool configuration
+    manager_max_workers: int = 10
+    orchestrator_max_workers: int = 5
+
+    # Network configuration
+    http_timeout_default: float = 30.0
+    tcp_connection_limit: int = 20
+
+    # Port management
+    default_base_port: int = 8529
+    max_port_range: int = 1000
+
+    # Retry and polling intervals
+    agency_retry_interval: float = 0.5
+    cluster_retry_interval: float = 1.0
+    orchestrator_retry_interval: float = 2.0
+    coordinator_retry_interval: float = 3.0
+    server_shutdown_poll_interval: float = 1.0
+
+
 class ArmadilloConfig(BaseModel):
     """Main framework configuration."""
 
     deployment_mode: DeploymentMode = DeploymentMode.SINGLE_SERVER
     cluster: ClusterConfig = Field(default_factory=ClusterConfig)
     timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
+    infrastructure: InfrastructureConfig = Field(default_factory=InfrastructureConfig)
     test_timeout: float = 900.0
     result_formats: List[str] = Field(default_factory=lambda: ["junit", "json"])
     temp_dir: Optional[Path] = None

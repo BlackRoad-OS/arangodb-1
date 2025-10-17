@@ -126,7 +126,8 @@ class ThreadingResources:
         """Create threading resources for a deployment."""
         return cls(
             executor=ThreadPoolExecutor(
-                max_workers=10, thread_name_prefix=f"InstanceMgr-{deployment_id}"
+                max_workers=config.infrastructure.manager_max_workers,
+                thread_name_prefix=f"InstanceMgr-{deployment_id}",
             ),
             lock=threading.RLock(),
         )
@@ -460,7 +461,9 @@ class InstanceManager:
                     )
 
             # Poll to ensure server actually stops
-            poll_interval = 1.0
+            poll_interval = (
+                self._deps.config.infrastructure.server_shutdown_poll_interval
+            )
             while server.is_running():
                 elapsed = time.time() - start_time
                 if elapsed > timeout:

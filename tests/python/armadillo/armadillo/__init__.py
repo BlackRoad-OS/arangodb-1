@@ -17,6 +17,7 @@ from .core.types import (
     ServerConfig,
     ClusterConfig,
     TimeoutConfig,
+    InfrastructureConfig,
     ArmadilloConfig,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "ServerConfig",
     "ClusterConfig",
     "TimeoutConfig",
+    "InfrastructureConfig",
     "ArmadilloConfig",
 ]

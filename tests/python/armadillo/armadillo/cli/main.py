@@ -154,6 +154,17 @@ def config():
             "Deployment Timeout (Cluster)",
             f"{current_config.timeouts.deployment_cluster}s",
         )
+        table.add_row(
+            "Manager Max Workers",
+            str(current_config.infrastructure.manager_max_workers),
+        )
+        table.add_row(
+            "Orchestrator Max Workers",
+            str(current_config.infrastructure.orchestrator_max_workers),
+        )
+        table.add_row(
+            "Default Base Port", str(current_config.infrastructure.default_base_port)
+        )
         console.print(table)
     except (ValueError, OSError) as e:
         console.print(f"[red]Error getting configuration: {e}[/red]")
