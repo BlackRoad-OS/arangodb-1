@@ -388,7 +388,6 @@ void arangodb::aql::shortTraversalToJoinRule(
       parent->removeDependencies();
       parent->addDependency(snippet);
 
-      plan->show();
       modified = true;
     }
   }
