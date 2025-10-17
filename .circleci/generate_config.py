@@ -614,7 +614,7 @@ def create_test_job(test, depl_variant, build_config, build_jobs, args, replicat
 def create_rta_test_job(build_config, build_jobs, deployment_mode, filter_statement, buckets, rta_branch):
     edition = "ee" if build_config.enterprise else "ce"
     job = {
-        "name": f"test-{filter_statement}-{edition}-{deployment_mode}-UI",
+        "name": f"test-{deployment_mode}-UI",
         "suiteName": filter_statement,
         "arangosh_args": "",
         "deployment": deployment_mode,
