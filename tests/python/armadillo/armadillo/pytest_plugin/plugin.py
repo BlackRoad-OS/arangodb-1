@@ -521,6 +521,20 @@ def pytest_sessionfinish(session, exitstatus):
         reporter.print_final_summary()
         reporter.pytest_sessionfinish(session, exitstatus)
 
+        # Export test results
+        try:
+            from pathlib import Path
+            from ..core.config import get_config
+            config = get_config()
+
+            # Determine output directory (default to test-results if not set)
+            output_dir = Path("./test-results")
+
+            # Export results (JSON by default, JUnit is handled by pytest's --junitxml)
+            reporter.export_results(output_dir, formats=["json"])
+        except Exception as e:
+            logger.error("Failed to export test results: %s", e, exc_info=True)
+
     try:
         logger.debug("Starting pytest session cleanup")
         _cleanup_all_deployments(emergency=False)

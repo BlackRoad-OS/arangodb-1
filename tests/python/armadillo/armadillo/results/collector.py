@@ -1,13 +1,15 @@
 """Test result collection and aggregation."""
 
 import time
+import platform
+import sys
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import dataclass
-from ..core.types import ExecutionResult, SuiteExecutionResults, ExecutionOutcome
+from dataclasses import dataclass, field
+from ..core.types import ExecutionOutcome
 from ..core.errors import ResultProcessingError
 from ..core.log import get_logger
 from ..utils.codec import to_json_string
@@ -41,88 +43,326 @@ class TestResultParams:
     crash_info: Optional[Dict[str, Any]] = None
 
 
+@dataclass
+class TestResult:
+    """Individual test result for hierarchical structure."""
+
+    __test__ = False  # Tell pytest this is not a test class
+
+    id: str  # Full pytest nodeid
+    outcome: str  # Outcome as string (passed, failed, etc.)
+    duration_seconds: float
+    setup_duration_seconds: float = 0.0
+    call_duration_seconds: float = 0.0
+    teardown_duration_seconds: float = 0.0
+    markers: List[str] = field(default_factory=list)
+    longrepr: Optional[str] = None
+    crash_info: Optional[Dict[str, Any]] = None
+    artifacts: List[str] = field(default_factory=list)
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+
+@dataclass
+class TestSuite:
+    """Test suite (file) containing multiple tests."""
+
+    __test__ = False  # Tell pytest this is not a test class
+
+    file: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    duration_seconds: float = 0.0
+    setup_duration_seconds: float = 0.0
+    teardown_duration_seconds: float = 0.0
+    summary: Dict[str, int] = field(default_factory=dict)
+    tests: Dict[str, TestResult] = field(default_factory=dict)
+
+
 class ResultCollector:
-    """Collects and aggregates test results."""
+    """Collects and aggregates test results in hierarchical format."""
 
     def __init__(self) -> None:
-        self.tests: List[ExecutionResult] = []
+        self.test_suites: Dict[str, TestSuite] = {}
         self.start_time = time.time()
         self.metadata: Dict[str, Any] = {}
         self._finalized = False
+        self._suite_start_times: Dict[str, float] = {}
 
-    def add_test_result(self, result: ExecutionResult) -> None:
-        """Add a single test result."""
+    def _extract_file_path(self, nodeid: str) -> str:
+        """Extract file path from pytest nodeid."""
+        # nodeid format: "path/to/file.py::TestClass::test_method"
+        return nodeid.split("::")[0]
+
+    def _extract_test_name(self, nodeid: str) -> str:
+        """Extract test name from pytest nodeid (excluding file path)."""
+        # nodeid format: "path/to/file.py::TestClass::test_method"
+        parts = nodeid.split("::")
+        if len(parts) > 1:
+            return "::".join(parts[1:])
+        return parts[0]
+
+    def _ensure_suite(self, file_path: str) -> TestSuite:
+        """Ensure a test suite exists for the given file path."""
+        if file_path not in self.test_suites:
+            self.test_suites[file_path] = TestSuite(file=file_path)
+            self._suite_start_times[file_path] = time.time()
+        return self.test_suites[file_path]
+
+    def record_test_result(
+        self,
+        nodeid: str,
+        outcome: ExecutionOutcome,
+        duration: float,
+        setup_duration: float = 0.0,
+        call_duration: float = 0.0,
+        teardown_duration: float = 0.0,
+        markers: Optional[List[str]] = None,
+        longrepr: Optional[str] = None,
+        crash_info: Optional[Dict[str, Any]] = None,
+        artifacts: Optional[List[str]] = None,
+        started_at: Optional[datetime] = None,
+        finished_at: Optional[datetime] = None,
+    ) -> None:
+        """Record a test result in the hierarchical structure."""
         if self._finalized:
             raise ResultProcessingError("Cannot add results after finalization")
-        self.tests.append(result)
-        logger.debug("Added test result: %s -> %s", result.name, result.outcome.value)
+
+        file_path = self._extract_file_path(nodeid)
+        test_name = self._extract_test_name(nodeid)
+        suite = self._ensure_suite(file_path)
+
+        # Create test result
+        test_result = TestResult(
+            id=nodeid,
+            outcome=outcome.value,
+            duration_seconds=duration,
+            setup_duration_seconds=setup_duration,
+            call_duration_seconds=call_duration,
+            teardown_duration_seconds=teardown_duration,
+            markers=markers or [],
+            longrepr=longrepr,
+            crash_info=crash_info,
+            artifacts=artifacts or [],
+            started_at=started_at.isoformat() if started_at else None,
+            finished_at=finished_at.isoformat() if finished_at else None,
+        )
+
+        suite.tests[test_name] = test_result
+        logger.debug("Recorded test result: %s -> %s", nodeid, outcome.value)
 
     def record_test(self, params: TestResultParams) -> None:
-        """Record a test result directly."""
-        result = ExecutionResult(
-            name=params.name,
+        """Record a test result using legacy params format."""
+        # Convert legacy format to new format
+        self.record_test_result(
+            nodeid=params.name,
             outcome=params.outcome,
             duration=params.timing.duration,
             setup_duration=params.timing.setup_duration,
+            call_duration=params.timing.duration
+            - params.timing.setup_duration
+            - params.timing.teardown_duration,
             teardown_duration=params.timing.teardown_duration,
-            error_message=params.error_message,
-            failure_message=params.failure_message,
+            longrepr=params.error_message or params.failure_message,
             crash_info=params.crash_info,
         )
-        self.add_test_result(result)
 
     def set_metadata(self, **metadata: Any) -> None:
         """Set metadata for the test run."""
         self.metadata.update(metadata)
 
-    def finalize_results(self) -> SuiteExecutionResults:
+    def _safe_platform_info(self, info_type: str) -> str:
+        """Safely retrieve platform information, handling potential subprocess issues."""
+        try:
+            if info_type == "python_version":
+                return platform.python_version()
+            elif info_type == "platform":
+                return platform.platform()
+            elif info_type == "hostname":
+                return platform.node()
+            return "unknown"
+        except Exception:
+            # Handle any issues with platform module (e.g., in tests with mocked subprocess)
+            return "unknown"
+
+    def finalize_results(self) -> Dict[str, Any]:
         """Finalize and process all results."""
         if self._finalized:
             raise ResultProcessingError("Results already finalized")
+
         end_time = time.time()
         total_duration = end_time - self.start_time
-        summary = self._calculate_summary()
-        self.metadata.update(
-            {
-                "start_time": datetime.fromtimestamp(
+
+        # Finalize each suite's timing and summary
+        for file_path, suite in self.test_suites.items():
+            self._finalize_suite(suite, file_path)
+
+        # Calculate overall summary
+        summary = self._calculate_global_summary()
+
+        # Get version info
+        from .. import __version__ as armadillo_version
+
+        # Build final results structure
+        results = {
+            "armadillo_version": armadillo_version if armadillo_version else "1.0.0",
+            "schema_version": "1.0",
+            "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "test_run": {
+                "started_at": datetime.fromtimestamp(
                     self.start_time, tz=timezone.utc
                 ).isoformat(),
-                "end_time": datetime.fromtimestamp(
+                "finished_at": datetime.fromtimestamp(
                     end_time, tz=timezone.utc
                 ).isoformat(),
-                "total_duration": total_duration,
-            }
-        )
-        results = SuiteExecutionResults(
-            tests=self.tests.copy(),
-            total_duration=total_duration,
-            summary=summary,
-            metadata=self.metadata.copy(),
-        )
+                "duration_seconds": total_duration,
+                "environment": {
+                    "deployment_mode": self.metadata.get("deployment_mode", "unknown"),
+                    "build_dir": str(self.metadata.get("build_dir", "")),
+                    "python_version": self._safe_platform_info("python_version"),
+                    "platform": self._safe_platform_info("platform"),
+                    "hostname": self._safe_platform_info("hostname"),
+                },
+                "configuration": {
+                    "test_timeout": self.metadata.get("test_timeout", 900.0),
+                    "compact_mode": self.metadata.get("compact_mode", False),
+                    "show_server_logs": self.metadata.get("show_server_logs", False),
+                },
+            },
+            "summary": summary,
+            "test_suites": self._serialize_suites(),
+        }
+
         self._finalized = True
+        total_tests = summary["total"]
         logger.info(
-            "Finalized results: %s tests, %ss total", len(self.tests), total_duration
+            "Finalized results: %s tests in %s suites, %.2fs total",
+            total_tests,
+            len(self.test_suites),
+            total_duration,
         )
         return results
+
+    def _finalize_suite(self, suite: TestSuite, file_path: str) -> None:
+        """Finalize a suite's timing and summary statistics."""
+        # Calculate suite summary
+        suite.summary = {
+            "total": 0,
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "error": 0,
+            "timeout": 0,
+            "crashed": 0,
+        }
+
+        suite_start = None
+        suite_end = None
+        total_setup = 0.0
+        total_teardown = 0.0
+
+        for test in suite.tests.values():
+            # Update summary counts
+            suite.summary["total"] += 1
+            outcome = test.outcome
+            if outcome in suite.summary:
+                suite.summary[outcome] += 1
+
+            # Track timing
+            total_setup += test.setup_duration_seconds
+            total_teardown += test.teardown_duration_seconds
+
+            # Track earliest start and latest end
+            if test.started_at:
+                if suite_start is None or test.started_at < suite_start:
+                    suite_start = test.started_at
+            if test.finished_at:
+                if suite_end is None or test.finished_at > suite_end:
+                    suite_end = test.finished_at
+
+        # Set suite timing
+        suite.started_at = suite_start
+        suite.finished_at = suite_end
+        suite.setup_duration_seconds = total_setup
+        suite.teardown_duration_seconds = total_teardown
+
+        # Calculate total duration from start/end or sum of tests
+        if suite_start and suite_end:
+            start_dt = datetime.fromisoformat(suite_start)
+            end_dt = datetime.fromisoformat(suite_end)
+            suite.duration_seconds = (end_dt - start_dt).total_seconds()
+        else:
+            # Fallback: sum all test durations
+            suite.duration_seconds = sum(t.duration_seconds for t in suite.tests.values())
+
+    def _calculate_global_summary(self) -> Dict[str, int]:
+        """Calculate overall summary statistics across all suites."""
+        summary = {
+            "total": 0,
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "error": 0,
+            "timeout": 0,
+            "crashed": 0,
+        }
+
+        for suite in self.test_suites.values():
+            for key in summary:
+                summary[key] += suite.summary.get(key, 0)
+
+        return summary
+
+    def _serialize_suites(self) -> Dict[str, Any]:
+        """Serialize test suites to dictionary format."""
+        result = {}
+        for file_path, suite in self.test_suites.items():
+            result[file_path] = {
+                "file": suite.file,
+                "started_at": suite.started_at,
+                "finished_at": suite.finished_at,
+                "duration_seconds": suite.duration_seconds,
+                "setup_duration_seconds": suite.setup_duration_seconds,
+                "teardown_duration_seconds": suite.teardown_duration_seconds,
+                "summary": suite.summary,
+                "tests": {
+                    test_name: {
+                        "id": test.id,
+                        "outcome": test.outcome,
+                        "duration_seconds": test.duration_seconds,
+                        "setup_duration_seconds": test.setup_duration_seconds,
+                        "call_duration_seconds": test.call_duration_seconds,
+                        "teardown_duration_seconds": test.teardown_duration_seconds,
+                        "markers": test.markers,
+                        "longrepr": test.longrepr,
+                        "crash_info": test.crash_info,
+                        "artifacts": test.artifacts,
+                        "started_at": test.started_at,
+                        "finished_at": test.finished_at,
+                    }
+                    for test_name, test in suite.tests.items()
+                },
+            }
+        return result
 
     def export_results(self, formats: List[str], output_dir: Path) -> Dict[str, Path]:
         """Export results in specified formats."""
         if not self._finalized:
             results = self.finalize_results()
         else:
-            results = SuiteExecutionResults(
-                tests=self.tests,
-                total_duration=time.time() - self.start_time,
-                summary=self._calculate_summary(),
-                metadata=self.metadata,
-            )
+            # Already finalized, need to regenerate the results dict
+            # Temporarily unset finalized flag to allow re-generation
+            self._finalized = False
+            results = self.finalize_results()
+
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         exported_files = {}
+
         for format_name in formats:
             try:
                 if format_name == "json":
-                    file_path = output_dir / "UNITTEST_RESULT.json"
+                    file_path = output_dir / "test_results.json"
                     self._export_json(results, file_path)
                     exported_files["json"] = file_path
                 elif format_name == "junit":
@@ -136,93 +376,79 @@ class ResultCollector:
                 raise ResultProcessingError(
                     f"Export failed for format {format_name}: {e}"
                 ) from e
+
         logger.info(
             "Exported results in %s formats to %s", len(exported_files), output_dir
         )
         return exported_files
 
-    def _calculate_summary(self) -> Dict[str, int]:
-        """Calculate summary statistics."""
-        summary = {
-            "total": len(self.tests),
-            "passed": 0,
-            "failed": 0,
-            "skipped": 0,
-            "error": 0,
-            "timeout": 0,
-            "crashed": 0,
-        }
-        for test in self.tests:
-            outcome = test.outcome.value
-            if outcome in summary:
-                summary[outcome] += 1
-        return summary
-
-    def _export_json(self, results: SuiteExecutionResults, file_path: Path) -> None:
-        """Export results as JSON."""
-        export_data = {
-            "framework_version": "1.0.0",
-            "timestamp_utc": results.metadata.get("start_time"),
-            "duration_s": results.total_duration,
-            "tests": {},
-            "meta": {"summary": results.summary, "metadata": results.metadata},
-        }
-        for test in results.tests:
-            test_data = {
-                "status": test.outcome.value,
-                "duration_s": test.duration,
-                "setup_duration_s": test.setup_duration,
-                "teardown_duration_s": test.teardown_duration,
-            }
-            if test.error_message:
-                test_data["error_message"] = test.error_message
-            if test.failure_message:
-                test_data["failure_message"] = test.failure_message
-            if test.crash_info:
-                test_data["crash_info"] = test.crash_info
-            export_data["tests"][test.name] = test_data
-        json_content = to_json_string(export_data)
+    def _export_json(self, results: Dict[str, Any], file_path: Path) -> None:
+        """Export results as JSON in hierarchical format."""
+        json_content = to_json_string(results)
         atomic_write(file_path, json_content)
         logger.debug("Exported JSON results to %s", file_path)
 
-    def _export_junit(self, results: SuiteExecutionResults, file_path: Path) -> None:
+    def _export_junit(self, results: Dict[str, Any], file_path: Path) -> None:
         """Export results as JUnit XML."""
+        summary = results["summary"]
+        test_run = results["test_run"]
+        test_suites = results["test_suites"]
+
         testsuite = ET.Element("testsuite")
         testsuite.set("name", "ArmadilloTests")
-        testsuite.set("tests", str(results.summary["total"]))
-        testsuite.set("failures", str(results.summary["failed"]))
-        testsuite.set("errors", str(results.summary["error"]))
-        testsuite.set("skipped", str(results.summary["skipped"]))
-        testsuite.set("time", f"{results.total_duration:.3f}")
-        testsuite.set("timestamp", results.metadata.get("start_time", ""))
-        for test in results.tests:
-            testcase = ET.SubElement(testsuite, "testcase")
-            testcase.set("name", test.name.split("::")[-1])
-            testcase.set("classname", "::".join(test.name.split("::")[:-1]))
-            testcase.set("time", f"{test.duration:.3f}")
-            if test.outcome == ExecutionOutcome.FAILED:
-                failure = ET.SubElement(testcase, "failure")
-                failure.set("message", test.failure_message or "Test failed")
-                if test.failure_message:
-                    failure.text = test.failure_message
-            elif test.outcome == ExecutionOutcome.ERROR:
-                error = ET.SubElement(testcase, "error")
-                error.set("message", test.error_message or "Test error")
-                if test.error_message:
-                    error.text = test.error_message
-            elif test.outcome == ExecutionOutcome.SKIPPED:
-                skipped = ET.SubElement(testcase, "skipped")
-                skipped.set("message", "Test skipped")
-            elif test.outcome == ExecutionOutcome.TIMEOUT:
-                error = ET.SubElement(testcase, "error")
-                error.set("message", "Test timed out")
-                error.set("type", "timeout")
-            elif test.outcome == ExecutionOutcome.CRASHED:
-                error = ET.SubElement(testcase, "error")
-                error.set("message", "Test crashed")
-                error.set("type", "crash")
-                if test.crash_info:
-                    error.text = str(test.crash_info)
+        testsuite.set("tests", str(summary["total"]))
+        testsuite.set("failures", str(summary["failed"]))
+        testsuite.set("errors", str(summary["error"]))
+        testsuite.set("skipped", str(summary["skipped"]))
+        testsuite.set("time", f"{test_run['duration_seconds']:.3f}")
+        testsuite.set("timestamp", test_run.get("started_at", ""))
+
+        # Iterate through all suites and tests
+        for suite_path, suite_data in test_suites.items():
+            for test_name, test_data in suite_data["tests"].items():
+                testcase = ET.SubElement(testsuite, "testcase")
+                # Extract test name and classname from full ID
+                test_id = test_data["id"]
+                parts = test_id.split("::")
+                if len(parts) > 1:
+                    testcase.set("classname", "::".join(parts[:-1]))
+                    testcase.set("name", parts[-1])
+                else:
+                    testcase.set("classname", suite_path)
+                    testcase.set("name", test_name)
+                testcase.set("time", f"{test_data['duration_seconds']:.3f}")
+
+                outcome = test_data["outcome"]
+                longrepr = test_data.get("longrepr")
+
+                if outcome == "failed":
+                    failure = ET.SubElement(testcase, "failure")
+                    failure.set("message", longrepr or "Test failed")
+                    if longrepr:
+                        failure.text = longrepr
+                elif outcome == "error":
+                    error = ET.SubElement(testcase, "error")
+                    error.set("message", longrepr or "Test error")
+                    if longrepr:
+                        error.text = longrepr
+                elif outcome == "skipped":
+                    skipped = ET.SubElement(testcase, "skipped")
+                    skipped.set("message", longrepr or "Test skipped")
+                elif outcome == "timeout":
+                    error = ET.SubElement(testcase, "error")
+                    error.set("message", "Test timed out")
+                    error.set("type", "timeout")
+                    if longrepr:
+                        error.text = longrepr
+                elif outcome == "crashed":
+                    error = ET.SubElement(testcase, "error")
+                    error.set("message", "Test crashed")
+                    error.set("type", "crash")
+                    if test_data.get("crash_info"):
+                        error.text = str(test_data["crash_info"])
+                    elif longrepr:
+                        error.text = longrepr
+
         rough_string = ET.tostring(testsuite, encoding="unicode")
         reparsed = minidom.parseString(rough_string)
         pretty_xml = reparsed.toprettyxml(indent="  ")
@@ -247,23 +473,23 @@ def record_test_result(
     name: str, outcome: ExecutionOutcome, duration: float, **kwargs
 ) -> None:
     """Record a test result using global collector."""
-    timing = TestTiming(
+    get_result_collector().record_test_result(
+        nodeid=name,
+        outcome=outcome,
         duration=duration,
         setup_duration=kwargs.get("setup_duration", 0.0),
+        call_duration=kwargs.get("call_duration", 0.0),
         teardown_duration=kwargs.get("teardown_duration", 0.0),
-    )
-    params = TestResultParams(
-        name=name,
-        outcome=outcome,
-        timing=timing,
-        error_message=kwargs.get("error_message"),
-        failure_message=kwargs.get("failure_message"),
+        markers=kwargs.get("markers"),
+        longrepr=kwargs.get("longrepr"),
         crash_info=kwargs.get("crash_info"),
+        artifacts=kwargs.get("artifacts"),
+        started_at=kwargs.get("started_at"),
+        finished_at=kwargs.get("finished_at"),
     )
-    get_result_collector().record_test(params)
 
 
-def finalize_results() -> SuiteExecutionResults:
+def finalize_results() -> Dict[str, Any]:
     """Finalize results using global collector."""
     return get_result_collector().finalize_results()
 

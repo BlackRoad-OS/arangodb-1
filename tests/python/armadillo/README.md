@@ -47,10 +47,10 @@ armadillo test run tests/ --compact
 ### Analyze Results
 ```bash
 # Show summary
-armadillo analyze summary ./results/UNITTEST_RESULT.json
+armadillo analyze summary ./results/test_results.json
 
 # Plain text output
-armadillo analyze summary ./results/UNITTEST_RESULT.json --format plain
+armadillo analyze summary ./results/test_results.json --format plain
 
 # List available analyzers
 armadillo analyze list-analyzers

@@ -6,10 +6,13 @@ Provides detailed verbose output with timestamps, test phases, and comprehensive
 import os
 import time
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
+from pathlib import Path
 from _pytest.reports import TestReport
 
 from ..core.log import get_logger
+from ..core.types import ExecutionOutcome
+from ..results.collector import ResultCollector
 from ..utils.output import write_stdout
 
 logger = get_logger(__name__)
@@ -38,6 +41,7 @@ class ArmadilloReporter:
 
     def __init__(self):
         self.test_times: Dict[str, Dict[str, float]] = {}
+        self.test_reports: Dict[str, TestReport] = {}  # Store reports for result collection
         self.suite_start_times: Dict[str, float] = {}
         self.suite_test_counts: Dict[str, int] = {}
         self.total_tests = 0
@@ -54,6 +58,7 @@ class ArmadilloReporter:
         self.file_test_counts: Dict[str, int] = {}  # Track test count per file
         self.file_expected_counts: Dict[str, int] = {}  # Expected test count per file
         self.files_completed: set = set()  # Track which files have been completed
+        self.result_collector = ResultCollector()  # Collect structured results
 
     def _colorize(self, text: str, color: str) -> str:
         """Apply color to text if colors are supported."""
@@ -219,6 +224,10 @@ class ArmadilloReporter:
 
     def pytest_runtest_logreport(self, report: TestReport):
         """Handle test report."""
+        # Store all reports for later aggregation
+        if report.when == "call":
+            self.test_reports[report.nodeid] = report
+
         if report.when == "teardown":
             test_name = self._get_test_name(report.nodeid)
             suite_name = self._get_suite_name(report.nodeid)
@@ -252,6 +261,9 @@ class ArmadilloReporter:
                 write_stdout(
                     f"{self._get_timestamp()} {self._colorize('[     FAILED ]', Colors.RED)} {test_name}\n"
                 )
+
+            # Record test result for JSON export
+            self._record_test_result(report.nodeid, report.outcome)
 
             # Print file summary immediately after each test to ensure proper timing
             # This happens in teardown phase to ensure all timing is complete
@@ -302,6 +314,77 @@ class ArmadilloReporter:
         # session_finish_time is now set by the plugin before cleanup
         # Summary is printed immediately by the plugin before server shutdown
         self.final_exitstatus = exitstatus
+
+    def _record_test_result(self, nodeid: str, outcome: str) -> None:
+        """Record a test result to the result collector."""
+        # Map pytest outcome to ExecutionOutcome
+        outcome_map = {
+            "passed": ExecutionOutcome.PASSED,
+            "failed": ExecutionOutcome.FAILED,
+            "skipped": ExecutionOutcome.SKIPPED,
+            "error": ExecutionOutcome.ERROR,
+        }
+
+        exec_outcome = outcome_map.get(outcome, ExecutionOutcome.ERROR)
+
+        # Get timing info (convert from milliseconds to seconds)
+        test_name = self._get_test_name(nodeid)
+        timing = self.test_times.get(test_name, {})
+        setup_duration = timing.get("setup", 0) / 1000.0
+        call_duration = timing.get("call", 0) / 1000.0
+        teardown_duration = timing.get("teardown", 0) / 1000.0
+        total_duration = setup_duration + call_duration + teardown_duration
+
+        # Get longrepr from stored report
+        longrepr = None
+        if nodeid in self.test_reports:
+            report = self.test_reports[nodeid]
+            if report.longrepr:
+                longrepr = str(report.longrepr)
+
+        # Get markers from stored report
+        markers = []
+        if nodeid in self.test_reports:
+            report = self.test_reports[nodeid]
+            if hasattr(report, "keywords"):
+                # Extract marker names
+                markers = [key for key in report.keywords if not key.startswith("_")]
+
+        # Record to collector
+        self.result_collector.record_test_result(
+            nodeid=nodeid,
+            outcome=exec_outcome,
+            duration=total_duration,
+            setup_duration=setup_duration,
+            call_duration=call_duration,
+            teardown_duration=teardown_duration,
+            markers=markers,
+            longrepr=longrepr,
+        )
+
+    def export_results(self, output_dir: Path, formats: Optional[list] = None) -> None:
+        """Export collected results to specified formats."""
+        if formats is None:
+            formats = ["json"]
+
+        try:
+            # Set metadata from test run
+            from ..core.config import get_config
+            config = get_config()
+
+            self.result_collector.set_metadata(
+                deployment_mode=config.deployment_mode.value,
+                build_dir=str(config.bin_dir) if config.bin_dir else "",
+                test_timeout=config.test_timeout,
+                compact_mode=config.compact_mode,
+                show_server_logs=config.show_server_logs,
+            )
+
+            # Export results
+            exported_files = self.result_collector.export_results(formats, output_dir)
+            logger.info("Exported test results to: %s", list(exported_files.values()))
+        except Exception as e:
+            logger.error("Failed to export results: %s", e, exc_info=True)
 
     def print_final_summary(self):
         """Print the final test summary."""

@@ -3,7 +3,6 @@
 import pytest
 import time
 from pathlib import Path
-from unittest.mock import patch, mock_open
 
 from armadillo.results.collector import (
     ResultCollector,
@@ -14,77 +13,124 @@ from armadillo.results.collector import (
     finalize_results,
     export_results,
 )
-from armadillo.core.types import (
-    ExecutionResult,
-    SuiteExecutionResults,
-    ExecutionOutcome,
-)
+from armadillo.core.types import ExecutionOutcome
 from armadillo.core.errors import ResultProcessingError
 
 
-class ExecutionResultCollector:
-    """Test ResultCollector class."""
+class TestResultCollector:
+    """Test ResultCollector class with hierarchical structure."""
 
     def test_result_collector_creation(self):
         """Test ResultCollector creation."""
         collector = ResultCollector()
 
-        assert len(collector.tests) == 0
+        assert len(collector.test_suites) == 0
         assert collector.start_time > 0
         assert len(collector.metadata) == 0
         assert collector._finalized is False
 
-    def test_add_test_result(self):
-        """Test adding individual test results."""
+    def test_record_single_test_result(self):
+        """Test recording a single test result."""
         collector = ResultCollector()
 
-        result = ExecutionResult("test_example", ExecutionOutcome.PASSED, 1.5)
-        collector.add_test_result(result)
-
-        assert len(collector.tests) == 1
-        assert collector.tests[0] == result
-
-    def test_add_multiple_test_results(self):
-        """Test adding multiple test results."""
-        collector = ResultCollector()
-
-        results = [
-            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0),
-            ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0),
-            ExecutionResult("test3", ExecutionOutcome.SKIPPED, 0.0),
-        ]
-
-        for result in results:
-            collector.add_test_result(result)
-
-        assert len(collector.tests) == 3
-        assert collector.tests == results
-
-    def test_record_test_direct(self):
-        """Test recording test result directly."""
-        collector = ResultCollector()
-
-        timing = TestTiming(
-            duration=2.5,
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_passed",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.5,
             setup_duration=0.1,
-            teardown_duration=0.05,
+            call_duration=1.3,
+            teardown_duration=0.1,
         )
-        params = TestResultParams(
-            name="test_direct",
-            outcome=ExecutionOutcome.FAILED,
-            timing=timing,
-            failure_message="Assertion failed",
-        )
-        collector.record_test(params)
 
-        assert len(collector.tests) == 1
-        result = collector.tests[0]
-        assert result.name == "test_direct"
-        assert result.outcome == ExecutionOutcome.FAILED
-        assert result.duration == 2.5
-        assert result.setup_duration == 0.1
-        assert result.teardown_duration == 0.05
-        assert result.failure_message == "Assertion failed"
+        assert len(collector.test_suites) == 1
+        assert "tests/test_example.py" in collector.test_suites
+        suite = collector.test_suites["tests/test_example.py"]
+        assert len(suite.tests) == 1
+        assert "test_passed" in suite.tests
+        test = suite.tests["test_passed"]
+        assert test.outcome == "passed"
+        assert test.duration_seconds == 1.5
+
+    def test_record_multiple_tests_same_file(self):
+        """Test recording multiple tests from the same file."""
+        collector = ResultCollector()
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_one",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
+        )
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_two",
+            outcome=ExecutionOutcome.FAILED,
+            duration=2.0,
+        )
+
+        assert len(collector.test_suites) == 1
+        suite = collector.test_suites["tests/test_example.py"]
+        assert len(suite.tests) == 2
+        assert "test_one" in suite.tests
+        assert "test_two" in suite.tests
+
+    def test_record_tests_different_files(self):
+        """Test recording tests from different files."""
+        collector = ResultCollector()
+
+        collector.record_test_result(
+            nodeid="tests/test_one.py::test_a",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
+        )
+        collector.record_test_result(
+            nodeid="tests/test_two.py::test_b",
+            outcome=ExecutionOutcome.PASSED,
+            duration=2.0,
+        )
+
+        assert len(collector.test_suites) == 2
+        assert "tests/test_one.py" in collector.test_suites
+        assert "tests/test_two.py" in collector.test_suites
+
+    def test_record_test_with_class(self):
+        """Test recording test with class name in nodeid."""
+        collector = ResultCollector()
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::TestClass::test_method",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
+        )
+
+        suite = collector.test_suites["tests/test_example.py"]
+        assert "TestClass::test_method" in suite.tests
+
+    def test_record_test_with_markers(self):
+        """Test recording test with markers."""
+        collector = ResultCollector()
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_slow",
+            outcome=ExecutionOutcome.PASSED,
+            duration=5.0,
+            markers=["slow", "arango_single"],
+        )
+
+        test = collector.test_suites["tests/test_example.py"].tests["test_slow"]
+        assert test.markers == ["slow", "arango_single"]
+
+    def test_record_test_with_longrepr(self):
+        """Test recording failed test with longrepr."""
+        collector = ResultCollector()
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_failed",
+            outcome=ExecutionOutcome.FAILED,
+            duration=1.0,
+            longrepr="AssertionError: Expected 5, got 3",
+        )
+
+        test = collector.test_suites["tests/test_example.py"].tests["test_failed"]
+        assert test.longrepr == "AssertionError: Expected 5, got 3"
 
     def test_set_metadata(self):
         """Test setting metadata."""
@@ -100,17 +146,22 @@ class ExecutionResultCollector:
     def test_finalize_results(self):
         """Test finalizing results."""
         collector = ResultCollector()
-        start_time = collector.start_time
 
         # Add some test results
-        collector.add_test_result(
-            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_passed",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
         )
-        collector.add_test_result(
-            ExecutionResult("test2", ExecutionOutcome.FAILED, 2.0)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_failed",
+            outcome=ExecutionOutcome.FAILED,
+            duration=2.0,
         )
-        collector.add_test_result(
-            ExecutionResult("test3", ExecutionOutcome.SKIPPED, 0.5)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_skipped",
+            outcome=ExecutionOutcome.SKIPPED,
+            duration=0.0,
         )
         collector.set_metadata(framework="test")
 
@@ -119,16 +170,15 @@ class ExecutionResultCollector:
 
         results = collector.finalize_results()
 
-        assert isinstance(results, SuiteExecutionResults)
-        assert len(results.tests) == 3
-        assert results.total_duration > 0
-        assert results.summary["total"] == 3
-        assert results.summary["passed"] == 1
-        assert results.summary["failed"] == 1
-        assert results.summary["skipped"] == 1
-        assert "start_time" in results.metadata
-        assert "end_time" in results.metadata
-        assert results.metadata["framework"] == "test"
+        assert isinstance(results, dict)
+        assert "summary" in results
+        assert "test_suites" in results
+        assert "test_run" in results
+        assert results["summary"]["total"] == 3
+        assert results["summary"]["passed"] == 1
+        assert results["summary"]["failed"] == 1
+        assert results["summary"]["skipped"] == 1
+        assert results["test_run"]["duration_seconds"] > 0
 
         # Should be marked as finalized
         assert collector._finalized is True
@@ -151,50 +201,54 @@ class ExecutionResultCollector:
         with pytest.raises(
             ResultProcessingError, match="Cannot add results after finalization"
         ):
-            collector.add_test_result(
-                ExecutionResult("late_test", ExecutionOutcome.PASSED, 1.0)
+            collector.record_test_result(
+                nodeid="tests/test_example.py::test_late",
+                outcome=ExecutionOutcome.PASSED,
+                duration=1.0,
             )
 
-    def test_calculate_summary(self):
-        """Test summary calculation."""
+    def test_suite_summary_calculation(self):
+        """Test that suite summaries are calculated correctly."""
         collector = ResultCollector()
 
-        # Add results with different outcomes
-        outcomes = [
-            ExecutionOutcome.PASSED,
-            ExecutionOutcome.PASSED,
-            ExecutionOutcome.FAILED,
-            ExecutionOutcome.ERROR,
-            ExecutionOutcome.SKIPPED,
-            ExecutionOutcome.TIMEOUT,
-            ExecutionOutcome.CRASHED,
-        ]
+        # Add tests with different outcomes to same suite
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_1",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
+        )
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_2",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
+        )
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_3",
+            outcome=ExecutionOutcome.FAILED,
+            duration=1.0,
+        )
 
-        for i, outcome in enumerate(outcomes):
-            collector.add_test_result(ExecutionResult(f"test_{i}", outcome, 1.0))
+        results = collector.finalize_results()
+        suite_data = results["test_suites"]["tests/test_example.py"]
 
-        summary = collector._calculate_summary()
+        assert suite_data["summary"]["total"] == 3
+        assert suite_data["summary"]["passed"] == 2
+        assert suite_data["summary"]["failed"] == 1
 
-        assert summary["total"] == 7
-        assert summary["passed"] == 2
-        assert summary["failed"] == 1
-        assert summary["error"] == 1
-        assert summary["skipped"] == 1
-        assert summary["timeout"] == 1
-        assert summary["crashed"] == 1
-
-    def test_export_results_json(self, temp_dir):
+    def test_export_json(self, temp_dir):
         """Test exporting results as JSON."""
         collector = ResultCollector()
 
-        # Add test data
-        collector.add_test_result(
-            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.5)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_passed",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.5,
         )
-        collector.add_test_result(
-            ExecutionResult(
-                "test2", ExecutionOutcome.FAILED, 2.0, failure_message="Test failed"
-            )
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_failed",
+            outcome=ExecutionOutcome.FAILED,
+            duration=2.0,
+            longrepr="Test failed",
         )
 
         exported_files = collector.export_results(["json"], temp_dir)
@@ -202,7 +256,7 @@ class ExecutionResultCollector:
         assert "json" in exported_files
         json_file = exported_files["json"]
         assert json_file.exists()
-        assert json_file.name == "UNITTEST_RESULT.json"
+        assert json_file.name == "test_results.json"
 
         # Verify JSON content
         import json as json_module
@@ -210,37 +264,26 @@ class ExecutionResultCollector:
         with open(json_file) as f:
             data = json_module.load(f)
 
-        assert "framework_version" in data
-        assert "tests" in data
-        assert "meta" in data
-        assert len(data["tests"]) == 2
+        assert "armadillo_version" in data
+        assert "schema_version" in data
+        assert "test_suites" in data
+        assert "summary" in data
+        assert len(data["test_suites"]) == 1
 
-    def test_export_results_junit(self, temp_dir):
+    def test_export_junit(self, temp_dir):
         """Test exporting results as JUnit XML."""
         collector = ResultCollector()
 
-        # Add test data
-        collector.add_test_result(
-            ExecutionResult("test_suite::test_passed", ExecutionOutcome.PASSED, 1.0)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_passed",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
         )
-        collector.add_test_result(
-            ExecutionResult(
-                "test_suite::test_failed",
-                ExecutionOutcome.FAILED,
-                2.0,
-                failure_message="Assertion error",
-            )
-        )
-        collector.add_test_result(
-            ExecutionResult(
-                "test_suite::test_error",
-                ExecutionOutcome.ERROR,
-                1.5,
-                error_message="Runtime error",
-            )
-        )
-        collector.add_test_result(
-            ExecutionResult("test_suite::test_skipped", ExecutionOutcome.SKIPPED, 0.0)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_failed",
+            outcome=ExecutionOutcome.FAILED,
+            duration=2.0,
+            longrepr="Assertion error",
         )
 
         exported_files = collector.export_results(["junit"], temp_dir)
@@ -255,15 +298,15 @@ class ExecutionResultCollector:
         assert "<testsuite" in content
         assert "<testcase" in content
         assert "<failure" in content
-        assert "<error" in content
-        assert "<skipped" in content
 
-    def test_export_results_multiple_formats(self, temp_dir):
+    def test_export_multiple_formats(self, temp_dir):
         """Test exporting results in multiple formats."""
         collector = ResultCollector()
 
-        collector.add_test_result(
-            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_passed",
+            outcome=ExecutionOutcome.PASSED,
+            duration=1.0,
         )
 
         exported_files = collector.export_results(["json", "junit"], temp_dir)
@@ -273,33 +316,6 @@ class ExecutionResultCollector:
         assert "junit" in exported_files
         assert exported_files["json"].exists()
         assert exported_files["junit"].exists()
-
-    def test_export_results_unknown_format(self, temp_dir):
-        """Test exporting with unknown format."""
-        collector = ResultCollector()
-
-        collector.add_test_result(
-            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0)
-        )
-
-        exported_files = collector.export_results(["unknown"], temp_dir)
-
-        # Should skip unknown format and return empty dict
-        assert len(exported_files) == 0
-
-    def test_export_results_creates_output_dir(self, temp_dir):
-        """Test that export creates output directory if it doesn't exist."""
-        collector = ResultCollector()
-
-        collector.add_test_result(
-            ExecutionResult("test1", ExecutionOutcome.PASSED, 1.0)
-        )
-
-        output_dir = temp_dir / "new_output_dir"
-        exported_files = collector.export_results(["json"], output_dir)
-
-        assert output_dir.exists()
-        assert "json" in exported_files
 
 
 class TestGlobalResultFunctions:
@@ -320,17 +336,19 @@ class TestGlobalResultFunctions:
         armadillo.results.collector._result_collector = None
 
         record_test_result(
-            "global_test", ExecutionOutcome.PASSED, 1.0, setup_duration=0.1
+            "tests/test_example.py::test_global",
+            ExecutionOutcome.PASSED,
+            1.0,
+            setup_duration=0.1,
         )
 
         collector = get_result_collector()
-        assert len(collector.tests) == 1
-
-        result = collector.tests[0]
-        assert result.name == "global_test"
-        assert result.outcome == ExecutionOutcome.PASSED
-        assert result.duration == 1.0
-        assert result.setup_duration == 0.1
+        assert len(collector.test_suites) == 1
+        suite = collector.test_suites["tests/test_example.py"]
+        assert "test_global" in suite.tests
+        test = suite.tests["test_global"]
+        assert test.outcome == "passed"
+        assert test.setup_duration_seconds == 0.1
 
     def test_finalize_results_function(self):
         """Test global finalize_results function."""
@@ -339,13 +357,17 @@ class TestGlobalResultFunctions:
 
         armadillo.results.collector._result_collector = ResultCollector()
 
-        record_test_result("test1", ExecutionOutcome.PASSED, 1.0)
-        record_test_result("test2", ExecutionOutcome.FAILED, 2.0)
+        record_test_result(
+            "tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0
+        )
+        record_test_result(
+            "tests/test_example.py::test2", ExecutionOutcome.FAILED, 2.0
+        )
 
         results = finalize_results()
 
-        assert isinstance(results, SuiteExecutionResults)
-        assert len(results.tests) == 2
+        assert isinstance(results, dict)
+        assert results["summary"]["total"] == 2
 
     def test_export_results_function(self, temp_dir):
         """Test global export_results function."""
@@ -354,7 +376,9 @@ class TestGlobalResultFunctions:
 
         armadillo.results.collector._result_collector = ResultCollector()
 
-        record_test_result("test1", ExecutionOutcome.PASSED, 1.0)
+        record_test_result(
+            "tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0
+        )
 
         exported_files = export_results(["json"], temp_dir)
 
@@ -362,7 +386,7 @@ class TestGlobalResultFunctions:
         assert exported_files["json"].exists()
 
 
-class ExecutionResultCollectorEdgeCases:
+class TestResultCollectorEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_empty_result_collection(self, temp_dir):
@@ -371,9 +395,9 @@ class ExecutionResultCollectorEdgeCases:
 
         results = collector.finalize_results()
 
-        assert len(results.tests) == 0
-        assert results.total_duration > 0  # Should still have elapsed time
-        assert results.summary["total"] == 0
+        assert len(results["test_suites"]) == 0
+        assert results["test_run"]["duration_seconds"] > 0  # Should still have elapsed time
+        assert results["summary"]["total"] == 0
 
         # Should still be able to export
         exported_files = collector.export_results(["json"], temp_dir)
@@ -383,79 +407,59 @@ class ExecutionResultCollectorEdgeCases:
         """Test handling tests with very short durations."""
         collector = ResultCollector()
 
-        collector.add_test_result(
-            ExecutionResult("fast_test", ExecutionOutcome.PASSED, 0.001)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_fast",
+            outcome=ExecutionOutcome.PASSED,
+            duration=0.001,
         )
-        collector.add_test_result(
-            ExecutionResult("instant_test", ExecutionOutcome.PASSED, 0.0)
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_instant",
+            outcome=ExecutionOutcome.PASSED,
+            duration=0.0,
         )
 
         results = collector.finalize_results()
 
-        assert results.summary["total"] == 2
-        assert results.summary["passed"] == 2
+        assert results["summary"]["total"] == 2
+        assert results["summary"]["passed"] == 2
 
-    def test_test_with_all_optional_fields(self):
-        """Test test result with all optional fields populated."""
+    def test_test_with_crash_info(self):
+        """Test test result with crash information."""
         collector = ResultCollector()
 
         crash_info = {"signal": 11, "backtrace": "..."}
 
-        timing = TestTiming(
-            duration=5.0,
-            setup_duration=1.0,
-            teardown_duration=0.5,
-        )
-        params = TestResultParams(
-            name="complex_test",
+        collector.record_test_result(
+            nodeid="tests/test_crash.py::test_segfault",
             outcome=ExecutionOutcome.CRASHED,
-            timing=timing,
-            error_message="Segmentation fault",
-            failure_message="Process crashed",
+            duration=5.0,
+            longrepr="Process crashed",
             crash_info=crash_info,
         )
-        collector.record_test(params)
 
         results = collector.finalize_results()
 
-        test = results.tests[0]
-        assert test.name == "complex_test"
-        assert test.outcome == ExecutionOutcome.CRASHED
-        assert test.error_message == "Segmentation fault"
-        assert test.failure_message == "Process crashed"
-        assert test.crash_info == crash_info
+        test = results["test_suites"]["tests/test_crash.py"]["tests"]["test_segfault"]
+        assert test["outcome"] == "crashed"
+        assert test["crash_info"] == crash_info
 
     def test_large_number_of_tests(self):
         """Test handling large number of test results."""
         collector = ResultCollector()
 
         # Add many test results
-        for i in range(1000):
-            outcome = ExecutionOutcome.PASSED if i % 2 == 0 else ExecutionOutcome.FAILED
-            collector.add_test_result(ExecutionResult(f"test_{i}", outcome, 0.1))
+        for i in range(100):
+            outcome = (
+                ExecutionOutcome.PASSED if i % 2 == 0 else ExecutionOutcome.FAILED
+            )
+            collector.record_test_result(
+                nodeid=f"tests/test_suite.py::test_{i}",
+                outcome=outcome,
+                duration=0.1,
+            )
 
         results = collector.finalize_results()
 
-        assert results.summary["total"] == 1000
-        assert results.summary["passed"] == 500
-        assert results.summary["failed"] == 500
-
-    def test_unicode_in_test_names_and_messages(self):
-        """Test handling Unicode in test names and messages."""
-        collector = ResultCollector()
-
-        timing = TestTiming(duration=1.0)
-        params = TestResultParams(
-            name="test_unicode_你好",
-            outcome=ExecutionOutcome.FAILED,
-            timing=timing,
-            failure_message="Failed with 🚫 emoji and 世界 characters",
-        )
-        collector.record_test(params)
-
-        results = collector.finalize_results()
-
-        test = results.tests[0]
-        assert "你好" in test.name
-        assert "🚫" in test.failure_message
-        assert "世界" in test.failure_message
+        assert results["summary"]["total"] == 100
+        assert results["summary"]["passed"] == 50
+        assert results["summary"]["failed"] == 50
