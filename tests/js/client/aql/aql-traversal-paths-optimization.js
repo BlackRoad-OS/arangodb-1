@@ -146,12 +146,12 @@ function BaseTestConfig() {
         if(!plan.rules.includes("short-traversal-to-join")) {
           let traversal = nodes.filter((node) => node.type === 'TraversalNode')[0];
           assertEqual("p", traversal.pathOutVariable.name);
+
+          assertEqual(query[1][0], traversal.options.producePathsVertices, query);
+          assertEqual(query[1][1], traversal.options.producePathsEdges, query);
+          assertEqual(query[1][2], traversal.options.producePathsWeights, query);
         }
 
-        assertEqual(query[1][0], traversal.options.producePathsVertices, query);
-        assertEqual(query[1][1], traversal.options.producePathsEdges, query);
-        assertEqual(query[1][2], traversal.options.producePathsWeights, query);
-       
         // execute the queries but don't check the results yet.
         // we execute them to ensure that there are no runtime crashses (e.g.
         // nullptr accesses due to optimized-away path variables etc.)
