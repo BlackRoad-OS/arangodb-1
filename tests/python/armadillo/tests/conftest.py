@@ -38,7 +38,6 @@ def base_url(arango_deployment):
 # Pytest markers for test organization
 def pytest_configure(config):
     """Configure pytest markers for Armadillo tests."""
-    # These markers should integrate with our TestSelector
     config.addinivalue_line("markers", "shell_api: Tests for shell API functionality")
     config.addinivalue_line("markers", "statistics: Tests for statistics API endpoints")
     config.addinivalue_line(
