@@ -45,11 +45,11 @@ TEST(AqlValueSupervisedTest, InlineNoPayloadDontAccountPointer) {
   Slice s = b.slice();
 
   AqlValue v(monitor, s, false);
-  EXPECT_EQ(v.memoryUsage(), 0u);
-  EXPECT_EQ(monitor.current(), 0u);
+  EXPECT_EQ(v.memoryUsage(), 0);
+  EXPECT_EQ(monitor.current(), 0);
 
   v.destroy();
-  EXPECT_EQ(monitor.current(), 0u);
+  EXPECT_EQ(monitor.current(), 0);
 }
 
 TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
@@ -74,7 +74,7 @@ TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
   EXPECT_EQ(monitor.current(), base);
 
   v.destroy();
-  EXPECT_EQ(monitor.current(), 0u);
+  EXPECT_EQ(monitor.current(), 0);
 }
 
 TEST(AqlValueSupervisedTest,
@@ -95,7 +95,7 @@ TEST(AqlValueSupervisedTest,
   EXPECT_GE(monitor.current(), ptrOverhead());
 
   c.destroy();
-  EXPECT_EQ(monitor.current(), 0u);
+  EXPECT_EQ(monitor.current(), 0);
 }
 
 TEST(AqlValueSupervisedTest, AdoptSupervisedBufferAccountOnlyPtr) {
@@ -115,4 +115,36 @@ TEST(AqlValueSupervisedTest, AdoptSupervisedBufferAccountOnlyPtr) {
   EXPECT_EQ(monitor.current(), before + ptrOverhead());
   v.destroy();
   EXPECT_EQ(monitor.current(), before);
+}
+TEST(AqlValueSupervisedTest, SupervisedFromSliceFitsInlineNoAccounting) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  Builder b;
+  b.add(Value(7));
+  Slice s = b.slice();
+  AqlValue v(monitor, s, false);
+  EXPECT_EQ(v.memoryUsage(), 0);
+  EXPECT_EQ(monitor.current(), 0);
+  v.destroy();
+  EXPECT_EQ(monitor.current(), 0);
+}
+
+TEST(AqlValueSupervisedTest, CloneEraseKeepAccounting) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  Builder builder;
+  builder.openArray();
+  builder.add(Value(std::string(1024, 'a')));
+  builder.close();
+  Slice slice = builder.slice();
+  AqlValue value(monitor, slice, false);
+  size_t base = monitor.current();
+  AqlValue c = value.clone();
+  EXPECT_EQ(monitor.current(), base + ptrOverhead());
+  c.erase();
+  EXPECT_EQ(monitor.current(), base + ptrOverhead());
+  c.destroy();
+  EXPECT_EQ(monitor.current(), base);
+  value.destroy();
+  EXPECT_EQ(monitor.current(), 0);
 }

@@ -49,12 +49,7 @@ namespace arangodb {
 
 class CollectionNameResolver;
 
-struct SupervisedHeader {
-  arangodb::ResourceMonitor* rm;  // part of the accounted memory
-  void* dataPtr;                  // payload in the heap GET RID OF IT
-};
-static_assert(sizeof(SupervisedHeader) == 2 * sizeof(void*),
-              "SupervisedHeader must be two pointers");
+class ResourceMonitor;
 
 namespace velocypack {
 
@@ -285,11 +280,8 @@ struct AqlValue final {
     // VPACK_SUPERVISED_SLICE
     struct {
       uint64_t getLength() const noexcept {
-        if constexpr (basics::isLittleEndian()) {
-          return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
-        } else {
-          return (lengthOrigin & 0x0000ffffffffffffULL);
-        }
+        return velocypack::Slice(reinterpret_cast<uint8_t const*>(payload))
+            .byteSize();
       }
       uint64_t getOrigin() const noexcept {
         if constexpr (basics::isLittleEndian()) {
@@ -298,13 +290,9 @@ struct AqlValue final {
           return (lengthOrigin & 0x00ff000000000000ULL) >> 48;
         }
       }
-      arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
-        return header->rm;
-      }
-      void* getPointer() const noexcept { return header->dataPtr; }
-
-      uint64_t lengthOrigin;     // | AT | MO | 6 x ML |
-      SupervisedHeader* header;  // PD -> header {rm + dataPtr}
+      void* getPayloadPtr() const noexcept { return payload; }
+      uint64_t lengthOrigin;
+      uint8_t* payload;
     } supervisedSliceMeta;
     static_assert(sizeof(supervisedSliceMeta) == 16,
                   "VPACK_SUPERVISED_SLICE layout must be 16 bytes!");
@@ -312,11 +300,8 @@ struct AqlValue final {
     // VPACK_SUPERVISED_STRING
     struct {
       uint64_t getLength() const noexcept {
-        if constexpr (basics::isLittleEndian()) {
-          return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
-        } else {
-          return (lengthOrigin & 0x0000ffffffffffffULL);
-        }
+        return velocypack::Slice(reinterpret_cast<uint8_t const*>(payload))
+            .byteSize();
       }
       uint64_t getOrigin() const noexcept {
         if constexpr (basics::isLittleEndian()) {
@@ -325,13 +310,9 @@ struct AqlValue final {
           return (lengthOrigin & 0x00ff000000000000ULL) >> 48;
         }
       }
-      arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
-        return header->rm;
-      }
-      void* getPointer() const noexcept { return header->dataPtr; }
-
-      uint64_t lengthOrigin;     // | AT | MO | 6 x ML |
-      SupervisedHeader* header;  // PD -> header {rm + dataPtr}
+      void* getPayloadPtr() const noexcept { return payload; }
+      uint64_t lengthOrigin;
+      uint8_t* payload;
     } supervisedStringMeta;
     static_assert(sizeof(supervisedStringMeta) == 16,
                   "VPACK_SUPERVISED_STRING layout must be 16 bytes!");
