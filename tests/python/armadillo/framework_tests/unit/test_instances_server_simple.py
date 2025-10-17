@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from pathlib import Path
 
 from armadillo.instances.server import ArangoServer
-from armadillo.core.types import ServerRole, ClusterConfig
+from armadillo.core.types import ServerRole, ClusterConfig, TimeoutConfig
 
 
 class TestArangoServerBasic:
@@ -125,6 +125,7 @@ class TestArangoServerLifecycle:
         self.mock_config.verbose = 0
         self.mock_config.keep_instances_on_failure = False
         self.mock_config.test_timeout = 30.0
+        self.mock_config.timeouts = TimeoutConfig()
 
         # Create mock logger
         self.mock_logger = Mock()

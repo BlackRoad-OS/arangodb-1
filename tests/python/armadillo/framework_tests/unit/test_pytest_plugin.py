@@ -15,7 +15,7 @@ from armadillo.pytest_plugin.plugin import (
     pytest_runtest_call,
     pytest_runtest_teardown,
     pytest_runtest_logreport,
-    _is_verbose_output_enabled,
+    _is_compact_mode_enabled,
 )
 from armadillo.pytest_plugin.reporter import ArmadilloReporter, get_armadillo_reporter
 
@@ -347,13 +347,13 @@ class TestArmadilloPytestHooks:
 
         reporter_module._reporter = None
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
     def test_pytest_runtest_logstart_hook_connected(
-        self, mock_get_reporter, mock_verbose
+        self, mock_get_reporter, mock_compact
     ):
         """Test pytest_runtest_logstart hook calls reporter correctly."""
-        mock_verbose.return_value = True
+        mock_compact.return_value = False
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
@@ -365,11 +365,11 @@ class TestArmadilloPytestHooks:
         mock_get_reporter.assert_called_once()
         mock_reporter.pytest_runtest_logstart.assert_called_once_with(nodeid, location)
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
-    def test_pytest_runtest_setup_hook_connected(self, mock_get_reporter, mock_verbose):
+    def test_pytest_runtest_setup_hook_connected(self, mock_get_reporter, mock_compact):
         """Test pytest_runtest_setup hook calls reporter correctly."""
-        mock_verbose.return_value = True
+        mock_compact.return_value = False
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
@@ -379,11 +379,11 @@ class TestArmadilloPytestHooks:
         mock_get_reporter.assert_called_once()
         mock_reporter.pytest_runtest_setup.assert_called_once_with(mock_item)
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
-    def test_pytest_runtest_call_hook_connected(self, mock_get_reporter, mock_verbose):
+    def test_pytest_runtest_call_hook_connected(self, mock_get_reporter, mock_compact):
         """Test pytest_runtest_call hook calls reporter correctly."""
-        mock_verbose.return_value = True
+        mock_compact.return_value = False
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
@@ -393,13 +393,13 @@ class TestArmadilloPytestHooks:
         mock_get_reporter.assert_called_once()
         mock_reporter.pytest_runtest_call.assert_called_once_with(mock_item)
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
     def test_pytest_runtest_teardown_hook_connected(
-        self, mock_get_reporter, mock_verbose
+        self, mock_get_reporter, mock_compact
     ):
         """Test pytest_runtest_teardown hook calls reporter correctly."""
-        mock_verbose.return_value = True
+        mock_compact.return_value = False
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
@@ -409,13 +409,13 @@ class TestArmadilloPytestHooks:
         mock_get_reporter.assert_called_once()
         mock_reporter.pytest_runtest_teardown.assert_called_once_with(mock_item)
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
     def test_pytest_runtest_logreport_hook_connected(
-        self, mock_get_reporter, mock_verbose
+        self, mock_get_reporter, mock_compact
     ):
         """Test pytest_runtest_logreport hook calls reporter correctly."""
-        mock_verbose.return_value = True
+        mock_compact.return_value = False
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
@@ -425,11 +425,11 @@ class TestArmadilloPytestHooks:
         mock_get_reporter.assert_called_once()
         mock_reporter.pytest_runtest_logreport.assert_called_once_with(mock_report)
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
-    def test_hooks_respect_verbose_mode(self, mock_get_reporter, mock_verbose):
-        """Test hooks only call reporter when verbose mode is enabled."""
-        mock_verbose.return_value = False  # Compact mode
+    def test_hooks_respect_compact_mode(self, mock_get_reporter, mock_compact):
+        """Test hooks do not call reporter when compact mode is enabled."""
+        mock_compact.return_value = True  # Compact mode
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
@@ -444,11 +444,11 @@ class TestArmadilloPytestHooks:
         mock_get_reporter.assert_not_called()
         mock_reporter.pytest_runtest_logstart.assert_not_called()
 
-    def test_verbose_output_enabled_function(self):
-        """Test _is_verbose_output_enabled function exists and is callable."""
+    def test_compact_mode_enabled_function(self):
+        """Test _is_compact_mode_enabled function exists and is callable."""
         # Just test that the function exists and can be called
         # The actual behavior is tested through integration
-        result = _is_verbose_output_enabled()
+        result = _is_compact_mode_enabled()
         assert isinstance(result, bool)
 
 
@@ -474,14 +474,14 @@ class TestArmadilloReporterRegressionTests:
         assert callable(pytest_runtest_teardown)
         assert callable(pytest_runtest_logreport)
 
-    @patch("armadillo.pytest_plugin.plugin._is_verbose_output_enabled")
+    @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
-    def test_hooks_call_reporter_when_verbose(self, mock_get_reporter, mock_verbose):
-        """Test hooks call reporter when verbose mode is enabled.
+    def test_hooks_call_reporter_when_non_compact(self, mock_get_reporter, mock_compact):
+        """Test hooks call reporter when compact mode is disabled.
 
         This is a regression test for the missing hook connections.
         """
-        mock_verbose.return_value = True
+        mock_compact.return_value = False
         mock_reporter = Mock()
         mock_get_reporter.return_value = mock_reporter
 
