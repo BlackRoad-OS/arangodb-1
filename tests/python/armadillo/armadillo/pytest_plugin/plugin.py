@@ -535,6 +535,7 @@ def pytest_sessionfinish(session, exitstatus):
         try:
             from pathlib import Path
             from ..core.config import get_config
+
             config = get_config()
 
             # Determine output directory (default to test-results if not set)
@@ -635,9 +636,7 @@ def pytest_runtest_makereport(item, call):
             report.crash_info = crash_states
 
         logger.error(
-            "Test %s failed due to server crash: %s",
-            item.nodeid,
-            crash_message
+            "Test %s failed due to server crash: %s", item.nodeid, crash_message
         )
 
         # Record the crash in the result collector

@@ -12,6 +12,7 @@ from _pytest.reports import TestReport
 
 from ..core.log import get_logger
 from ..core.types import ExecutionOutcome
+from ..core.process import has_any_crash, get_crash_state
 from ..results.collector import ResultCollector
 from ..utils.output import write_stdout
 
@@ -41,7 +42,8 @@ class ArmadilloReporter:
 
     def __init__(self):
         self.test_times: Dict[str, Dict[str, float]] = {}
-        self.test_reports: Dict[str, TestReport] = {}  # Store reports for result collection
+        self.test_reports: Dict[str, TestReport] = {} # Store reports for result collection
+        self.test_skipped: Dict[str, bool] = {}  # Track which tests were skipped
         self.suite_start_times: Dict[str, float] = {}
         self.suite_test_counts: Dict[str, int] = {}
         self.total_tests = 0
@@ -228,6 +230,10 @@ class ArmadilloReporter:
         if report.when == "call":
             self.test_reports[report.nodeid] = report
 
+        # Track skips in any phase
+        if report.outcome == "skipped":
+            self.test_skipped[report.nodeid] = True
+
         if report.when == "teardown":
             test_name = self._get_test_name(report.nodeid)
             suite_name = self._get_suite_name(report.nodeid)
@@ -242,8 +248,21 @@ class ArmadilloReporter:
                     time.time() - self.test_times[test_name]["teardown_start"]
                 ) * 1000  # Convert to milliseconds
 
+            # Determine actual outcome
+            # Check if test was skipped in any phase
+            if self.test_skipped.get(report.nodeid, False):
+                outcome = "skipped"
+            # Check if there's crash info attached to the report (from makereport hook)
+            # or check crash state directly
+            elif (
+                hasattr(report, "crash_info") and report.crash_info
+            ) or has_any_crash():
+                outcome = "failed"  # Crashed tests should show as failed
+            else:
+                outcome = report.outcome
+
             # Print test result
-            if report.outcome == "passed":
+            if outcome == "passed":
                 self.passed_tests += 1
                 setup_time = int(self.test_times.get(test_name, {}).get("setup", 0))
                 call_time = int(self.test_times.get(test_name, {}).get("call", 0))
@@ -256,6 +275,11 @@ class ArmadilloReporter:
                     f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
                     f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: {teardown_time}ms)\n"
                 )
+            elif outcome == "skipped":
+                # Test was skipped (e.g., due to crash in previous test)
+                write_stdout(
+                    f"{self._get_timestamp()} {self._colorize('[    SKIPPED ]', Colors.YELLOW)} {test_name}\n"
+                )
             else:
                 self.failed_tests += 1
                 write_stdout(
@@ -263,7 +287,7 @@ class ArmadilloReporter:
                 )
 
             # Record test result for JSON export
-            self._record_test_result(report.nodeid, report.outcome)
+            self._record_test_result(report.nodeid, outcome)
 
             # Print file summary immediately after each test to ensure proper timing
             # This happens in teardown phase to ensure all timing is complete
@@ -370,6 +394,7 @@ class ArmadilloReporter:
         try:
             # Set metadata from test run
             from ..core.config import get_config
+
             config = get_config()
 
             self.result_collector.set_metadata(
