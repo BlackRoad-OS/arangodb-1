@@ -56,7 +56,7 @@ class TestResult:
     call_duration_seconds: float = 0.0
     teardown_duration_seconds: float = 0.0
     markers: List[str] = field(default_factory=list)
-    longrepr: Optional[str] = None
+    details: Optional[str] = None
     crash_info: Optional[Dict[str, Any]] = None
     artifacts: List[str] = field(default_factory=list)
     started_at: Optional[str] = None
@@ -118,7 +118,7 @@ class ResultCollector:
         call_duration: float = 0.0,
         teardown_duration: float = 0.0,
         markers: Optional[List[str]] = None,
-        longrepr: Optional[str] = None,
+        details: Optional[str] = None,
         crash_info: Optional[Dict[str, Any]] = None,
         artifacts: Optional[List[str]] = None,
         started_at: Optional[datetime] = None,
@@ -141,7 +141,7 @@ class ResultCollector:
             call_duration_seconds=call_duration,
             teardown_duration_seconds=teardown_duration,
             markers=markers or [],
-            longrepr=longrepr,
+            details=details,
             crash_info=crash_info,
             artifacts=artifacts or [],
             started_at=started_at.isoformat() if started_at else None,
@@ -163,7 +163,7 @@ class ResultCollector:
             - params.timing.setup_duration
             - params.timing.teardown_duration,
             teardown_duration=params.timing.teardown_duration,
-            longrepr=params.error_message or params.failure_message,
+            details=params.error_message or params.failure_message,
             crash_info=params.crash_info,
         )
 
@@ -293,7 +293,9 @@ class ResultCollector:
             suite.duration_seconds = (end_dt - start_dt).total_seconds()
         else:
             # Fallback: sum all test durations
-            suite.duration_seconds = sum(t.duration_seconds for t in suite.tests.values())
+            suite.duration_seconds = sum(
+                t.duration_seconds for t in suite.tests.values()
+            )
 
     def _calculate_global_summary(self) -> Dict[str, int]:
         """Calculate overall summary statistics across all suites."""
@@ -334,7 +336,7 @@ class ResultCollector:
                         "call_duration_seconds": test.call_duration_seconds,
                         "teardown_duration_seconds": test.teardown_duration_seconds,
                         "markers": test.markers,
-                        "longrepr": test.longrepr,
+                        "details": test.details,
                         "crash_info": test.crash_info,
                         "artifacts": test.artifacts,
                         "started_at": test.started_at,
@@ -419,35 +421,35 @@ class ResultCollector:
                 testcase.set("time", f"{test_data['duration_seconds']:.3f}")
 
                 outcome = test_data["outcome"]
-                longrepr = test_data.get("longrepr")
+                details = test_data.get("details")
 
                 if outcome == "failed":
                     failure = ET.SubElement(testcase, "failure")
-                    failure.set("message", longrepr or "Test failed")
-                    if longrepr:
-                        failure.text = longrepr
+                    failure.set("message", details or "Test failed")
+                    if details:
+                        failure.text = details
                 elif outcome == "error":
                     error = ET.SubElement(testcase, "error")
-                    error.set("message", longrepr or "Test error")
-                    if longrepr:
-                        error.text = longrepr
+                    error.set("message", details or "Test error")
+                    if details:
+                        error.text = details
                 elif outcome == "skipped":
                     skipped = ET.SubElement(testcase, "skipped")
-                    skipped.set("message", longrepr or "Test skipped")
+                    skipped.set("message", details or "Test skipped")
                 elif outcome == "timeout":
                     error = ET.SubElement(testcase, "error")
                     error.set("message", "Test timed out")
                     error.set("type", "timeout")
-                    if longrepr:
-                        error.text = longrepr
+                    if details:
+                        error.text = details
                 elif outcome == "crashed":
                     error = ET.SubElement(testcase, "error")
                     error.set("message", "Test crashed")
                     error.set("type", "crash")
                     if test_data.get("crash_info"):
                         error.text = str(test_data["crash_info"])
-                    elif longrepr:
-                        error.text = longrepr
+                    elif details:
+                        error.text = details
 
         rough_string = ET.tostring(testsuite, encoding="unicode")
         reparsed = minidom.parseString(rough_string)
@@ -481,7 +483,7 @@ def record_test_result(
         call_duration=kwargs.get("call_duration", 0.0),
         teardown_duration=kwargs.get("teardown_duration", 0.0),
         markers=kwargs.get("markers"),
-        longrepr=kwargs.get("longrepr"),
+        details=kwargs.get("details"),
         crash_info=kwargs.get("crash_info"),
         artifacts=kwargs.get("artifacts"),
         started_at=kwargs.get("started_at"),

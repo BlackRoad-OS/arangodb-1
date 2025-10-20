@@ -647,7 +647,7 @@ def pytest_runtest_makereport(item, call):
                 nodeid=item.nodeid,
                 outcome=ExecutionOutcome.CRASHED,
                 duration=getattr(report, "duration", 0.0),
-                longrepr=crash_message,
+                details=crash_message,
                 crash_info=crash_states,
             )
 

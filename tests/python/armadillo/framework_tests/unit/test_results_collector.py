@@ -118,19 +118,19 @@ class TestResultCollector:
         test = collector.test_suites["tests/test_example.py"].tests["test_slow"]
         assert test.markers == ["slow", "arango_single"]
 
-    def test_record_test_with_longrepr(self):
-        """Test recording failed test with longrepr."""
+    def test_record_test_with_details(self):
+        """Test recording failed test with details."""
         collector = ResultCollector()
 
         collector.record_test_result(
             nodeid="tests/test_example.py::test_failed",
             outcome=ExecutionOutcome.FAILED,
             duration=1.0,
-            longrepr="AssertionError: Expected 5, got 3",
+            details="AssertionError: Expected 5, got 3",
         )
 
         test = collector.test_suites["tests/test_example.py"].tests["test_failed"]
-        assert test.longrepr == "AssertionError: Expected 5, got 3"
+        assert test.details == "AssertionError: Expected 5, got 3"
 
     def test_set_metadata(self):
         """Test setting metadata."""
@@ -248,7 +248,7 @@ class TestResultCollector:
             nodeid="tests/test_example.py::test_failed",
             outcome=ExecutionOutcome.FAILED,
             duration=2.0,
-            longrepr="Test failed",
+            details="Test failed",
         )
 
         exported_files = collector.export_results(["json"], temp_dir)
@@ -283,7 +283,7 @@ class TestResultCollector:
             nodeid="tests/test_example.py::test_failed",
             outcome=ExecutionOutcome.FAILED,
             duration=2.0,
-            longrepr="Assertion error",
+            details="Assertion error",
         )
 
         exported_files = collector.export_results(["junit"], temp_dir)
@@ -357,12 +357,8 @@ class TestGlobalResultFunctions:
 
         armadillo.results.collector._result_collector = ResultCollector()
 
-        record_test_result(
-            "tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0
-        )
-        record_test_result(
-            "tests/test_example.py::test2", ExecutionOutcome.FAILED, 2.0
-        )
+        record_test_result("tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0)
+        record_test_result("tests/test_example.py::test2", ExecutionOutcome.FAILED, 2.0)
 
         results = finalize_results()
 
@@ -376,9 +372,7 @@ class TestGlobalResultFunctions:
 
         armadillo.results.collector._result_collector = ResultCollector()
 
-        record_test_result(
-            "tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0
-        )
+        record_test_result("tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0)
 
         exported_files = export_results(["json"], temp_dir)
 
@@ -396,7 +390,9 @@ class TestResultCollectorEdgeCases:
         results = collector.finalize_results()
 
         assert len(results["test_suites"]) == 0
-        assert results["test_run"]["duration_seconds"] > 0  # Should still have elapsed time
+        assert (
+            results["test_run"]["duration_seconds"] > 0
+        )  # Should still have elapsed time
         assert results["summary"]["total"] == 0
 
         # Should still be able to export
@@ -433,7 +429,7 @@ class TestResultCollectorEdgeCases:
             nodeid="tests/test_crash.py::test_segfault",
             outcome=ExecutionOutcome.CRASHED,
             duration=5.0,
-            longrepr="Process crashed",
+            details="Process crashed",
             crash_info=crash_info,
         )
 
@@ -449,9 +445,7 @@ class TestResultCollectorEdgeCases:
 
         # Add many test results
         for i in range(100):
-            outcome = (
-                ExecutionOutcome.PASSED if i % 2 == 0 else ExecutionOutcome.FAILED
-            )
+            outcome = ExecutionOutcome.PASSED if i % 2 == 0 else ExecutionOutcome.FAILED
             collector.record_test_result(
                 nodeid=f"tests/test_suite.py::test_{i}",
                 outcome=outcome,
