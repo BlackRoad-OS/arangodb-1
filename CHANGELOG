@@ -6,6 +6,8 @@ devel
   undefined behavior if a transaction would update its state at the same time
   while we are collecting its details.
 
+* FE-835: Escape HTML in notifications.
+
 * Improved performance of filtered vector index queries by batching document
   fetches during index iteration.
 
