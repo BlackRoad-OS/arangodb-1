@@ -42,7 +42,9 @@ class ArmadilloReporter:
 
     def __init__(self):
         self.test_times: Dict[str, Dict[str, float]] = {}
-        self.test_reports: Dict[str, TestReport] = {} # Store reports for result collection
+        self.test_reports: Dict[str, TestReport] = (
+            {}
+        )  # Store reports for result collection
         self.test_skipped: Dict[str, bool] = {}  # Track which tests were skipped
         self.suite_start_times: Dict[str, float] = {}
         self.suite_test_counts: Dict[str, int] = {}
@@ -359,12 +361,12 @@ class ArmadilloReporter:
         teardown_duration = timing.get("teardown", 0) / 1000.0
         total_duration = setup_duration + call_duration + teardown_duration
 
-        # Get longrepr from stored report
-        longrepr = None
+        # Get details from stored report
+        details = None
         if nodeid in self.test_reports:
             report = self.test_reports[nodeid]
             if report.longrepr:
-                longrepr = str(report.longrepr)
+                details = str(report.longrepr)
 
         # Get markers from stored report
         markers = []
@@ -383,7 +385,7 @@ class ArmadilloReporter:
             call_duration=call_duration,
             teardown_duration=teardown_duration,
             markers=markers,
-            longrepr=longrepr,
+            details=details,
         )
 
     def export_results(self, output_dir: Path, formats: Optional[list] = None) -> None:

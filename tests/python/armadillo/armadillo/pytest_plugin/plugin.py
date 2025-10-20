@@ -19,6 +19,7 @@ from ..core.log import (
 from ..core.time import set_global_deadline, stop_watchdog
 from ..core.types import ServerRole, DeploymentMode, ClusterConfig, ExecutionOutcome
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
+from ..core.errors import ServerStartupError
 from ..instances.server import ArangoServer
 from ..instances.manager import InstanceManager, get_instance_manager
 from .reporter import get_armadillo_reporter
@@ -38,6 +39,8 @@ class ArmadilloPlugin:
     def __init__(self) -> None:
         self._session_deployments: Dict[str, InstanceManager] = {}
         self._armadillo_config: Optional[Any] = None
+        self._deployment_failed: bool = False
+        self._deployment_failure_reason: Optional[str] = None
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
@@ -259,8 +262,40 @@ def _get_or_create_cluster(self) -> "InstanceManager":
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
         plan = manager.create_deployment_plan(cluster_config)
-        manager.deploy_servers(plan, timeout=300.0)
-        logger.info("Session cluster deployment ready")
+
+        try:
+            manager.deploy_servers(plan, timeout=300.0)
+            logger.info("Session cluster deployment ready")
+        except ServerStartupError as e:
+            # Check if any servers crashed during deployment
+            crash_states = get_crash_state()
+            if crash_states:
+                crashed_servers = list(crash_states.keys())
+                crash_details = []
+                for server_id, crash_info in crash_states.items():
+                    exit_code = crash_info.get("exit_code", -1)
+                    signal_num = crash_info.get("signal", -1)
+                    crash_details.append(
+                        f"{server_id} (exit code {exit_code}, signal {signal_num})"
+                    )
+
+                # Create a cleaner error message
+                error_msg = f"Cluster deployment failed due to server crashes: {', '.join(crashed_servers)}"
+                logger.error(error_msg)
+                for detail in crash_details:
+                    logger.error("  %s", detail)
+
+                # Set deployment failure flag instead of raising exception
+                self._deployment_failed = True
+                self._deployment_failure_reason = error_msg
+                return None
+            else:
+                logger.error("Deployment failed: %s", str(e))
+                raise
+        except Exception as e:
+            logger.error("Deployment failed: %s", str(e))
+            raise
+
         self._session_deployments["cluster"] = manager
     return self._session_deployments["cluster"]
 
@@ -276,7 +311,38 @@ def _get_or_create_single_server(self) -> ArangoServer:
         logger.info("Starting session single server")
 
         plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
-        manager.deploy_servers(plan, timeout=60.0)
+
+        try:
+            manager.deploy_servers(plan, timeout=60.0)
+        except ServerStartupError as e:
+            # Check if server crashed during deployment
+            crash_states = get_crash_state()
+            if crash_states:
+                crashed_servers = list(crash_states.keys())
+                crash_details = []
+                for server_id, crash_info in crash_states.items():
+                    exit_code = crash_info.get("exit_code", -1)
+                    signal_num = crash_info.get("signal", -1)
+                    crash_details.append(
+                        f"{server_id} (exit code {exit_code}, signal {signal_num})"
+                    )
+
+                # Create a cleaner error message
+                error_msg = f"Single server deployment failed due to server crashes: {', '.join(crashed_servers)}"
+                logger.error(error_msg)
+                for detail in crash_details:
+                    logger.error("  %s", detail)
+
+                # Set deployment failure flag instead of raising exception
+                self._deployment_failed = True
+                self._deployment_failure_reason = error_msg
+                return None
+            else:
+                logger.error("Single server deployment failed: %s", str(e))
+                raise
+        except Exception as e:
+            logger.error("Single server deployment failed: %s", str(e))
+            raise
 
         # Store manager (not individual server) for cleanup
         self._session_deployments["single"] = manager
@@ -563,8 +629,14 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_runtest_setup(item):
-    """Handle test setup - check if we should skip due to previous crash."""
+    """Handle test setup - check if we should skip due to previous crash or deployment failure."""
     global _abort_remaining_tests, _crash_detected_during_test
+
+    # If deployment failed, skip all tests
+    if _plugin._deployment_failed:
+        pytest.skip(
+            f"Test skipped due to deployment failure: {_plugin._deployment_failure_reason}"
+        )
 
     # If a crash was detected in a previous test, skip all remaining tests
     if _abort_remaining_tests and _crash_detected_during_test != item.nodeid:
