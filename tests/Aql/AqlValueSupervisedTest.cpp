@@ -22,17 +22,17 @@ TEST(AqlValueSupervisedTest, CopyLargePayloadAndAccountPayloadAndPointer) {
   ResourceMonitor monitor(global);
   ASSERT_EQ(monitor.current(), 0);
 
-  Builder b;
-  b.openArray();
-  b.add(Value(std::string(2048, 'a')));  // force heap payload
-  b.close();
-  Slice s = b.slice();
+  Builder builder;
+  builder.openArray();
+  builder.add(Value(std::string(2048, 'a')));  // force heap payload
+  builder.close();
+  Slice slice = builder.slice();
 
-  AqlValue v(monitor, s, false);
+  AqlValue aqlValue(monitor, slice, false);
 
-  EXPECT_EQ(monitor.current(), v.memoryUsage())
+  EXPECT_EQ(monitor.current(), aqlValue.memoryUsage())
       << "must account for the payload + resource monitor pointer (once)";
-  v.destroy();
+  aqlValue.destroy();
   EXPECT_EQ(monitor.current(), 0);
 }
 
@@ -40,15 +40,15 @@ TEST(AqlValueSupervisedTest, InlineNoPayloadDontAccountPointer) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor(global);
 
-  Builder b;
-  b.add(Value(42));  // fits inline
-  Slice s = b.slice();
+  Builder builder;
+  builder.add(Value(42));  // fits inline
+  Slice slice = builder.slice();
 
-  AqlValue v(monitor, s, false);
-  EXPECT_EQ(v.memoryUsage(), 0);
+  AqlValue aqlValue(monitor, slice, false);
+  EXPECT_EQ(aqlValue.memoryUsage(), 0);
   EXPECT_EQ(monitor.current(), 0);
 
-  v.destroy();
+  aqlValue.destroy();
   EXPECT_EQ(monitor.current(), 0);
 }
 
@@ -56,24 +56,24 @@ TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor monitor(global);
 
-  Builder b;
-  b.openArray();
-  b.add(Value(std::string(4096, 'a')));  // heap payload
-  b.close();
-  Slice s = b.slice();
+  Builder builder;
+  builder.openArray();
+  builder.add(Value(std::string(4096, 'a')));  // heap payload
+  builder.close();
+  Slice slice = builder.slice();
 
-  AqlValue v(monitor, s, false);
+  AqlValue value1(monitor, slice, false);
   const size_t base = monitor.current();
-  ASSERT_EQ(base, v.memoryUsage());
+  ASSERT_EQ(base, value1.memoryUsage());
 
-  AqlValue c = v.clone();
+  AqlValue value2 = value1.clone();
   EXPECT_EQ(monitor.current(), base + ptrOverhead())
       << "clone must add only the overhead of the resource monitor pointer";
 
-  c.destroy();
+  value2.destroy();
   EXPECT_EQ(monitor.current(), base);
 
-  v.destroy();
+  value1.destroy();
   EXPECT_EQ(monitor.current(), 0);
 }
 

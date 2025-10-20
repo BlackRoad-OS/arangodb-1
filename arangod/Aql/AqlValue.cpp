@@ -71,32 +71,23 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& resourceMonitor,
     initFromSlice(slice, length);
     return;
   }
-
+  // length of the payload
   auto n = static_cast<uint64_t>(length);
-  auto* sh =
-      static_cast<SupervisedHeader*>(::operator new(sizeof(SupervisedHeader)));
-  resourceMonitor.increaseMemoryUsage(sizeof(SupervisedHeader));
-  sh->rm = &resourceMonitor;
-
-  void* p = nullptr;
-  if (adopt) {
-    p = const_cast<uint8_t*>(slice.begin());
-    if (n != 0) {
-      resourceMonitor.increaseMemoryUsage(n);
-    }
-  } else {
-    if (n != 0) {
-      p = ::operator new(static_cast<size_t>(n));
-      std::memcpy(p, slice.begin(), static_cast<size_t>(n));
-      resourceMonitor.increaseMemoryUsage(n);
-    }
+  std::size_t totalSize =
+      sizeof(arangodb::ResourceMonitor*) + static_cast<std::size_t>(n);
+  auto* base = static_cast<uint8_t*>(::operator new(totalSize));
+  // store the resource monitor pointer in the prefix
+  *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &resourceMonitor;
+  // pointer to the actual payload data
+  uint8_t* payload = base + sizeof(arangodb::ResourceMonitor*);
+  // copy the slice data into the payload
+  if (n != 0) {
+    std::memcpy(payload, slice.begin(), static_cast<std::size_t>(n));
   }
-  sh->dataPtr = p;
-
-  _data.supervisedSliceMeta.header = sh;
-
-  _data.supervisedSliceMeta.lengthOrigin = encodeTypeOriginLength(
-      AqlValueType::VPACK_SUPERVISED_SLICE, adopt ? 1 : 0, n);
+  resourceMonitor.increaseMemoryUsage(totalSize);
+  _data.supervisedSliceMeta.payload = payload;
+  _data.supervisedSliceMeta.lengthOrigin =
+      encodeTypeOriginLength(AqlValueType::VPACK_SUPERVISED_SLICE, 0, n);
 }
 
 /**
@@ -113,9 +104,9 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& resourceMonitor,
   auto t = type();
   if (t == VPACK_SUPERVISED_SLICE) {
     auto n = static_cast<uint64_t>(length);
-    uint64_t origin = _data.supervisedSliceMeta.getOrigin();
-    _data.supervisedSliceMeta.lengthOrigin = encodeTypeOriginLength(
-        AqlValueType::VPACK_SUPERVISED_SLICE, static_cast<uint8_t>(origin), n);
+    // always set origin bit to 0 as we own the allocated memory
+    _data.supervisedSliceMeta.lengthOrigin =
+        encodeTypeOriginLength(AqlValueType::VPACK_SUPERVISED_SLICE, 0, n);
   }
 }
 
@@ -138,17 +129,15 @@ uint64_t AqlValue::hash(uint64_t seed) const {
 
     return value;
   }
-  // we must use the slow hash function here, because a value may have
-  // different representations in case it's an array/object/number
   switch (t) {
     case VPACK_SUPERVISED_SLICE: {
-      velocypack::Slice s{reinterpret_cast<uint8_t const*>(
-          _data.supervisedSliceMeta.header->dataPtr)};
+      velocypack::Slice s{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)};
       return s.normalizedHash(seed);
     }
     case VPACK_SUPERVISED_STRING: {
-      velocypack::Slice s{reinterpret_cast<uint8_t const*>(
-          _data.supervisedStringMeta.header->dataPtr)};
+      velocypack::Slice s{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)};
       return s.normalizedHash(seed);
     }
     default:
@@ -167,11 +156,11 @@ bool AqlValue::isNone() const noexcept {
       return VPackSlice(_data.managedSliceMeta.pointer).isNone();
     case VPACK_SUPERVISED_SLICE:
       return VPackSlice(reinterpret_cast<uint8_t const*>(
-                            _data.supervisedSliceMeta.header->dataPtr))
+                            _data.supervisedSliceMeta.payload))
           .isNone();
     case VPACK_SUPERVISED_STRING:
       return VPackSlice(reinterpret_cast<uint8_t const*>(
-                            _data.supervisedStringMeta.header->dataPtr))
+                            _data.supervisedStringMeta.payload))
           .isNone();
     default:
       return false;
@@ -194,13 +183,13 @@ bool AqlValue::isNull(bool emptyIsNull) const noexcept {
       return s.isNull() || (emptyIsNull && s.isNone());
     }
     case VPACK_SUPERVISED_SLICE: {
-      VPackSlice s{reinterpret_cast<uint8_t const*>(
-          _data.supervisedSliceMeta.header->dataPtr)};
+      VPackSlice s{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)};
       return s.isNull() || (emptyIsNull && s.isNone());
     }
     case VPACK_SUPERVISED_STRING: {
-      VPackSlice s{reinterpret_cast<uint8_t const*>(
-          _data.supervisedStringMeta.header->dataPtr)};
+      VPackSlice s{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)};
       return s.isNull() || (emptyIsNull && s.isNone());
     }
     default:
@@ -218,12 +207,12 @@ bool AqlValue::isBoolean() const noexcept {
     case VPACK_MANAGED_SLICE:
       return VPackSlice{_data.managedSliceMeta.pointer}.isBoolean();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedSliceMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)}
           .isBoolean();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedStringMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)}
           .isBoolean();
     default:
       return false;
@@ -244,12 +233,12 @@ bool AqlValue::isNumber() const noexcept {
     case VPACK_MANAGED_SLICE:
       return VPackSlice{_data.managedSliceMeta.pointer}.isNumber();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedSliceMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)}
           .isNumber();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedStringMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)}
           .isNumber();
     default:
       return false;
@@ -268,12 +257,12 @@ bool AqlValue::isString() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isString();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedSliceMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)}
           .isString();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedStringMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)}
           .isString();
     default:
       return false;
@@ -292,12 +281,12 @@ bool AqlValue::isObject() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isObject();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedSliceMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)}
           .isObject();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedStringMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)}
           .isObject();
     default:
       return false;
@@ -316,12 +305,12 @@ bool AqlValue::isArray() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isArray();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedSliceMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)}
           .isArray();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-                            _data.supervisedStringMeta.header->dataPtr)}
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)}
           .isArray();
     case RANGE:
       return true;
@@ -350,12 +339,12 @@ std::string_view AqlValue::getTypeString() const noexcept {
       s = _data.managedStringMeta.toSlice();
       break;
     case VPACK_SUPERVISED_SLICE:
-      s = VPackSlice{reinterpret_cast<uint8_t const*>(
-          _data.supervisedSliceMeta.header->dataPtr)};
+      s = VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)};
       break;
     case VPACK_SUPERVISED_STRING:
-      s = VPackSlice{reinterpret_cast<uint8_t const*>(
-          _data.supervisedStringMeta.header->dataPtr)};
+      s = VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)};
       break;
     case RANGE:
       return "array";
@@ -1032,43 +1021,20 @@ AqlValue AqlValue::clone() const {
       return AqlValue{_data.managedStringMeta.toSlice(),
                       _data.managedStringMeta.getLength()};
     case VPACK_SUPERVISED_SLICE: {
-      // create a new header pointing to the same payload, and account
-      // header memory but not the payload. The origin is set to 1 (adopted)
-      auto* oldHeader = _data.supervisedSliceMeta.header;
-      TRI_ASSERT(oldHeader != nullptr);
-      auto* rm = oldHeader->rm;
-      TRI_ASSERT(rm != nullptr);
+      // create a new AqlValue referencing the same payload. the origin is set
+      // to 1 (adopted)
       auto len = _data.supervisedSliceMeta.getLength();
-      // allocate new header
-      auto* newHeader = static_cast<SupervisedHeader*>(
-          ::operator new(sizeof(SupervisedHeader)));
-      // account for header memory only
-      rm->increaseMemoryUsage(sizeof(SupervisedHeader));
-      newHeader->rm = rm;
-      // adopt pointer to the existing payload
-      newHeader->dataPtr = oldHeader->dataPtr;
       AqlValue res;
-      // set header and encode type/origin/length (origin=1 indicates adopt)
-      res._data.supervisedSliceMeta.header = newHeader;
+      res._data.supervisedSliceMeta.payload = _data.supervisedSliceMeta.payload;
       res._data.supervisedSliceMeta.lengthOrigin = res.encodeTypeOriginLength(
           AqlValueType::VPACK_SUPERVISED_SLICE, 1, static_cast<uint64_t>(len));
       return res;
     }
     case VPACK_SUPERVISED_STRING: {
-      // create a new header pointing to the same std::string* payload
-      auto* oldHeader = _data.supervisedStringMeta.header;
-      TRI_ASSERT(oldHeader != nullptr);
-      auto* rm = oldHeader->rm;
-      TRI_ASSERT(rm != nullptr);
       auto len = _data.supervisedStringMeta.getLength();
-      auto* newHeader = static_cast<SupervisedHeader*>(
-          ::operator new(sizeof(SupervisedHeader)));
-      // account only header memory
-      rm->increaseMemoryUsage(sizeof(SupervisedHeader));
-      newHeader->rm = rm;
-      newHeader->dataPtr = oldHeader->dataPtr;
       AqlValue res;
-      res._data.supervisedStringMeta.header = newHeader;
+      res._data.supervisedStringMeta.payload =
+          _data.supervisedStringMeta.payload;
       res._data.supervisedStringMeta.lengthOrigin = res.encodeTypeOriginLength(
           AqlValueType::VPACK_SUPERVISED_STRING, 1, static_cast<uint64_t>(len));
       return res;
@@ -1098,38 +1064,38 @@ void AqlValue::destroy() noexcept {
       break;
     }
     case VPACK_SUPERVISED_SLICE: {
-      auto* header = _data.supervisedSliceMeta.header;
-      if (header != nullptr) {
-        auto len = _data.supervisedSliceMeta.getLength();
-        auto origin = _data.supervisedSliceMeta.getOrigin();
-        auto* rm = header->rm;
+      auto len = _data.supervisedSliceMeta.getLength();
+      auto origin = _data.supervisedSliceMeta.getOrigin();
+      auto* payload = _data.supervisedSliceMeta.payload;
+      if (origin == 0 && payload != nullptr) {
+        // compute pointer to the beginning of the allocated block
+        auto* base = reinterpret_cast<uint8_t*>(payload) -
+                     sizeof(arangodb::ResourceMonitor*);
+        // read resource monitor pointer
+        auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
+        std::size_t totalSize =
+            sizeof(arangodb::ResourceMonitor*) + static_cast<std::size_t>(len);
         if (len != 0) {
-          rm->decreaseMemoryUsage(static_cast<std::uint64_t>(len));
+          rm->decreaseMemoryUsage(totalSize);
         }
-        rm->decreaseMemoryUsage(sizeof(SupervisedHeader));
-        if (origin == 0 && header->dataPtr != nullptr) {
-          ::operator delete(header->dataPtr);
-        }
-        ::operator delete(header);
+        ::operator delete(base);
       }
       break;
     }
     case VPACK_SUPERVISED_STRING: {
-      auto* header = _data.supervisedStringMeta.header;
-      if (header != nullptr) {
-        auto len = _data.supervisedStringMeta.getLength();
-        auto origin = _data.supervisedStringMeta.getOrigin();
-        auto* rm = header->rm;
+      auto len = _data.supervisedStringMeta.getLength();
+      auto origin = _data.supervisedStringMeta.getOrigin();
+      auto* payload = _data.supervisedStringMeta.payload;
+      if (origin == 0 && payload != nullptr) {
+        auto* base = reinterpret_cast<uint8_t*>(payload) -
+                     sizeof(arangodb::ResourceMonitor*);
+        auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
+        std::size_t totalSize =
+            sizeof(arangodb::ResourceMonitor*) + static_cast<std::size_t>(len);
         if (len != 0) {
-          rm->decreaseMemoryUsage(static_cast<std::uint64_t>(len));
+          rm->decreaseMemoryUsage(totalSize);
         }
-        rm->decreaseMemoryUsage(sizeof(SupervisedHeader));
-        if (origin == 0 && header->dataPtr != nullptr) {
-          // payload is expected to be a std::string*
-          auto* str = static_cast<std::string*>(header->dataPtr);
-          delete str;
-        }
-        ::operator delete(header);
+        ::operator delete(base);
       }
       break;
     }
@@ -1161,11 +1127,11 @@ VPackSlice AqlValue::slice(AqlValueType type) const {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-          _data.supervisedSliceMeta.header->dataPtr)};
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedSliceMeta.payload)};
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{reinterpret_cast<uint8_t const*>(
-          _data.supervisedStringMeta.header->dataPtr)};
+      return VPackSlice{
+          reinterpret_cast<uint8_t const*>(_data.supervisedStringMeta.payload)};
     default:
       THROW_ARANGO_EXCEPTION(TRI_ERROR_ARANGO_DOCUMENT_TYPE_INVALID);
   }
@@ -1453,8 +1419,8 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer) {
         auto& global = arangodb::GlobalResourceMonitor::instance();
         arangodb::ResourceMonitor dummyMonitor(global);
         arangodb::ResourceUsageScope tmpScope(dummyMonitor);
-        _data.managedSliceMeta.pointer =
-            sb->stealWithMemoryAccounting(tmpScope);
+        _data.managedSliceMeta.pointer = sb->stealWithMemoryAccounting(
+            tmpScope);  // optimize for read rather than write without dataPtr*
       } else {
         _data.managedSliceMeta.pointer = buffer.steal();
       }
@@ -1531,10 +1497,12 @@ size_t AqlValue::memoryUsage() const noexcept {
       // It should be length, because in case of clone
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
-    case VPACK_SUPERVISED_SLICE:  // + monitor
-      return static_cast<size_t>(_data.supervisedSliceMeta.getLength());
-    case VPACK_SUPERVISED_STRING:  // + monitor
-      return static_cast<size_t>(_data.supervisedStringMeta.getLength());
+    case VPACK_SUPERVISED_SLICE:  // includes monitor pointer
+      return static_cast<size_t>(_data.supervisedSliceMeta.getLength()) +
+             sizeof(arangodb::ResourceMonitor*);
+    case VPACK_SUPERVISED_STRING:  // includes monitor pointer
+      return static_cast<size_t>(_data.supervisedStringMeta.getLength()) +
+             sizeof(arangodb::ResourceMonitor*);
     case RANGE:
       return sizeof(Range);
     default:
