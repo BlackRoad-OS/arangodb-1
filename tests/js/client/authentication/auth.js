@@ -1057,7 +1057,7 @@ function AuthMechanismSuite() {
 
   const isCluster = require('internal').isCluster();
   const runArangosh = require("@arangodb/testutils/client-tools").run.arangoshCmd;
-  const instance = isCluster ?  global.instanceManager.arangods.filter(arangod => arangod.instanceRole === "coordinator")[0] : global.instanceManager.arangods[0];
+  const instance = isCluster ?  IM.arangods.filter(arangod => arangod.instanceRole === "coordinator")[0] : IM.arangods[0];
   const testCollection = "testCollectionAuthMechanism";
   const userManager = require("@arangodb/users");
   const rootPassword = "root";
@@ -1083,10 +1083,7 @@ function AuthMechanismSuite() {
 
     testUserNamePassword: function () {
       const docKey = "testUserNamePassword";
-      const res = runArangosh({
-        username: "root",
-        password: rootPassword
-      }, instance, {
+      const res = runArangosh({ ...IM.options, username: "root", password: rootPassword }, instance, {
         "javascript.execute-string": `db["${testCollection}"].save({_key: "${docKey}"});`
       }, "");
       assertFalse(res.hasOwnProperty("exitCode"), `Error on exit code: ${JSON.stringify(res)}`);
@@ -1100,10 +1097,7 @@ function AuthMechanismSuite() {
 
     testWrongUserNamePassword: function () {
       const docKey = "testWrongUserNamePassword";
-      const res = runArangosh({
-        username: "rooter",
-        password: rootPassword
-      }, instance, {
+      const res = runArangosh({ ...IM.options, username: "rooter", password: rootPassword }, instance, {
         "javascript.execute-string": `db["${testCollection}"].save({_key: "${docKey}"});`
       }, "");
       assertEqual(res.exitCode, 1, `Error on exit code: ${JSON.stringify(res)}`);
@@ -1117,10 +1111,7 @@ function AuthMechanismSuite() {
 
     testUserNameWrongPassword: function () {
       const docKey = "testUserNameWrongPassword";
-      const res = runArangosh({
-        username: "root",
-        password: "abc"
-      }, instance, {
+      const res = runArangosh({ ...IM.options, username: "root", password: "abc" }, instance, {
         "javascript.execute-string": `db["${testCollection}"].save({_key: "${docKey}"});`
       }, "");
       assertEqual(res.exitCode, 1, `Error on exit code: ${JSON.stringify(res)}`);
@@ -1134,8 +1125,8 @@ function AuthMechanismSuite() {
 
     testNoUserNameNoPassword: function () {
       const docKey = "testNoUserNameNoPassword";
-      const res = runArangosh({
-      }, instance, {
+      const {username, password, ...options} = IM.options;
+      const res = runArangosh(options, instance, {
         "javascript.execute-string": `db["${testCollection}"].save({_key: "${docKey}"});`
       }, "");
       assertEqual(res.exitCode, 1, `Error on exit code: ${JSON.stringify(res)}`);
@@ -1160,8 +1151,8 @@ function AuthMechanismSuite() {
       const jwtToken = tokenResponse.jwt;
       
       // Test with valid JWT token
-      const res = runArangosh({
-      }, instance, {
+      const {username, password, ...options} = IM.options;
+      const res = runArangosh(options, instance, {
         "server.jwt-token": jwtToken,
         "javascript.execute-string": `db["${testCollection}"].save({_key: "${docKey}"});`
       }, "");
@@ -1191,8 +1182,8 @@ function AuthMechanismSuite() {
       const invalidJwtToken = validJwtToken.substring(0, validJwtToken.length - 5) + "INVALID";
       
       // Test with invalid JWT token
-      const res = runArangosh({
-      }, instance, {
+      const {username, password, ...options} = IM.options;
+      const res = runArangosh(options, instance, {
         "server.jwt-token": invalidJwtToken,
         "javascript.execute-string": `db["${testCollection}"].save({_key: "${docKey}"});`
       }, "");
