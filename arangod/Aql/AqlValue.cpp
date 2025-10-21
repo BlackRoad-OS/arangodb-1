@@ -67,7 +67,7 @@ static inline uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
                                           std::uint64_t len) {
   void* base = ::operator new(kPrefix + static_cast<std::size_t>(len));
   *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-  uint8_t* payload = reinterpret_cast<uint8_t*>(base) + kPrefix;
+  uint8_t* payload = reinterpret_cast<uint8_t*>(base);
   if (len) {
     rm.increaseMemoryUsage(len);
   }
@@ -1527,11 +1527,21 @@ size_t AqlValue::memoryUsage() const noexcept {
   }
 }
 
-void AqlValue::initFromSlice(VPackSlice slice, VPackValueLength length) {
+void AqlValue::initFromSlice(VPackSlice slice, VPackValueLength length,
+                             ResourceMonitor* rm) {
   TRI_ASSERT(!slice.isExternal());
   TRI_ASSERT(length > 0);
   TRI_ASSERT(slice.byteSize() == length);
   if (length > sizeof(_data.inlineSliceMeta.slice)) {
+    if (rm != nullptr) {
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                        MemoryOriginType::New);
+      auto payload = allocateSupervised(*rm, length);
+
+      std::memcpy(payload + kPrefix, slice.begin(), length);
+      _data.supervisedSliceMeta.pointer = payload;
+      return;
+    }
     // Use managed slice
     setManagedSliceData(MemoryOriginType::New, length);
     _data.managedSliceMeta.pointer = new uint8_t[length];
@@ -1601,6 +1611,36 @@ void const* AqlValue::data() const noexcept {
       return nullptr;
   }
 }
+
+void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
+  TRI_ASSERT(at == VPACK_SUPERVISED_SLICE || at == VPACK_SUPERVISED_STRING);
+  TRI_ASSERT(mot == MemoryOriginType::New || mot == MemoryOriginType::Malloc);
+
+  uint64_t lo = 0;  // This is the first 8 bytes: LengthOrigin [ AT | MO |
+                    // padding(6 bytes) ]
+  if constexpr (basics::isLittleEndian()) {
+    lo |= (static_cast<uint64_t>(mot) << 8);
+    lo |= static_cast<uint64_t>(at);
+  } else {
+    lo |= (static_cast<uint64_t>(mot) << 48);
+    lo |= (static_cast<uint64_t>(at) << 56);
+  }
+
+  if (at == VPACK_SUPERVISED_SLICE) {
+    TRI_ASSERT(type() == VPACK_SUPERVISED_SLICE);
+    _data.supervisedSliceMeta.lengthOrigin = lo;
+    TRI_ASSERT(_data.supervisedSliceMeta.getOrigin() ==
+               static_cast<uint64_t>(mot));
+  } else {  // VPACK_SUPERVISED_STRING
+    TRI_ASSERT(type() == VPACK_SUPERVISED_STRING);
+    _data.supervisedStringMeta.lengthOrigin = lo;
+    TRI_ASSERT(_data.supervisedStringMeta.getOrigin() ==
+               static_cast<uint64_t>(mot));
+  }
+
+  TRI_ASSERT(memoryUsage() == length);
+}
+
 }  // namespace arangodb::aql
 
 namespace std {

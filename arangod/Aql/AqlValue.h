@@ -554,7 +554,8 @@ struct AqlValue final {
 
  private:
   /// @brief initializes value from a slice, when the length is already known
-  void initFromSlice(velocypack::Slice slice, velocypack::ValueLength length);
+  void initFromSlice(velocypack::Slice slice, velocypack::ValueLength length,
+                     ResourceMonitor* rm = nullptr);
   void initFromUint(uint64_t v);
   void initFromInt(int64_t v);
 
@@ -570,6 +571,8 @@ struct AqlValue final {
   /// @brief store meta information for values of type VPACK_MANAGED_SLICE
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
+
+  void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot);
 };
 
 static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
