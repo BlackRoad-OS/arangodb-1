@@ -384,6 +384,7 @@ struct AqlValue final {
            velocypack::ValueLength length);
   AqlValue(arangodb::ResourceMonitor& rm,
            velocypack::Buffer<uint8_t> const& buffer);
+  AqlValue(arangodb::ResourceMonitor& rm, velocypack::Buffer<uint8_t>&& buffer);
   AqlValue(arangodb::ResourceMonitor& rm, AqlValueHintSliceCopy v);
 
   /// @brief AqlValues can be copied and moved as required
