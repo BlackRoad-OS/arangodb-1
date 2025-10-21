@@ -2,6 +2,7 @@
 
 import os
 import sys
+import signal
 import subprocess
 from pathlib import Path
 from typing import Optional, List
@@ -271,13 +272,64 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
     # Execute tests
     console.print(f"[cyan]Running tests with command:[/cyan] {' '.join(pytest_args)}")
-    result = subprocess.run(pytest_args, cwd=Path.cwd(), check=False)
 
-    if result.returncode == 0:
+    # Start pytest subprocess
+    process = subprocess.Popen(
+        pytest_args,
+        cwd=Path.cwd(),
+    )
+
+    # Track signal handling state
+    signal_count = 0
+
+    def signal_handler(signum, frame):
+        """Two-stage signal handling: graceful first, force kill on second signal."""
+        nonlocal signal_count
+        signal_count += 1
+
+        if signal_count == 1:
+            # First signal: forward to subprocess for graceful cleanup
+            if process.poll() is None:  # Process still running
+                console.print(
+                    "\n[yellow]Initiating graceful shutdown (Ctrl-C again to force kill)...[/yellow]"
+                )
+                try:
+                    process.send_signal(signum)
+                except ProcessLookupError:
+                    pass
+        else:
+            # Second signal: force kill everything
+            console.print("\n[red]Force killing all processes...[/red]")
+            if process.poll() is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            sys.exit(128 + signum)
+
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Wait for subprocess to complete
+    try:
+        returncode = process.wait()
+    except KeyboardInterrupt:
+        # First Ctrl-C: signal handler forwarded SIGINT to subprocess for graceful cleanup
+        # Wait for it to finish
+        try:
+            returncode = process.wait()
+        except KeyboardInterrupt:
+            # Second Ctrl-C while waiting: force kill
+            if process.poll() is None:
+                process.kill()
+            sys.exit(130)
+
+    if returncode == 0:
         console.print("[green]✅ All tests passed![/green]")
     else:
-        console.print(f"[red]❌ Tests failed (exit code: {result.returncode})[/red]")
-    sys.exit(result.returncode)
+        console.print(f"[red]❌ Tests failed (exit code: {returncode})[/red]")
+    sys.exit(returncode)
 
 
 @test_app.command(name="list")

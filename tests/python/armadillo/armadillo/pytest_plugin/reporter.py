@@ -58,6 +58,7 @@ class ArmadilloReporter:
         self.summary_printed = False
         self.use_colors = Colors.is_color_supported()
         self.current_file = None  # Track current test file for header display
+        self.deployment_failed = False  # Flag set by plugin when deployment fails
         self.file_start_times: Dict[str, float] = {}  # Track start time per file
         self.file_test_counts: Dict[str, int] = {}  # Track test count per file
         self.file_expected_counts: Dict[str, int] = {}  # Expected test count per file
@@ -149,8 +150,11 @@ class ArmadilloReporter:
             self.session_finish_time if self.session_finish_time > 0 else time.time()
         )
         total_time = int((end_time - self.session_start_time) * 1000)
-        summary_color = Colors.GREEN if self.failed_tests == 0 else Colors.RED
-        status_text = "PASSED" if self.failed_tests == 0 else "FAILED"
+
+        # Consider it a failure if tests failed OR deployment failed
+        is_failure = self.failed_tests > 0 or self.deployment_failed
+        summary_color = Colors.RED if is_failure else Colors.GREEN
+        status_text = "FAILED" if is_failure else "PASSED"
         write_stdout(
             f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n"
         )

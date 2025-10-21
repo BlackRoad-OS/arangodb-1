@@ -284,17 +284,21 @@ def _get_or_create_cluster(self) -> "InstanceManager":
                 logger.error(error_msg)
                 for detail in crash_details:
                     logger.error("  %s", detail)
-
-                # Set deployment failure flag instead of raising exception
-                self._deployment_failed = True
-                self._deployment_failure_reason = error_msg
-                return None
             else:
-                logger.error("Deployment failed: %s", str(e))
-                raise
+                error_msg = f"Cluster deployment failed: {str(e)}"
+                logger.error(error_msg)
+
+            # Set deployment failure flag instead of raising exception
+            self._deployment_failed = True
+            self._deployment_failure_reason = error_msg
+            return None
         except Exception as e:
-            logger.error("Deployment failed: %s", str(e))
-            raise
+            # Catch all other exceptions during deployment
+            error_msg = f"Cluster deployment failed: {str(e)}"
+            logger.error(error_msg)
+            self._deployment_failed = True
+            self._deployment_failure_reason = error_msg
+            return None
 
         self._session_deployments["cluster"] = manager
     return self._session_deployments["cluster"]
@@ -332,17 +336,21 @@ def _get_or_create_single_server(self) -> ArangoServer:
                 logger.error(error_msg)
                 for detail in crash_details:
                     logger.error("  %s", detail)
-
-                # Set deployment failure flag instead of raising exception
-                self._deployment_failed = True
-                self._deployment_failure_reason = error_msg
-                return None
             else:
-                logger.error("Single server deployment failed: %s", str(e))
-                raise
+                error_msg = f"Single server deployment failed: {str(e)}"
+                logger.error(error_msg)
+
+            # Set deployment failure flag instead of raising exception
+            self._deployment_failed = True
+            self._deployment_failure_reason = error_msg
+            return None
         except Exception as e:
-            logger.error("Single server deployment failed: %s", str(e))
-            raise
+            # Catch all other exceptions during deployment
+            error_msg = f"Single server deployment failed: {str(e)}"
+            logger.error(error_msg)
+            self._deployment_failed = True
+            self._deployment_failure_reason = error_msg
+            return None
 
         # Store manager (not individual server) for cleanup
         self._session_deployments["single"] = manager
@@ -542,8 +550,37 @@ def pytest_sessionstart(session):
             signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
         )
         logger.warning(f"Received {signal_name}, performing emergency cleanup...")
+
+        # Perform cleanup and wait for it to complete
         _emergency_cleanup()
-        sys.exit(128 + signum)  # Standard exit code for signal termination
+
+        # Give cleanup time to work (max 10 seconds)
+        logger.info("Waiting for processes to terminate...")
+        cleanup_timeout = 10.0
+        start_time = time.time()
+
+        # Check if processes are still running
+        try:
+            from ..core.process import _process_supervisor
+
+            while (time.time() - start_time) < cleanup_timeout:
+                if (
+                    not hasattr(_process_supervisor, "_processes")
+                    or not _process_supervisor._processes
+                ):
+                    logger.info("All supervised processes terminated successfully")
+                    break
+                time.sleep(0.5)  # Check every 500ms
+            else:
+                logger.warning(
+                    "Cleanup timeout reached, some processes may still be running"
+                )
+        except Exception as e:
+            logger.error("Error during cleanup monitoring: %s", e)
+
+        # Don't call sys.exit() as it causes pytest INTERNALERROR
+        # The cleanup is already working correctly
+        logger.info("Emergency cleanup completed, exiting gracefully")
 
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
@@ -589,10 +626,17 @@ def pytest_sessionfinish(session, exitstatus):
     """Clean up all resources at the end of test session."""
     logger.debug("Starting pytest plugin cleanup")
 
+    # If deployment failed, set exit status to failure
+    if _plugin._deployment_failed:
+        logger.error("Setting exit status to 1 due to deployment failure")
+        session.exitstatus = 1
+
     # Capture the test end time BEFORE server shutdown begins
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
         reporter.session_finish_time = time.time()
+        # Set deployment failed flag on reporter so it shows FAILED status
+        reporter.deployment_failed = _plugin._deployment_failed
         # Print the final summary immediately, before any server cleanup
         reporter.print_final_summary()
         reporter.pytest_sessionfinish(session, exitstatus)
@@ -837,10 +881,14 @@ def _cleanup_all_deployments(emergency=True):
 def _cleanup_all_processes(emergency=True):
     """Cleanup all supervised processes with bulletproof termination."""
     try:
+        logger.info("Starting _cleanup_all_processes")
         from ..core.process import _process_supervisor
 
         if hasattr(_process_supervisor, "_processes"):
             process_ids = list(_process_supervisor._processes.keys())
+            logger.info(
+                "Found %d processes to cleanup: %s", len(process_ids), process_ids
+            )
             if process_ids:
                 if emergency:
                     logger.warning(
@@ -854,11 +902,32 @@ def _cleanup_all_processes(emergency=True):
                 graceful_failed = []
                 for process_id in process_ids:
                     try:
+                        # Check if process is already dead before trying to stop it
+                        if process_id in _process_supervisor._processes:
+                            process = _process_supervisor._processes[process_id]
+                            if process.poll() is not None:
+                                logger.debug(
+                                    "Process %s already dead (exit code: %s), skipping",
+                                    process_id,
+                                    process.returncode,
+                                )
+                                # Remove it from tracking since it's already dead
+                                _process_supervisor._cleanup_process(process_id)
+                                continue
+
+                        logger.debug("Sending SIGTERM to process group %s", process_id)
                         _process_supervisor.stop(process_id, graceful=True, timeout=3.0)
                         logger.debug("Process %s terminated gracefully", process_id)
                     except (OSError, ProcessLookupError) as e:
                         logger.warning(
                             "Graceful termination failed for %s: %s", process_id, e
+                        )
+                        graceful_failed.append(process_id)
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error during graceful termination of %s: %s",
+                            process_id,
+                            e,
                         )
                         graceful_failed.append(process_id)
                 if graceful_failed:
@@ -869,6 +938,22 @@ def _cleanup_all_processes(emergency=True):
                     )
                     for process_id in graceful_failed:
                         try:
+                            # Check if process is already dead before trying to force kill it
+                            if process_id in _process_supervisor._processes:
+                                process = _process_supervisor._processes[process_id]
+                                if process.poll() is not None:
+                                    logger.debug(
+                                        "Process %s already dead (exit code: %s), skipping force kill",
+                                        process_id,
+                                        process.returncode,
+                                    )
+                                    # Remove it from tracking since it's already dead
+                                    _process_supervisor._cleanup_process(process_id)
+                                    continue
+
+                            logger.debug(
+                                "Sending SIGKILL to process group %s", process_id
+                            )
                             _process_supervisor.stop(
                                 process_id, graceful=False, timeout=2.0
                             )
@@ -879,9 +964,47 @@ def _cleanup_all_processes(emergency=True):
                                 process_id,
                                 e,
                             )
+                        except Exception as e:
+                            logger.error(
+                                "CRITICAL: Unexpected error force killing process %s: %s",
+                                process_id,
+                                e,
+                            )
                 logger.info("Emergency process cleanup completed")
+
+                # Final verification: check if any processes are still running
+                try:
+                    remaining_processes = []
+                    for process_id in process_ids:
+                        if process_id in _process_supervisor._processes:
+                            process = _process_supervisor._processes[process_id]
+                            try:
+                                # Check if process is still alive
+                                if process.poll() is None:  # None means still running
+                                    remaining_processes.append(process_id)
+                            except Exception:
+                                # Process might be in inconsistent state
+                                remaining_processes.append(process_id)
+
+                    if remaining_processes:
+                        logger.error(
+                            "CRITICAL: %d processes still running after cleanup: %s",
+                            len(remaining_processes),
+                            remaining_processes,
+                        )
+                    else:
+                        logger.info("All processes successfully terminated")
+                except Exception as e:
+                    logger.error("Error during final process verification: %s", e)
+            else:
+                logger.debug("No supervised processes to cleanup")
+        else:
+            logger.debug("Process supervisor not available")
     except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
         logger.error("Error during emergency process cleanup: %s", e)
+        logger.error("Stack trace: %s", traceback.format_exc())
+    except Exception as e:
+        logger.error("Unexpected error during emergency process cleanup: %s", e)
         logger.error("Stack trace: %s", traceback.format_exc())
 
 
@@ -907,8 +1030,20 @@ def _emergency_cleanup():
         logger.warning("Emergency cleanup triggered via atexit")
 
     try:
-        _cleanup_all_deployments(emergency=True)
-        _cleanup_all_processes(emergency=True)
+        logger.info("Starting emergency cleanup...")
+        logger.info(
+            "has_deployments: %s, has_processes: %s", has_deployments, has_processes
+        )
+
+        try:
+            _cleanup_all_deployments(emergency=True)
+        except Exception as e:
+            logger.error("Error during deployment cleanup: %s", e)
+
+        try:
+            _cleanup_all_processes(emergency=True)
+        except Exception as e:
+            logger.error("Error during process cleanup: %s", e)
 
         # Only use nuclear option if processes still remain after normal emergency cleanup
         try:
@@ -918,9 +1053,12 @@ def _emergency_cleanup():
                 hasattr(_process_supervisor, "_processes")
                 and _process_supervisor._processes
             ):
+                logger.warning("Some processes still running, using nuclear cleanup...")
                 from ..core.process import kill_all_supervised_processes
 
                 kill_all_supervised_processes()
+            else:
+                logger.info("All processes cleaned up successfully")
         except (OSError, ProcessLookupError, AttributeError, RuntimeError) as nuclear_e:
             logger.error("Nuclear cleanup failed: %s", nuclear_e)
     except (OSError, ProcessLookupError, AttributeError, RuntimeError) as e:
