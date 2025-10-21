@@ -100,7 +100,7 @@ void AqlValue::setPointer(uint8_t const* pointer) noexcept {
           static_cast<std::uint64_t>(velocypack::Slice(pointer).byteSize());
       setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginAdopted,
                 len, _data.supervisedSliceMeta.lengthOrigin);
-      _data.supervisedSliceMeta.dataPtr = const_cast<uint8_t*>(pointer);
+      _data.supervisedSliceMeta.pointer = const_cast<uint8_t*>(pointer);
       return;
     }
     case VPACK_SUPERVISED_STRING: {
@@ -108,7 +108,7 @@ void AqlValue::setPointer(uint8_t const* pointer) noexcept {
           static_cast<std::uint64_t>(velocypack::Slice(pointer).byteSize());
       setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_STRING), kOriginAdopted,
                 len, _data.supervisedStringMeta.lengthOrigin);
-      _data.supervisedStringMeta.dataPtr = const_cast<uint8_t*>(pointer);
+      _data.supervisedStringMeta.pointer = const_cast<uint8_t*>(pointer);
       return;
     }
     default:
@@ -172,11 +172,11 @@ bool AqlValue::isNull(bool emptyIsNull) const noexcept {
       return s.isNull() || (emptyIsNull && s.isNone());
     }
     case VPACK_SUPERVISED_SLICE: {
-      VPackSlice s{_data.supervisedSliceMeta.dataPtr};
+      VPackSlice s{_data.supervisedSliceMeta.pointer};
       return s.isNull() || (emptyIsNull && s.isNone());
     }
     case VPACK_SUPERVISED_STRING: {
-      VPackSlice s{_data.supervisedStringMeta.dataPtr};
+      VPackSlice s{_data.supervisedStringMeta.pointer};
       return s.isNull() || (emptyIsNull && s.isNone());
     }
     default:
@@ -194,9 +194,9 @@ bool AqlValue::isBoolean() const noexcept {
     case VPACK_MANAGED_SLICE:
       return VPackSlice{_data.managedSliceMeta.pointer}.isBoolean();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.dataPtr}.isBoolean();
+      return VPackSlice{_data.supervisedSliceMeta.pointer}.isBoolean();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.dataPtr}.isBoolean();
+      return VPackSlice{_data.supervisedStringMeta.pointer}.isBoolean();
     default:
       return false;
   }
@@ -216,9 +216,9 @@ bool AqlValue::isNumber() const noexcept {
     case VPACK_MANAGED_SLICE:
       return VPackSlice{_data.managedSliceMeta.pointer}.isNumber();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.dataPtr}.isNumber();
+      return VPackSlice{_data.supervisedSliceMeta.pointer}.isNumber();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.dataPtr}.isNumber();
+      return VPackSlice{_data.supervisedStringMeta.pointer}.isNumber();
     default:
       return false;
   }
@@ -236,9 +236,9 @@ bool AqlValue::isString() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isString();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.dataPtr}.isString();
+      return VPackSlice{_data.supervisedSliceMeta.pointer}.isString();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.dataPtr}.isString();
+      return VPackSlice{_data.supervisedStringMeta.pointer}.isString();
     default:
       return false;
   }
@@ -256,9 +256,9 @@ bool AqlValue::isObject() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isObject();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.dataPtr}.isObject();
+      return VPackSlice{_data.supervisedSliceMeta.pointer}.isObject();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.dataPtr}.isObject();
+      return VPackSlice{_data.supervisedStringMeta.pointer}.isObject();
     default:
       return false;
   }
@@ -276,9 +276,9 @@ bool AqlValue::isArray() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isArray();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.dataPtr}.isArray();
+      return VPackSlice{_data.supervisedSliceMeta.pointer}.isArray();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.dataPtr}.isArray();
+      return VPackSlice{_data.supervisedStringMeta.pointer}.isArray();
     case RANGE:
       return true;
     default:
@@ -306,10 +306,10 @@ std::string_view AqlValue::getTypeString() const noexcept {
       s = _data.managedStringMeta.toSlice();
       break;
     case VPACK_SUPERVISED_SLICE:
-      s = VPackSlice{_data.supervisedSliceMeta.dataPtr};
+      s = VPackSlice{_data.supervisedSliceMeta.pointer};
       break;
     case VPACK_SUPERVISED_STRING:
-      s = VPackSlice{_data.supervisedStringMeta.dataPtr};
+      s = VPackSlice{_data.supervisedStringMeta.pointer};
       break;
     case RANGE:
       return "array";
@@ -942,10 +942,10 @@ void AqlValue::toVelocyPack(velocypack::Options const* options,
       builder.add(s);
     } break;
     case VPACK_SUPERVISED_SLICE: {
-      builder.add(VPackSlice{_data.supervisedSliceMeta.dataPtr});
+      builder.add(VPackSlice{_data.supervisedSliceMeta.pointer});
     } break;
     case VPACK_SUPERVISED_STRING: {
-      builder.add(VPackSlice{_data.supervisedStringMeta.dataPtr});
+      builder.add(VPackSlice{_data.supervisedStringMeta.pointer});
     } break;
     case RANGE: {
       builder.openArray(/*unindexed*/ allowUnindexed);
@@ -1013,22 +1013,22 @@ void AqlValue::destroy() noexcept {
     case VPACK_SUPERVISED_SLICE: {
       auto lo = _data.supervisedSliceMeta.lengthOrigin;
       auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(_data.supervisedSliceMeta.dataPtr).byteSize());
+          velocypack::Slice(_data.supervisedSliceMeta.pointer).byteSize());
       if (getOrigin8(lo) == kOriginOwned) {
-        deallocateSupervised(_data.supervisedSliceMeta.dataPtr, len);
+        deallocateSupervised(_data.supervisedSliceMeta.pointer, len);
       }
-      _data.supervisedSliceMeta.dataPtr = nullptr;
+      _data.supervisedSliceMeta.pointer = nullptr;
       _data.supervisedSliceMeta.lengthOrigin = 0;
       break;
     }
     case VPACK_SUPERVISED_STRING: {
       auto lo = _data.supervisedStringMeta.lengthOrigin;
       auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(_data.supervisedStringMeta.dataPtr).byteSize());
+          velocypack::Slice(_data.supervisedStringMeta.pointer).byteSize());
       if (getOrigin8(lo) == kOriginOwned) {
-        deallocateSupervised(_data.supervisedStringMeta.dataPtr, len);
+        deallocateSupervised(_data.supervisedStringMeta.pointer, len);
       }
-      _data.supervisedStringMeta.dataPtr = nullptr;
+      _data.supervisedStringMeta.pointer = nullptr;
       _data.supervisedStringMeta.lengthOrigin = 0;
       break;
     }
@@ -1056,9 +1056,9 @@ VPackSlice AqlValue::slice(AqlValueType type) const {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.dataPtr};
+      return VPackSlice{_data.supervisedSliceMeta.pointer};
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.dataPtr};
+      return VPackSlice{_data.supervisedStringMeta.pointer};
     default:
       THROW_ARANGO_EXCEPTION(TRI_ERROR_ARANGO_DOCUMENT_TYPE_INVALID);
   }
@@ -1385,7 +1385,7 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice) {
   setType(AqlValueType::VPACK_SUPERVISED_SLICE);
   setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
             _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.dataPtr = p;
+  _data.supervisedSliceMeta.pointer = p;
 }
 
 AqlValue::AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice,
@@ -1400,7 +1400,7 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice,
   setType(AqlValueType::VPACK_SUPERVISED_SLICE);
   setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
             _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.dataPtr = p;
+  _data.supervisedSliceMeta.pointer = p;
 }
 
 AqlValue::AqlValue(arangodb::ResourceMonitor& rm, uint8_t const* bytes,
@@ -1415,7 +1415,7 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& rm, uint8_t const* bytes,
   setType(AqlValueType::VPACK_SUPERVISED_SLICE);
   setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
             _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.dataPtr = p;
+  _data.supervisedSliceMeta.pointer = p;
 }
 
 AqlValue::AqlValue(arangodb::ResourceMonitor& rm,
@@ -1431,7 +1431,7 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& rm,
   setType(AqlValueType::VPACK_SUPERVISED_SLICE);
   setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
             _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.dataPtr = p;
+  _data.supervisedSliceMeta.pointer = p;
 }
 
 AqlValue::AqlValue(arangodb::ResourceMonitor& rm,
@@ -1448,7 +1448,7 @@ AqlValue::AqlValue(arangodb::ResourceMonitor& rm,
   setType(AqlValueType::VPACK_SUPERVISED_SLICE);
   setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
             _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.dataPtr = p;
+  _data.supervisedSliceMeta.pointer = p;
   buffer.clear();
 }
 
@@ -1511,13 +1511,13 @@ size_t AqlValue::memoryUsage() const noexcept {
     case VPACK_SUPERVISED_SLICE: {
       auto lo = _data.supervisedSliceMeta.lengthOrigin;
       auto len = static_cast<size_t>(
-          velocypack::Slice(_data.supervisedSliceMeta.dataPtr).byteSize());
+          velocypack::Slice(_data.supervisedSliceMeta.pointer).byteSize());
       return getOrigin8(lo) == kOriginOwned ? len + kPrefix : 0;
     }
     case VPACK_SUPERVISED_STRING: {
       auto lo = _data.supervisedStringMeta.lengthOrigin;
       auto len = static_cast<size_t>(
-          velocypack::Slice(_data.supervisedStringMeta.dataPtr).byteSize());
+          velocypack::Slice(_data.supervisedStringMeta.pointer).byteSize());
       return getOrigin8(lo) == kOriginOwned ? len + kPrefix : 0;
     }
     case RANGE:
@@ -1591,9 +1591,9 @@ void const* AqlValue::data() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.pointer;
     case VPACK_SUPERVISED_SLICE:
-      return _data.supervisedSliceMeta.dataPtr;
+      return _data.supervisedSliceMeta.pointer;
     case VPACK_SUPERVISED_STRING:
-      return _data.supervisedStringMeta.dataPtr;
+      return _data.supervisedStringMeta.pointer;
     case RANGE:
       return _data.rangeMeta.range;
     default:
@@ -1625,9 +1625,9 @@ size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
     case AqlValue::VPACK_MANAGED_STRING:
       return std::hash<void const*>()(x._data.managedStringMeta.pointer);
     case AqlValue::VPACK_SUPERVISED_SLICE:
-      return std::hash<void const*>()(x._data.supervisedSliceMeta.dataPtr);
+      return std::hash<void const*>()(x._data.supervisedSliceMeta.pointer);
     case AqlValue::VPACK_SUPERVISED_STRING:
-      return std::hash<void const*>()(x._data.supervisedStringMeta.dataPtr);
+      return std::hash<void const*>()(x._data.supervisedStringMeta.pointer);
     case AqlValue::RANGE:
       return std::hash<void const*>()(x._data.rangeMeta.range);
   }
@@ -1661,11 +1661,11 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       return a._data.managedStringMeta.pointer ==
              b._data.managedStringMeta.pointer;
     case AqlValue::VPACK_SUPERVISED_SLICE:
-      return a._data.supervisedSliceMeta.dataPtr ==
-             b._data.supervisedSliceMeta.dataPtr;
+      return a._data.supervisedSliceMeta.pointer ==
+             b._data.supervisedSliceMeta.pointer;
     case AqlValue::VPACK_SUPERVISED_STRING:
-      return a._data.supervisedStringMeta.dataPtr ==
-             b._data.supervisedStringMeta.dataPtr;
+      return a._data.supervisedStringMeta.pointer ==
+             b._data.supervisedStringMeta.pointer;
     case AqlValue::RANGE:
       return a._data.rangeMeta.range == b._data.rangeMeta.range;
   }
