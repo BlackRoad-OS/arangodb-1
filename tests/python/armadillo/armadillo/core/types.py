@@ -123,44 +123,23 @@ class ArmadilloConfig(BaseModel):
     compact_mode: bool = False
     show_server_logs: bool = False
 
+    # Test mode flag - explicit instead of stack inspection
+    is_test_mode: bool = False
+
     @model_validator(mode="after")
     def validate_config(self) -> "ArmadilloConfig":
-        """Validate and normalize configuration."""
-        # Import here to avoid circular imports
-        import inspect  # pylint: disable=import-outside-toplevel
-        from .build_detection import detect_build_directory, normalize_build_directory
-        from .errors import ConfigurationError, PathError
+        """Validate configuration - NO SIDE EFFECTS.
 
-        # Set default temp directory if not specified
-        if self.temp_dir is None:
-            self.temp_dir = Path("/tmp/armadillo")
+        This method performs ONLY pure validation that the configuration
+        is internally consistent. It does NOT:
+        - Create directories
+        - Detect build directories
+        - Perform any I/O operations
 
-        # Create temp directory
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
-
-        # Handle bin_dir: normalize or auto-detect
-        if self.bin_dir is not None:
-            # User explicitly provided a build directory
-            # Normalize it to find the actual bin directory containing arangod
-            normalized_bin_dir = normalize_build_directory(self.bin_dir)
-            if normalized_bin_dir is None:
-                # Directory exists but no arangod found
-                raise PathError(
-                    f"Could not find arangod binary in build directory: {self.bin_dir}\n"
-                    f"Looked in:\n"
-                    f"  - {self.bin_dir}/arangod\n"
-                    f"  - {self.bin_dir}/bin/arangod\n"
-                    f"Please ensure the build directory contains a compiled arangod executable."
-                )
-            self.bin_dir = normalized_bin_dir
-        elif not self._is_unit_test_context():
-            # No explicit bin_dir, try auto-detection
-            detected_build_dir = detect_build_directory()
-            if detected_build_dir:
-                self.bin_dir = detected_build_dir
-
-        if self.work_dir and not self.work_dir.exists():
-            self.work_dir.mkdir(parents=True, exist_ok=True)
+        For initialization with side effects, use initialize_config() from
+        core.config_initializer after construction.
+        """
+        from .errors import ConfigurationError
 
         # Validate cluster configuration
         if self.deployment_mode == DeploymentMode.CLUSTER:
@@ -176,18 +155,6 @@ class ArmadilloConfig(BaseModel):
             raise ConfigurationError("Test timeout must be positive")
 
         return self
-
-    def _is_unit_test_context(self) -> bool:
-        """Check if we're running in a unit test context where build detection should be skipped."""
-        import inspect
-
-        for frame_info in inspect.stack():
-            if (
-                "framework_tests/unit" in frame_info.filename
-                or "framework_tests\\unit" in frame_info.filename
-            ):
-                return True
-        return False
 
 
 # Result types for test execution
