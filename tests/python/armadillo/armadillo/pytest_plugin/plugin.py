@@ -9,6 +9,7 @@ import time
 import traceback
 from typing import Generator, Optional, Dict, Any, List
 from ..core.config import get_config
+from ..core.config_initializer import initialize_config
 from ..core.log import (
     configure_logging,
     get_logger,
@@ -24,7 +25,6 @@ from ..instances.server import ArangoServer
 from ..instances.manager import InstanceManager, get_instance_manager
 from .reporter import get_armadillo_reporter
 from ..utils.crypto import random_id
-from ..utils.filesystem import set_test_session_id, clear_test_session, cleanup_work_dir
 
 logger = get_logger(__name__)
 
@@ -47,6 +47,10 @@ class ArmadilloPlugin:
         # In pytest subprocess, config needs to be loaded from environment variables
         # get_config() will call load_config() if not already loaded
         framework_config = get_config()
+
+        # Initialize config (side effects: create dirs, detect builds if needed)
+        framework_config = initialize_config(framework_config)
+
         if framework_config.log_level != "DEBUG":
             logging.getLogger("faker").setLevel(logging.WARNING)
             logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -143,7 +147,8 @@ class ArmadilloPlugin:
         # Config already loaded by CLI and pytest_configure
         # Don't call load_config() again to avoid duplicate build detection
         configure_logging()
-        set_test_session_id()
+        # TODO: Re-enable session isolation via ApplicationContext in Phase 2
+        # set_test_session_id()  # Removed - will use ApplicationContext.filesystem
         # Clear any crash state from previous runs
         _abort_remaining_tests = False
         _crash_detected_during_test = None
@@ -160,8 +165,9 @@ class ArmadilloPlugin:
                 logger.error(
                     "Error stopping session deployment %s: %s", deployment_id, e
                 )
-        clear_test_session()
-        cleanup_work_dir()
+        # TODO: Re-enable cleanup via ApplicationContext in Phase 2
+        # clear_test_session()  # Removed - will use ApplicationContext.filesystem
+        # cleanup_work_dir()  # Removed - will use ApplicationContext.filesystem
         stop_watchdog()
 
     def pytest_runtest_setup(self, item: pytest.Item) -> None:
@@ -537,8 +543,10 @@ def pytest_addoption(parser):
 def pytest_sessionstart(session):
     """Set up test session with isolated directories and register cleanup."""
     logger.debug("Starting pytest plugin setup")
-    session_id = set_test_session_id()
-    logger.info("Test session started with ID: %s", session_id)
+    # TODO: Re-enable session isolation via ApplicationContext in Phase 2
+    # session_id = set_test_session_id()  # Removed - will use ApplicationContext.filesystem
+    # logger.info("Test session started with ID: %s", session_id)
+    logger.info("Test session started")
 
     # Register cleanup handlers for both normal and abnormal exits
     atexit.register(_emergency_cleanup)
@@ -660,8 +668,9 @@ def pytest_sessionfinish(session, exitstatus):
         logger.debug("Starting pytest session cleanup")
         _cleanup_all_deployments(emergency=False)
         _cleanup_all_processes(emergency=False)
-        cleanup_work_dir()
-        clear_test_session()
+        # TODO: Re-enable cleanup via ApplicationContext in Phase 2
+        # cleanup_work_dir()  # Removed - will use ApplicationContext.filesystem
+        # clear_test_session()  # Removed - will use ApplicationContext.filesystem
         logger.debug("Armadillo pytest plugin cleanup completed")
     except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
         logger.error("Error during pytest plugin cleanup: %s", e)
