@@ -98,7 +98,7 @@ class ApplicationContext:
             >>> ctx = ApplicationContext.create(config, logger=my_logger)
         """
         # Import here to avoid circular dependencies at module level
-        from .log import configure_logging
+        from .log import configure_logging, get_logger
         from ..utils.ports import PortManager
         from ..utils.auth import AuthProvider as AuthProviderImpl
         from ..utils.filesystem import FilesystemService as FilesystemServiceImpl
@@ -107,11 +107,14 @@ class ApplicationContext:
 
         # Create logger if not provided
         if logger is None:
-            logger = configure_logging(
+            # Configure logging system
+            configure_logging(
                 level=config.log_level,
                 enable_console=True,
                 enable_json=True,
             )
+            # Get the configured logger
+            logger = get_logger("armadillo")
 
         # Create port allocator if not provided
         if port_allocator is None:

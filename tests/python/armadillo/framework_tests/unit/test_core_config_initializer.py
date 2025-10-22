@@ -132,7 +132,9 @@ class TestConfigInitialization:
         build_dir = tmp_path / "build"
         bin_dir = build_dir / "bin"
         bin_dir.mkdir(parents=True)
-        (bin_dir / "arangod").touch()
+        arangod_path = bin_dir / "arangod"
+        arangod_path.touch()
+        arangod_path.chmod(0o755)  # Make executable
 
         config = ArmadilloConfig(
             temp_dir=tmp_path / "temp",
