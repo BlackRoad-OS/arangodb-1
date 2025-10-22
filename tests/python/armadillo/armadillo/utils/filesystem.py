@@ -5,38 +5,56 @@ import tempfile
 import shutil
 import uuid
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union, Optional, TYPE_CHECKING
 from contextlib import contextmanager
-from ..core.config import get_config, derive_sub_tmp
 from ..core.errors import FilesystemError, PathError, AtomicWriteError
 from ..core.log import get_logger
 
+if TYPE_CHECKING:
+    from ..core.types import ArmadilloConfig
+
 logger = get_logger(__name__)
-_test_session_id: Optional[str] = None
 
 
 class FilesystemService:
-    """Provides safe filesystem operations with atomic writes and path management."""
+    """Provides safe filesystem operations with atomic writes and path management.
 
-    def __init__(self) -> None:
+    This service requires explicit configuration instead of using global state.
+    """
+
+    def __init__(self, config: "ArmadilloConfig") -> None:
+        """Initialize filesystem service with explicit configuration.
+
+        Args:
+            config: Framework configuration
+        """
+        self._config = config
         self._work_dir: Optional[Path] = None
+        self._test_session_id: Optional[str] = None
+
+    def set_test_session_id(self, session_id: str) -> None:
+        """Set test session ID for directory isolation.
+
+        Args:
+            session_id: Unique test session identifier
+        """
+        self._test_session_id = session_id
+        self._work_dir = None  # Reset to force recalculation
 
     def work_dir(self) -> Path:
         """Get the main working directory."""
         if self._work_dir is None:
-            config = get_config()
-            if config.work_dir:
-                base_work_dir = config.work_dir
-                if _test_session_id:
-                    self._work_dir = base_work_dir / f"session_{_test_session_id}"
-                else:
-                    self._work_dir = base_work_dir
+            if self._config.work_dir:
+                base_work_dir = self._config.work_dir
             else:
-                base_work_dir = derive_sub_tmp("work")
-                if _test_session_id:
-                    self._work_dir = base_work_dir / f"session_{_test_session_id}"
-                else:
-                    self._work_dir = base_work_dir
+                # Use temp_dir/work as base
+                base_work_dir = self._config.temp_dir / "work"
+
+            if self._test_session_id:
+                self._work_dir = base_work_dir / f"session_{self._test_session_id}"
+            else:
+                self._work_dir = base_work_dir
+
         self._work_dir.mkdir(parents=True, exist_ok=True)
         return self._work_dir
 
@@ -48,7 +66,8 @@ class FilesystemService:
 
     def temp_dir(self, prefix: str = "armadillo") -> Path:
         """Create a temporary directory."""
-        base_temp = derive_sub_tmp("temp")
+        base_temp = self._config.temp_dir / "temp"
+        base_temp.mkdir(parents=True, exist_ok=True)
         temp_path = Path(tempfile.mkdtemp(prefix=f"{prefix}_", dir=base_temp))
         return temp_path
 
@@ -212,82 +231,3 @@ class FilesystemService:
                 logger.error(
                     "Failed to clean up work directory %s: %s", self._work_dir, e
                 )
-
-
-_filesystem_service = FilesystemService()
-
-
-def work_dir() -> Path:
-    """Get the main working directory."""
-    return _filesystem_service.work_dir()
-
-
-def server_dir(name: str) -> Path:
-    """Get a directory for a specific server instance."""
-    return _filesystem_service.server_dir(name)
-
-
-def temp_dir(prefix: str = "armadillo") -> Path:
-    """Create a temporary directory."""
-    return _filesystem_service.temp_dir(prefix)
-
-
-def atomic_write(path: Path, data: Union[str, bytes], mode: str = "w") -> None:
-    """Atomically write data to a file."""
-    _filesystem_service.atomic_write(path, data, mode)
-
-
-def read_text(path: Path, encoding: str = "utf-8") -> str:
-    """Read text file."""
-    return _filesystem_service.read_text(path, encoding)
-
-
-def read_bytes(path: Path) -> bytes:
-    """Read binary file."""
-    return _filesystem_service.read_bytes(path)
-
-
-def ensure_dir(path: Path) -> Path:
-    """Ensure directory exists."""
-    return _filesystem_service.ensure_dir(path)
-
-
-def safe_remove(path: Path) -> bool:
-    """Safely remove file or directory."""
-    return _filesystem_service.safe_remove(path)
-
-
-def cleanup_work_dir() -> None:
-    """Clean up work directory."""
-    _filesystem_service.cleanup_work_dir()
-
-
-def set_test_session_id(session_id: Optional[str] = None) -> str:
-    """Set a unique test session ID for directory isolation.
-
-    Args:
-        session_id: Optional session ID. If None, a random ID is generated.
-
-    Returns:
-        The session ID that was set
-    """
-    global _test_session_id
-    if session_id is None:
-        session_id = str(uuid.uuid4())[:8]
-    _test_session_id = session_id
-    logger.info("Set test session ID: %s", session_id)
-    _filesystem_service._work_dir = None
-    return session_id
-
-
-def get_test_session_id() -> Optional[str]:
-    """Get the current test session ID."""
-    return _test_session_id
-
-
-def clear_test_session() -> None:
-    """Clear the test session ID and reset to shared directories."""
-    global _test_session_id
-    _test_session_id = None
-    _filesystem_service._work_dir = None
-    logger.info("Cleared test session ID")
