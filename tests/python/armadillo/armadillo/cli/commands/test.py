@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 from rich.console import Console
 from rich.table import Table
 from ...core.config import load_config
+from ...core.config_initializer import initialize_config
 from ...core.log import get_logger
 from ...core.types import DeploymentMode
 
@@ -192,6 +193,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
         "log_level": options.log_level,
         "show_server_logs": options.show_server_logs,
         "compact_mode": options.compact,
+        "is_test_mode": False,  # Explicit: not in test mode
     }
 
     if options.build_dir:
@@ -200,7 +202,11 @@ def _execute_test_run(options: TestRunOptions) -> None:
         if bin_dir and bin_dir.exists():
             console.print(f"[green]Using ArangoDB build directory: {bin_dir}[/green]")
 
+    # Step 1: Load config (pure validation)
     config = load_config(**config_kwargs)
+
+    # Step 2: Initialize config (side effects: create dirs, detect builds)
+    config = initialize_config(config)
 
     # Always propagate bin_dir to pytest subprocess (whether explicitly set or auto-detected)
     # This prevents duplicate build detection in the subprocess
