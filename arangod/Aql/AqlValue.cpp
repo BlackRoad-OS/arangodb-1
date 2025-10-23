@@ -80,7 +80,7 @@ static inline void deallocateSupervised(uint8_t* payload,
   if (payload == nullptr) {
     return;
   }
-  uint8_t* base = payload - kPrefix;
+  uint8_t* base = payload;
   auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
   if (len) {
     rm->decreaseMemoryUsage(len);
@@ -236,9 +236,9 @@ bool AqlValue::isString() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isString();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.pointer}.isString();
+      return VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()}.isString();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.pointer}.isString();
+      return VPackSlice{_data.supervisedStringMeta.getPayloadPtr()}.isString();
     default:
       return false;
   }
@@ -256,9 +256,9 @@ bool AqlValue::isObject() const noexcept {
     case VPACK_MANAGED_STRING:
       return _data.managedStringMeta.toSlice().isObject();
     case VPACK_SUPERVISED_SLICE:
-      return VPackSlice{_data.supervisedSliceMeta.pointer}.isObject();
+      return VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()}.isObject();
     case VPACK_SUPERVISED_STRING:
-      return VPackSlice{_data.supervisedStringMeta.pointer}.isObject();
+      return VPackSlice{_data.supervisedStringMeta.getPayloadPtr()}.isObject();
     default:
       return false;
   }
@@ -1326,13 +1326,23 @@ AqlValue::AqlValue(AqlValueHintEmptyObject) noexcept {
   _data.inlineSliceMeta.slice[0] = 0x0a;  // empty object in VPack
 }
 
-AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer) {
+AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
+                   arangodb::ResourceMonitor* rm) {
   auto size = buffer.size();
   TRI_ASSERT(size >= 1);
   VPackSlice slice{buffer.data()};
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
-  if (size < sizeof(AqlValue)) {
+  if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
+    uint8_t* p = allocateSupervised(*rm, size);
+    memcpy(p, slice.begin(), size);
+    setType(AqlValueType::VPACK_SUPERVISED_SLICE);
+    setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned,
+              static_cast<std::uint64_t>(size),
+              _data.supervisedSliceMeta.lengthOrigin);
+    _data.supervisedSliceMeta.pointer = p;
+    buffer.clear();
+  } else if (size < sizeof(AqlValue)) {
     // Use inline value
     initFromSlice(slice, size);
     buffer.clear();  // for move semantics
@@ -1359,15 +1369,27 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer) {
   }
 }
 
-AqlValue::AqlValue(AqlValueHintSliceNoCopy v) noexcept
-    : AqlValue{v.slice.start()} {}
+AqlValue::AqlValue(AqlValueHintSliceCopy v, arangodb::ResourceMonitor* rm)
+    : AqlValue{v.slice, v.slice.byteSize(), rm} {}
 
-AqlValue::AqlValue(AqlValueHintSliceCopy v) : AqlValue{v.slice} {}
+// AqlValue::AqlValue(VPackSlice slice) { initFromSlice(slice,
+// slice.byteSize()); }
 
-AqlValue::AqlValue(VPackSlice slice) { initFromSlice(slice, slice.byteSize()); }
-
-AqlValue::AqlValue(VPackSlice slice, velocypack::ValueLength length) {
-  initFromSlice(slice, length);
+AqlValue::AqlValue(VPackSlice slice, velocypack::ValueLength length,
+                   arangodb::ResourceMonitor* rm) {
+  auto len = static_cast<std::uint64_t>(length ? length : slice.byteSize());
+  TRI_ASSERT(len >= 1);
+  TRI_ASSERT(!slice.isExternal());
+  if (rm != nullptr && len > sizeof(_data.inlineSliceMeta.slice)) {
+    uint8_t* p = allocateSupervised(*rm, len);
+    memcpy(p, slice.begin(), static_cast<std::size_t>(len));
+    setType(AqlValueType::VPACK_SUPERVISED_SLICE);
+    setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
+              _data.supervisedSliceMeta.lengthOrigin);
+    _data.supervisedSliceMeta.pointer = p;
+  } else {
+    initFromSlice(slice, static_cast<velocypack::ValueLength>(len));
+  }
 }
 
 AqlValue::AqlValue(int64_t low, int64_t high) {
@@ -1375,87 +1397,37 @@ AqlValue::AqlValue(int64_t low, int64_t high) {
   setType(AqlValueType::RANGE);
 }
 
-// supervised constructors
-AqlValue::AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice) {
-  auto len = static_cast<std::uint64_t>(slice.byteSize());
-  if (len <= sizeof(_data.inlineSliceMeta.slice)) {
-    initFromSlice(slice, static_cast<velocypack::ValueLength>(len));
-    return;
+AqlValue::AqlValue(uint8_t const* bytes, velocypack::ValueLength length,
+                   arangodb::ResourceMonitor* rm) {
+  VPackSlice s(bytes);
+  auto len = static_cast<std::uint64_t>(length ? length : s.byteSize());
+  if (rm != nullptr && len > sizeof(_data.inlineSliceMeta.slice)) {
+    uint8_t* p = allocateSupervised(*rm, len);
+    memcpy(p, bytes, static_cast<std::size_t>(len));
+    setType(AqlValueType::VPACK_SUPERVISED_SLICE);
+    setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
+              _data.supervisedSliceMeta.lengthOrigin);
+    _data.supervisedSliceMeta.pointer = p;
+  } else {
+    initFromSlice(s, static_cast<velocypack::ValueLength>(len));
   }
-  uint8_t* p = allocateSupervised(rm, len);
-  memcpy(p, slice.begin(), static_cast<std::size_t>(len));
-  setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-  setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
-            _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.pointer = p;
 }
 
-AqlValue::AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice,
-                   velocypack::ValueLength length) {
-  auto len = static_cast<std::uint64_t>(length);
-  if (len <= sizeof(_data.inlineSliceMeta.slice)) {
-    initFromSlice(slice, length);
-    return;
-  }
-  uint8_t* p = allocateSupervised(rm, len);
-  memcpy(p, slice.begin(), static_cast<std::size_t>(len));
-  setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-  setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
-            _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.pointer = p;
-}
-
-AqlValue::AqlValue(arangodb::ResourceMonitor& rm, uint8_t const* bytes,
-                   velocypack::ValueLength length) {
-  auto len = static_cast<std::uint64_t>(length);
-  if (len <= sizeof(_data.inlineSliceMeta.slice)) {
-    initFromSlice(velocypack::Slice(bytes), length);
-    return;
-  }
-  uint8_t* p = allocateSupervised(rm, len);
-  memcpy(p, bytes, static_cast<std::size_t>(len));
-  setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-  setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
-            _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.pointer = p;
-}
-
-AqlValue::AqlValue(arangodb::ResourceMonitor& rm,
-                   velocypack::Buffer<uint8_t> const& buffer) {
+AqlValue::AqlValue(velocypack::Buffer<uint8_t> const& buffer,
+                   arangodb::ResourceMonitor* rm) {
   auto len = static_cast<std::uint64_t>(buffer.size());
-  if (len <= sizeof(_data.inlineSliceMeta.slice)) {
+  if (rm != nullptr && len > sizeof(_data.inlineSliceMeta.slice)) {
+    uint8_t* p = allocateSupervised(*rm, len);
+    memcpy(p, buffer.data(), static_cast<std::size_t>(len));
+    setType(AqlValueType::VPACK_SUPERVISED_SLICE);
+    setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
+              _data.supervisedSliceMeta.lengthOrigin);
+    _data.supervisedSliceMeta.pointer = p;
+  } else {
     initFromSlice(velocypack::Slice(buffer.data()),
                   static_cast<velocypack::ValueLength>(len));
-    return;
   }
-  uint8_t* p = allocateSupervised(rm, len);
-  memcpy(p, buffer.data(), static_cast<std::size_t>(len));
-  setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-  setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
-            _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.pointer = p;
 }
-
-AqlValue::AqlValue(arangodb::ResourceMonitor& rm,
-                   velocypack::Buffer<uint8_t>&& buffer) {
-  auto len = static_cast<std::uint64_t>(buffer.size());
-  if (len <= sizeof(_data.inlineSliceMeta.slice)) {
-    initFromSlice(velocypack::Slice(buffer.data()),
-                  static_cast<velocypack::ValueLength>(len));
-    buffer.clear();
-    return;
-  }
-  uint8_t* p = allocateSupervised(rm, len);
-  memcpy(p, buffer.data(), static_cast<std::size_t>(len));
-  setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-  setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
-            _data.supervisedSliceMeta.lengthOrigin);
-  _data.supervisedSliceMeta.pointer = p;
-  buffer.clear();
-}
-
-AqlValue::AqlValue(arangodb::ResourceMonitor& rm, AqlValueHintSliceCopy v)
-    : AqlValue(rm, v.slice) {}
 
 bool AqlValue::requiresDestruction() const noexcept {
   auto t = type();
@@ -1623,26 +1595,22 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
   uint64_t lo = 0;  // This is the first 8 bytes: LengthOrigin [ AT | MO |
                     // padding(6 bytes) ]
   if constexpr (basics::isLittleEndian()) {
-    lo |= (static_cast<uint64_t>(mot) << 8);
+    lo |= (static_cast<uint64_t>(kOriginOwned) << 8);
     lo |= static_cast<uint64_t>(at);
   } else {
-    lo |= (static_cast<uint64_t>(mot) << 48);
+    lo |= (static_cast<uint64_t>(kOriginOwned) << 48);
     lo |= (static_cast<uint64_t>(at) << 56);
   }
 
   if (at == VPACK_SUPERVISED_SLICE) {
     TRI_ASSERT(type() == VPACK_SUPERVISED_SLICE);
     _data.supervisedSliceMeta.lengthOrigin = lo;
-    TRI_ASSERT(_data.supervisedSliceMeta.getOrigin() ==
-               static_cast<uint64_t>(mot));
+    TRI_ASSERT(_data.supervisedSliceMeta.getOrigin() == kOriginOwned);
   } else {  // VPACK_SUPERVISED_STRING
     TRI_ASSERT(type() == VPACK_SUPERVISED_STRING);
     _data.supervisedStringMeta.lengthOrigin = lo;
-    TRI_ASSERT(_data.supervisedStringMeta.getOrigin() ==
-               static_cast<uint64_t>(mot));
+    TRI_ASSERT(_data.supervisedStringMeta.getOrigin() == kOriginOwned);
   }
-
-  TRI_ASSERT(memoryUsage() == length);
 }
 
 }  // namespace arangodb::aql

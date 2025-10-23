@@ -385,33 +385,31 @@ struct AqlValue final {
   explicit AqlValue(AqlValueHintEmptyObject) noexcept;
 
   // construct from Buffer, potentially taking over its ownership
-  explicit AqlValue(velocypack::Buffer<uint8_t>&& buffer);
+  explicit AqlValue(velocypack::Buffer<uint8_t>&& buffer,
+                    arangodb::ResourceMonitor* rm = nullptr);
+  explicit AqlValue(velocypack::Buffer<uint8_t> const& buffer,
+                    arangodb::ResourceMonitor* rm = nullptr);
 
   // construct from slice data, not copying!
   explicit AqlValue(AqlValueHintSliceNoCopy v) noexcept;
 
   // construct from slice data, copying the data
-  explicit AqlValue(AqlValueHintSliceCopy v);
+  explicit AqlValue(AqlValueHintSliceCopy v,
+                    arangodb::ResourceMonitor* rm = nullptr);
 
   // construct from Slice, copying contents
-  explicit AqlValue(velocypack::Slice slice);
+  // explicit AqlValue(velocypack::Slice slice);
 
   // construct from Slice and length, copying contents
-  AqlValue(velocypack::Slice slice, velocypack::ValueLength length);
+  explicit AqlValue(velocypack::Slice slice, velocypack::ValueLength length = 0,
+                    arangodb::ResourceMonitor* rm = nullptr);
+  // construct from raw bytes and length
+
+  AqlValue(uint8_t const* bytes, velocypack::ValueLength length = 0,
+           arangodb::ResourceMonitor* rm = nullptr);
 
   // construct range type
   AqlValue(int64_t low, int64_t high);
-
-  // supervised ctors
-  AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice);
-  AqlValue(arangodb::ResourceMonitor& rm, velocypack::Slice slice,
-           velocypack::ValueLength length);
-  AqlValue(arangodb::ResourceMonitor& rm, uint8_t const* bytes,
-           velocypack::ValueLength length);
-  AqlValue(arangodb::ResourceMonitor& rm,
-           velocypack::Buffer<uint8_t> const& buffer);
-  AqlValue(arangodb::ResourceMonitor& rm, velocypack::Buffer<uint8_t>&& buffer);
-  AqlValue(arangodb::ResourceMonitor& rm, AqlValueHintSliceCopy v);
 
   /// @brief AqlValues can be copied and moved as required
   /// memory management is not performed via AqlValue destructor but via
@@ -572,7 +570,7 @@ struct AqlValue final {
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
 
-  void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot);
+  void setSupervisedData(AqlValueType at, MemoryOriginType mot);
 };
 
 static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
