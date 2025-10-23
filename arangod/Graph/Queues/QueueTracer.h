@@ -26,7 +26,7 @@
 #include "Graph/Helpers/TraceEntry.h"
 #include "Basics/ResourceUsage.h"
 #include "Containers/FlatHashMap.h"
-#include "Graph/Queues/NextBatchMarker.h"
+#include "Graph/Queues/ExpansionMarker.h"
 
 #include <unordered_map>
 #include <vector>
