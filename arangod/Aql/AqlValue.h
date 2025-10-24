@@ -362,7 +362,8 @@ struct AqlValue final {
   // note: this is the default constructor and should be as cheap as possible
   AqlValue() noexcept;
 
-  explicit AqlValue(DocumentData& data) noexcept;
+  explicit AqlValue(DocumentData& data,
+                    arangodb::ResourceMonitor* rm = nullptr) noexcept;
 
   // construct from pointer, not copying!
   explicit AqlValue(uint8_t const* pointer) noexcept;

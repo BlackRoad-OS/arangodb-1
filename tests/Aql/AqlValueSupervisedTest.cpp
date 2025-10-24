@@ -128,7 +128,7 @@ TEST(AqlValueSupervisedTest, InlineNotAccount) {
   {
     ValueLength l = 0;
     (void)aqlVal.slice().getStringUnchecked(l);
-    EXPECT_EQ(static_cast<size_t>(l), 15);
+    EXPECT_EQ(static_cast<size_t>(l), 14);
   }
   EXPECT_EQ(aqlVal.slice().byteSize(), slice.byteSize());
 
@@ -140,7 +140,7 @@ TEST(AqlValueSupervisedTest, BoundaryOverInlineAccounts) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  auto builder = makeString(15, 'a');
+  auto builder = makeString(16, 'a');
   Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 

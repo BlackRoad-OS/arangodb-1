@@ -1201,7 +1201,7 @@ int AqlValue::Compare(velocypack::Options const* options, AqlValue const& left,
 
 AqlValue::AqlValue() noexcept { erase(); }
 
-AqlValue::AqlValue(DocumentData& data) noexcept {
+AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
   TRI_ASSERT(data);
   auto size = data->size();
   TRI_ASSERT(size >= 1);
@@ -1209,10 +1209,15 @@ AqlValue::AqlValue(DocumentData& data) noexcept {
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
   if (size < sizeof(AqlValue)) {
-    initFromSlice(slice, size);
+    initFromSlice(slice, size, rm);
   } else {
-    setType(AqlValueType::VPACK_MANAGED_STRING);
-    _data.managedStringMeta.pointer = data.release();
+    if (rm != nullptr) {
+      setType(AqlValueType::VPACK_SUPERVISED_STRING);
+      _data.supervisedStringMeta.getPayloadPtr() = data.release();
+    } else {
+      setType(AqlValueType::VPACK_MANAGED_STRING);
+      _data.managedStringMeta.pointer = data.release();
+    }
   }
 }
 
