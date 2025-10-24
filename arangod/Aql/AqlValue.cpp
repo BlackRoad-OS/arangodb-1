@@ -66,12 +66,11 @@ static inline uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
                                           std::uint64_t len) {
   void* base = ::operator new(kPrefix + static_cast<std::size_t>(len));
   *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-  uint8_t* payload = reinterpret_cast<uint8_t*>(base);
   if (len) {
     rm.increaseMemoryUsage(len);
   }
   rm.increaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
-  return payload;
+  return reinterpret_cast<uint8_t*>(base);;
 }
 
 static inline void deallocateSupervised(uint8_t* payload,
@@ -1214,8 +1213,13 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
     initFromSlice(slice, size, rm);
   } else {
     if (rm != nullptr) {
-      setType(AqlValueType::VPACK_SUPERVISED_STRING);
-      _data.supervisedStringMeta.getPayloadPtr() = data.release();
+      // handing over the ownership of the pointee
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_STRING, MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, size);
+      _data.supervisedStringMeta.pointer = base;
+      auto* strObj = reinterpret_cast<std::string*>(base + kPrefix);
+      *strObj = std::move(*data); // take a look
+
     } else {
       setType(AqlValueType::VPACK_MANAGED_STRING);
       _data.managedStringMeta.pointer = data.release();
@@ -1243,6 +1247,8 @@ AqlValue::AqlValue(AqlValue const& other, void const* data) noexcept {
     case VPACK_MANAGED_STRING:
       _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
       break;
+    case VPACK_SUPERVISED_SLICE:
+
     case RANGE:
       _data.rangeMeta.range = static_cast<Range const*>(data);
       break;
@@ -1291,7 +1297,7 @@ AqlValue::AqlValue(AqlValueHintInt v) noexcept { initFromInt(v.value); }
 
 AqlValue::AqlValue(AqlValueHintUInt v) noexcept { initFromUint(v.value); }
 
-AqlValue::AqlValue(std::string_view s) {
+AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
   TRI_ASSERT(s.data() != nullptr);  // not necessary, can be removed
   if (s.size() == 0) {
     // empty string
@@ -1305,20 +1311,40 @@ AqlValue::AqlValue(std::string_view s) {
   } else if (s.size() <= 126) {
     // short string... cannot store inline, but we don't need to
     // create a full-featured Builder object here
-    setManagedSliceData(MemoryOriginType::New, s.size() + 1);
-    _data.managedSliceMeta.pointer = new uint8_t[s.size() + 1];
-    _data.managedSliceMeta.pointer[0] = static_cast<uint8_t>(0x40U + s.size());
-    memcpy(_data.managedSliceMeta.pointer + 1, s.data(), s.size());
+    const std::size_t byteSize = s.size() + 1;
+    if (rm != nullptr) {
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, byteSize);  // accounts kPrefix + byteSize
+      base[kPrefix + 0] = static_cast<uint8_t>(0x40U + s.size()); // base -> [ rm* | tag (type + length of strObj) | shortStrObj ]
+      std::memcpy(base + kPrefix + 1, s.data(), s.size());
+      _data.supervisedSliceMeta.pointer = base;
+    } else {
+      setManagedSliceData(MemoryOriginType::New, s.size() + 1);
+      _data.managedSliceMeta.pointer = new uint8_t[s.size() + 1];
+      _data.managedSliceMeta.pointer[0] = static_cast<uint8_t>(0x40U + s.size());
+      memcpy(_data.managedSliceMeta.pointer + 1, s.data(), s.size());
+    }
   } else {
     // long string
     // create a big enough uint8_t buffer
     size_t byteSize = s.size() + 9;
-    setManagedSliceData(MemoryOriginType::New, byteSize);
-    _data.managedSliceMeta.pointer = new uint8_t[byteSize];
-    _data.managedSliceMeta.pointer[0] = static_cast<uint8_t>(0xbfU);
-    auto v = absl::little_endian::FromHost64(s.size());
-    memcpy(&_data.managedSliceMeta.pointer[1], &v, sizeof(v));
-    memcpy(&_data.managedSliceMeta.pointer[9], s.data(), s.size());
+    if (rm != nullptr) {
+      // supervised slice
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, byteSize);  // accounts kPrefix + byteSize
+      base[kPrefix + 0] = static_cast<uint8_t>(0xbfU);
+      auto v = absl::little_endian::FromHost64(s.size());
+      std::memcpy(base + kPrefix + 1, &v, sizeof(v));
+      std::memcpy(base + kPrefix + 9, s.data(), s.size());
+      _data.supervisedSliceMeta.pointer = base;
+    } else {
+      setManagedSliceData(MemoryOriginType::New, byteSize);
+      _data.managedSliceMeta.pointer = new uint8_t[byteSize];
+      _data.managedSliceMeta.pointer[0] = static_cast<uint8_t>(0xbfU);
+      auto v = absl::little_endian::FromHost64(s.size());
+      memcpy(&_data.managedSliceMeta.pointer[1], &v, sizeof(v));
+      memcpy(&_data.managedSliceMeta.pointer[9], s.data(), s.size());
+    }
   }
 }
 
@@ -1340,12 +1366,9 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
   if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
+    setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
     uint8_t* p = allocateSupervised(*rm, size);
     memcpy(p + kPrefix, slice.begin(), size);
-    setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-    setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned,
-              static_cast<std::uint64_t>(size),
-              _data.supervisedSliceMeta.lengthOrigin);
     _data.supervisedSliceMeta.pointer = p;
     buffer.clear();
   } else if (size < sizeof(AqlValue)) {
@@ -1564,8 +1587,8 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
   TRI_ASSERT(at == VPACK_SUPERVISED_SLICE || at == VPACK_SUPERVISED_STRING);
   TRI_ASSERT(mot == MemoryOriginType::New || mot == MemoryOriginType::Malloc);
 
-  uint64_t lo = 0;  // This is the first 8 bytes: LengthOrigin [ AT | MO |
-                    // padding(6 bytes) ]
+  uint64_t lo = 0;  // This is the first 8 bytes: LengthOrigin
+                    // [ AT | MO | padding(6 bytes) ]
   if constexpr (basics::isLittleEndian()) {
     lo |= (static_cast<uint64_t>(kOriginOwned) << 8);
     lo |= static_cast<uint64_t>(at);

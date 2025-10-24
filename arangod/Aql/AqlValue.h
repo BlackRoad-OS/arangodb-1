@@ -387,7 +387,8 @@ struct AqlValue final {
   explicit AqlValue(AqlValueHintUInt v) noexcept;
 
   // construct from std::string
-  explicit AqlValue(std::string_view value);
+  explicit AqlValue(std::string_view value,
+                    arangodb::ResourceMonitor* rm = nullptr);
 
   explicit AqlValue(AqlValueHintEmptyArray) noexcept;
 
@@ -572,6 +573,7 @@ struct AqlValue final {
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
 
+  // @brief set the first 2 bytes for SupervisedSlice and SupervisedString
   void setSupervisedData(AqlValueType at, MemoryOriginType mot);
 };
 
