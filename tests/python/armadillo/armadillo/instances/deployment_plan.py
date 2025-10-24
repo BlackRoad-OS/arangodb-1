@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
 from ..core.types import ServerConfig, ServerRole
-from ..utils.filesystem import server_dir
+from ..utils.filesystem import FilesystemService
 
 
 @dataclass
@@ -39,17 +39,28 @@ DeploymentPlan = Union[SingleServerDeploymentPlan, ClusterDeploymentPlan]
 
 
 def create_single_server_plan(
-    server_id: str, port: int, server_args: Optional[dict] = None
+    server_id: str,
+    port: int,
+    filesystem: FilesystemService,
+    server_args: Optional[dict] = None,
 ) -> SingleServerDeploymentPlan:
-    """Create a single server deployment plan with default test configuration."""
+    """Create a single server deployment plan with default test configuration.
+
+    Args:
+        server_id: Unique server identifier
+        port: Port number for the server
+        filesystem: Filesystem service for path derivation
+        server_args: Optional additional server arguments
+    """
     args = server_args or {}
     args["server.authentication"] = "false"
 
+    base_dir = filesystem.server_dir(server_id)
     server_config = ServerConfig(
         role=ServerRole.SINGLE,
         port=port,
-        data_dir=server_dir(server_id) / "data",
-        log_file=server_dir(server_id) / "arangod.log",
+        data_dir=base_dir / "data",
+        log_file=base_dir / "arangod.log",
         args=args,
     )
 

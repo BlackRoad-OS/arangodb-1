@@ -23,17 +23,15 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 from pathlib import Path
 
 from .types import ArmadilloConfig
 from .log import Logger
-
-if TYPE_CHECKING:
-    from ..utils.ports import PortAllocator
-    from ..utils.auth import AuthProvider
-    from ..utils.filesystem import FilesystemService
-    from .process import ProcessSupervisor
+from ..utils.ports import PortAllocator
+from ..utils.auth import AuthProvider
+from ..utils.filesystem import FilesystemService
+from .process import ProcessSupervisor
 
 
 @dataclass(frozen=True)
@@ -59,10 +57,10 @@ class ApplicationContext:
 
     config: ArmadilloConfig
     logger: Logger
-    port_allocator: "PortAllocator"
-    auth_provider: "AuthProvider"
-    filesystem: "FilesystemService"
-    process_supervisor: "ProcessSupervisor"
+    port_allocator: PortAllocator
+    auth_provider: AuthProvider
+    filesystem: FilesystemService
+    process_supervisor: ProcessSupervisor
 
     @classmethod
     def create(
@@ -70,10 +68,10 @@ class ApplicationContext:
         config: ArmadilloConfig,
         *,
         logger: Optional[Logger] = None,
-        port_allocator: Optional["PortAllocator"] = None,
-        auth_provider: Optional["AuthProvider"] = None,
-        filesystem: Optional["FilesystemService"] = None,
-        process_supervisor: Optional["ProcessSupervisor"] = None,
+        port_allocator: Optional[PortAllocator] = None,
+        auth_provider: Optional[AuthProvider] = None,
+        filesystem: Optional[FilesystemService] = None,
+        process_supervisor: Optional[ProcessSupervisor] = None,
     ) -> "ApplicationContext":
         """Create application context with default implementations.
 

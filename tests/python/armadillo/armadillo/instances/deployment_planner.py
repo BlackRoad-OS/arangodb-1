@@ -6,7 +6,7 @@ from ..core.types import ServerRole, ServerConfig, ClusterConfig
 from ..core.log import Logger
 from ..core.config import ConfigProvider
 from ..utils.ports import PortAllocator
-from ..utils.filesystem import server_dir
+from ..utils.filesystem import FilesystemService
 from .deployment_plan import SingleServerDeploymentPlan, ClusterDeploymentPlan
 from .server_config_builder import ServerConfigBuilder
 
@@ -19,10 +19,12 @@ class DeploymentPlanner:
         port_allocator: PortAllocator,
         logger: Logger,
         config_provider: ConfigProvider,
+        filesystem: FilesystemService,
     ) -> None:
         self._port_allocator = port_allocator
         self._logger = logger
         self._config_provider = config_provider
+        self._filesystem = filesystem
         self._server_config_builder = ServerConfigBuilder(config_provider, logger)
 
     def create_single_server_plan(
@@ -41,8 +43,8 @@ class DeploymentPlanner:
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
             port=port,
-            data_dir=server_dir(server_id) / "data",
-            log_file=server_dir(server_id) / "arangod.log",
+            data_dir=self._filesystem.server_dir(server_id) / "data",
+            log_file=self._filesystem.server_dir(server_id) / "arangod.log",
             args=args,
         )
 
@@ -125,8 +127,12 @@ class DeploymentPlanner:
             agent_config = ServerConfig(
                 role=ServerRole.AGENT,
                 port=port,
-                data_dir=server_dir(deployment_id) / f"agent_{i}" / "data",
-                log_file=server_dir(deployment_id) / f"agent_{i}" / "arangod.log",
+                data_dir=self._filesystem.server_dir(deployment_id)
+                / f"agent_{i}"
+                / "data",
+                log_file=self._filesystem.server_dir(deployment_id)
+                / f"agent_{i}"
+                / "arangod.log",
                 args=args,
             )
             plan.servers.append(agent_config)
@@ -156,8 +162,12 @@ class DeploymentPlanner:
             dbserver_config = ServerConfig(
                 role=ServerRole.DBSERVER,
                 port=port,
-                data_dir=server_dir(deployment_id) / f"dbserver_{i}" / "data",
-                log_file=server_dir(deployment_id) / f"dbserver_{i}" / "arangod.log",
+                data_dir=self._filesystem.server_dir(deployment_id)
+                / f"dbserver_{i}"
+                / "data",
+                log_file=self._filesystem.server_dir(deployment_id)
+                / f"dbserver_{i}"
+                / "arangod.log",
                 args=args,
             )
             plan.servers.append(dbserver_config)
@@ -188,8 +198,12 @@ class DeploymentPlanner:
             coordinator_config = ServerConfig(
                 role=ServerRole.COORDINATOR,
                 port=port,
-                data_dir=server_dir(deployment_id) / f"coordinator_{i}" / "data",
-                log_file=server_dir(deployment_id) / f"coordinator_{i}" / "arangod.log",
+                data_dir=self._filesystem.server_dir(deployment_id)
+                / f"coordinator_{i}"
+                / "data",
+                log_file=self._filesystem.server_dir(deployment_id)
+                / f"coordinator_{i}"
+                / "arangod.log",
                 args=args,
             )
             plan.servers.append(coordinator_config)
