@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from armadillo.core.types import ServerRole, ServerConfig
+from armadillo.core.context import ApplicationContext
 from armadillo.core.errors import ServerError
 from armadillo.instances.server_factory import StandardServerFactory
 
@@ -14,21 +15,13 @@ class TestStandardServerFactory:
 
     def setup_method(self):
         """Set up test environment."""
-        # Create mock config provider
-        self.mock_config = Mock()
-        self.mock_config.bin_dir = Path("/fake/bin")
-
         # Create mock logger
         self.mock_logger = Mock()
-
-        # Create mock port allocator
-        self.mock_port_allocator = Mock()
-
-        self.factory = StandardServerFactory(
-            config_provider=self.mock_config,
-            logger=self.mock_logger,
-            port_allocator=self.mock_port_allocator,
-        )
+        
+        # Create application context for testing with mock logger
+        self.app_context = ApplicationContext.for_testing(logger=self.mock_logger)
+        
+        self.factory = StandardServerFactory(app_context=self.app_context)
 
     def test_create_single_server_instance(self):
         """Test creating a single server instance."""
@@ -49,8 +42,8 @@ class TestStandardServerFactory:
         assert server.server_id == "server_0"
         assert server.role == ServerRole.SINGLE
         assert server.port == 8529
-        assert server.data_dir == Path("/fake/data")
-        assert server.log_file == Path("/fake/log")
+        assert server.paths.data_dir == Path("/fake/data")
+        assert server.paths.log_file == Path("/fake/log")
 
         # Verify debug logging
         self.mock_logger.debug.assert_called_with(
@@ -194,12 +187,13 @@ class TestStandardServerFactory:
         servers = self.factory.create_server_instances([server_config])
         server = servers["server_0"]
 
-        # Check that server has the expected dependencies
+        # Check that server has the expected dependencies via app_context
         # These are tested by verifying the server was created successfully with all required components
-        assert server._deps.command_builder is not None
-        assert server._deps.health_checker is not None
-        assert server._deps.config_provider == self.mock_config
-        assert server._deps.logger == self.mock_logger
+        assert server._app_context is not None
+        assert server._app_context.config is not None
+        assert server._app_context.logger is not None
+        assert server._app_context.port_allocator is not None
+        assert server._app_context.auth_provider is not None
 
     def test_empty_server_list(self):
         """Test handling empty server configuration list."""
