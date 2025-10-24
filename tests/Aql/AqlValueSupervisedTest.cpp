@@ -118,7 +118,7 @@ TEST(AqlValueSupervisedTest, InlineNotAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  auto builder = makeString(15, 'a');
+  auto builder = makeString(14, 'a');
   Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
@@ -140,7 +140,7 @@ TEST(AqlValueSupervisedTest, BoundaryOverInlineAccounts) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  auto builder = makeString(17, 'a');
+  auto builder = makeString(15, 'a');
   Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 

@@ -283,8 +283,8 @@ struct AqlValue final {
             pointer + sizeof(arangodb::ResourceMonitor*)));
       }
       uint64_t getLength() const noexcept {
-        return velocypack::Slice(reinterpret_cast<uint8_t const*>(pointer))
-            .byteSize();  // + bytes from monitor
+        return velocypack::Slice(pointer + sizeof(arangodb::ResourceMonitor*))
+            .byteSize();
       }
 
       uint64_t getOrigin() const noexcept {
@@ -321,8 +321,8 @@ struct AqlValue final {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(s->data()));
       }
       uint64_t getLength() const noexcept {
-        return velocypack::Slice(reinterpret_cast<uint8_t const*>(pointer))
-            .byteSize();  // + bytes from monitor
+        return velocypack::Slice(pointer + sizeof(arangodb::ResourceMonitor*))
+            .byteSize();
       }
       uint64_t getOrigin() const noexcept {
         if constexpr (basics::isLittleEndian()) {
