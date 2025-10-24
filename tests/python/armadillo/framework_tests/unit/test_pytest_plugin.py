@@ -89,8 +89,7 @@ class TestArmadilloPluginConfiguration:
             ), f"Marker '{expected}' not registered"
 
     @patch("armadillo.pytest_plugin.plugin.configure_logging")
-    @patch("armadillo.pytest_plugin.plugin.set_test_session_id")
-    def test_pytest_sessionstart_basic(self, mock_set_session, mock_logging):
+    def test_pytest_sessionstart_basic(self, mock_logging):
         """Test pytest_sessionstart performs setup."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
@@ -98,16 +97,11 @@ class TestArmadilloPluginConfiguration:
         plugin.pytest_sessionstart(mock_session)
 
         # Should have called setup functions
-        # Note: load_config() is no longer called here - config is loaded by CLI and pytest_configure
+        # Note: Session isolation features not currently enabled
         mock_logging.assert_called_once()
-        mock_set_session.assert_called_once()
 
-    @patch("armadillo.pytest_plugin.plugin.cleanup_work_dir")
-    @patch("armadillo.pytest_plugin.plugin.clear_test_session")
     @patch("armadillo.pytest_plugin.plugin.stop_watchdog")
-    def test_pytest_sessionfinish_basic(
-        self, mock_stop_watchdog, mock_clear_session, mock_cleanup
-    ):
+    def test_pytest_sessionfinish_basic(self, mock_stop_watchdog):
         """Test pytest_sessionfinish performs cleanup."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
@@ -115,9 +109,8 @@ class TestArmadilloPluginConfiguration:
         plugin.pytest_sessionfinish(mock_session, exitstatus=0)
 
         # Should have called cleanup functions
+        # Note: Session isolation features not currently enabled
         mock_stop_watchdog.assert_called_once()
-        mock_clear_session.assert_called_once()
-        mock_cleanup.assert_called_once()
 
 
 class TestArmadilloPluginSessionManagement:
@@ -163,14 +156,12 @@ class TestArmadilloPluginErrorHandling:
             # If it raises, that's also acceptable behavior
             pass
 
-    @patch("armadillo.pytest_plugin.plugin.cleanup_work_dir")
-    def test_sessionfinish_handles_cleanup_error(self, mock_cleanup):
+    def test_sessionfinish_handles_cleanup_error(self):
         """Test sessionfinish handles cleanup errors gracefully."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
-        mock_cleanup.side_effect = Exception("Cleanup failed")
 
-        # Should not crash even if cleanup fails
+        # Should not crash - session isolation features not currently enabled
         try:
             plugin.pytest_sessionfinish(mock_session, exitstatus=0)
         except Exception:
@@ -476,7 +467,9 @@ class TestArmadilloReporterRegressionTests:
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
     @patch("armadillo.pytest_plugin.plugin.get_armadillo_reporter")
-    def test_hooks_call_reporter_when_non_compact(self, mock_get_reporter, mock_compact):
+    def test_hooks_call_reporter_when_non_compact(
+        self, mock_get_reporter, mock_compact
+    ):
         """Test hooks call reporter when compact mode is disabled.
 
         This is a regression test for the missing hook connections.

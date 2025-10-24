@@ -34,7 +34,6 @@ from ..utils.auth import get_auth_provider, AuthProvider
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
 from .command_builder import ServerCommandParams
-import warnings
 
 logger = get_logger(__name__)
 
@@ -90,44 +89,6 @@ class ServerPaths:
 
 
 @dataclass
-class ServerDependencies:
-    """Injectable dependencies for ArangoServer."""
-
-    config_provider: ConfigProvider
-    logger: Logger
-    port_allocator: Optional[PortAllocator]
-    command_builder: CommandBuilder
-    health_checker: HealthChecker
-    auth_provider: "AuthProvider"
-
-    @classmethod
-    def create_defaults(
-        cls,
-        custom_logger: Optional[Logger] = None,
-        port_allocator: Optional[PortAllocator] = None,
-    ) -> "ServerDependencies":
-        """Create dependencies with sensible defaults."""
-        config_provider = get_config()
-        logger_instance = custom_logger or get_logger(__name__)
-        auth_provider = get_auth_provider()
-
-        return cls(
-            config_provider=config_provider,
-            logger=logger_instance,
-            port_allocator=port_allocator or PortManager(),
-            command_builder=ServerCommandBuilder(
-                config_provider=config_provider, logger=logger_instance
-            ),
-            health_checker=ServerHealthChecker(
-                logger=logger_instance,
-                auth_provider=auth_provider,
-                timeout_config=config_provider.timeouts,
-            ),
-            auth_provider=auth_provider,
-        )
-
-
-@dataclass
 class ServerRuntimeState:
     """Runtime state for an ArangoDB server."""
 
@@ -169,24 +130,14 @@ class ArangoServer:
         self,
         server_id: str,
         *,
-        role: Optional[ServerRole] = None,
-        port: Optional[int] = None,
-        paths: Optional[ServerPaths] = None,
-        app_context: Optional[ApplicationContext] = None,
-        # Backward compatibility parameters (internal use only)
-        dependencies: Optional[ServerDependencies] = None,
-        config_provider=None,
-        logger=None,
-        port_allocator=None,
-        command_builder=None,
-        health_checker=None,
-        config=None,
+        role: ServerRole,
+        port: int,
+        paths: ServerPaths,
+        app_context: ApplicationContext,
     ) -> None:
         """Initialize ArangoDB server with explicit dependencies.
 
-        **Recommended Usage:**
-        Use factory methods instead of calling __init__ directly:
-
+        **Recommended**: Use factory methods instead of calling __init__ directly:
         - ``ArangoServer.create_single_server(server_id, app_context, port=None)``
         - ``ArangoServer.create_cluster_server(server_id, role, port, app_context, config=None)``
 
@@ -196,151 +147,20 @@ class ArangoServer:
             port: Port number (must be allocated beforehand)
             paths: Server file system paths
             app_context: Application context with all dependencies
-
-        Note:
-            Other parameters (dependencies, config_provider, logger, etc.) are maintained
-            for backward compatibility but will emit deprecation warnings. New code should
-            use the factory methods above.
         """
-        # Detect initialization pattern
-        uses_old_api = any(
-            [
-                dependencies,
-                config_provider,
-                logger,
-                port_allocator,
-                command_builder,
-                health_checker,
-                config,
-            ]
-        )
-        uses_new_api = app_context is not None and paths is not None
-
-        if uses_new_api and not uses_old_api:
-            # New pattern - validate all required params
-            if role is None or port is None:
-                raise TypeError(
-                    "New pattern requires: role, port, paths, and app_context"
-                )
-
-            if not isinstance(port, int):
-                raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
-
-            # Store clean dependencies
-            self.server_id = server_id
-            self.role = role
-            self.port = port
-            self.paths = paths
-            self._app_context = app_context
-            self.endpoint = f"http://127.0.0.1:{self.port}"
-
-            # Runtime state
-            self._runtime = ServerRuntimeState()
-
-            log_server_event(
-                self._app_context.logger,
-                "created",
-                server_id=server_id,
-                role=role.value,
-                port=self.port,
-            )
-        elif uses_old_api or (role is not None and not uses_new_api):
-            # Old API for backward compatibility
-            warnings.warn(
-                "Direct instantiation of ArangoServer is deprecated. "
-                "Use factory methods (create_single_server, create_cluster_server) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            self._init_backward_compat(
-                server_id,
-                role,
-                port,
-                dependencies,
-                config_provider,
-                logger,
-                port_allocator,
-                command_builder,
-                health_checker,
-                config,
-            )
-        else:
-            raise TypeError(
-                "ArangoServer() requires either:\n"
-                "  - Factory methods: create_single_server() or create_cluster_server()\n"
-                "  - Direct call: role, port, paths, and app_context parameters"
-            )
-
-    def _init_backward_compat(
-        self,
-        server_id: str,
-        role: ServerRole,
-        port: Optional[int],
-        dependencies: Optional[ServerDependencies],
-        config_provider,
-        logger,
-        port_allocator,
-        command_builder,
-        health_checker,
-        config,
-    ) -> None:
-        """Backward compatibility initialization path."""
-        self.server_id = server_id
-        self.role = role
-
-        # Validate port type early
-        if port is not None and not isinstance(port, int):
+        if not isinstance(port, int):
             raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
 
-        # Initialize dependencies - handle both composed and individual parameters
-        if dependencies is not None:
-            self._deps = dependencies
-        elif any(
-            [config_provider, logger, port_allocator, command_builder, health_checker]
-        ):
-            # Individual parameters provided - compose them
-            final_config_provider = config_provider or get_config()
-            final_logger = logger or get_logger(__name__)
-            final_auth_provider = get_auth_provider()
-
-            self._deps = ServerDependencies(
-                config_provider=final_config_provider,
-                logger=final_logger,
-                port_allocator=port_allocator or PortManager(),
-                command_builder=command_builder
-                or ServerCommandBuilder(
-                    config_provider=final_config_provider, logger=final_logger
-                ),
-                health_checker=health_checker
-                or ServerHealthChecker(
-                    logger=final_logger,
-                    auth_provider=final_auth_provider,
-                    timeout_config=final_config_provider.timeouts,
-                ),
-                auth_provider=final_auth_provider,
-            )
-        else:
-            # No dependencies provided, use defaults
-            self._deps = ServerDependencies.create_defaults()
-
-        # Port allocation
-        self.port = port or self._allocate_port()
+        self.server_id = server_id
+        self.role = role
+        self.port = port
+        self.paths = paths
+        self._app_context = app_context
         self.endpoint = f"http://127.0.0.1:{self.port}"
-
-        # Set up file system paths (backward compatibility mode)
-        from ..utils.filesystem import FilesystemService as FilesystemServiceImpl
-        from ..core.config import load_config
-        from ..core.config_initializer import initialize_config
-
-        temp_config = initialize_config(load_config())
-        temp_fs = FilesystemServiceImpl(temp_config)
-        self.paths = ServerPaths.from_config(server_id, config, temp_fs)
-
-        # Consolidated runtime state
         self._runtime = ServerRuntimeState()
 
         log_server_event(
-            self._logger,
+            self._app_context.logger,
             "created",
             server_id=server_id,
             role=role.value,
@@ -414,65 +234,40 @@ class ArangoServer:
             server_id, role=role, port=port, paths=paths, app_context=app_context
         )
 
-    # Internal properties for dependency access (compatible with both APIs)
+    # Internal properties for dependency access
     @property
     def _logger(self) -> Logger:
-        """Get logger instance."""
-        return (
-            getattr(self, "_app_context", None)
-            and self._app_context.logger
-            or self._deps.logger
-        )
+        """Get logger instance from application context."""
+        return self._app_context.logger
 
     @property
     def _config(self) -> "ArmadilloConfig":
-        """Get configuration."""
-        return (
-            getattr(self, "_app_context", None)
-            and self._app_context.config
-            or self._deps.config_provider
-        )
+        """Get configuration from application context."""
+        return self._app_context.config
 
     @property
     def _auth(self) -> "AuthProvider":
-        """Get authentication provider."""
-        return (
-            getattr(self, "_app_context", None)
-            and self._app_context.auth_provider
-            or self._deps.auth_provider
-        )
+        """Get authentication provider from application context."""
+        return self._app_context.auth_provider
 
     def _get_command_builder(self) -> CommandBuilder:
-        """Get command builder - creates on demand for new pattern."""
-        if hasattr(self, "_app_context"):
-            return ServerCommandBuilder(
-                config_provider=self._app_context.config,
-                logger=self._app_context.logger,
-            )
-        else:
-            return self._deps.command_builder
+        """Get command builder - creates on demand from application context."""
+        return ServerCommandBuilder(
+            config_provider=self._config,
+            logger=self._logger,
+        )
 
     def _get_health_checker(self) -> HealthChecker:
-        """Get health checker - creates on demand for new pattern."""
-        if hasattr(self, "_app_context"):
-            return ServerHealthChecker(
-                logger=self._app_context.logger,
-                auth_provider=self._app_context.auth_provider,
-                timeout_config=self._app_context.config.timeouts,
-            )
-        else:
-            return self._deps.health_checker
-
-    def _allocate_port(self, preferred: Optional[int] = None) -> int:
-        """Allocate a port using injected allocator (backward compatibility only)."""
-        return self._deps.port_allocator.allocate_port(preferred)
+        """Get health checker - creates on demand from application context."""
+        return ServerHealthChecker(
+            logger=self._logger,
+            auth_provider=self._auth,
+            timeout_config=self._config.timeouts,
+        )
 
     def _release_port(self, port: int) -> None:
-        """Release a port using injected allocator."""
-        if hasattr(self, "_app_context"):
-            self._app_context.port_allocator.release_port(port)
-        else:
-            self._deps.port_allocator.release_port(port)
+        """Release a port using the port allocator from application context."""
+        self._app_context.port_allocator.release_port(port)
 
     def start(self, timeout: Optional[float] = None) -> None:
         """Start the ArangoDB server."""

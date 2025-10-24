@@ -17,10 +17,10 @@ class TestStandardServerFactory:
         """Set up test environment."""
         # Create mock logger
         self.mock_logger = Mock()
-        
+
         # Create application context for testing with mock logger
         self.app_context = ApplicationContext.for_testing(logger=self.mock_logger)
-        
+
         self.factory = StandardServerFactory(app_context=self.app_context)
 
     def test_create_single_server_instance(self):

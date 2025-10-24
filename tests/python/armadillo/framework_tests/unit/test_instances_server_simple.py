@@ -8,17 +8,19 @@ import pytest
 from unittest.mock import Mock, patch
 from pathlib import Path
 
-from armadillo.instances.server import ArangoServer
+from armadillo.instances.server import ArangoServer, ServerPaths
 from armadillo.core.types import ServerRole, ClusterConfig, TimeoutConfig
+from armadillo.core.context import ApplicationContext
 
 
 class TestArangoServerBasic:
     """Test ArangoServer basic functionality."""
 
     def test_server_can_be_created(self):
-        """Test ArangoServer can be instantiated."""
-        server = ArangoServer(
-            server_id="test_server", role=ServerRole.SINGLE, port=8529
+        """Test ArangoServer can be instantiated using factory method."""
+        app_context = ApplicationContext.for_testing()
+        server = ArangoServer.create_single_server(
+            server_id="test_server", app_context=app_context, port=8529
         )
 
         assert server is not None
@@ -36,46 +38,37 @@ class TestArangoServerBasic:
             ServerRole.AGENT,
         ]
 
+        app_context = ApplicationContext.for_testing()
+
         for role in roles:
-            server = ArangoServer(server_id=f"test_{role.value}", role=role, port=8530)
+            if role == ServerRole.SINGLE:
+                server = ArangoServer.create_single_server(
+                    server_id=f"test_{role.value}", app_context=app_context, port=8530
+                )
+            else:
+                server = ArangoServer.create_cluster_server(
+                    server_id=f"test_{role.value}",
+                    role=role,
+                    port=8530,
+                    app_context=app_context,
+                )
 
             assert server.role == role
             assert server.endpoint == "http://127.0.0.1:8530"
 
     def test_server_with_different_ports(self):
         """Test server creation with different ports."""
-        # Create mock config provider
-        mock_config = Mock()
-        mock_config.bin_dir = Path("/fake/bin")
-        mock_config.work_dir = Path("/fake/work")
-        mock_config.cluster = ClusterConfig()
-        mock_config.verbose = 0
-        mock_config.keep_instances_on_failure = False
-        mock_config.test_timeout = 30.0
+        app_context = ApplicationContext.for_testing()
 
-        # Create mock logger
-        mock_logger = Mock()
-
-        # Create mock port allocator
-        mock_port_allocator = Mock()
-        mock_port_allocator.allocate_port.return_value = 8529
-        mock_port_allocator.release_port = Mock()
-
-        server1 = ArangoServer(
-            "test1",
-            role=ServerRole.SINGLE,
+        server1 = ArangoServer.create_single_server(
+            server_id="test1",
+            app_context=app_context,
             port=8531,
-            config_provider=mock_config,
-            logger=mock_logger,
-            port_allocator=mock_port_allocator,
         )
-        server2 = ArangoServer(
-            "test2",
-            role=ServerRole.SINGLE,
+        server2 = ArangoServer.create_single_server(
+            server_id="test2",
+            app_context=app_context,
             port=8532,
-            config_provider=mock_config,
-            logger=mock_logger,
-            port_allocator=mock_port_allocator,
         )
 
         assert server1.endpoint == "http://127.0.0.1:8531"
@@ -83,30 +76,12 @@ class TestArangoServerBasic:
 
     def test_server_not_running_initially(self):
         """Test server is not running initially."""
-        # Create mock config provider
-        mock_config = Mock()
-        mock_config.bin_dir = Path("/fake/bin")
-        mock_config.work_dir = Path("/fake/work")
-        mock_config.cluster = ClusterConfig()
-        mock_config.verbose = 0
-        mock_config.keep_instances_on_failure = False
-        mock_config.test_timeout = 30.0
+        app_context = ApplicationContext.for_testing()
 
-        # Create mock logger
-        mock_logger = Mock()
-
-        # Create mock port allocator
-        mock_port_allocator = Mock()
-        mock_port_allocator.allocate_port.return_value = 8529
-        mock_port_allocator.release_port = Mock()
-
-        server = ArangoServer(
-            "test",
-            role=ServerRole.SINGLE,
+        server = ArangoServer.create_single_server(
+            server_id="test",
+            app_context=app_context,
             port=8529,
-            config_provider=mock_config,
-            logger=mock_logger,
-            port_allocator=mock_port_allocator,
         )
 
         assert server.is_running() is False
@@ -117,45 +92,11 @@ class TestArangoServerLifecycle:
 
     def setup_method(self):
         """Set up test environment."""
-        # Create mock config provider
-        self.mock_config = Mock()
-        self.mock_config.bin_dir = Path("/fake/bin")
-        self.mock_config.work_dir = Path("/fake/work")
-        self.mock_config.cluster = ClusterConfig()
-        self.mock_config.verbose = 0
-        self.mock_config.keep_instances_on_failure = False
-        self.mock_config.test_timeout = 30.0
-        self.mock_config.timeouts = TimeoutConfig()
-
-        # Create mock logger
-        self.mock_logger = Mock()
-
-        # Create mock port allocator
-        self.mock_port_allocator = Mock()
-        self.mock_port_allocator.allocate_port.return_value = 8529
-        self.mock_port_allocator.release_port = Mock()
-
-        # Create mock command builder
-        self.mock_command_builder = Mock()
-        self.mock_command_builder.build_command.return_value = [
-            "/fake/bin/arangod",
-            "--test-arg",
-        ]
-        self.mock_command_builder.get_repository_root.return_value = Path("/fake/repo")
-
-        # Create mock health checker
-        self.mock_health_checker = Mock()
-        self.mock_health_checker.check_readiness.return_value = True
-
-        self.server = ArangoServer(
+        self.app_context = ApplicationContext.for_testing()
+        self.server = ArangoServer.create_single_server(
             server_id="test_server",
-            role=ServerRole.SINGLE,
+            app_context=self.app_context,
             port=8529,
-            config_provider=self.mock_config,
-            logger=self.mock_logger,
-            port_allocator=self.mock_port_allocator,
-            command_builder=self.mock_command_builder,
-            health_checker=self.mock_health_checker,
         )
 
     @patch("armadillo.instances.server.start_supervised_process")
@@ -221,36 +162,11 @@ class TestArangoServerConfiguration:
 
     def setup_method(self):
         """Set up test environment."""
-        # Create mock config provider
-        mock_config = Mock()
-        mock_config.bin_dir = Path("/fake/bin")
-        mock_config.work_dir = Path("/fake/work")
-        mock_config.cluster = ClusterConfig()
-        mock_config.verbose = 0
-        mock_config.keep_instances_on_failure = False
-        mock_config.test_timeout = 30.0
-
-        # Create mock logger
-        mock_logger = Mock()
-
-        # Create mock port allocator
-        mock_port_allocator = Mock()
-
-        # Use real command builder for configuration tests
-        from armadillo.instances.command_builder import ServerCommandBuilder
-
-        command_builder = ServerCommandBuilder(
-            config_provider=mock_config, logger=mock_logger
-        )
-
-        self.server = ArangoServer(
-            "test",
-            role=ServerRole.SINGLE,
+        self.app_context = ApplicationContext.for_testing()
+        self.server = ArangoServer.create_single_server(
+            server_id="test",
+            app_context=self.app_context,
             port=8529,
-            config_provider=mock_config,
-            logger=mock_logger,
-            port_allocator=mock_port_allocator,
-            command_builder=command_builder,
         )
 
     @patch("pathlib.Path.exists", return_value=True)
@@ -285,42 +201,11 @@ class TestArangoServerErrorHandling:
 
     def setup_method(self):
         """Set up test environment."""
-        # Create mock config provider
-        mock_config = Mock()
-        mock_config.bin_dir = Path("/fake/bin")
-        mock_config.work_dir = Path("/fake/work")
-        mock_config.cluster = ClusterConfig()
-        mock_config.verbose = 0
-        mock_config.keep_instances_on_failure = False
-        mock_config.test_timeout = 30.0
-
-        # Create mock logger
-        mock_logger = Mock()
-
-        # Create mock port allocator
-        mock_port_allocator = Mock()
-
-        # Create mock command builder
-        mock_command_builder = Mock()
-        mock_command_builder.build_command.return_value = [
-            "/fake/bin/arangod",
-            "--test-arg",
-        ]
-        mock_command_builder.get_repository_root.return_value = Path("/fake/repo")
-
-        # Create mock health checker
-        mock_health_checker = Mock()
-        mock_health_checker.check_readiness.return_value = True
-
-        self.server = ArangoServer(
-            "test",
-            role=ServerRole.SINGLE,
+        self.app_context = ApplicationContext.for_testing()
+        self.server = ArangoServer.create_single_server(
+            server_id="test",
+            app_context=self.app_context,
             port=8529,
-            config_provider=mock_config,
-            logger=mock_logger,
-            port_allocator=mock_port_allocator,
-            command_builder=mock_command_builder,
-            health_checker=mock_health_checker,
         )
 
     @patch("armadillo.instances.server.start_supervised_process")
@@ -362,9 +247,14 @@ class TestArangoServerErrorHandling:
 
     def test_invalid_port_type(self):
         """Test that invalid port types are caught."""
+        app_context = ApplicationContext.for_testing()
         with pytest.raises((TypeError, ValueError)):
             # This should be caught by the strict type validation
-            ArangoServer("test", role=ServerRole.SINGLE, port="not_a_port")
+            ArangoServer.create_single_server(
+                server_id="test",
+                app_context=app_context,
+                port="not_a_port",  # type: ignore
+            )
 
 
 class TestArangoServerIntegration:
@@ -378,24 +268,11 @@ class TestArangoServerIntegration:
         self, mock_exists, mock_is_running, mock_stop, mock_start
     ):
         """Test complete start->check->stop workflow."""
-        # Create mock config provider
-        mock_config = Mock()
-        mock_config.bin_dir = Path("/fake/bin")
-        mock_config.work_dir = Path("/fake/work")
-        mock_config.cluster = ClusterConfig()
-        mock_config.verbose = 0
-        mock_config.keep_instances_on_failure = False
-        mock_config.test_timeout = 30.0
-
-        # Create mock logger
-        mock_logger = Mock()
-
-        server = ArangoServer(
-            "lifecycle_test",
-            role=ServerRole.SINGLE,
+        app_context = ApplicationContext.for_testing()
+        server = ArangoServer.create_single_server(
+            server_id="lifecycle_test",
+            app_context=app_context,
             port=8529,
-            config_provider=mock_config,
-            logger=mock_logger,
         )
 
         # Mock successful start
