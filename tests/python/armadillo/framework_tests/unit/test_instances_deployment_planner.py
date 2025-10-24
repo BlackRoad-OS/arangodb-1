@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from armadillo.core.types import ServerRole, ClusterConfig
+from armadillo.core.context import ApplicationContext
 from armadillo.instances.deployment_planner import DeploymentPlanner
 from armadillo.instances.deployment_plan import (
     SingleServerDeploymentPlan,
@@ -31,10 +32,17 @@ class TestDeploymentPlanner:
         self.mock_config_provider = Mock()
         self.mock_config_provider.verbose = 0  # Default to quiet mode for tests
 
+        # Create mock filesystem
+        self.mock_filesystem = Mock()
+        self.mock_filesystem.server_dir.side_effect = lambda server_id: Path(
+            f"/fake/servers/{server_id}"
+        )
+
         self.planner = DeploymentPlanner(
             port_allocator=self.mock_port_allocator,
             logger=self.mock_logger,
             config_provider=self.mock_config_provider,
+            filesystem=self.mock_filesystem,
         )
 
     def _get_next_port(self) -> int:
