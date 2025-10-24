@@ -51,7 +51,6 @@ namespace {
 static constexpr std::size_t kPrefix = sizeof(arangodb::ResourceMonitor*);
 
 static constexpr std::uint64_t kOriginOwned = 1;
-static constexpr std::uint64_t kOriginAdopted = 0;
 
 inline void setHeader(uint8_t t, std::uint64_t origin, std::uint64_t len,
                       std::uint64_t& lengthOrigin) noexcept {
@@ -93,29 +92,8 @@ static inline void deallocateSupervised(uint8_t* payload,
 namespace arangodb::aql {
 
 void AqlValue::setPointer(uint8_t const* pointer) noexcept {
-  auto t = type();
-  switch (t) {
-    case VPACK_SUPERVISED_SLICE: {
-      auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(pointer + kPrefix).byteSize());
-      setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginAdopted,
-                len, _data.supervisedSliceMeta.lengthOrigin);
-      _data.supervisedSliceMeta.pointer = const_cast<uint8_t*>(pointer);
-      return;
-    }
-    case VPACK_SUPERVISED_STRING: {
-      auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(pointer + kPrefix).byteSize());
-      setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_STRING), kOriginAdopted,
-                len, _data.supervisedStringMeta.lengthOrigin);
-      _data.supervisedStringMeta.pointer = const_cast<uint8_t*>(pointer);
-      return;
-    }
-    default:
-      setType(AqlValueType::VPACK_SLICE_POINTER);
-      _data.slicePointerMeta.pointer = pointer;
-      return;
-  }
+  setType(AqlValueType::VPACK_SLICE_POINTER);
+  _data.slicePointerMeta.pointer = pointer;
 }
 
 uint64_t AqlValue::hash(uint64_t seed) const {
@@ -151,6 +129,10 @@ bool AqlValue::isNone() const noexcept {
       return VPackSlice(_data.slicePointerMeta.pointer).isNone();
     case VPACK_MANAGED_SLICE:
       return VPackSlice(_data.managedSliceMeta.pointer).isNone();
+    case VPACK_SUPERVISED_SLICE:
+      return VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).isNone();
+    case VPACK_SUPERVISED_STRING:
+      return VPackSlice(_data.supervisedStringMeta.getPayloadPtr()).isNone();
     default:
       return false;
   }
@@ -355,6 +337,8 @@ AqlValue AqlValue::at(int64_t position, bool& mustDestroy, bool doCopy) const {
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isArray()) {
         int64_t const n = static_cast<int64_t>(s.length());
         if (position < 0) {
@@ -401,6 +385,8 @@ AqlValue AqlValue::at(int64_t position, size_t n, bool& mustDestroy,
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isArray()) {
         if (position < 0) {
           // a negative position is allowed
@@ -445,6 +431,8 @@ AqlValue AqlValue::getKeyAttribute(bool& mustDestroy, bool doCopy) const {
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isObject()) {
         auto const found = transaction::helpers::extractKeyFromDocument(s);
         if (!found.isNone()) {
@@ -474,6 +462,8 @@ AqlValue AqlValue::getIdAttribute(CollectionNameResolver const& resolver,
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isObject()) {
         auto const found = transaction::helpers::extractIdFromDocument(s);
         if (found.isCustom()) {
@@ -508,6 +498,8 @@ AqlValue AqlValue::getFromAttribute(bool& mustDestroy, bool doCopy) const {
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isObject()) {
         auto const found = transaction::helpers::extractFromFromDocument(s);
         if (!found.isNone()) {
@@ -536,6 +528,8 @@ AqlValue AqlValue::getToAttribute(bool& mustDestroy, bool doCopy) const {
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isObject()) {
         auto const found = transaction::helpers::extractToFromDocument(s);
         if (!found.isNone()) {
@@ -566,6 +560,8 @@ AqlValue AqlValue::get(CollectionNameResolver const& resolver,
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isObject()) {
         auto const found = s.get(name);
         if (found.isCustom()) {
@@ -605,6 +601,8 @@ AqlValue AqlValue::get(CollectionNameResolver const& resolver,
     case VPACK_INLINE:
     case VPACK_MANAGED_SLICE:
     case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING:
       if (auto s = slice(t); s.isObject()) {
         VPackSlice prev;
         size_t const n = names.size();
@@ -654,7 +652,9 @@ bool AqlValue::hasKey(std::string_view name) const {
     case VPACK_INLINE:
     case VPACK_SLICE_POINTER:
     case VPACK_MANAGED_SLICE:
-    case VPACK_MANAGED_STRING: {
+    case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING: {
       auto s = slice(t);
       return s.isObject() && s.hasKey(name);
     }
@@ -985,6 +985,14 @@ AqlValue AqlValue::clone() const {
     case VPACK_MANAGED_STRING:
       return AqlValue{_data.managedStringMeta.toSlice(),
                       _data.managedStringMeta.getLength()};
+    case VPACK_SUPERVISED_SLICE: {
+      return AqlValue{VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()},
+                      _data.supervisedSliceMeta.getLength()};
+    }
+    case VPACK_SUPERVISED_STRING: {
+      return AqlValue{_data.supervisedStringMeta.toSlice(),
+                      _data.supervisedStringMeta.getLength()};
+    }
     case RANGE:
       return AqlValue{range()->_low, range()->_high};
     default:
@@ -1012,10 +1020,10 @@ void AqlValue::destroy() noexcept {
       break;
     case VPACK_SUPERVISED_SLICE: {
       auto lo = _data.supervisedSliceMeta.lengthOrigin;
-      auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(_data.supervisedSliceMeta.getPayloadPtr())
-              .byteSize());
       if (getOrigin8(lo) == kOriginOwned) {
+        auto len = static_cast<std::uint64_t>(
+            velocypack::Slice(_data.supervisedSliceMeta.getPayloadPtr())
+                .byteSize());
         deallocateSupervised(_data.supervisedSliceMeta.pointer, len);
       }
       _data.supervisedSliceMeta.pointer = nullptr;
@@ -1024,10 +1032,10 @@ void AqlValue::destroy() noexcept {
     }
     case VPACK_SUPERVISED_STRING: {
       auto lo = _data.supervisedStringMeta.lengthOrigin;
-      auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(_data.supervisedStringMeta.getPayloadPtr())
-              .byteSize());
       if (getOrigin8(lo) == kOriginOwned) {
+        auto len = static_cast<std::uint64_t>(
+            velocypack::Slice(_data.supervisedStringMeta.getPayloadPtr())
+                .byteSize());
         deallocateSupervised(_data.supervisedStringMeta.pointer, len);
       }
       _data.supervisedStringMeta.pointer = nullptr;
@@ -1335,7 +1343,7 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   TRI_ASSERT(!slice.isExternal());
   if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
     uint8_t* p = allocateSupervised(*rm, size);
-    memcpy(p, slice.begin(), size);
+    memcpy(p + kPrefix, slice.begin(), size);
     setType(AqlValueType::VPACK_SUPERVISED_SLICE);
     setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned,
               static_cast<std::uint64_t>(size),
@@ -1369,6 +1377,9 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   }
 }
 
+AqlValue::AqlValue(AqlValueHintSliceNoCopy v) noexcept
+    : AqlValue{v.slice.start()} {}
+
 AqlValue::AqlValue(AqlValueHintSliceCopy v, arangodb::ResourceMonitor* rm)
     : AqlValue{v.slice, v.slice.byteSize(), rm} {}
 
@@ -1382,7 +1393,7 @@ AqlValue::AqlValue(VPackSlice slice, velocypack::ValueLength length,
   TRI_ASSERT(!slice.isExternal());
   if (rm != nullptr && len > sizeof(_data.inlineSliceMeta.slice)) {
     uint8_t* p = allocateSupervised(*rm, len);
-    memcpy(p, slice.begin(), static_cast<std::size_t>(len));
+    memcpy(p + kPrefix, slice.begin(), static_cast<std::size_t>(len));
     setType(AqlValueType::VPACK_SUPERVISED_SLICE);
     setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
               _data.supervisedSliceMeta.lengthOrigin);
@@ -1397,28 +1408,12 @@ AqlValue::AqlValue(int64_t low, int64_t high) {
   setType(AqlValueType::RANGE);
 }
 
-AqlValue::AqlValue(uint8_t const* bytes, velocypack::ValueLength length,
-                   arangodb::ResourceMonitor* rm) {
-  VPackSlice s(bytes);
-  auto len = static_cast<std::uint64_t>(length ? length : s.byteSize());
-  if (rm != nullptr && len > sizeof(_data.inlineSliceMeta.slice)) {
-    uint8_t* p = allocateSupervised(*rm, len);
-    memcpy(p, bytes, static_cast<std::size_t>(len));
-    setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-    setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
-              _data.supervisedSliceMeta.lengthOrigin);
-    _data.supervisedSliceMeta.pointer = p;
-  } else {
-    initFromSlice(s, static_cast<velocypack::ValueLength>(len));
-  }
-}
-
 AqlValue::AqlValue(velocypack::Buffer<uint8_t> const& buffer,
                    arangodb::ResourceMonitor* rm) {
   auto len = static_cast<std::uint64_t>(buffer.size());
   if (rm != nullptr && len > sizeof(_data.inlineSliceMeta.slice)) {
     uint8_t* p = allocateSupervised(*rm, len);
-    memcpy(p, buffer.data(), static_cast<std::size_t>(len));
+    memcpy(p + kPrefix, buffer.data(), static_cast<std::size_t>(len));
     setType(AqlValueType::VPACK_SUPERVISED_SLICE);
     setHeader(static_cast<uint8_t>(VPACK_SUPERVISED_SLICE), kOriginOwned, len,
               _data.supervisedSliceMeta.lengthOrigin);

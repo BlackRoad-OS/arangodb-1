@@ -17,35 +17,24 @@ using namespace arangodb::velocypack;
 namespace {
 inline size_t ptrOverhead() { return sizeof(ResourceMonitor*); }
 
-inline Slice makeLargeArray(size_t n = 2048, char bytesToFill = 'a') {
-  Builder builder;
-  builder.openArray();
-  builder.add(Value(std::string(n, bytesToFill)));
-  builder.close();
-  return builder.slice();
+inline Builder makeLargeArray(size_t n = 2048, char bytesToFill = 'a') {
+  Builder b;
+  b.openArray();
+  b.add(Value(std::string(n, bytesToFill)));
+  b.close();
+  return b;
 }
-inline Slice makeString(size_t n, char bytesToFill = 'a') {
-  Builder builder;
-  builder.add(Value(std::string(n, bytesToFill)));
-  return builder.slice();
+inline Builder makeString(size_t n, char bytesToFill = 'a') {
+  Builder b;
+  b.add(Value(std::string(n, bytesToFill)));
+  return b;
 }
-inline Slice makeArrayOfNumbers(size_t n = 5) {
-  Builder builder;
-  builder.openArray();
-  for (size_t i = 0; i < n; ++i) builder.add(Value(static_cast<int>(i)));
-  builder.close();
-  return builder.slice();
-}
-
-inline size_t findNonInlineThreshold(ResourceMonitor& resourceMonitor) {
-  for (size_t len = 1; len < 4096; ++len) {
-    Slice slice = makeString(len, 'a');
-    AqlValue aqlVal(slice, 0, &resourceMonitor);
-    size_t memUsage = aqlVal.memoryUsage();
-    aqlVal.destroy();
-    if (memUsage > 0) return len;
-  }
-  return 1024;
+inline Builder makeArrayOfNumbers(size_t n = 5) {
+  Builder b;
+  b.openArray();
+  for (size_t i = 0; i < n; ++i) b.add(Value(static_cast<int>(i)));
+  b.close();
+  return b;
 }
 }  // namespace
 
@@ -54,7 +43,8 @@ TEST(AqlValueSupervisedTest, SliceOwnedAccountsPayloadPrefix) {
   ResourceMonitor resourceMonitor(global);
   ASSERT_EQ(resourceMonitor.current(), 0u);
 
-  Slice slice = makeLargeArray(4096, 'a');
+  auto builder = makeLargeArray(4096, 'a');
+  Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
   EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
@@ -76,24 +66,9 @@ TEST(AqlValueSupervisedTest, SliceLengthOwnedMatchesSliceCtor) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice slice = makeLargeArray(1024, 'a');
+  auto builder = makeLargeArray(1024, 'a');
+  Slice slice = builder.slice();
   AqlValue aqlVal(slice, static_cast<ValueLength>(slice.byteSize()),
-                  &resourceMonitor);
-
-  EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(slice.byteSize()) + ptrOverhead());
-
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0u);
-}
-
-TEST(AqlValueSupervisedTest, BytesLengthOwnedAccountsPayloadPrefix) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
-  Slice slice = makeLargeArray(1536, 'a');
-  AqlValue aqlVal(slice.begin(), static_cast<ValueLength>(slice.byteSize()),
                   &resourceMonitor);
 
   EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
@@ -108,7 +83,8 @@ TEST(AqlValueSupervisedTest, BufferOwnedAccountsPayloadPrefix) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice slice = makeLargeArray(2048, 'a');
+  auto builder = makeLargeArray(2048, 'a');
+  Slice slice = builder.slice();
   velocypack::Buffer<uint8_t> buffer;
   buffer.append(slice.start(), slice.byteSize());
 
@@ -125,7 +101,8 @@ TEST(AqlValueSupervisedTest, HintSliceCopyOwnedAccountsPayloadPrefix) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice slice = makeLargeArray(512, 'a');
+  auto builder = makeLargeArray(512, 'a');
+  Slice slice = builder.slice();
   AqlValueHintSliceCopy hint{slice};
   AqlValue aqlVal(hint, &resourceMonitor);
 
@@ -141,15 +118,15 @@ TEST(AqlValueSupervisedTest, InlineNotAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  size_t threshold = findNonInlineThreshold(resourceMonitor);
-  ASSERT_GT(threshold, 1u);
-  size_t inlineLen = threshold - 1;
+  // Inline fits up to 16 bytes total (header + data)
+  size_t inlineLen = 15;
 
-  Slice slice = makeString(inlineLen, 'a');
+  auto builder = makeString(inlineLen, 'a');
+  Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
-  EXPECT_EQ(aqlVal.memoryUsage(), 0);
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(aqlVal.memoryUsage(), 0u);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
   EXPECT_TRUE(aqlVal.slice().isString());
   {
     ValueLength l = 0;
@@ -159,94 +136,76 @@ TEST(AqlValueSupervisedTest, InlineNotAccount) {
   EXPECT_EQ(aqlVal.slice().byteSize(), slice.byteSize());
 
   aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, BoundaryOverInlineAccounts) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  size_t threshold = findNonInlineThreshold(resourceMonitor);
-  Slice slice = makeString(threshold, 'a');
+  // First non-inline is 17 bytes (header + data exceeds 16)
+  auto builder = makeString(16, 'a');
+  Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
-  EXPECT_GT(aqlVal.memoryUsage(), 0);
+  EXPECT_GT(aqlVal.memoryUsage(), 0u);
   EXPECT_EQ(aqlVal.memoryUsage(),
             static_cast<size_t>(slice.byteSize()) + ptrOverhead());
   EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
 
   aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
-TEST(AqlValueSupervisedTest, AdoptedSetPointerNoAccount) {
+TEST(AqlValueSupervisedTest, AdoptedBytesCtorNoAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice sliceA = makeLargeArray(3072, 'a');
-  Slice sliceB = makeLargeArray(3072, 'b');
+  auto builder1 = makeLargeArray(3072, 'a');
+  auto builder2 = makeLargeArray(3072, 'b');
+  Slice slice1 = builder1.slice();
+  Slice slice2 = builder2.slice();
 
-  AqlValue aqlVal(sliceA, 0, &resourceMonitor);
+  AqlValue aOwned(slice1, 0, &resourceMonitor);
   size_t billed = resourceMonitor.current();
-  ASSERT_EQ(billed, aqlVal.memoryUsage());
+  ASSERT_EQ(billed, aOwned.memoryUsage());
   ASSERT_GE(billed, ptrOverhead());
 
-  aqlVal.setPointer(const_cast<uint8_t*>(sliceB.start()));
-  EXPECT_EQ(resourceMonitor.current(), billed);
-  EXPECT_EQ(aqlVal.memoryUsage(), 0);
+  AqlValue aAdopt(slice2.begin());
 
-  aqlVal.destroy();
+  EXPECT_EQ(resourceMonitor.current(), billed);
+  EXPECT_EQ(aAdopt.memoryUsage(), 0u);
+
+  aAdopt.destroy();
   EXPECT_EQ(resourceMonitor.current(), billed);
 
-  AqlValue aqlVal2(sliceB, 0, &resourceMonitor);
-  EXPECT_EQ(resourceMonitor.current(), billed + aqlVal2.memoryUsage());
-
-  aqlVal2.destroy();
-  EXPECT_EQ(resourceMonitor.current(), billed);
+  aOwned.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
-TEST(AqlValueSupervisedTest, OwnedSetPointerKeepsAccountingDestroy) {
+TEST(AqlValueSupervisedTest, OwnedThenAdoptedElsewhereDoesNotChangeAccounting) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice sliceOwned = makeLargeArray(1800, 'a');
-  Slice sliceAdopt = makeLargeArray(1600, 'b');
+  auto builder1 = makeLargeArray(1500, 'a');
+  auto builder2 = makeLargeArray(1500, 'b');
+  Slice slice1 = builder1.slice();
+  Slice slice2 = builder2.slice();
 
-  AqlValue aqlVal(sliceOwned, 0, &resourceMonitor);
-  size_t billed = resourceMonitor.current();
-  ASSERT_GT(billed, 0);
-
-  aqlVal.setPointer(const_cast<uint8_t*>(sliceAdopt.start()));
-  EXPECT_EQ(resourceMonitor.current(), billed);
-  EXPECT_EQ(aqlVal.memoryUsage(), 0);
-
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), billed);
-}
-
-TEST(AqlValueSupervisedTest, OwnedThenAdoptedDoesNotChangeAccounting) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
-  Slice sliceA = makeLargeArray(1500, 'a');
-  Slice sliceB = makeLargeArray(1500, 'b');
-
-  AqlValue aqlVal1(sliceA, 0, &resourceMonitor);
+  AqlValue aOwned(slice1, 0, &resourceMonitor);
   size_t base = resourceMonitor.current();
-  ASSERT_EQ(base, aqlVal1.memoryUsage());
+  ASSERT_EQ(base, aOwned.memoryUsage());
   ASSERT_GE(base, ptrOverhead());
 
-  AqlValue aqlVal2(sliceB, 0, &resourceMonitor);
-  aqlVal2.setPointer(
-      const_cast<uint8_t*>(aqlVal1.slice().begin()));  // adopt view
+  AqlValue aAdoptB(slice2.begin());
   EXPECT_EQ(resourceMonitor.current(), base);
-  EXPECT_EQ(aqlVal2.memoryUsage(), 0);
+  EXPECT_EQ(aAdoptB.memoryUsage(), 0u);
 
-  aqlVal2.destroy();
+  aAdoptB.destroy();
   EXPECT_EQ(resourceMonitor.current(), base);
 
-  aqlVal1.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  aOwned.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, AdoptSupervisedBufferDoesNotAccountOrFree) {
@@ -260,20 +219,20 @@ TEST(AqlValueSupervisedTest, AdoptSupervisedBufferDoesNotAccountOrFree) {
   builder.close();
 
   const size_t before = resourceMonitor.current();
-  ASSERT_GT(before, 0);
+  ASSERT_GT(before, 0u);
 
-  // Start with inline, then adopt external bytes from the supervised buffer
   Builder tiny;
   tiny.add(Value(7));
-  AqlValue aqlVal(tiny.slice(), 0, &resourceMonitor);  // inline -> 0 accounting
-  ASSERT_EQ(aqlVal.memoryUsage(), 0);
+  AqlValue inlineVal(tiny.slice(), 0, &resourceMonitor);
+  ASSERT_EQ(inlineVal.memoryUsage(), 0u);
   ASSERT_EQ(resourceMonitor.current(), before);
 
-  aqlVal.setPointer(const_cast<uint8_t*>(builder.slice().start()));  // adopt
-  EXPECT_EQ(aqlVal.memoryUsage(), 0);
+  AqlValue adopted(builder.slice().begin());
+  EXPECT_EQ(adopted.memoryUsage(), 0u);
   EXPECT_EQ(resourceMonitor.current(), before);
 
-  aqlVal.destroy();
+  adopted.destroy();
+  inlineVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), before);
 }
 
@@ -292,14 +251,14 @@ TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
   ASSERT_EQ(base, aqlVal1.memoryUsage());
 
   AqlValue aqlVal2 = aqlVal1.clone();
-  // clone adds only handle overhead (pointer-sized)
+
   EXPECT_EQ(resourceMonitor.current(), base + ptrOverhead());
 
   aqlVal2.destroy();
   EXPECT_EQ(resourceMonitor.current(), base);
 
   aqlVal1.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest,
@@ -320,7 +279,7 @@ TEST(AqlValueSupervisedTest,
   EXPECT_GE(resourceMonitor.current(), ptrOverhead());
 
   cloneVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, CloneEraseKeepAccounting) {
@@ -339,14 +298,14 @@ TEST(AqlValueSupervisedTest, CloneEraseKeepAccounting) {
   AqlValue c = aqlVal.clone();
   EXPECT_EQ(resourceMonitor.current(), base + ptrOverhead());
 
-  c.erase();  // should not drop accounting
+  c.erase();
   EXPECT_EQ(resourceMonitor.current(), base + ptrOverhead());
 
   c.destroy();
   EXPECT_EQ(resourceMonitor.current(), base);
 
   aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, TypeArrayNumberStringNullObjectNone) {
@@ -354,7 +313,8 @@ TEST(AqlValueSupervisedTest, TypeArrayNumberStringNullObjectNone) {
   ResourceMonitor resourceMonitor(global);
 
   {
-    Slice slice = makeArrayOfNumbers(16);
+    auto b = makeArrayOfNumbers(16);
+    Slice slice = b.slice();
     AqlValue aqlVal(slice, 0, &resourceMonitor);
     EXPECT_TRUE(aqlVal.isArray());
     EXPECT_FALSE(aqlVal.isObject());
@@ -363,7 +323,8 @@ TEST(AqlValueSupervisedTest, TypeArrayNumberStringNullObjectNone) {
     aqlVal.destroy();
   }
   {
-    Slice slice = makeString(4096, 'a');
+    auto b = makeString(4096, 'a');
+    Slice slice = b.slice();
     AqlValue aqlVal(slice, 0, &resourceMonitor);
     EXPECT_TRUE(aqlVal.isString());
     EXPECT_FALSE(aqlVal.isArray());
@@ -380,14 +341,15 @@ TEST(AqlValueSupervisedTest, TypeArrayNumberStringNullObjectNone) {
     aqlVal.destroy();
   }
 
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, PayloadLengthsMatchPrefixNotCounted) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice slice = makeLargeArray(1234, 'a');
+  auto b = makeLargeArray(1234, 'a');
+  Slice slice = b.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
   EXPECT_EQ(aqlVal.slice().byteSize(), slice.byteSize());
@@ -395,16 +357,19 @@ TEST(AqlValueSupervisedTest, PayloadLengthsMatchPrefixNotCounted) {
             static_cast<size_t>(aqlVal.slice().byteSize()) + ptrOverhead());
 
   aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, MultipleOwnedSumAccounting) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice sliceA = makeLargeArray(1000, 'a');
-  Slice sliceB = makeLargeArray(2000, 'b');
-  Slice sliceC = makeLargeArray(3000, 'c');
+  auto bA = makeLargeArray(1000, 'a');
+  auto bB = makeLargeArray(2000, 'b');
+  auto bC = makeLargeArray(3000, 'c');
+  Slice sliceA = bA.slice();
+  Slice sliceB = bB.slice();
+  Slice sliceC = bC.slice();
 
   AqlValue aqlVal1(sliceA, 0, &resourceMonitor);
   AqlValue aqlVal2(sliceB, 0, &resourceMonitor);
@@ -426,31 +391,29 @@ TEST(AqlValueSupervisedTest, MultipleOwnedSumAccounting) {
   EXPECT_EQ(resourceMonitor.current(), exp3);
 
   aqlVal3.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }
 
 TEST(AqlValueSupervisedTest, FuzzAroundInlineThreshold) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  size_t t = findNonInlineThreshold(resourceMonitor);
-  for (int delta = -3; delta <= 3; ++delta) {
-    size_t n =
-        static_cast<size_t>(std::max<long>(1, static_cast<long>(t) + delta));
-    Slice slice = makeString(n, 'a');
+  for (size_t n = 13; n <= 19; ++n) {
+    auto b = makeString(n, 'a');
+    Slice slice = b.slice();
     AqlValue aqlVal(slice, 0, &resourceMonitor);
     size_t mu = aqlVal.memoryUsage();
 
-    if (n < t) {
-      EXPECT_EQ(mu, 0) << "n=" << n << " should be inline";
-      EXPECT_EQ(resourceMonitor.current(), 0);
+    if (slice.byteSize() <= 16) {
+      EXPECT_EQ(mu, 0u) << "n=" << n << " should be inline";
+      EXPECT_EQ(resourceMonitor.current(), 0u);
     } else {
       size_t expected = static_cast<size_t>(slice.byteSize()) + ptrOverhead();
       EXPECT_EQ(mu, expected) << "n=" << n << " should be owned";
       EXPECT_EQ(resourceMonitor.current(), expected);
     }
     aqlVal.destroy();
-    EXPECT_EQ(resourceMonitor.current(), 0);
+    EXPECT_EQ(resourceMonitor.current(), 0u);
   }
 }
 
@@ -458,14 +421,15 @@ TEST(AqlValueSupervisedTest, DestroySafe) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  Slice slice = makeLargeArray(2000, 'a');
+  auto b = makeLargeArray(2000, 'a');
+  Slice slice = b.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
   size_t billed = resourceMonitor.current();
-  EXPECT_GT(billed, 0);
+  EXPECT_GT(billed, 0u);
 
   aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 
   aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 }

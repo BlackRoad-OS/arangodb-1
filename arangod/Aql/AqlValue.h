@@ -278,6 +278,10 @@ struct AqlValue final {
 
     // VPACK_SUPERVISED_SLICE
     struct {
+      velocypack::Slice toSlice() const noexcept {
+        return velocypack::Slice(reinterpret_cast<uint8_t const*>(
+            pointer + sizeof(arangodb::ResourceMonitor*)));
+      }
       uint64_t getLength() const noexcept {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(pointer))
             .byteSize();  // + bytes from monitor
@@ -311,6 +315,11 @@ struct AqlValue final {
 
     // VPACK_SUPERVISED_STRING
     struct {
+      velocypack::Slice toSlice() const {
+        auto const* s = reinterpret_cast<std::string const*>(
+            pointer + sizeof(arangodb::ResourceMonitor*));
+        return velocypack::Slice(reinterpret_cast<uint8_t const*>(s->data()));
+      }
       uint64_t getLength() const noexcept {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(pointer))
             .byteSize();  // + bytes from monitor
@@ -397,16 +406,9 @@ struct AqlValue final {
   explicit AqlValue(AqlValueHintSliceCopy v,
                     arangodb::ResourceMonitor* rm = nullptr);
 
-  // construct from Slice, copying contents
-  // explicit AqlValue(velocypack::Slice slice);
-
   // construct from Slice and length, copying contents
   explicit AqlValue(velocypack::Slice slice, velocypack::ValueLength length = 0,
                     arangodb::ResourceMonitor* rm = nullptr);
-  // construct from raw bytes and length
-
-  AqlValue(uint8_t const* bytes, velocypack::ValueLength length = 0,
-           arangodb::ResourceMonitor* rm = nullptr);
 
   // construct range type
   AqlValue(int64_t low, int64_t high);
