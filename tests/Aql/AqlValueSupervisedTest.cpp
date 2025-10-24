@@ -167,7 +167,7 @@ TEST(AqlValueSupervisedTest, AdoptedBytesCtorNoAccount) {
   ASSERT_EQ(billed, aOwned.memoryUsage());
   ASSERT_GE(billed, ptrOverhead());
 
-  AqlValue aAdopt(slice2.begin());
+  AqlValue aAdopt(slice2.begin());  // take a look
 
   EXPECT_EQ(resourceMonitor.current(), billed);
   EXPECT_EQ(aAdopt.memoryUsage(), 0);

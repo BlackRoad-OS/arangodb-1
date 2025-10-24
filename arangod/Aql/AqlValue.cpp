@@ -978,11 +978,13 @@ AqlValue AqlValue::clone() const {
                       _data.managedStringMeta.getLength()};
     case VPACK_SUPERVISED_SLICE: {
       return AqlValue{VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()},
-                      _data.supervisedSliceMeta.getLength()};
+                      _data.supervisedSliceMeta.getLength(),
+                      _data.supervisedSliceMeta.getResourceMonitor()};
     }
     case VPACK_SUPERVISED_STRING: {
       return AqlValue{_data.supervisedStringMeta.toSlice(),
-                      _data.supervisedStringMeta.getLength()};
+                      _data.supervisedStringMeta.getLength(),
+                      _data.supervisedSliceMeta.getResourceMonitor()};
     }
     case RANGE:
       return AqlValue{range()->_low, range()->_high};
