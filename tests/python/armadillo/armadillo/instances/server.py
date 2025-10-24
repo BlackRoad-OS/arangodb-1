@@ -168,11 +168,11 @@ class ArangoServer:
     def __init__(
         self,
         server_id: str,
-        role: ServerRole,
-        port: int,
-        paths: ServerPaths,
-        app_context: ApplicationContext,
         *,
+        role: Optional[ServerRole] = None,
+        port: Optional[int] = None,
+        paths: Optional[ServerPaths] = None,
+        app_context: Optional[ApplicationContext] = None,
         # Legacy parameters for backwards compatibility - deprecated
         dependencies: Optional[ServerDependencies] = None,
         config_provider=None,
@@ -202,8 +202,8 @@ class ArangoServer:
             health_checker: DEPRECATED - use app_context instead
             config: DEPRECATED - use paths parameter instead
         """
-        # Detect legacy usage and warn
-        if any(
+        # Detect which initialization pattern is being used
+        has_legacy_params = any(
             [
                 dependencies,
                 config_provider,
@@ -213,10 +213,41 @@ class ArangoServer:
                 health_checker,
                 config,
             ]
-        ):
+        )
+        has_new_params = app_context is not None and paths is not None
+
+        if has_new_params and not has_legacy_params:
+            # New pattern - validate all required params
+            if role is None or port is None:
+                raise TypeError(
+                    "New pattern requires: role, port, paths, and app_context"
+                )
+
+            if not isinstance(port, int):
+                raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
+
+            # Store clean dependencies
+            self.server_id = server_id
+            self.role = role
+            self.port = port
+            self.paths = paths
+            self._app_context = app_context
+            self.endpoint = f"http://127.0.0.1:{self.port}"
+
+            # Runtime state
+            self._runtime = ServerRuntimeState()
+
+            log_server_event(
+                self._app_context.logger,
+                "created",
+                server_id=server_id,
+                role=role.value,
+                port=self.port,
+            )
+        elif has_legacy_params or (role is not None and not has_new_params):
+            # Legacy pattern
             warnings.warn(
-                "Passing dependencies/config_provider/logger/port_allocator/command_builder/"
-                "health_checker/config to ArangoServer.__init__ is deprecated. "
+                "Direct instantiation of ArangoServer is deprecated. "
                 "Use factory methods (create_single_server, create_cluster_server) instead.",
                 DeprecationWarning,
                 stacklevel=2,
@@ -234,30 +265,12 @@ class ArangoServer:
                 health_checker,
                 config,
             )
-            return
-
-        # Strict validation
-        if not isinstance(port, int):
-            raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
-
-        # Store clean dependencies
-        self.server_id = server_id
-        self.role = role
-        self.port = port
-        self.paths = paths
-        self._app_context = app_context
-        self.endpoint = f"http://127.0.0.1:{self.port}"
-
-        # Runtime state
-        self._runtime = ServerRuntimeState()
-
-        log_server_event(
-            self._app_context.logger,
-            "created",
-            server_id=server_id,
-            role=role.value,
-            port=self.port,
-        )
+        else:
+            raise TypeError(
+                "ArangoServer() requires either:\n"
+                "  - New pattern: role, port, paths, and app_context (use factory methods)\n"
+                "  - Legacy pattern: role and port (optionally with dependencies)"
+            )
 
     def _init_legacy(
         self,
@@ -275,6 +288,10 @@ class ArangoServer:
         """Legacy initialization path - DEPRECATED."""
         self.server_id = server_id
         self.role = role
+
+        # Validate port type early
+        if port is not None and not isinstance(port, int):
+            raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
 
         # Initialize dependencies - handle both composed and individual parameters
         if dependencies is not None:
@@ -315,8 +332,10 @@ class ArangoServer:
         # We need to import the global pattern for backwards compat
         from ..utils.filesystem import FilesystemService as FilesystemServiceImpl
         from ..core.config import load_config
+        from ..core.config_initializer import initialize_config
 
-        temp_fs = FilesystemServiceImpl(load_config())
+        temp_config = initialize_config(load_config())
+        temp_fs = FilesystemServiceImpl(temp_config)
         self.paths = ServerPaths.from_config(server_id, config, temp_fs)
 
         # Consolidated runtime state
