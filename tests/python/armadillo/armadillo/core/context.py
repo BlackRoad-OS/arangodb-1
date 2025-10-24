@@ -61,6 +61,8 @@ class ApplicationContext:
     auth_provider: AuthProvider
     filesystem: FilesystemService
     process_supervisor: ProcessSupervisor
+    server_factory: "ServerFactory"
+    deployment_planner: "DeploymentPlanner"
 
     @classmethod
     def create(
@@ -136,14 +138,38 @@ class ApplicationContext:
         if process_supervisor is None:
             process_supervisor = ProcessSupervisorImpl()
 
-        return cls(
+        # Import server-related dependencies here to avoid circular imports
+        from ..instances.server_factory import StandardServerFactory
+        from ..instances.deployment_planner import DeploymentPlanner
+
+        # Create server factory
+        server_factory = StandardServerFactory(
+            app_context=None  # Will be set after context creation
+        )
+
+        # Create deployment planner
+        deployment_planner = DeploymentPlanner(
+            port_allocator=port_allocator,
+            logger=logger,
+            config_provider=config,
+            filesystem=filesystem,
+        )
+
+        ctx = cls(
             config=config,
             logger=logger,
             port_allocator=port_allocator,
             auth_provider=auth_provider,
             filesystem=filesystem,
             process_supervisor=process_supervisor,
+            server_factory=server_factory,
+            deployment_planner=deployment_planner,
         )
+
+        # Set circular reference
+        server_factory._app_context = ctx
+
+        return ctx
 
     @classmethod
     def for_testing(

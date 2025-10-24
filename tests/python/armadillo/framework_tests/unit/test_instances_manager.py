@@ -14,6 +14,7 @@ from armadillo.instances.deployment_plan import (
     ClusterDeploymentPlan,
 )
 from armadillo.core.types import DeploymentMode, ServerRole, ServerConfig
+from armadillo.core.context import ApplicationContext
 
 
 class TestInstanceManagerBasic:
@@ -21,27 +22,30 @@ class TestInstanceManagerBasic:
 
     def test_manager_can_be_created(self):
         """Test InstanceManager can be instantiated."""
-        manager = InstanceManager("test_deployment")
+        app_context = ApplicationContext.for_testing()
+        manager = InstanceManager("test_deployment", app_context=app_context)
 
         assert manager is not None
         assert manager.deployment_id == "test_deployment"
 
     def test_manager_has_expected_attributes(self):
         """Test manager has expected attributes."""
-        manager = InstanceManager("test")
+        app_context = ApplicationContext.for_testing()
+        manager = InstanceManager("test", app_context=app_context)
 
         # Check that expected attributes exist
         assert hasattr(manager, "deployment_id")
-        assert hasattr(manager, "_deps")
-        assert hasattr(manager._deps, "config")
-        assert hasattr(manager._deps, "port_manager")
+        assert hasattr(manager, "_app_context")
+        assert hasattr(manager._app_context, "config")
+        assert hasattr(manager._app_context, "port_allocator")
         assert hasattr(manager, "state")
         assert hasattr(manager.state, "servers")
         assert hasattr(manager, "_threading")
 
     def test_manager_has_expected_methods(self):
         """Test manager has expected public methods."""
-        manager = InstanceManager("test")
+        app_context = ApplicationContext.for_testing()
+        manager = InstanceManager("test", app_context=app_context)
 
         # Check that public methods exist
         assert hasattr(manager, "create_deployment_plan")
@@ -55,8 +59,9 @@ class TestInstanceManagerBasic:
 
     def test_unique_deployment_ids(self):
         """Test deployment IDs are preserved correctly."""
-        manager1 = InstanceManager("deployment_one")
-        manager2 = InstanceManager("deployment_two")
+        app_context = ApplicationContext.for_testing()
+        manager1 = InstanceManager("deployment_one", app_context=app_context)
+        manager2 = InstanceManager("deployment_two", app_context=app_context)
 
         assert manager1.deployment_id != manager2.deployment_id
         assert manager1.deployment_id == "deployment_one"
@@ -144,7 +149,8 @@ class TestInstanceManagerDeployment:
 
     def setup_method(self):
         """Set up test environment."""
-        self.manager = InstanceManager("test_deployment")
+        self.app_context = ApplicationContext.for_testing()
+        self.manager = InstanceManager("test_deployment", app_context=self.app_context)
 
     def test_get_server_no_servers(self):
         """Test getting server when no servers exist."""
@@ -191,12 +197,14 @@ class TestInstanceManagerErrorHandling:
 
     def test_manager_handles_invalid_deployment_id(self):
         """Test manager creation with edge case deployment IDs."""
+        app_context = ApplicationContext.for_testing()
+
         # Test with empty string
-        manager1 = InstanceManager("")
+        manager1 = InstanceManager("", app_context=app_context)
         assert manager1.deployment_id == ""
 
         # Test with special characters
-        manager2 = InstanceManager("test-deployment_123")
+        manager2 = InstanceManager("test-deployment_123", app_context=app_context)
         assert manager2.deployment_id == "test-deployment_123"
 
 
@@ -205,7 +213,8 @@ class TestInstanceManagerMockIntegration:
 
     def setup_method(self):
         """Set up test environment."""
-        self.manager = InstanceManager("mock_test")
+        self.app_context = ApplicationContext.for_testing()
+        self.manager = InstanceManager("mock_test", app_context=self.app_context)
 
     def test_shutdown_deployment_handles_no_deployment(self):
         """Test shutdown when no deployment exists."""

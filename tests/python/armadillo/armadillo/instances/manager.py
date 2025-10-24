@@ -14,6 +14,7 @@ from ..core.types import (
     ServerStats,
 )
 from ..core.config import get_config
+from ..core.context import ApplicationContext
 from ..core.errors import (
     ServerError,
     ServerStartupError,
@@ -36,55 +37,6 @@ from .cluster_bootstrapper import ClusterBootstrapper
 from .deployment_orchestrator import DeploymentOrchestrator
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class ManagerDependencies:
-    """Injectable dependencies for InstanceManager."""
-
-    config: ConfigProvider
-    logger: Logger
-    port_manager: PortAllocator
-    auth_provider: "AuthProvider"
-    deployment_planner: DeploymentPlanner
-    server_factory: ServerFactory
-
-    @classmethod
-    def create_defaults(
-        cls,
-        deployment_id: str,
-        config: Optional[ConfigProvider] = None,
-        custom_logger: Optional[Logger] = None,
-        port_allocator: Optional[PortAllocator] = None,
-    ) -> "ManagerDependencies":
-        """Create dependencies with deployment-specific defaults."""
-        final_config = config or get_config()
-
-        # Create deployment-specific logger with context if not provided
-        if custom_logger:
-            final_logger = custom_logger
-        else:
-            base_logger = get_logger(f"{__name__}.{deployment_id}")
-            final_logger = base_logger
-
-        final_port_manager = port_allocator or get_port_manager()
-
-        return cls(
-            config=final_config,
-            logger=final_logger,
-            port_manager=final_port_manager,
-            auth_provider=get_auth_provider(),
-            deployment_planner=DeploymentPlanner(
-                port_allocator=final_port_manager,
-                logger=final_logger,
-                config_provider=final_config,
-            ),
-            server_factory=StandardServerFactory(
-                config_provider=final_config,
-                logger=final_logger,
-                port_allocator=final_port_manager,
-            ),
-        )
 
 
 @dataclass
@@ -146,55 +98,16 @@ class InstanceManager:
         self,
         deployment_id: str,
         *,
-        dependencies: Optional[ManagerDependencies] = None,
-        config_provider=None,
-        logger=None,
-        port_allocator=None,
-        deployment_planner=None,
-        server_factory=None,
+        app_context: ApplicationContext,
     ) -> None:
-        """Initialize instance manager with composition-based design.
+        """Initialize instance manager with application context.
 
         Args:
             deployment_id: Unique identifier for this deployment
-            dependencies: Composed dependencies object (recommended)
-            config_provider: Optional config provider (alternative to dependencies)
-            logger: Optional logger (alternative to dependencies)
-            port_allocator: Optional port allocator (alternative to dependencies)
-            deployment_planner: Optional deployment planner (alternative to dependencies)
-            server_factory: Optional server factory (alternative to dependencies)
+            app_context: Application context with all dependencies
         """
         self.deployment_id = deployment_id
-
-        # Initialize dependencies - handle both composed and individual parameters
-        if dependencies is not None:
-            self._deps = dependencies
-        elif any(
-            [
-                config_provider,
-                logger,
-                port_allocator,
-                deployment_planner,
-                server_factory,
-            ]
-        ):
-            # Individual parameters provided - compose them
-            self._deps = ManagerDependencies.create_defaults(
-                deployment_id=deployment_id,
-                config=config_provider,
-                custom_logger=logger,
-                port_allocator=port_allocator,
-            )
-            # Override with explicitly provided parameters
-            if deployment_planner is not None:
-                self._deps.deployment_planner = deployment_planner
-            if server_factory is not None:
-                self._deps.server_factory = server_factory
-        else:
-            # No parameters provided, use all defaults
-            self._deps = ManagerDependencies.create_defaults(
-                deployment_id=deployment_id
-            )
+        self._app_context = app_context
 
         # Initialize runtime state and threading resources
         self.state = DeploymentState()
@@ -203,14 +116,16 @@ class InstanceManager:
         # Initialize new architectural components
         self._server_registry = ServerRegistry()
         self._health_monitor = HealthMonitor(
-            self._deps.logger, self._deps.config.timeouts
+            self._app_context.logger, self._app_context.config.timeouts
         )
         self._cluster_bootstrapper = ClusterBootstrapper(
-            self._deps.logger, self._threading.executor, self._deps.config.timeouts
+            self._app_context.logger,
+            self._threading.executor,
+            self._app_context.config.timeouts,
         )
         self._deployment_orchestrator = DeploymentOrchestrator(
-            logger=self._deps.logger,
-            server_factory=self._deps.server_factory,
+            logger=self._app_context.logger,
+            server_factory=self._app_context.server_factory,
             server_registry=self._server_registry,
             cluster_bootstrapper=self._cluster_bootstrapper,
             health_monitor=self._health_monitor,
@@ -243,9 +158,9 @@ class InstanceManager:
         """
         # Use default cluster config if none provided
         if cluster_config is None:
-            cluster_config = self._deps.config.cluster
+            cluster_config = self._app_context.config.cluster
 
-        return self._deps.deployment_planner.create_cluster_plan(
+        return self._app_context.deployment_planner.create_cluster_plan(
             deployment_id=self.deployment_id, cluster_config=cluster_config
         )
 
@@ -403,7 +318,7 @@ class InstanceManager:
             logger.debug("Phase 1: Shutting down %d non-agent servers", len(non_agents))
             for server in non_agents:
                 try:
-                    timeout = self._deps.config.timeouts.server_shutdown
+                    timeout = self._app_context.config.timeouts.server_shutdown
                     self._shutdown_server(server, timeout=timeout)
                 except (OSError, ServerShutdownError) as e:
                     logger.error(
@@ -417,7 +332,7 @@ class InstanceManager:
             for server in agents:
                 try:
                     # Agents get extra timeout
-                    timeout = self._deps.config.timeouts.server_shutdown_agent
+                    timeout = self._app_context.config.timeouts.server_shutdown_agent
                     self._shutdown_server(server, timeout=timeout)
                 except (OSError, ServerShutdownError) as e:
                     logger.error("Failed to shutdown agent %s: %s", server.server_id, e)
@@ -464,7 +379,7 @@ class InstanceManager:
 
             # Poll to ensure server actually stops
             poll_interval = (
-                self._deps.config.infrastructure.server_shutdown_poll_interval
+                self._app_context.config.infrastructure.server_shutdown_poll_interval
             )
             while server.is_running():
                 elapsed = time.time() - start_time
@@ -499,7 +414,7 @@ class InstanceManager:
                     "Attempting emergency force kill of server %s", server.server_id
                 )
                 if server.is_running():
-                    timeout = self._deps.config.timeouts.process_force_kill
+                    timeout = self._app_context.config.timeouts.process_force_kill
                     stop_supervised_process(
                         server.server_id, graceful=False, timeout=timeout
                     )
@@ -713,7 +628,7 @@ class InstanceManager:
             # Release ports for each server in this deployment
             for server in self.state.servers.values():
                 if hasattr(server, "port"):
-                    self._deps.port_manager.release_port(server.port)
+                    self._app_context.port_manager.release_port(server.port)
                     logger.debug(
                         "Released port %s for server %s", server.port, server.server_id
                     )

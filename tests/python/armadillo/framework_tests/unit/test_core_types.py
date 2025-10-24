@@ -144,8 +144,8 @@ class TestArmadilloConfig:
         assert isinstance(config.timeouts, TimeoutConfig)
         assert config.test_timeout == 900.0
         assert config.result_formats == ["junit", "json"]
-        # temp_dir is now set to default by the validator
-        assert config.temp_dir == Path("/tmp/armadillo")
+        # temp_dir is None by default - set by initialize_config()
+        assert config.temp_dir is None
         assert config.keep_instances_on_failure is False
         assert config.bin_dir is None
         assert config.work_dir is None
