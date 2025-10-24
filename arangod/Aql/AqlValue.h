@@ -316,13 +316,12 @@ struct AqlValue final {
     // VPACK_SUPERVISED_STRING
     struct {
       velocypack::Slice toSlice() const {
-        auto const* s = reinterpret_cast<std::string const*>(
-            pointer + sizeof(arangodb::ResourceMonitor*));
+        auto const* s = reinterpret_cast<std::string const*>(getPayloadPtr());
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(s->data()));
       }
       uint64_t getLength() const noexcept {
-        return velocypack::Slice(pointer + sizeof(arangodb::ResourceMonitor*))
-            .byteSize();
+        auto const* s = reinterpret_cast<std::string const*>(getPayloadPtr());
+        return static_cast<uint64_t>(s->size());
       }
       uint64_t getOrigin() const noexcept {
         if constexpr (basics::isLittleEndian()) {
