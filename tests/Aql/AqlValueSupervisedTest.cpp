@@ -36,6 +36,18 @@ inline Builder makeArrayOfNumbers(size_t n = 5) {
   b.close();
   return b;
 }
+
+inline size_t findNonInlineThreshold(ResourceMonitor& resourceMonitor) {
+  for (size_t len = 1; len < 4096; ++len) {
+    auto b = makeString(len, 'a');
+    Slice slice = b.slice();
+    AqlValue aqlVal(slice, 0, &resourceMonitor);
+    size_t memUsage = aqlVal.memoryUsage();
+    aqlVal.destroy();
+    if (memUsage > 0) return len;
+  }
+  return 1024;
+}
 }  // namespace
 
 TEST(AqlValueSupervisedTest, SliceOwnedAccountsPayloadPrefix) {
@@ -118,8 +130,9 @@ TEST(AqlValueSupervisedTest, InlineNotAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  // Inline fits up to 16 bytes total (header + data)
-  size_t inlineLen = 15;
+  size_t threshold = findNonInlineThreshold(resourceMonitor);
+  ASSERT_GT(threshold, 1u);
+  size_t inlineLen = threshold - 1;
 
   auto builder = makeString(inlineLen, 'a');
   Slice slice = builder.slice();
@@ -143,8 +156,8 @@ TEST(AqlValueSupervisedTest, BoundaryOverInlineAccounts) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  // First non-inline is 17 bytes (header + data exceeds 16)
-  auto builder = makeString(16, 'a');
+  size_t threshold = findNonInlineThreshold(resourceMonitor);
+  auto builder = makeString(threshold, 'a');
   Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
@@ -171,6 +184,8 @@ TEST(AqlValueSupervisedTest, AdoptedBytesCtorNoAccount) {
   ASSERT_EQ(billed, aOwned.memoryUsage());
   ASSERT_GE(billed, ptrOverhead());
 
+  // adopt a view into builder2's storage (no accounting, and builder2 stays
+  // alive)
   AqlValue aAdopt(slice2.begin());
 
   EXPECT_EQ(resourceMonitor.current(), billed);
@@ -223,11 +238,11 @@ TEST(AqlValueSupervisedTest, AdoptSupervisedBufferDoesNotAccountOrFree) {
 
   Builder tiny;
   tiny.add(Value(7));
-  AqlValue inlineVal(tiny.slice(), 0, &resourceMonitor);
+  AqlValue inlineVal(tiny.slice(), 0, &resourceMonitor);  // inline -> 0
   ASSERT_EQ(inlineVal.memoryUsage(), 0u);
   ASSERT_EQ(resourceMonitor.current(), before);
 
-  AqlValue adopted(builder.slice().begin());
+  AqlValue adopted(builder.slice().begin());  // adopt view of supervised buffer
   EXPECT_EQ(adopted.memoryUsage(), 0u);
   EXPECT_EQ(resourceMonitor.current(), before);
 
@@ -252,7 +267,11 @@ TEST(AqlValueSupervisedTest, CloneSharedPayloadAccountOnlyPtr) {
 
   AqlValue aqlVal2 = aqlVal1.clone();
 
-  EXPECT_EQ(resourceMonitor.current(), base + ptrOverhead());
+  // clone() makes a deep copy into a managed (non-RM) buffer: RM accounting
+  // unchanged
+  EXPECT_EQ(resourceMonitor.current(), base);
+  // original is supervised (payload + prefix), clone is managed (payload only)
+  EXPECT_EQ(aqlVal2.memoryUsage(), static_cast<size_t>(slice.byteSize()));
 
   aqlVal2.destroy();
   EXPECT_EQ(resourceMonitor.current(), base);
@@ -273,10 +292,12 @@ TEST(AqlValueSupervisedTest,
   Slice slice = builder.slice();
 
   AqlValue aqlVal(slice, 0, &resourceMonitor);
-  AqlValue cloneVal = aqlVal.clone();
+  AqlValue cloneVal = aqlVal.clone();  // managed copy, not billed to RM
 
   aqlVal.destroy();
-  EXPECT_GE(resourceMonitor.current(), ptrOverhead());
+  // After destroying the supervised original, RM should be zero (clone is
+  // unmanaged)
+  EXPECT_EQ(resourceMonitor.current(), 0u);
 
   cloneVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0u);
@@ -295,11 +316,11 @@ TEST(AqlValueSupervisedTest, CloneEraseKeepAccounting) {
   AqlValue aqlVal(slice, 0, &resourceMonitor);
   size_t base = resourceMonitor.current();
 
-  AqlValue c = aqlVal.clone();
-  EXPECT_EQ(resourceMonitor.current(), base + ptrOverhead());
+  AqlValue c = aqlVal.clone();  // managed, not billed
+  EXPECT_EQ(resourceMonitor.current(), base);
 
   c.erase();
-  EXPECT_EQ(resourceMonitor.current(), base + ptrOverhead());
+  EXPECT_EQ(resourceMonitor.current(), base);
 
   c.destroy();
   EXPECT_EQ(resourceMonitor.current(), base);
@@ -398,13 +419,16 @@ TEST(AqlValueSupervisedTest, FuzzAroundInlineThreshold) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  for (size_t n = 13; n <= 19; ++n) {
+  size_t t = findNonInlineThreshold(resourceMonitor);
+  for (int delta = -3; delta <= 3; ++delta) {
+    size_t n =
+        static_cast<size_t>(std::max<long>(1, static_cast<long>(t) + delta));
     auto b = makeString(n, 'a');
     Slice slice = b.slice();
     AqlValue aqlVal(slice, 0, &resourceMonitor);
     size_t mu = aqlVal.memoryUsage();
 
-    if (slice.byteSize() <= 16) {
+    if (n < t) {
       EXPECT_EQ(mu, 0u) << "n=" << n << " should be inline";
       EXPECT_EQ(resourceMonitor.current(), 0u);
     } else {
