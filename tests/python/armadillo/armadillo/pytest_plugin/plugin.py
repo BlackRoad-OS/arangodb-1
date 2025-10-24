@@ -214,7 +214,7 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
     try:
         logger.info("Starting session single server")
 
-        plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
+        plan = manager.create_single_server_plan()
         manager.deploy_servers(plan, timeout=60.0)
 
         # Store manager for tracking and cleanup
@@ -319,7 +319,7 @@ def _get_or_create_single_server(self) -> ArangoServer:
 
         logger.info("Starting session single server")
 
-        plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
+        plan = manager.create_single_server_plan()
 
         try:
             manager.deploy_servers(plan, timeout=60.0)
@@ -384,7 +384,7 @@ def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     try:
         logger.info("Starting function server %s", deployment_id)
 
-        plan = manager._deps.deployment_planner.create_single_server_plan(deployment_id)
+        plan = manager.create_single_server_plan()
         manager.deploy_servers(plan, timeout=30.0)
 
         # Get the server instance to yield

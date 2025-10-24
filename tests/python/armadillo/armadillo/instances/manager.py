@@ -30,7 +30,7 @@ from .server_factory import ServerFactory, StandardServerFactory
 from ..core.config import get_config, ConfigProvider
 from ..utils.ports import get_port_manager, PortAllocator
 from ..utils.auth import get_auth_provider, AuthProvider
-from .deployment_plan import DeploymentPlan
+from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
 from .server_registry import ServerRegistry
 from .health_monitor import HealthMonitor
 from .cluster_bootstrapper import ClusterBootstrapper
@@ -142,6 +142,18 @@ class InstanceManager:
                 self.shutdown_deployment()
         finally:
             self._threading.executor.shutdown(wait=True)
+
+    def create_single_server_plan(self) -> "SingleServerDeploymentPlan":
+        """Create deployment plan for single server.
+
+        This is a pure function that creates and returns a plan without side effects.
+
+        Returns:
+            Single server deployment plan
+        """
+        return self._app_context.deployment_planner.create_single_server_plan(
+            self.deployment_id
+        )
 
     def create_deployment_plan(
         self, cluster_config: Optional[ClusterConfig] = None
@@ -628,7 +640,7 @@ class InstanceManager:
             # Release ports for each server in this deployment
             for server in self.state.servers.values():
                 if hasattr(server, "port"):
-                    self._app_context.port_manager.release_port(server.port)
+                    self._app_context.port_allocator.release_port(server.port)
                     logger.debug(
                         "Released port %s for server %s", server.port, server.server_id
                     )
@@ -652,7 +664,11 @@ def get_instance_manager(deployment_id: str) -> InstanceManager:
     """
     with _manager_lock:
         if deployment_id not in _instance_managers:
-            _instance_managers[deployment_id] = InstanceManager(deployment_id)
+            # Create ApplicationContext for this manager
+            app_context = ApplicationContext.create(get_config())
+            _instance_managers[deployment_id] = InstanceManager(
+                deployment_id, app_context=app_context
+            )
         return _instance_managers[deployment_id]
 
 
