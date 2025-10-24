@@ -147,8 +147,8 @@ class ArmadilloPlugin:
         # Config already loaded by CLI and pytest_configure
         # Don't call load_config() again to avoid duplicate build detection
         configure_logging()
-        # TODO: Re-enable session isolation via ApplicationContext in Phase 2
-        # set_test_session_id()  # Removed - will use ApplicationContext.filesystem
+        # Note: Session-level directory isolation not currently enabled
+        # (would require ApplicationContext integration in pytest fixtures)
         # Clear any crash state from previous runs
         _abort_remaining_tests = False
         _crash_detected_during_test = None
@@ -165,9 +165,8 @@ class ArmadilloPlugin:
                 logger.error(
                     "Error stopping session deployment %s: %s", deployment_id, e
                 )
-        # TODO: Re-enable cleanup via ApplicationContext in Phase 2
-        # clear_test_session()  # Removed - will use ApplicationContext.filesystem
-        # cleanup_work_dir()  # Removed - will use ApplicationContext.filesystem
+        # Note: Automatic cleanup not currently enabled
+        # (would require ApplicationContext integration in pytest fixtures)
         stop_watchdog()
 
     def pytest_runtest_setup(self, item: pytest.Item) -> None:
@@ -541,11 +540,8 @@ def pytest_addoption(parser):
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):
-    """Set up test session with isolated directories and register cleanup."""
+    """Set up test session and register cleanup handlers."""
     logger.debug("Starting pytest plugin setup")
-    # TODO: Re-enable session isolation via ApplicationContext in Phase 2
-    # session_id = set_test_session_id()  # Removed - will use ApplicationContext.filesystem
-    # logger.info("Test session started with ID: %s", session_id)
     logger.info("Test session started")
 
     # Register cleanup handlers for both normal and abnormal exits
@@ -668,9 +664,6 @@ def pytest_sessionfinish(session, exitstatus):
         logger.debug("Starting pytest session cleanup")
         _cleanup_all_deployments(emergency=False)
         _cleanup_all_processes(emergency=False)
-        # TODO: Re-enable cleanup via ApplicationContext in Phase 2
-        # cleanup_work_dir()  # Removed - will use ApplicationContext.filesystem
-        # clear_test_session()  # Removed - will use ApplicationContext.filesystem
         logger.debug("Armadillo pytest plugin cleanup completed")
     except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
         logger.error("Error during pytest plugin cleanup: %s", e)

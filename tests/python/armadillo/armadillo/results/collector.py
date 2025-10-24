@@ -152,8 +152,8 @@ class ResultCollector:
         logger.debug("Recorded test result: %s -> %s", nodeid, outcome.value)
 
     def record_test(self, params: TestResultParams) -> None:
-        """Record a test result using legacy params format."""
-        # Convert legacy format to new format
+        """Record a test result using structured parameters."""
+        # Convert structured format to internal representation
         self.record_test_result(
             nodeid=params.name,
             outcome=params.outcome,

@@ -173,7 +173,7 @@ class ArangoServer:
         port: Optional[int] = None,
         paths: Optional[ServerPaths] = None,
         app_context: Optional[ApplicationContext] = None,
-        # Legacy parameters for backwards compatibility - deprecated
+        # Backward compatibility parameters (internal use only)
         dependencies: Optional[ServerDependencies] = None,
         config_provider=None,
         logger=None,
@@ -184,9 +184,11 @@ class ArangoServer:
     ) -> None:
         """Initialize ArangoDB server with explicit dependencies.
 
-        RECOMMENDED: Use factory methods instead of calling __init__ directly:
-        - ArangoServer.create_single_server(server_id, app_context)
-        - ArangoServer.create_cluster_server(server_id, role, port, app_context)
+        **Recommended Usage:**
+        Use factory methods instead of calling __init__ directly:
+
+        - ``ArangoServer.create_single_server(server_id, app_context, port=None)``
+        - ``ArangoServer.create_cluster_server(server_id, role, port, app_context, config=None)``
 
         Args:
             server_id: Unique server identifier
@@ -194,16 +196,14 @@ class ArangoServer:
             port: Port number (must be allocated beforehand)
             paths: Server file system paths
             app_context: Application context with all dependencies
-            dependencies: DEPRECATED - use app_context instead
-            config_provider: DEPRECATED - use app_context instead
-            logger: DEPRECATED - use app_context instead
-            port_allocator: DEPRECATED - use app_context instead
-            command_builder: DEPRECATED - use app_context instead
-            health_checker: DEPRECATED - use app_context instead
-            config: DEPRECATED - use paths parameter instead
+
+        Note:
+            Other parameters (dependencies, config_provider, logger, etc.) are maintained
+            for backward compatibility but will emit deprecation warnings. New code should
+            use the factory methods above.
         """
-        # Detect which initialization pattern is being used
-        has_legacy_params = any(
+        # Detect initialization pattern
+        uses_old_api = any(
             [
                 dependencies,
                 config_provider,
@@ -214,9 +214,9 @@ class ArangoServer:
                 config,
             ]
         )
-        has_new_params = app_context is not None and paths is not None
+        uses_new_api = app_context is not None and paths is not None
 
-        if has_new_params and not has_legacy_params:
+        if uses_new_api and not uses_old_api:
             # New pattern - validate all required params
             if role is None or port is None:
                 raise TypeError(
@@ -244,16 +244,15 @@ class ArangoServer:
                 role=role.value,
                 port=self.port,
             )
-        elif has_legacy_params or (role is not None and not has_new_params):
-            # Legacy pattern
+        elif uses_old_api or (role is not None and not uses_new_api):
+            # Old API for backward compatibility
             warnings.warn(
                 "Direct instantiation of ArangoServer is deprecated. "
                 "Use factory methods (create_single_server, create_cluster_server) instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            # Fall back to legacy behavior
-            self._init_legacy(
+            self._init_backward_compat(
                 server_id,
                 role,
                 port,
@@ -268,11 +267,11 @@ class ArangoServer:
         else:
             raise TypeError(
                 "ArangoServer() requires either:\n"
-                "  - New pattern: role, port, paths, and app_context (use factory methods)\n"
-                "  - Legacy pattern: role and port (optionally with dependencies)"
+                "  - Factory methods: create_single_server() or create_cluster_server()\n"
+                "  - Direct call: role, port, paths, and app_context parameters"
             )
 
-    def _init_legacy(
+    def _init_backward_compat(
         self,
         server_id: str,
         role: ServerRole,
@@ -285,7 +284,7 @@ class ArangoServer:
         health_checker,
         config,
     ) -> None:
-        """Legacy initialization path - DEPRECATED."""
+        """Backward compatibility initialization path."""
         self.server_id = server_id
         self.role = role
 
@@ -328,8 +327,7 @@ class ArangoServer:
         self.port = port or self._allocate_port()
         self.endpoint = f"http://127.0.0.1:{self.port}"
 
-        # Set up file system paths using legacy global function access
-        # We need to import the global pattern for backwards compat
+        # Set up file system paths (backward compatibility mode)
         from ..utils.filesystem import FilesystemService as FilesystemServiceImpl
         from ..core.config import load_config
         from ..core.config_initializer import initialize_config
@@ -416,10 +414,10 @@ class ArangoServer:
             server_id, role=role, port=port, paths=paths, app_context=app_context
         )
 
-    # Properties for accessing dependencies (works with both patterns)
+    # Internal properties for dependency access (compatible with both APIs)
     @property
     def _logger(self) -> Logger:
-        """Get logger from either new or legacy pattern."""
+        """Get logger instance."""
         return (
             getattr(self, "_app_context", None)
             and self._app_context.logger
@@ -428,7 +426,7 @@ class ArangoServer:
 
     @property
     def _config(self) -> "ArmadilloConfig":
-        """Get config from either new or legacy pattern."""
+        """Get configuration."""
         return (
             getattr(self, "_app_context", None)
             and self._app_context.config
@@ -437,7 +435,7 @@ class ArangoServer:
 
     @property
     def _auth(self) -> "AuthProvider":
-        """Get auth provider from either new or legacy pattern."""
+        """Get authentication provider."""
         return (
             getattr(self, "_app_context", None)
             and self._app_context.auth_provider
@@ -466,8 +464,7 @@ class ArangoServer:
             return self._deps.health_checker
 
     def _allocate_port(self, preferred: Optional[int] = None) -> int:
-        """Allocate a port using injected allocator."""
-        # Legacy path only - new pattern pre-allocates ports
+        """Allocate a port using injected allocator (backward compatibility only)."""
         return self._deps.port_allocator.allocate_port(preferred)
 
     def _release_port(self, port: int) -> None:
