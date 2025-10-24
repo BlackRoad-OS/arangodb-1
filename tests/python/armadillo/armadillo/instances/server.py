@@ -375,7 +375,13 @@ class ArangoServer:
         """
         actual_port = port or app_context.port_allocator.allocate_port()
         paths = ServerPaths.from_config(server_id, None, app_context.filesystem)
-        return cls(server_id, ServerRole.SINGLE, actual_port, paths, app_context)
+        return cls(
+            server_id,
+            role=ServerRole.SINGLE,
+            port=actual_port,
+            paths=paths,
+            app_context=app_context,
+        )
 
     @classmethod
     def create_cluster_server(
@@ -406,7 +412,9 @@ class ArangoServer:
             >>> agent.start()
         """
         paths = ServerPaths.from_config(server_id, config, app_context.filesystem)
-        return cls(server_id, role, port, paths, app_context)
+        return cls(
+            server_id, role=role, port=port, paths=paths, app_context=app_context
+        )
 
     # Properties for accessing dependencies (works with both patterns)
     @property
