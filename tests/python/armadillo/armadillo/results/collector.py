@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass, field
 from ..core.types import ExecutionOutcome
-from ..core.errors import ResultProcessingError
+from ..core.errors import ResultProcessingError, SerializationError, FilesystemError
 from ..core.log import get_logger
 from ..utils.codec import to_json_string
 from ..utils.filesystem import atomic_write
@@ -373,8 +373,8 @@ class ResultCollector:
                     exported_files["junit"] = file_path
                 else:
                     logger.warning("Unknown export format: %s", format_name)
-            except Exception as e:
-                logger.error("Failed to export %s: %s", format_name, e)
+            except (SerializationError, FilesystemError, OSError, IOError) as e:
+                logger.error("Failed to export %s: %s", format_name, e, exc_info=True)
                 raise ResultProcessingError(
                     f"Export failed for format {format_name}: {e}"
                 ) from e

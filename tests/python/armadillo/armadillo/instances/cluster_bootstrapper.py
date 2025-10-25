@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ..core.types import ServerRole, TimeoutConfig, InfrastructureConfig
 from ..core.config import get_config
 from ..core.log import Logger
-from ..core.errors import ServerStartupError, AgencyError, ClusterError
+from ..core.errors import ServerStartupError, AgencyError, ClusterError, ProcessError
 from .server import ArangoServer
 
 
@@ -147,9 +147,14 @@ class ClusterBootstrapper:
                 self._logger.info(
                     "%s %s started successfully", role_name.title(), server_id
                 )
-            except Exception as e:
+            except (ServerStartupError, ProcessError, OSError, TimeoutError) as e:
                 raise ServerStartupError(
                     f"Failed to start {role_name} {server_id}: {e}"
+                ) from e
+            except Exception as e:
+                # Defensive catch-all for server startup
+                raise ServerStartupError(
+                    f"Unexpected error starting {role_name} {server_id}: {e}"
                 ) from e
 
     def wait_for_agency_ready(

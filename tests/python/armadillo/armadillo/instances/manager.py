@@ -20,6 +20,9 @@ from ..core.errors import (
     ServerStartupError,
     ServerShutdownError,
     ProcessError,
+    ProcessStartupError,
+    ProcessTimeoutError,
+    ArmadilloTimeoutError,
 )
 from ..core.log import get_logger, Logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
@@ -220,12 +223,19 @@ class InstanceManager:
                     "Deployment completed successfully in %.2fs", deployment_time
                 )
 
-            except Exception as e:
+            except (
+                ServerStartupError,
+                ProcessStartupError,
+                ProcessTimeoutError,
+                OSError,
+                ArmadilloTimeoutError,
+            ) as e:
                 logger.error("Deployment failed: %s", e)
                 # Try to cleanup partial deployment
                 try:
                     self.shutdown_deployment()
                 except (OSError, ProcessLookupError, RuntimeError, AttributeError):
+                    # Cleanup errors are acceptable - we're already in error handling
                     pass
                 raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
@@ -276,7 +286,7 @@ class InstanceManager:
                 logger.debug(
                     "DeploymentOrchestrator.shutdown_deployment completed successfully"
                 )
-            except Exception as e:
+            except (ServerShutdownError, ProcessError, OSError, RuntimeError) as e:
                 logger.error("Shutdown via orchestrator failed: %s", e)
                 # Fallback to direct shutdown if orchestrator fails
                 self._direct_shutdown_deployment(timeout)
@@ -414,7 +424,7 @@ class InstanceManager:
                 shutdown_time,
             )
 
-        except Exception as e:
+        except (ServerShutdownError, ProcessError, OSError) as e:
             log_server_event(
                 logger, "stop_failed", server_id=server.server_id, error=str(e)
             )

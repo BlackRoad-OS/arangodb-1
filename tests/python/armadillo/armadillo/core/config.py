@@ -161,9 +161,13 @@ class ConfigManager:
                     raise ConfigurationError(
                         f"Unsupported config file format: {config_file.suffix}"
                     )
-        except Exception as e:
+        except (FileNotFoundError, PermissionError, OSError) as e:
             raise ConfigurationError(
                 f"Failed to load config file {config_file}: {e}"
+            ) from e
+        except yaml.YAMLError as e:
+            raise ConfigurationError(
+                f"Failed to parse YAML config file {config_file}: {e}"
             ) from e
 
 

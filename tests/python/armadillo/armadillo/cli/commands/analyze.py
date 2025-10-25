@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from ...core.log import get_logger
+from ...core.errors import ResultProcessingError, DeserializationError
 from ...utils.codec import from_json_string
 from ...utils.filesystem import read_text
 
@@ -39,9 +40,13 @@ def summary(
         else:
             console.print(f"[red]Unknown format: {output_format}[/red]")
             raise typer.Exit(1)
-    except Exception as e:
+    except (ResultProcessingError, DeserializationError, FileNotFoundError, OSError) as e:
+        # Expected errors - clean message
         logger.error("Analysis failed: %s", e)
-        console.print(f"[red]Analysis failed: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        # Unexpected errors - full stack trace for debugging
+        logger.exception("Unexpected error during analysis: %s", e)
         raise typer.Exit(1)
 
 
@@ -117,7 +122,7 @@ def _load_results(result_files: List[Path]) -> Dict[str, Any]:
                             "file": str(result_file),
                         }
                     )
-        except Exception as e:
+        except (FileNotFoundError, DeserializationError, KeyError, ValueError) as e:
             console.print(f"[red]Failed to load {result_file}: {e}[/red]")
             raise
     return aggregated

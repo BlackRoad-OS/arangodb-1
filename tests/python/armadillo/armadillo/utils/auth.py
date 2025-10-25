@@ -46,6 +46,7 @@ class AuthProvider:
             logger.debug("Issued JWT token with TTL %ss", ttl)
             return token
         except Exception as e:
+            # Defensive: JWT library could fail in various ways, wrap all errors
             raise JWTError(f"Failed to issue JWT token: {e}") from e
 
 

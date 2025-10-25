@@ -4,7 +4,13 @@ from typing import Optional
 import time
 from ..core.types import ServerRole
 from ..core.log import Logger
-from ..core.errors import ServerError
+from ..core.errors import (
+    ServerError,
+    ServerStartupError,
+    ServerShutdownError,
+    ProcessError,
+    ClusterError,
+)
 from ..utils import print_status
 from .deployment_plan import (
     DeploymentPlan,
@@ -119,8 +125,8 @@ class DeploymentOrchestrator:
                 "Deployment completed successfully in %.2fs", elapsed_total
             )
 
-        except Exception as e:
-            self._logger.error("Deployment failed: %s", e)
+        except (ServerStartupError, ProcessError, ClusterError, OSError) as e:
+            self._logger.error("Deployment failed: %s", e, exc_info=True)
             raise
 
     def shutdown_deployment(
@@ -181,7 +187,8 @@ class DeploymentOrchestrator:
                 self._logger.info("Shutting down %s", server.server_id)
                 server.stop(timeout=per_server_timeout)
                 self._logger.info("Server %s stopped", server.server_id)
-            except Exception as e:
+            except (ServerShutdownError, ProcessError, OSError) as e:
+                # Continue shutting down other servers even if one fails
                 self._logger.error("Failed to stop %s: %s", server.server_id, e)
                 failed_shutdowns.append(server.server_id)
 

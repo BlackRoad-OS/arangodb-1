@@ -123,7 +123,7 @@ class ProcessExecutor:
                 timeout=effective_timeout,
                 details={"command": command, "duration": duration},
             ) from e
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
             duration = time.time() - start_time
             log_process_event(logger, "exec.error", duration=duration, error=str(e))
             raise ProcessError(f"Failed to execute command {command[0]}: {e}") from e
@@ -243,7 +243,12 @@ class ProcessSupervisor:
                 self._wait_for_readiness(process_id, readiness_check, effective_timeout)
             self._start_monitoring(process_id)
             return process_info
-        except Exception as e:
+        except (
+            OSError,
+            subprocess.SubprocessError,
+            ProcessStartupError,
+            ProcessTimeoutError,
+        ) as e:
             error_output = ""
             try:
                 if process_id in self._processes:
@@ -309,8 +314,8 @@ class ProcessSupervisor:
                     )
                     try:
                         process.terminate()
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        # Ignore errors during fallback termination
+                    except (OSError, ProcessLookupError):
+                        # Process already dead or not accessible - acceptable during cleanup
                         pass
                 try:
                     process.wait(timeout=timeout)

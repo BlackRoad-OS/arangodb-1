@@ -14,6 +14,7 @@ from ...core.config import load_config
 from ...core.config_initializer import initialize_config
 from ...core.log import get_logger
 from ...core.types import DeploymentMode
+from ...core.errors import ArmadilloError
 
 
 class TestRunOptions(BaseModel):
@@ -174,9 +175,13 @@ def run(
         # Use the validated options for the rest of the function
         _execute_test_run(options)
 
+    except ArmadilloError as e:
+        # Expected framework errors - clean message, no stack trace
+        logger.error("Test execution failed: %s", e.message)
+        raise typer.Exit(1)
     except Exception as e:
-        logger.error("Test execution failed: %s", e)
-        console.print(f"[red]Test execution failed: {e}[/red]")
+        # Unexpected errors - full stack trace for debugging
+        logger.exception("Unexpected error during test execution: %s", e)
         raise typer.Exit(1)
 
 

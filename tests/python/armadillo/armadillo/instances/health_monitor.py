@@ -5,7 +5,7 @@ import time
 import requests
 from ..core.types import HealthStatus, ServerStats, ServerRole, TimeoutConfig
 from ..core.log import Logger
-from ..core.errors import HealthCheckError
+from ..core.errors import HealthCheckError, NetworkError
 from .server import ArangoServer
 
 
@@ -47,9 +47,23 @@ class HealthMonitor:
         try:
             health = server.health_check_sync(timeout=actual_timeout)
             return health
-        except Exception as e:
+        except (HealthCheckError, NetworkError, OSError, TimeoutError) as e:
+            # Health checks should not crash monitoring - log and return unhealthy
             self._logger.warning(
                 "Health check failed for server %s: %s", server.server_id, e
+            )
+            return HealthStatus(
+                is_healthy=False,
+                response_time=0.0,
+                error_message=f"Health check failed: {e}",
+            )
+        except Exception as e:
+            # Defensive catch-all for monitoring - unexpected errors should not crash
+            self._logger.warning(
+                "Unexpected error checking health for server %s: %s",
+                server.server_id,
+                e,
+                exc_info=True,
             )
             return HealthStatus(
                 is_healthy=False,
@@ -95,10 +109,21 @@ class HealthMonitor:
                     unhealthy_servers.append(server_id)
                     if health.error_message:
                         health_errors.append(f"{server_id}: {health.error_message}")
-            except Exception as e:
+            except (HealthCheckError, NetworkError, OSError, TimeoutError) as e:
+                # Monitoring loop should continue even if individual checks fail
                 unhealthy_servers.append(server_id)
                 health_errors.append(f"{server_id}: {e}")
                 self._logger.error("Health check error for server %s: %s", server_id, e)
+            except Exception as e:
+                # Defensive catch-all for monitoring loop
+                unhealthy_servers.append(server_id)
+                health_errors.append(f"{server_id}: {e}")
+                self._logger.error(
+                    "Unexpected health check error for server %s: %s",
+                    server_id,
+                    e,
+                    exc_info=True,
+                )
 
         elapsed_time = time.time() - start_time
         is_healthy = len(unhealthy_servers) == 0
@@ -132,9 +157,19 @@ class HealthMonitor:
         """
         try:
             return server.get_stats()
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
+            # Stats collection should not crash monitoring - log and return None
             self._logger.warning(
                 "Failed to collect stats for server %s: %s", server.server_id, e
+            )
+            return None
+        except Exception as e:
+            # Defensive catch-all for stats collection
+            self._logger.warning(
+                "Unexpected error collecting stats for server %s: %s",
+                server.server_id,
+                e,
+                exc_info=True,
             )
             return None
 
@@ -195,7 +230,8 @@ class HealthMonitor:
 
         except requests.RequestException as e:
             return False, f"Request failed: {e}"
-        except Exception as e:
+        except (OSError, TimeoutError, ValueError) as e:
+            # Readiness check should not crash - return failure status
             return False, f"Readiness check failed: {e}"
 
     def _get_readiness_endpoint(self, server: ArangoServer) -> Tuple[str, str]:

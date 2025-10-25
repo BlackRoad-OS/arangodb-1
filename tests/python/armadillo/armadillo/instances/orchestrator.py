@@ -14,6 +14,7 @@ from ..core.errors import (
     HealthCheckError,
     ServerError,
     NetworkError,
+    ProcessError,
 )
 from ..core.log import get_logger
 from ..core.time import timeout_scope, clamp_timeout
@@ -185,8 +186,8 @@ class ClusterOrchestrator:
             self._cluster_state = state
             self._state_last_updated = current_time
             return state
-        except Exception as e:
-            logger.error("Failed to update cluster state: %s", e)
+        except (ClusterError, NetworkError, OSError) as e:
+            logger.error("Failed to update cluster state: %s", e, exc_info=True)
             raise ClusterError(f"Failed to update cluster state: {e}") from e
 
     async def perform_cluster_health_check(
@@ -416,7 +417,7 @@ class ClusterOrchestrator:
                 logger.info(
                     "Rolling restart completed successfully in %ss", operation.duration
                 )
-        except Exception as e:
+        except (ClusterError, ServerError, ProcessError, OSError) as e:
             operation.status = "failed"
             operation.end_time = time.time()
             operation.error_message = str(e)

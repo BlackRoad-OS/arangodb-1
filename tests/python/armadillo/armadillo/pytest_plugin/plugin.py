@@ -20,7 +20,7 @@ from ..core.log import (
 from ..core.time import set_global_deadline, stop_watchdog
 from ..core.types import ServerRole, DeploymentMode, ClusterConfig, ExecutionOutcome
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
-from ..core.errors import ServerStartupError
+from ..core.errors import ServerStartupError, ArmadilloError, ResultProcessingError
 from ..instances.server import ArangoServer
 from ..instances.manager import InstanceManager, get_instance_manager
 from .reporter import get_armadillo_reporter
@@ -297,10 +297,17 @@ def _get_or_create_cluster(self) -> "InstanceManager":
             self._deployment_failed = True
             self._deployment_failure_reason = error_msg
             return None
-        except Exception as e:
-            # Catch all other exceptions during deployment
+        except ArmadilloError as e:
+            # Framework errors during deployment - expected failure modes
             error_msg = f"Cluster deployment failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error(error_msg, exc_info=True)
+            self._deployment_failed = True
+            self._deployment_failure_reason = error_msg
+            return None
+        except Exception as e:
+            # Unexpected errors - boundary must not crash pytest
+            error_msg = f"Cluster deployment failed with unexpected error: {str(e)}"
+            logger.error(error_msg, exc_info=True)
             self._deployment_failed = True
             self._deployment_failure_reason = error_msg
             return None
@@ -349,10 +356,17 @@ def _get_or_create_single_server(self) -> ArangoServer:
             self._deployment_failed = True
             self._deployment_failure_reason = error_msg
             return None
-        except Exception as e:
-            # Catch all other exceptions during deployment
+        except ArmadilloError as e:
+            # Framework errors during deployment - expected failure modes
             error_msg = f"Single server deployment failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error(error_msg, exc_info=True)
+            self._deployment_failed = True
+            self._deployment_failure_reason = error_msg
+            return None
+        except Exception as e:
+            # Unexpected errors - boundary must not crash pytest
+            error_msg = f"Single server deployment failed with unexpected error: {str(e)}"
+            logger.error(error_msg, exc_info=True)
             self._deployment_failed = True
             self._deployment_failure_reason = error_msg
             return None
@@ -580,7 +594,8 @@ def pytest_sessionstart(session):
                     "Cleanup timeout reached, some processes may still be running"
                 )
         except Exception as e:
-            logger.error("Error during cleanup monitoring: %s", e)
+            # Signal handler must not crash - catch everything
+            logger.error("Error during cleanup monitoring: %s", e, exc_info=True)
 
         # Don't call sys.exit() as it causes pytest INTERNALERROR
         # The cleanup is already working correctly
@@ -657,7 +672,7 @@ def pytest_sessionfinish(session, exitstatus):
 
             # Export results (JSON by default, JUnit is handled by pytest's --junitxml)
             reporter.export_results(output_dir, formats=["json"])
-        except Exception as e:
+        except (ResultProcessingError, OSError, IOError) as e:
             logger.error("Failed to export test results: %s", e, exc_info=True)
 
     try:
@@ -926,10 +941,12 @@ def _cleanup_all_processes(emergency=True):
                         )
                         graceful_failed.append(process_id)
                     except Exception as e:
+                        # Emergency cleanup must continue even on unexpected errors
                         logger.error(
                             "Unexpected error during graceful termination of %s: %s",
                             process_id,
                             e,
+                            exc_info=True,
                         )
                         graceful_failed.append(process_id)
                 if graceful_failed:
@@ -967,10 +984,12 @@ def _cleanup_all_processes(emergency=True):
                                 e,
                             )
                         except Exception as e:
+                            # Emergency cleanup must continue even on unexpected errors
                             logger.error(
                                 "CRITICAL: Unexpected error force killing process %s: %s",
                                 process_id,
                                 e,
+                                exc_info=True,
                             )
                 logger.info("Emergency process cleanup completed")
 
@@ -984,8 +1003,8 @@ def _cleanup_all_processes(emergency=True):
                                 # Check if process is still alive
                                 if process.poll() is None:  # None means still running
                                     remaining_processes.append(process_id)
-                            except Exception:
-                                # Process might be in inconsistent state
+                            except (OSError, ProcessLookupError, ValueError):
+                                # Process might be in inconsistent state - treat as potentially alive
                                 remaining_processes.append(process_id)
 
                     if remaining_processes:
@@ -997,7 +1016,8 @@ def _cleanup_all_processes(emergency=True):
                     else:
                         logger.info("All processes successfully terminated")
                 except Exception as e:
-                    logger.error("Error during final process verification: %s", e)
+                    # Final verification errors should not prevent cleanup completion
+                    logger.error("Error during final process verification: %s", e, exc_info=True)
             else:
                 logger.debug("No supervised processes to cleanup")
         else:
@@ -1006,7 +1026,8 @@ def _cleanup_all_processes(emergency=True):
         logger.error("Error during emergency process cleanup: %s", e)
         logger.error("Stack trace: %s", traceback.format_exc())
     except Exception as e:
-        logger.error("Unexpected error during emergency process cleanup: %s", e)
+        # Emergency cleanup is last resort - must complete even on unexpected errors
+        logger.error("Unexpected error during emergency process cleanup: %s", e, exc_info=True)
         logger.error("Stack trace: %s", traceback.format_exc())
 
 
