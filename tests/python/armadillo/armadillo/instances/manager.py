@@ -252,17 +252,22 @@ class InstanceManager:
         # Sync startup order from orchestrator
         self.state.startup_order = self._deployment_orchestrator.get_startup_order()
 
-    def shutdown_deployment(self, timeout: float = 120.0) -> None:
+    def shutdown_deployment(self, timeout: Optional[float] = None) -> None:
         """Shutdown all deployed servers in correct order.
 
         For clusters, agents are shut down LAST after all other servers.
 
         Args:
-            timeout: Maximum time to wait for shutdown
+            timeout: Maximum time to wait for shutdown (uses config default if None)
         """
         if not self.state.status.is_deployed:
             logger.debug("No deployment to shutdown")
             return
+
+        # Use config default if not specified (scales with server count)
+        if timeout is None:
+            num_servers = len(self.state.servers)
+            timeout = self._app_context.config.timeouts.server_shutdown * max(1, num_servers) * 1.2
 
         timeout = clamp_timeout(timeout, "shutdown")
         self.state.timing.shutdown_time = time.time()
@@ -366,7 +371,7 @@ class InstanceManager:
                 "Some servers failed to shutdown cleanly: %s", failed_shutdowns
             )
 
-    def _shutdown_server(self, server: "ArangoServer", timeout: float = 30.0) -> None:
+    def _shutdown_server(self, server: "ArangoServer", timeout: Optional[float] = None) -> None:
         """Shutdown a single server with bulletproof termination and polling.
 
         Combines graceful shutdown with emergency force kill fallback and
@@ -374,8 +379,11 @@ class InstanceManager:
 
         Args:
             server: The server instance to shutdown
-            timeout: Maximum time to wait for shutdown
+            timeout: Maximum time to wait for shutdown (uses config default if None)
         """
+        if timeout is None:
+            timeout = self._app_context.config.timeouts.server_shutdown
+
         if not server.is_running():
             logger.debug("Server %s already stopped", server.server_id)
             return
@@ -454,18 +462,21 @@ class InstanceManager:
             # Re-raise the original error for the caller to handle
             raise
 
-    def restart_deployment(self, timeout: float = 300.0) -> None:
+    def restart_deployment(self, timeout: Optional[float] = None) -> None:
         """Restart the entire deployment.
 
         Args:
-            timeout: Maximum time for restart operation
+            timeout: Maximum time for restart operation (uses config default if None)
         """
-        logger.info("Restarting deployment")
+        if timeout is None:
+            timeout = self._app_context.config.timeouts.deployment_cluster
+
+        logger.info("Restarting deployment (timeout: %.1fs)", timeout)
 
         # Preserve current plan
         current_plan = self.state.deployment_plan
 
-        # Shutdown current deployment
+        # Shutdown current deployment (allocate half the timeout)
         self.shutdown_deployment(timeout / 2)
 
         # Restore plan and redeploy
@@ -534,15 +545,18 @@ class InstanceManager:
             return self.state.deployment_plan.agency_endpoints
         return []
 
-    def check_deployment_health(self, timeout: float = 30.0) -> HealthStatus:
+    def check_deployment_health(self, timeout: Optional[float] = None) -> HealthStatus:
         """Check health of the entire deployment.
 
         Args:
-            timeout: Timeout for health check
+            timeout: Timeout for health check (uses config default if None)
 
         Returns:
             Overall deployment health status
         """
+        if timeout is None:
+            timeout = self._app_context.config.timeouts.health_check_extended
+
         if not self.state.status.is_deployed:
             return HealthStatus(
                 is_healthy=False,

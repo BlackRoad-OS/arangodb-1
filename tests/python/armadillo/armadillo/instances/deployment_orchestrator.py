@@ -156,7 +156,7 @@ class DeploymentOrchestrator:
             ServerError: If shutdown fails critically
         """
         servers = self._server_registry.get_all_servers()
-        
+
         if timeout is None:
             # Calculate timeout based on number of servers
             # Allow per-server timeout + 20% buffer for coordination overhead
@@ -169,7 +169,7 @@ class DeploymentOrchestrator:
             timeout,
             self._timeouts.server_shutdown,
         )
-        
+
         if not servers:
             self._logger.debug("No servers to shutdown")
             return
