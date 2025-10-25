@@ -2,7 +2,7 @@
 
 from typing import Optional
 import time
-from ..core.types import ServerRole
+from ..core.types import ServerRole, TimeoutConfig
 from ..core.log import Logger
 from ..core.errors import (
     ServerError,
@@ -45,6 +45,7 @@ class DeploymentOrchestrator:
         server_registry: ServerRegistry,
         cluster_bootstrapper: Optional[ClusterBootstrapper] = None,
         health_monitor: Optional[HealthMonitor] = None,
+        timeout_config: Optional[TimeoutConfig] = None,
     ) -> None:
         """Initialize deployment orchestrator.
 
@@ -54,12 +55,14 @@ class DeploymentOrchestrator:
             server_registry: Registry for server storage/lookup
             cluster_bootstrapper: Optional bootstrapper for cluster deployments
             health_monitor: Optional health monitor for verification
+            timeout_config: Optional timeout configuration (uses defaults if not provided)
         """
         self._logger = logger
         self._server_factory = server_factory
         self._server_registry = server_registry
         self._cluster_bootstrapper = cluster_bootstrapper
         self._health_monitor = health_monitor
+        self._timeouts = timeout_config or TimeoutConfig()
         self._startup_order: list[str] = []
 
     def _create_strategy(self, plan: DeploymentPlan) -> DeploymentStrategy:
@@ -75,8 +78,18 @@ class DeploymentOrchestrator:
         else:
             raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
 
-    def execute_deployment(self, plan: DeploymentPlan, timeout: float = 300.0) -> None:
+    def execute_deployment(
+        self, plan: DeploymentPlan, timeout: Optional[float] = None
+    ) -> None:
         """Execute deployment based on plan using strategy pattern."""
+        # Use config defaults if timeout not specified
+        if timeout is None:
+            timeout = (
+                self._timeouts.deployment_single
+                if isinstance(plan, SingleServerDeploymentPlan)
+                else self._timeouts.deployment_cluster
+            )
+
         num_servers = (
             1 if isinstance(plan, SingleServerDeploymentPlan) else len(plan.servers)
         )
@@ -87,9 +100,10 @@ class DeploymentOrchestrator:
         )
 
         self._logger.info(
-            "Executing %s deployment with %d server(s)",
+            "Executing %s deployment with %d server(s) (timeout: %.1fs)",
             plan_type,
             num_servers,
+            timeout,
         )
         start_time = time.time()
 
@@ -130,22 +144,32 @@ class DeploymentOrchestrator:
             raise
 
     def shutdown_deployment(
-        self, shutdown_order: Optional[list[str]] = None, timeout: float = 120.0
+        self, shutdown_order: Optional[list[str]] = None, timeout: Optional[float] = None
     ) -> None:
         """Shutdown all servers in the deployment.
 
         Args:
             shutdown_order: Optional custom shutdown order (defaults to reverse of startup)
-            timeout: Total timeout for shutdown
+            timeout: Maximum time to wait for shutdown (uses config default if None)
 
         Raises:
             ServerError: If shutdown fails critically
         """
         servers = self._server_registry.get_all_servers()
-        self._logger.debug(
-            "DeploymentOrchestrator.shutdown_deployment called: %d servers registered",
+        
+        if timeout is None:
+            # Calculate timeout based on number of servers
+            # Allow per-server timeout + 20% buffer for coordination overhead
+            num_servers = len(servers)
+            timeout = self._timeouts.server_shutdown * max(1, num_servers) * 1.2
+
+        self._logger.info(
+            "Shutting down %d server(s) with %.1fs timeout (%.1fs per server)",
             len(servers),
+            timeout,
+            self._timeouts.server_shutdown,
         )
+        
         if not servers:
             self._logger.debug("No servers to shutdown")
             return
@@ -201,13 +225,16 @@ class DeploymentOrchestrator:
                 "Some servers failed to shutdown cleanly: %s", failed_shutdowns
             )
 
-    def restart_deployment(self, timeout: float = 300.0) -> None:
+    def restart_deployment(self, timeout: Optional[float] = None) -> None:
         """Restart all servers in the deployment.
 
         Args:
-            timeout: Total timeout for restart
+            timeout: Maximum time for restart operation (uses config default if None)
         """
-        self._logger.info("Restarting deployment")
+        if timeout is None:
+            timeout = self._timeouts.deployment_cluster  # Conservative default
+
+        self._logger.info("Restarting deployment (timeout: %.1fs)", timeout)
 
         # Shutdown first
         shutdown_timeout = timeout * 0.3

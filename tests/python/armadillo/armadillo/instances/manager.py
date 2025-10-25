@@ -132,6 +132,7 @@ class InstanceManager:
             server_registry=self._server_registry,
             cluster_bootstrapper=self._cluster_bootstrapper,
             health_monitor=self._health_monitor,
+            timeout_config=self._app_context.config.timeouts,
         )
 
     def __enter__(self):
