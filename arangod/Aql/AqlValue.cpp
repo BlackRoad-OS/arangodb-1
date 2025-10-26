@@ -1242,7 +1242,38 @@ AqlValue::AqlValue(AqlValue const& other, void const* data) noexcept {
       _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
       break;
     case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING: {
+      // Read rm* from void const* data
+      auto rmFromData =
+          *reinterpret_cast<arangodb::ResourceMonitor* const*>(data);
+      TRI_ASSERT(rmFromData != nullptr);
 
+      // Read rm* from AqlValue const& other
+      uint8_t const* otherBase =
+          (t == VPACK_SUPERVISED_SLICE)
+              ? other._data.supervisedSliceMeta.pointer
+              : other._data.supervisedStringMeta.pointer;
+      TRI_ASSERT(otherBase != nullptr);
+      auto rmFromOther =
+          *reinterpret_cast<arangodb::ResourceMonitor* const*>(otherBase);
+      TRI_ASSERT(rmFromOther != nullptr);
+
+      // both supervised blocks should hold the same RM*
+      TRI_ASSERT(rmFromData == rmFromOther);
+
+      if (t == VPACK_SUPERVISED_SLICE) {
+        _data.supervisedSliceMeta.lengthOrigin =
+            other._data.supervisedSliceMeta.lengthOrigin;
+        _data.supervisedSliceMeta.pointer =
+            const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
+      } else { // VPACK_SUPERVISED_STRING
+        _data.supervisedStringMeta.lengthOrigin =
+            other._data.supervisedStringMeta.lengthOrigin;
+        _data.supervisedStringMeta.pointer =
+            const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
+      }
+      break;
+    }
     case RANGE:
       _data.rangeMeta.range = static_cast<Range const*>(data);
       break;
@@ -1306,29 +1337,45 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
     // short string... cannot store inline, but we don't need to
     // create a full-featured Builder object here
     const std::size_t byteSize = s.size() + 1;
-    if (rm != nullptr) {
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
-      uint8_t* base = allocateSupervised(*rm, byteSize);  // accounts kPrefix + byteSize
-      base[kPrefix + 0] = static_cast<uint8_t>(0x40U + s.size()); // base -> [ rm* | tag (type + length of strObj) | shortStrObj ]
+    if (rm != nullptr) {  // if this should be supervised
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                        MemoryOriginType::New);
+      // allocate block: [ rm* (prefix) | VelocyPack slice bytes (payload) ]
+      // kPrefix = sizeof(ResourceMonitor*)
+      // byteSize = size of the VelocyPack payload
+      uint8_t* base = allocateSupervised(*rm, byteSize);
+      // Write the VelocyPack "head" byte for a short string into the payload.
+      // VPack encodes short strings with first byte = 0x40 + length.
+      // Ex: string "abc" (len=3) -> first payload byte = 0x43.
+      // So this line is writing the VPack type/length marker.
+      base[kPrefix + 0] = static_cast<uint8_t>(0x40U + s.size());
+      // Copy the actual string characters right after that first marker byte.
+      // [ ResourceMonitor* ][ 0x40+len ][ 'a' 'b' 'c' ... ]
       std::memcpy(base + kPrefix + 1, s.data(), s.size());
       _data.supervisedSliceMeta.pointer = base;
     } else {
       setManagedSliceData(MemoryOriginType::New, s.size() + 1);
       _data.managedSliceMeta.pointer = new uint8_t[s.size() + 1];
-      _data.managedSliceMeta.pointer[0] = static_cast<uint8_t>(0x40U + s.size());
+      _data.managedSliceMeta.pointer[0] =
+          static_cast<uint8_t>(0x40U + s.size());
       memcpy(_data.managedSliceMeta.pointer + 1, s.data(), s.size());
     }
   } else {
     // long string
     // create a big enough uint8_t buffer
     size_t byteSize = s.size() + 9;
-    if (rm != nullptr) {
-      // supervised slice
+    if (rm != nullptr) { // if this should be supervised
       setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
-      uint8_t* base = allocateSupervised(*rm, byteSize);  // accounts kPrefix + byteSize
+      uint8_t* base = allocateSupervised(*rm, byteSize);
+      // Write the VelocyPack type marker for a "long string" slice.
+      // 0xbf means "string, long form". This is the first byte.
       base[kPrefix + 0] = static_cast<uint8_t>(0xbfU);
+      // Encode the string length as an unsigned 64-bit little-endian integer.
+      // Place these 8 bytes right after the 0xbf marker.
       auto v = absl::little_endian::FromHost64(s.size());
       std::memcpy(base + kPrefix + 1, &v, sizeof(v));
+      // Copy the actual characters of the string right after the length field.
+      // [ rm* ][ 0xbf ][ 8-byte length ][ string bytes ... ]
       std::memcpy(base + kPrefix + 9, s.data(), s.size());
       _data.supervisedSliceMeta.pointer = base;
     } else {
