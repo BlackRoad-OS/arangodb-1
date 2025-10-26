@@ -462,3 +462,49 @@ TEST(AqlValueDocumentDataCtor_SupervisedString, CloneKeepsAccoutingUNtilBothDest
   cloned.destroy();
   EXPECT_EQ(rm.current(), 0);
 }
+
+TEST(AqlValueSupervisedSlice, ShortString_MemoryAccounting) {
+  auto& global = GlobalResourceMonitor::instance();
+  arangodb::ResourceMonitor rm(global);
+
+  std::string s(15, 'x'); // 15 chars, fits short-string (<= 126), not inline
+  const std::size_t payloadSize = 1 + s.size(); // tag + chars
+  const std::uint64_t before = rm.current();
+
+  {
+    AqlValue v(std::string_view{s}, &rm);
+
+    // Memory should increase by kPrefix + payloadSize
+    EXPECT_EQ(rm.current() - before, ptrOverhead() + payloadSize);
+
+    // Slice should decode back to original string
+    auto slice = v.slice();
+    ASSERT_TRUE(slice.isString());
+    EXPECT_EQ(slice.stringView(), s);
+  }
+
+  // After destruction, usage returns to baseline
+  EXPECT_EQ(rm.current(), before);
+}
+
+TEST(AqlValueSupervisedSlice, LongString_ResourceMonitorUsage) {
+  auto& global = GlobalResourceMonitor::instance();
+  arangodb::ResourceMonitor rm(global);
+
+  std::string s(300, 'A');  // triggers long string encoding
+  std::size_t expectedBytes = ptrOverhead() + (1 + 8 + s.size());
+  // prefix + 0xBF + 8-byte length + characters
+
+  std::uint64_t before = rm.current();
+  {
+    AqlValue v(std::string_view{s}, &rm);
+
+    auto slice = v.slice();
+    ASSERT_TRUE(slice.isString());
+    EXPECT_EQ(slice.stringView(), s);
+
+    std::uint64_t after = rm.current();
+    EXPECT_EQ(after - before, expectedBytes);
+  }
+  EXPECT_EQ(rm.current(), before);
+}
