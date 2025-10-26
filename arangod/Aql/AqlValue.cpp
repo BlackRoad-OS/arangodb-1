@@ -52,12 +52,6 @@ static constexpr std::size_t kPrefix = sizeof(arangodb::ResourceMonitor*);
 
 static constexpr std::uint64_t kOriginOwned = 1;
 
-inline void setHeader(uint8_t t, std::uint64_t origin, std::uint64_t len,
-                      std::uint64_t& lengthOrigin) noexcept {
-  lengthOrigin = (static_cast<std::uint64_t>(t)) |
-                 (static_cast<std::uint64_t>(origin) << 8) | (len << 16);
-}
-
 inline std::uint64_t getOrigin8(std::uint64_t lo) noexcept {
   return (lo >> 8) & 0xFFU;
 }
@@ -1218,7 +1212,7 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
       uint8_t* base = allocateSupervised(*rm, size);
       _data.supervisedStringMeta.pointer = base;
       auto* strObj = reinterpret_cast<std::string*>(base + kPrefix);
-      *strObj = std::move(*data); // take a look
+      new (strObj) std::string(std::move(*data)); // take a look
 
     } else {
       setType(AqlValueType::VPACK_MANAGED_STRING);

@@ -15,6 +15,8 @@ using namespace arangodb::aql;
 using namespace arangodb::velocypack;
 
 namespace {
+using DocumentData = std::unique_ptr<std::string>;
+
 inline size_t ptrOverhead() { return sizeof(ResourceMonitor*); }
 
 inline Builder makeLargeArray(size_t n = 2048, char bytesToFill = 'a') {
@@ -35,6 +37,11 @@ inline Builder makeArrayOfNumbers(size_t n = 5) {
   for (size_t i = 0; i < n; ++i) b.add(Value(static_cast<int>(i)));
   b.close();
   return b;
+}
+
+inline DocumentData makeDocDataFromSlice(Slice s) {
+  auto const* p = reinterpret_cast<char const*>(s.start());
+  return std::make_unique<std::string>(p, p + s.byteSize());
 }
 }  // namespace
 
@@ -383,4 +390,75 @@ TEST(AqlValueSupervisedTest, DestroySafe) {
 
   aqlVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
+}
+
+TEST(AqlValueDocumentDataCtor_SupervisedString, AccountsAndMovesFromSource) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+  ASSERT_EQ(rm.current(), 0);
+
+  auto s = makeString(4096, 'x').slice();
+  auto data = makeDocDataFromSlice(s);
+
+  AqlValue v(data, &rm);
+
+  size_t expected = static_cast<size_t>(s.byteSize()) + ptrOverhead();
+  EXPECT_EQ(v.memoryUsage(), expected);
+  EXPECT_EQ(rm.current(), expected);
+
+  // Source string should be empty
+  ASSERT_NE(data.get(), nullptr);
+  EXPECT_EQ(data->size(), 0U);
+
+  v.destroy();
+  EXPECT_EQ(rm.current(), 0);
+}
+
+TEST(AqlValueDocumentDataCtor_SupervisedString, MutipleValuesSumAccounting) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  auto s1 = makeString(1500, 'a').slice();
+  auto s2 = makeString(2500, 'b').slice();
+  auto d1 = makeDocDataFromSlice(s1);
+  auto d2 = makeDocDataFromSlice(s2);
+
+  AqlValue v1(d1, &rm);
+  AqlValue v2(d2, &rm);
+
+  size_t e1 = static_cast<size_t>(s1.byteSize()) + ptrOverhead();
+  size_t e2 = static_cast<size_t>(s2.byteSize()) + ptrOverhead();
+
+  EXPECT_EQ(v1.memoryUsage(), e1);
+  EXPECT_EQ(v2.memoryUsage(), e2);
+  EXPECT_EQ(rm.current(), e1 + e2);
+
+  v1.destroy();
+  EXPECT_EQ(rm.current(), e2);
+
+  v2.destroy();
+  EXPECT_EQ(rm.current(), 0);
+}
+
+TEST(AqlValueDocumentDataCtor_SupervisedString, CloneKeepsAccoutingUNtilBothDestroed) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  auto s = makeString(1500, 'z').slice();
+  auto data = makeDocDataFromSlice(s);
+  AqlValue v(data, &rm);
+
+  size_t expected = static_cast<size_t>(s.byteSize()) + ptrOverhead();
+  ASSERT_EQ(v.memoryUsage(), expected);
+  ASSERT_EQ(rm.current(), expected);
+
+  AqlValue cloned = v.clone();
+  EXPECT_EQ(cloned.memoryUsage(), expected);
+  EXPECT_EQ(rm.current(), expected + expected);
+
+  v.destroy();
+  EXPECT_EQ(rm.current(), expected);
+
+  cloned.destroy();
+  EXPECT_EQ(rm.current(), 0);
 }
