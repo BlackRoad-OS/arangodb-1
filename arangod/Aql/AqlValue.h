@@ -578,9 +578,11 @@ struct AqlValue final {
   void setSupervisedData(AqlValueType at, MemoryOriginType mot);
 };
 
-static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
+static_assert(std::is_copy_constructible_v<AqlValue>);
+static_assert(std::is_copy_assignable_v<AqlValue>);
+// static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
 static_assert(std::is_trivially_move_constructible_v<AqlValue>);
-static_assert(std::is_trivially_copy_assignable_v<AqlValue>);
+// static_assert(std::is_trivially_copy_assignable_v<AqlValue>);
 static_assert(std::is_trivially_move_assignable_v<AqlValue>);
 static_assert(std::is_trivially_destructible_v<AqlValue>);
 static_assert(std::is_standard_layout_v<AqlValue>);

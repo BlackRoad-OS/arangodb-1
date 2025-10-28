@@ -19,6 +19,35 @@ using DocumentData = std::unique_ptr<std::string>;
 
 inline size_t ptrOverhead() { return sizeof(ResourceMonitor*); }
 
+inline Builder makeObj(
+    std::initializer_list<std::pair<std::string, Value>> fields) {
+  Builder b;
+  b.openObject();
+  for (auto const& [k, v] : fields) {
+    b.add(k, v);
+  }
+  b.close();
+  return b;
+}
+
+inline Builder makeArray(std::initializer_list<Value> vals) {
+  Builder b;
+  b.openArray();
+  for (auto const& v : vals) {
+    b.add(v);
+  }
+  b.close();
+  return b;
+}
+
+inline Builder makeNumArray(size_t n) {
+  Builder b;
+  b.openArray();
+  for (size_t i = 0; i < n; ++i) b.add(Value(static_cast<int>(i)));
+  b.close();
+  return b;
+}
+
 inline Builder makeLargeArray(size_t n = 2048, char bytesToFill = 'a') {
   Builder b;
   b.openArray();
@@ -392,7 +421,7 @@ TEST(AqlValueSupervisedTest, DestroySafe) {
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueDocumentDataCtor_SupervisedString, AccountsAndMovesFromSource) {
+TEST(AqlValueSupervisedTest, AccountsAndMovesFromSource) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
   ASSERT_EQ(rm.current(), 0);
@@ -414,7 +443,7 @@ TEST(AqlValueDocumentDataCtor_SupervisedString, AccountsAndMovesFromSource) {
   EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueDocumentDataCtor_SupervisedString, MutipleValuesSumAccounting) {
+TEST(AqlValueSupervisedTest, MutipleValuesSumAccounting) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
 
@@ -440,7 +469,7 @@ TEST(AqlValueDocumentDataCtor_SupervisedString, MutipleValuesSumAccounting) {
   EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueDocumentDataCtor_SupervisedString, CloneKeepsAccoutingUNtilBothDestroed) {
+TEST(AqlValueSupervisedTest, CloneKeepsAccoutingUNtilBothDestroed) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
 
@@ -463,12 +492,12 @@ TEST(AqlValueDocumentDataCtor_SupervisedString, CloneKeepsAccoutingUNtilBothDest
   EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueSupervisedSlice, ShortString_MemoryAccounting) {
+TEST(AqlValueSupervisedTest, ShortString_MemoryAccounting) {
   auto& global = GlobalResourceMonitor::instance();
   arangodb::ResourceMonitor rm(global);
 
-  std::string s(15, 'x'); // 15 chars, fits short-string (<= 126), not inline
-  const std::size_t payloadSize = 1 + s.size(); // tag + chars
+  std::string s(15, 'x');  // 15 chars, fits short-string (<= 126), not inline
+  const std::size_t payloadSize = 1 + s.size();  // tag + chars
   const std::uint64_t before = rm.current();
 
   {
@@ -487,7 +516,7 @@ TEST(AqlValueSupervisedSlice, ShortString_MemoryAccounting) {
   EXPECT_EQ(rm.current(), before);
 }
 
-TEST(AqlValueSupervisedSlice, LongString_ResourceMonitorUsage) {
+TEST(AqlValueSupervisedTest, LongString_ResourceMonitorUsage) {
   auto& global = GlobalResourceMonitor::instance();
   arangodb::ResourceMonitor rm(global);
 
@@ -507,4 +536,233 @@ TEST(AqlValueSupervisedSlice, LongString_ResourceMonitorUsage) {
     EXPECT_EQ(after - before, expectedBytes);
   }
   EXPECT_EQ(rm.current(), before);
+}
+TEST(AqlValueSupervisedTest, GetTypeString_Basics_SupervisedAndManaged) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  // supervised string (short string path -> supervised slice in your impl)
+  AqlValue ssv(std::string_view{"abcdef"}, &rm);
+  EXPECT_EQ(std::string(ssv.getTypeString()), "string");
+  ssv.destroy();
+
+  // supervised array
+  Builder arr = makeArray({Value(1), Value(2)});
+  AqlValue asv(arr.slice(), 0, &rm);
+  EXPECT_EQ(std::string(asv.getTypeString()), "array");
+  asv.destroy();
+
+  // inline number
+  AqlValue n(AqlValueHintInt{42});
+  EXPECT_EQ(std::string(n.getTypeString()), "number");
+
+  // managed slice (no RM)
+  Builder obj = makeObj({{"a", Value(1)}});
+  AqlValue mv(obj.slice());
+  EXPECT_EQ(std::string(mv.getTypeString()), "object");
+  mv.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Length_ArrayAndRange) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder arr = makeNumArray(5);
+  AqlValue a(arr.slice(), 0, &rm);
+  EXPECT_EQ(a.length(), 5U);
+  a.destroy();
+
+  AqlValue r(3, 7);  // inclusive range [3..7] => length 5
+  EXPECT_EQ(r.length(), 5U);
+  r.destroy();
+}
+
+TEST(AqlValueSupervisedTest, At_DoCopy_And_NoCopy_Supervised) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder arr = makeArray({Value(11), Value(22), Value(33)});
+  AqlValue a(arr.slice(), 0, &rm);
+
+  bool mustDestroy = false;
+  // doCopy = false → return slice reference (mustDestroy=false)
+  AqlValue e0 = a.at(1, mustDestroy, /*doCopy*/ false);
+  EXPECT_FALSE(mustDestroy);
+  EXPECT_EQ(e0.toInt64(), 22);
+  // no destroy required
+  // doCopy = true → makes owning value (mustDestroy=true)
+  AqlValue e1 = a.at(2, mustDestroy, /*doCopy*/ true);
+  EXPECT_TRUE(mustDestroy);
+  EXPECT_EQ(e1.toInt64(), 33);
+  e1.destroy();
+
+  a.destroy();
+}
+
+TEST(AqlValueSupervisedTest, At_WithSizeOverload_NegativeIndexing) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder arr = makeArray({Value(1), Value(2), Value(3)});
+  Slice s = arr.slice();
+  AqlValue a(s, 0, &rm);
+
+  bool mustDestroy = false;
+  // request with explicit size, negative index
+  AqlValue e = a.at(-1, s.length(), mustDestroy, /*copy*/ false);
+  EXPECT_EQ(e.toInt64(), 3);
+  a.destroy();
+}
+
+TEST(AqlValueSupervisedTest, ToDouble_Various) {
+  // inline integer
+  AqlValue i(AqlValueHintInt{42});
+  bool failed = false;
+  EXPECT_DOUBLE_EQ(i.toDouble(failed), 42.0);
+  EXPECT_FALSE(failed);
+
+  // from boolean
+  AqlValue b(AqlValueHintBool{true});
+  EXPECT_DOUBLE_EQ(b.toDouble(), 1.0);
+
+  // from string number
+  Builder sb;
+  sb.add(Value("123"));
+  AqlValue sv(sb.slice());
+  EXPECT_DOUBLE_EQ(sv.toDouble(), 123.0);
+  sv.destroy();
+
+  // singleton array unwrap
+  Builder arr = makeArray({Value(7)});
+  AqlValue av(arr.slice());
+  EXPECT_DOUBLE_EQ(av.toDouble(), 7.0);
+  av.destroy();
+}
+
+TEST(AqlValueSupervisedTest, ToInt64_Various) {
+  AqlValue d(AqlValueHintDouble{5.0});
+  EXPECT_EQ(d.toInt64(), 5);
+
+  Builder s;
+  s.add(Value("99"));
+  AqlValue sv(s.slice());
+  EXPECT_EQ(sv.toInt64(), 99);
+  sv.destroy();
+
+  // singleton array forward
+  Builder arr = makeArray({Value(8)});
+  AqlValue a(arr.slice());
+  EXPECT_EQ(a.toInt64(), 8);
+  a.destroy();
+}
+
+TEST(AqlValueSupervisedTest, ToBoolean_Various) {
+  AqlValue zero(AqlValueHintInt{0});
+  EXPECT_FALSE(zero.toBoolean());
+  AqlValue one(AqlValueHintInt{1});
+  EXPECT_TRUE(one.toBoolean());
+
+  Builder s;
+  s.add(Value(""));  // empty string
+  AqlValue sv(s.slice());
+  EXPECT_FALSE(sv.toBoolean());
+  sv.destroy();
+
+  Builder obj = makeObj({{"a", Value(1)}});
+  AqlValue ov(obj.slice());
+  EXPECT_TRUE(ov.toBoolean());  // objects are truthy
+  ov.destroy();
+
+  Builder arr = makeArray({Value(1), Value(2)});
+  AqlValue av(arr.slice());
+  EXPECT_TRUE(av.toBoolean());
+  av.destroy();
+}
+
+TEST(AqlValueSupervisedTest,
+     DataPointer_MatchesSliceBegin_ForSupervisedAndManaged) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // supervised (with RM)
+  Builder b1 = makeObj({{"k", Value("v")}});
+  Slice s1 = b1.slice();
+  AqlValue sv(s1, 0, &rm);
+  EXPECT_EQ(static_cast<uint8_t const*>(sv.data()), sv.slice().start());
+  sv.destroy();
+
+  // managed (no RM, large enough to be out-of-line)
+  std::string big(300, 'a');
+  Builder b2;
+  b2.add(Value(big));
+  AqlValue mv(b2.slice());
+  EXPECT_EQ(static_cast<uint8_t const*>(mv.data()), mv.slice().start());
+  mv.destroy();
+}
+
+TEST(AqlValueSupervisedTest, ToVelocyPack_Roundtrip_Supervised) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder src = makeObj({{"a", Value(1)}, {"b", Value("x")}});
+  AqlValue v(src.slice(), 0, &rm);
+
+  Builder out;
+  v.toVelocyPack(nullptr, out, /*allowUnindexed*/ true);
+  EXPECT_TRUE(out.slice().binaryEquals(src.slice()));
+
+  v.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Materialize_RangeAndNonRange) {
+  // range → materializes array copy (hasCopied=true)
+  AqlValue r(2, 4);  // [2,3,4]
+  bool copied = false;
+  AqlValue mat = r.materialize(nullptr, copied);
+  EXPECT_TRUE(copied);
+  EXPECT_TRUE(mat.slice().isArray());
+  EXPECT_EQ(mat.length(), 3U);
+  EXPECT_EQ(mat.at(0, copied, false).toInt64(), 2);
+  mat.destroy();
+  r.destroy();
+
+  // non-range supervised → returns itself (hasCopied=false)
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+  Builder obj = makeObj({{"q", Value(7)}});
+  AqlValue v(obj.slice(), 0, &rm);
+  bool copied2 = false;
+  AqlValue mat2 = v.materialize(nullptr, copied2);
+  EXPECT_FALSE(copied2);
+  // same content
+  EXPECT_TRUE(mat2.slice().binaryEquals(obj.slice()));
+  v.destroy();
+  // mat2 is an alias; nothing to destroy
+}
+
+TEST(AqlValueSupervisedTest, Slice_TypedDispatch) {
+  // ensure slice() and slice(type) consistent
+  Builder b;
+  b.add(Value("hello"));
+  AqlValue v(b.slice());
+  auto st = v.type();
+  EXPECT_TRUE(v.slice().binaryEquals(v.slice(st)));
+  v.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Equality_SupervisedVsManaged_ContentEqual) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder doc = makeObj({{"a", Value(1)}, {"b", Value("qq")}});
+  Slice s = doc.slice();
+
+  AqlValue sup(s, 0, &rm);  // supervised
+  AqlValue man(s);          // managed (no RM)
+
+  std::equal_to<AqlValue> eq;
+  EXPECT_TRUE(eq(sup, man));
+
+  sup.destroy();
+  man.destroy();
 }
