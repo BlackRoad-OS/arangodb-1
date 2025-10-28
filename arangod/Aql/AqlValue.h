@@ -575,14 +575,12 @@ struct AqlValue final {
                            velocypack::ValueLength length);
 
   // @brief set the first 2 bytes for SupervisedSlice and SupervisedString
-  void setSupervisedData(AqlValueType at, MemoryOriginType mot);
+  void setSupervisedData(AqlValueType at, MemoryOriginType mot, bool owned);
 };
 
 static_assert(std::is_copy_constructible_v<AqlValue>);
 static_assert(std::is_copy_assignable_v<AqlValue>);
-// static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
 static_assert(std::is_trivially_move_constructible_v<AqlValue>);
-// static_assert(std::is_trivially_copy_assignable_v<AqlValue>);
 static_assert(std::is_trivially_move_assignable_v<AqlValue>);
 static_assert(std::is_trivially_destructible_v<AqlValue>);
 static_assert(std::is_standard_layout_v<AqlValue>);
