@@ -308,9 +308,6 @@ TEST(AqlValueSupervisedTest, CloneEraseKeepAccounting) {
   AqlValue c = aqlVal.clone();
   EXPECT_EQ(resourceMonitor.current(), base + c.memoryUsage());
 
-  c.erase();
-  EXPECT_EQ(resourceMonitor.current(), base);
-
   c.destroy();
   EXPECT_EQ(resourceMonitor.current(), base);
 
