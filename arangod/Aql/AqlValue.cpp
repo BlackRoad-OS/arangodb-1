@@ -1641,18 +1641,12 @@ size_t AqlValue::memoryUsage() const noexcept {
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
     case VPACK_SUPERVISED_SLICE: {
-      auto lo = _data.supervisedSliceMeta.lengthOrigin;
-      auto len = static_cast<size_t>(
-          velocypack::Slice(_data.supervisedSliceMeta.getPayloadPtr())
-              .byteSize());
-      return getOrigin8(lo) == kOriginOwned ? len + kPrefix : 0;
+      return sizeof(ResourceMonitor*) +
+             static_cast<size_t>(_data.supervisedSliceMeta.getLength());
     }
     case VPACK_SUPERVISED_STRING: {
-      auto lo = _data.supervisedStringMeta.lengthOrigin;
-      auto len = static_cast<size_t>(
-          velocypack::Slice(_data.supervisedStringMeta.getPayloadPtr())
-              .byteSize());
-      return getOrigin8(lo) == kOriginOwned ? len + kPrefix : 0;
+      return sizeof(ResourceMonitor*) +
+             static_cast<size_t>(_data.supervisedStringMeta.getLength());
     }
     case RANGE:
       return sizeof(Range);
