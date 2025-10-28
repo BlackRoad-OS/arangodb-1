@@ -64,7 +64,8 @@ static inline uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
     rm.increaseMemoryUsage(len);
   }
   rm.increaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
-  return reinterpret_cast<uint8_t*>(base);;
+  return reinterpret_cast<uint8_t*>(base);
+  ;
 }
 
 static inline void deallocateSupervised(uint8_t* payload,
@@ -1208,11 +1209,12 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
   } else {
     if (rm != nullptr) {
       // handing over the ownership of the pointee
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_STRING, MemoryOriginType::New);
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_STRING,
+                        MemoryOriginType::New);
       uint8_t* base = allocateSupervised(*rm, size);
       _data.supervisedStringMeta.pointer = base;
       auto* strObj = reinterpret_cast<std::string*>(base + kPrefix);
-      new (strObj) std::string(std::move(*data)); // take a look
+      new (strObj) std::string(std::move(*data));  // take a look
 
     } else {
       setType(AqlValueType::VPACK_MANAGED_STRING);
@@ -1249,10 +1251,9 @@ AqlValue::AqlValue(AqlValue const& other, void const* data) noexcept {
       TRI_ASSERT(rmFromData != nullptr);
 
       // Read rm* from AqlValue const& other
-      uint8_t const* otherBase =
-          (t == VPACK_SUPERVISED_SLICE)
-              ? other._data.supervisedSliceMeta.pointer
-              : other._data.supervisedStringMeta.pointer;
+      uint8_t const* otherBase = (t == VPACK_SUPERVISED_SLICE)
+                                     ? other._data.supervisedSliceMeta.pointer
+                                     : other._data.supervisedStringMeta.pointer;
       TRI_ASSERT(otherBase != nullptr);
       auto rmFromOther =
           *reinterpret_cast<arangodb::ResourceMonitor* const*>(otherBase);
@@ -1266,7 +1267,7 @@ AqlValue::AqlValue(AqlValue const& other, void const* data) noexcept {
             other._data.supervisedSliceMeta.lengthOrigin;
         _data.supervisedSliceMeta.pointer =
             const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
-      } else { // VPACK_SUPERVISED_STRING
+      } else {  // VPACK_SUPERVISED_STRING
         _data.supervisedStringMeta.lengthOrigin =
             other._data.supervisedStringMeta.lengthOrigin;
         _data.supervisedStringMeta.pointer =
@@ -1364,8 +1365,9 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
     // long string
     // create a big enough uint8_t buffer
     size_t byteSize = s.size() + 9;
-    if (rm != nullptr) { // if this should be supervised
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
+    if (rm != nullptr) {  // if this should be supervised
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                        MemoryOriginType::New);
       uint8_t* base = allocateSupervised(*rm, byteSize);
       // Write the VelocyPack type marker for a "long string" slice.
       // 0xbf means "string, long form". This is the first byte.
@@ -1407,7 +1409,8 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
   if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
-    setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
+    setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                      MemoryOriginType::New);
     uint8_t* p = allocateSupervised(*rm, size);
     memcpy(p + kPrefix, slice.begin(), size);
     _data.supervisedSliceMeta.pointer = p;
@@ -1463,6 +1466,125 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t> const& buffer,
   auto len = static_cast<std::uint64_t>(buffer.size());
   initFromSlice(velocypack::Slice(buffer.data()),
                 static_cast<velocypack::ValueLength>(len), rm);
+}
+
+AqlValue::AqlValue(AqlValue const& other) noexcept {
+  auto t = other.type();
+  switch (t) {
+    case VPACK_MANAGED_SLICE: {
+      auto len = other._data.managedSliceMeta.getLength();
+      initFromSlice(VPackSlice{other._data.managedSliceMeta.pointer},
+                    static_cast<VPackValueLength>(len), nullptr);
+      break;
+    }
+    case VPACK_MANAGED_STRING: {
+      // deep copy the std::string
+      auto const* str = other._data.managedStringMeta.pointer;
+      TRI_ASSERT(str != nullptr);
+      _data.managedStringMeta.pointer = new std::string(*str);
+      setType(AqlValueType::VPACK_MANAGED_STRING);
+      break;
+    }
+    case VPACK_SUPERVISED_SLICE: {
+      auto len = other._data.supervisedSliceMeta.getLength();
+      auto rm = other._data.supervisedSliceMeta.getResourceMonitor();
+      // allocate supervised slice and copy payload
+      setType(AqlValueType::VPACK_SUPERVISED_SLICE);
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                        MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, len);
+      _data.supervisedSliceMeta.pointer = base;
+      // copy payload bytes
+      std::memcpy(base + kPrefix,
+                  other._data.supervisedSliceMeta.getPayloadPtr(),
+                  static_cast<std::size_t>(len));
+      break;
+    }
+    case VPACK_SUPERVISED_STRING: {
+      auto len = other._data.supervisedStringMeta.getLength();
+      auto rm = other._data.supervisedStringMeta.getResourceMonitor();
+      // allocate supervised string and copy string content
+      setType(AqlValueType::VPACK_SUPERVISED_STRING);
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_STRING,
+                        MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, len);
+      _data.supervisedStringMeta.pointer = base;
+      // construct a new std::string in the payload area
+      auto tmpSlice = other._data.supervisedStringMeta.toSlice();
+      std::string tmp = tmpSlice.copyString();
+      auto* strObj = reinterpret_cast<std::string*>(base + kPrefix);
+      new (strObj) std::string(tmp);
+      break;
+    }
+    case RANGE: {
+      _data.rangeMeta.range =
+          new Range(other.range()->_low, other.range()->_high);
+      setType(AqlValueType::RANGE);
+      break;
+    }
+    default: {
+      _data.words[0] = other._data.words[0];
+      _data.words[1] = other._data.words[1];
+      break;
+    }
+  }
+}
+
+/*
+AqlValue::AqlValue(AqlValue&& other) noexcept {
+  _data.words[0] = other._data.words[0];
+  _data.words[1] = other._data.words[1];
+  // leave 'other' in a well‑defined state by resetting it to None
+  other.erase();
+}
+ */
+
+AqlValue& AqlValue::operator=(AqlValue const& other) noexcept {
+  if (this != &other) {
+    if (requiresDestruction()) {
+      destroy();
+    }
+    auto t = other.type();
+    switch (t) {
+      case VPACK_MANAGED_SLICE:
+      case VPACK_MANAGED_STRING:
+      case VPACK_SUPERVISED_SLICE:
+      case VPACK_SUPERVISED_STRING:
+      case RANGE: {
+        AqlValue tmp = other.clone();
+        *this = std::move(tmp);
+        break;
+      }
+      default: {
+        _data.words[0] = other._data.words[0];
+        _data.words[1] = other._data.words[1];
+        break;
+      }
+    }
+  }
+  return *this;
+}
+
+AqlValue::AqlValue(AqlValue const& other, arangodb::ResourceMonitor& rm) {
+  auto t = other.type();
+  TRI_ASSERT(t == VPACK_SUPERVISED_SLICE || t == VPACK_SUPERVISED_STRING);
+
+  switch (t) {
+    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_STRING: {
+      auto s = other.slice(t);
+      auto len = static_cast<std::uint64_t>(s.byteSize());
+      setType(AqlValueType::VPACK_SUPERVISED_SLICE);
+      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                        MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(rm, len);
+      _data.supervisedSliceMeta.pointer = base;
+      std::memcpy(base + kPrefix, s.start(), static_cast<std::size_t>(len));
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 bool AqlValue::requiresDestruction() const noexcept {
@@ -1649,6 +1771,14 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
   }
 }
 
+bool operator==(AqlValue const& a, AqlValue const& b) noexcept {
+  return std::equal_to<AqlValue>{}(a, b);
+}
+
+bool operator!=(AqlValue const& a, AqlValue const& b) noexcept {
+  return !std::equal_to<AqlValue>{}(a, b);
+}
+
 }  // namespace arangodb::aql
 
 namespace std {
@@ -1673,9 +1803,11 @@ size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
     case AqlValue::VPACK_MANAGED_STRING:
       return std::hash<void const*>()(x._data.managedStringMeta.pointer);
     case AqlValue::VPACK_SUPERVISED_SLICE:
-      return std::hash<void const*>()(x._data.supervisedSliceMeta.pointer);
+      return std::hash<void const*>()(
+          x._data.supervisedSliceMeta.getPayloadPtr());
     case AqlValue::VPACK_SUPERVISED_STRING:
-      return std::hash<void const*>()(x._data.supervisedStringMeta.pointer);
+      return std::hash<void const*>()(
+          x._data.supervisedStringMeta.getPayloadPtr());
     case AqlValue::RANGE:
       return std::hash<void const*>()(x._data.rangeMeta.range);
   }
@@ -1684,38 +1816,53 @@ size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
 
 bool equal_to<AqlValue>::operator()(AqlValue const& a,
                                     AqlValue const& b) const noexcept {
-  // TODO(MBkkt) can be just compare two uint64_t?
-  auto t = a.type();
-  if (t != b.type()) {
+  using T = AqlValue::AqlValueType;
+  auto ta = a.type();
+  auto tb = b.type();
+
+  if (ta == tb) {
+    switch (ta) {
+      case T::VPACK_INLINE:
+        return VPackSlice(a._data.inlineSliceMeta.slice)
+            .binaryEquals(VPackSlice(b._data.inlineSliceMeta.slice));
+      case T::VPACK_INLINE_INT64:
+      case T::VPACK_INLINE_UINT64:
+      case T::VPACK_INLINE_DOUBLE:
+        return a._data.longNumberMeta.data.intLittleEndian.val ==
+               b._data.longNumberMeta.data.intLittleEndian.val;
+      case T::VPACK_SLICE_POINTER:
+        return a._data.slicePointerMeta.pointer ==
+               b._data.slicePointerMeta.pointer;
+      case T::VPACK_MANAGED_SLICE:
+        return a._data.managedSliceMeta.pointer ==
+               b._data.managedSliceMeta.pointer;
+      case T::VPACK_MANAGED_STRING:
+        return a._data.managedStringMeta.pointer ==
+               b._data.managedStringMeta.pointer;
+      case T::VPACK_SUPERVISED_SLICE: {
+        auto as = VPackSlice(a._data.supervisedSliceMeta.getPayloadPtr());
+        auto bs = VPackSlice(b._data.supervisedSliceMeta.getPayloadPtr());
+        return as.binaryEquals(bs);  // ignore monitor*
+      }
+      case T::VPACK_SUPERVISED_STRING: {
+        auto as = a._data.supervisedStringMeta.toSlice();
+        auto bs = b._data.supervisedStringMeta.toSlice();
+        return as.binaryEquals(bs);  // ignore monitor*
+      }
+      case T::RANGE:
+        return a._data.rangeMeta.range == b._data.rangeMeta.range;
+    }
     return false;
   }
-  switch (t) {
-    case AqlValue::VPACK_INLINE:
-      return VPackSlice(a._data.inlineSliceMeta.slice)
-          .binaryEquals(VPackSlice(b._data.inlineSliceMeta.slice));
-    case AqlValue::VPACK_INLINE_INT64:
-    case AqlValue::VPACK_INLINE_UINT64:
-    case AqlValue::VPACK_INLINE_DOUBLE:
-      // equal is equal. sign/endianess does not matter
-      return a._data.longNumberMeta.data.intLittleEndian.val ==
-             b._data.longNumberMeta.data.intLittleEndian.val;
-    case AqlValue::VPACK_SLICE_POINTER:
-      return a._data.slicePointerMeta.pointer ==
-             b._data.slicePointerMeta.pointer;
-    case AqlValue::VPACK_MANAGED_SLICE:
-      return a._data.managedSliceMeta.pointer ==
-             b._data.managedSliceMeta.pointer;
-    case AqlValue::VPACK_MANAGED_STRING:
-      return a._data.managedStringMeta.pointer ==
-             b._data.managedStringMeta.pointer;
-    case AqlValue::VPACK_SUPERVISED_SLICE:
-      return a._data.supervisedSliceMeta.pointer ==
-             b._data.supervisedSliceMeta.pointer;
-    case AqlValue::VPACK_SUPERVISED_STRING:
-      return a._data.supervisedStringMeta.pointer ==
-             b._data.supervisedStringMeta.pointer;
-    case AqlValue::RANGE:
-      return a._data.rangeMeta.range == b._data.rangeMeta.range;
+  // different types: allow supervised vs managed content-equality
+  auto isSup = [](T t) {
+    return t == T::VPACK_SUPERVISED_SLICE || t == T::VPACK_SUPERVISED_STRING;
+  };
+  auto isMan = [](T t) {
+    return t == T::VPACK_MANAGED_SLICE || t == T::VPACK_MANAGED_STRING;
+  };
+  if ((isSup(ta) && isMan(tb)) || (isSup(tb) && isMan(ta))) {
+    return a.slice(ta).binaryEquals(b.slice(tb));
   }
   return false;
 }
