@@ -1242,36 +1242,17 @@ AqlValue::AqlValue(AqlValue const& other, void const* data) noexcept {
     case VPACK_MANAGED_STRING:
       _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
       break;
-    case VPACK_SUPERVISED_SLICE:
+    case VPACK_SUPERVISED_SLICE: {
+      setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New, false);
+      _data.supervisedSliceMeta.pointer =
+          const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
+      break;
+    }
+
     case VPACK_SUPERVISED_STRING: {
-      // Read rm* from void const* data
-      auto rmFromData =
-          *reinterpret_cast<arangodb::ResourceMonitor* const*>(data);
-      TRI_ASSERT(rmFromData != nullptr);
-
-      // Read rm* from AqlValue const& other
-      uint8_t const* otherBase = (t == VPACK_SUPERVISED_SLICE)
-                                     ? other._data.supervisedSliceMeta.pointer
-                                     : other._data.supervisedStringMeta.pointer;
-      TRI_ASSERT(otherBase != nullptr);
-      auto rmFromOther =
-          *reinterpret_cast<arangodb::ResourceMonitor* const*>(otherBase);
-      TRI_ASSERT(rmFromOther != nullptr);
-
-      // both supervised blocks should hold the same RM*
-      TRI_ASSERT(rmFromData == rmFromOther);
-
-      if (t == VPACK_SUPERVISED_SLICE) {
-        _data.supervisedSliceMeta.lengthOrigin =
-            other._data.supervisedSliceMeta.lengthOrigin;
-        _data.supervisedSliceMeta.pointer =
-            const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
-      } else {  // VPACK_SUPERVISED_STRING
-        _data.supervisedStringMeta.lengthOrigin =
-            other._data.supervisedStringMeta.lengthOrigin;
-        _data.supervisedStringMeta.pointer =
-            const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
-      }
+      setSupervisedData(VPACK_SUPERVISED_STRING, MemoryOriginType::New, false);
+      _data.supervisedStringMeta.pointer =
+          const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
       break;
     }
     case RANGE:
@@ -1764,11 +1745,9 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot,
   if (at == VPACK_SUPERVISED_SLICE) {
     TRI_ASSERT(type() == VPACK_SUPERVISED_SLICE);
     _data.supervisedSliceMeta.lengthOrigin = lo;
-    TRI_ASSERT(_data.supervisedSliceMeta.getOrigin() == kOriginOwned);
   } else {  // VPACK_SUPERVISED_STRING
     TRI_ASSERT(type() == VPACK_SUPERVISED_STRING);
     _data.supervisedStringMeta.lengthOrigin = lo;
-    TRI_ASSERT(_data.supervisedStringMeta.getOrigin() == kOriginOwned);
   }
 }
 
