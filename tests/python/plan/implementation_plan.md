@@ -17,6 +17,10 @@
 - Legacy command-line compatibility (new clean CLI)
 - Pregel-related orchestration/tests (deprecated; not ported)
 
+Note on current implementation status:
+- The codebase uses Pydantic models (BaseModel) for configuration/types rather than dataclasses in hot paths.
+- Server lifecycle and pytest fixtures are synchronous today; async conversion is deferred (see armadillo-9) pending pytest-asyncio stability.
+
 ## Supporting Design Documents
 
 The high-level plan is backed by a set of detailed subsidiary documents (all under `tests/python/plan/`):
@@ -351,13 +355,13 @@ class ArmadilloPlugin:
     def pytest_runtest_setup(self, item):
         """Set up test execution environment."""
 
-# Fixtures
+# Fixtures (synchronous)
 @pytest.fixture(scope="session")
-async def arango_single_server(request) -> ArangoServer:
+def arango_single_server() -> ArangoServer:
     """Provide a single ArangoDB server for testing."""
 
 @pytest.fixture(scope="session")
-async def arango_cluster(request) -> ArangoCluster:
+def arango_cluster() -> InstanceManager:
     """Provide an ArangoDB cluster for testing."""
 
 # Markers
@@ -368,21 +372,21 @@ pytest.mark.crash_test      # Test involves crashes
 pytest.mark.rta_suite("auth") # Specific RTA test suite
 ```
 
-### Test Discovery and Execution
+### Test Discovery and Execution (synchronous)
 ```python
 # Tests follow pytest conventions
 # tests/test_collections.py
 @pytest.mark.arango_single
-async def test_create_collection(arango_single_server):
+def test_create_collection(arango_single_server):
     """Test collection creation."""
 
 @pytest.mark.arango_cluster
 @pytest.mark.slow
-async def test_cluster_replication(arango_cluster):
+def test_cluster_replication(arango_cluster):
     """Test cluster replication."""
 
 @pytest.mark.crash_test
-async def test_coordinator_crash_recovery(arango_cluster):
+def test_coordinator_crash_recovery(arango_cluster):
     """Test coordinator crash and recovery."""
 ```
 
@@ -393,31 +397,23 @@ The CLI focuses on ease of use for everyday development with sensible defaults. 
 
 ```bash
 # Simple test execution (uses smart defaults)
-armadillo tests/collections/
-armadillo tests/replication/ --cluster
-armadillo tests/recovery/ --crash-analysis
+armadillo test run tests/
+armadillo test run tests/ --cluster
 
 # Common options with good defaults
-armadillo tests/ --cluster --dbservers 2 --coordinators 1
-armadillo tests/ --single-server --port 8529
-armadillo tests/ --timeout 600 --keep-instances-on-failure
+armadillo test run tests/ --timeout 600 --keep-instances-on-failure \
+  --output-dir ./test-results --format junit --format json
 
-# Advanced monitoring (optional)
-armadillo tests/ --memory-profiling --network-monitoring
-armadillo tests/ --gdb-debugging --output-dir ./test-results
+# Verbose mode with server logs
+armadillo -vv test run tests/ --show-server-logs
 
-# Output formats (defaults to junit + json)
-armadillo tests/ --format junit
-armadillo tests/ --format json --format html
+# Compact output (pytest-style)
+armadillo test run tests/ --compact
 
-# Result analysis (Phase 1 summary only)
-armadillo analyze ./test-results/UNITTEST_RESULT.json
-
-# Diff two runs (Phase 3+ once diff support lands)
-armadillo analyze ./run2/UNITTEST_RESULT.json --diff ./run1/UNITTEST_RESULT.json
-
-# Planned regression/trend hooks (Phase 6+)
-armadillo analyze ./run-latest/UNITTEST_RESULT.json --trend-cache ./trend/
+# Result analysis (summary)
+armadillo analyze summary ./test-results/test_results.json --format rich
+armadillo analyze summary ./test-results/test_results.json --format plain
+armadillo analyze list-analyzers
 ```
 > See `result-analysis-cli.md` for phased feature evolution of the `analyze` command.
 

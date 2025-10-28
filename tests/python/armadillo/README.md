@@ -93,10 +93,29 @@ def test_isolated_operation(arango_single_server_function):
 
 ### Available Markers
 - `@pytest.mark.arango_single`: Requires single ArangoDB server
-- `@pytest.mark.arango_cluster`: Requires cluster (Phase 2+)
+- `@pytest.mark.arango_cluster`: Requires ArangoDB cluster
 - `@pytest.mark.slow`: Long-running test
-- `@pytest.mark.crash_test`: Test involves crashes
+- `@pytest.mark.fast`: Fast test
+- `@pytest.mark.crash_test`: Test involves intentional crashes
+- `@pytest.mark.stress_test`: High-load stress test
+- `@pytest.mark.flaky`: Known intermittent failures
+- `@pytest.mark.auth_required`: Authentication required
+- `@pytest.mark.cluster_coordination`: Cluster coordination features
+- `@pytest.mark.replication`: Data replication
+- `@pytest.mark.sharding`: Sharding functionality
+- `@pytest.mark.failover`: High availability and failover
 - `@pytest.mark.rta_suite("name")`: RTA test suite marker
+- `@pytest.mark.smoke_test`: Basic smoke test
+- `@pytest.mark.regression`: Regression test
+- `@pytest.mark.performance`: Performance measurement test
+
+### Available Fixtures
+- `arango_single_server` (session): Single server for entire test session
+- `arango_single_server_function` (function): Single server per test function
+- `arango_cluster` (session): Full cluster deployment manager
+- `arango_cluster_function` (function): Cluster per test function
+- `arango_deployment`: Auto-selects single or cluster based on configuration
+- `arango_coordinators` / `arango_dbservers` / `arango_agents`: Role-filtered server lists
 
 ## Architecture
 
@@ -144,6 +163,10 @@ export ARMADILLO_TEST_TIMEOUT=900.0
 export ARMADILLO_TEMP_DIR=/tmp/armadillo-tests
 export ARMADILLO_BIN_DIR=/usr/local/bin
 export ARMADILLO_VERBOSE=1
+export ARMADILLO_LOG_LEVEL=INFO              # DEBUG, INFO, WARNING, ERROR
+export ARMADILLO_SHOW_SERVER_LOGS=0          # 1 to show arangod stdout
+export ARMADILLO_COMPACT_MODE=0              # 1 for compact pytest output
+export ARMADILLO_KEEP_INSTANCES_ON_FAILURE=0 # 1 to keep servers on failure
 ```
 
 ## Development
@@ -254,19 +277,13 @@ armadillo config
 armadillo test run --timeout 60 tests/
 ```
 
-**Port allocation errors:**
-```bash
-# Clean up port reservations
-rm -f /tmp/armadillo/ports.txt
-```
-
 **Log analysis:**
 ```bash
 # Enable debug logging
-armadillo test run -vv tests/
+armadillo -vv test run tests/
 
-# Check JSON logs
-cat ./test-results/armadillo.log
+# Results: JUnit XML and JSON are supported
+ls ./test-results/
 ```
 
 ## Support

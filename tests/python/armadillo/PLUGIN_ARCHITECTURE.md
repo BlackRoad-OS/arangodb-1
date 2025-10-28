@@ -61,28 +61,33 @@ Stop timeout watchdog
 
 ## Usage Examples
 
-### Session-Scoped Server
+### Session-Scoped Server (using InstanceManager)
 ```python
 @pytest.fixture(scope="session")
 def arango_single_server():
-    server = ArangoServer("test_single_server", ServerRole.SINGLE)
+    from ..instances.manager import get_instance_manager
+
+    deployment_id = "test_single_server_session"
+    manager = get_instance_manager(deployment_id)
     try:
-        server.start()
-        _plugin._session_servers["single"] = server  # Register for tracking
-        yield server
+        plan = manager.create_single_server_plan()
+        manager.deploy_servers(plan, timeout=60.0)
+        _plugin._session_deployments[deployment_id] = manager
+        servers = manager.get_all_servers()
+        yield next(iter(servers.values()))
     finally:
-        server.stop()  # Fixture handles cleanup
-        _plugin._session_servers.pop("single", None)  # Deregister
+        manager.shutdown_deployment(timeout=30.0)
+        _plugin._session_deployments.pop(deployment_id, None)
 ```
 
 ### Plugin Safety Net
 ```python
 def pytest_unconfigure(self, config):
     """Only cleans up resources that fixtures failed to clean."""
-    for server_id, server in self._session_servers.items():
-        if server.is_running():  # Only if fixture cleanup failed
-            logger.info(f"Plugin safety cleanup: stopping server {server_id}")
-            server.stop()
+    for deployment_id, manager in self._session_deployments.items():
+        if manager.is_deployed():
+            logger.info("Plugin safety cleanup: shutting down deployment %s", deployment_id)
+            manager.shutdown_deployment()
 ```
 
 ## Future Enhancements
@@ -109,3 +114,7 @@ def pytest_unconfigure(self, config):
 - `"Plugin safety cleanup: ..."` - Plugin is cleaning up resources that fixtures left behind
 - `"...removed from plugin tracking"` - Fixture properly cleaned up and deregistered
 - `"Session server pre-start analysis complete"` - Plugin startup phase completed
+
+### Output Modes
+- Verbose reporter (default): rich, file-structured output + JSON export
+- Compact mode: pytest-style minimal output when `--compact` is used
