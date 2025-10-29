@@ -977,7 +977,7 @@ AqlValue AqlValue::clone() const {
     case VPACK_SUPERVISED_STRING: {
       return AqlValue{_data.supervisedStringMeta.toSlice(),
                       _data.supervisedStringMeta.getLength(),
-                      _data.supervisedSliceMeta.getResourceMonitor()};
+                      _data.supervisedStringMeta.getResourceMonitor()};
     }
     case RANGE:
       return AqlValue{range()->_low, range()->_high};
@@ -1019,9 +1019,8 @@ void AqlValue::destroy() noexcept {
     case VPACK_SUPERVISED_STRING: {
       auto lo = _data.supervisedStringMeta.lengthOrigin;
       if (getOrigin8(lo) == kOriginOwned) {
-        auto len = static_cast<std::uint64_t>(
-            velocypack::Slice(_data.supervisedStringMeta.getPayloadPtr())
-                .byteSize());
+        auto len =
+            static_cast<std::uint64_t>(_data.supervisedStringMeta.getLength());
         deallocateSupervised(_data.supervisedStringMeta.pointer, len);
       }
       _data.supervisedStringMeta.pointer = nullptr;
@@ -1200,26 +1199,30 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
   TRI_ASSERT(data);
   auto size = data->size();
   TRI_ASSERT(size >= 1);
-  VPackSlice slice{reinterpret_cast<uint8_t const*>(data->data())};
+
+  auto const* bytes = reinterpret_cast<uint8_t const*>(data->data());
+  VPackSlice slice{bytes};
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
-  if (size < sizeof(AqlValue)) {
-    initFromSlice(slice, size, rm);
-  } else {
-    if (rm != nullptr) {
-      // handing over the ownership of the pointee
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_STRING,
-                        MemoryOriginType::New, true);
-      uint8_t* base = allocateSupervised(*rm, size);
-      _data.supervisedStringMeta.pointer = base;
-      auto* strObj = reinterpret_cast<std::string*>(base + kPrefix);
-      new (strObj) std::string(std::move(*data));  // take a look
 
-    } else {
-      setType(AqlValueType::VPACK_MANAGED_STRING);
-      _data.managedStringMeta.pointer = data.release();
-    }
+  // Small values: keep the old fast path — inline if it fits.
+  if (size < sizeof(AqlValue)) {
+    initFromSlice(slice, static_cast<velocypack::ValueLength>(size), rm);
+    return;
   }
+
+  if (rm != nullptr) {
+    // has to be a slice, because the string has a ptr to a buffer allocated on
+    // the heap that the monitor won't know about
+    setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
+                      MemoryOriginType::New, true);
+    uint8_t* base = allocateSupervised(*rm, static_cast<std::uint64_t>(size));
+    std::memcpy(base + kPrefix, bytes, static_cast<std::size_t>(size));
+    _data.supervisedSliceMeta.pointer = base;
+    return;
+  }
+  setType(AqlValueType::VPACK_MANAGED_STRING);
+  _data.managedStringMeta.pointer = data.release();
 }
 
 AqlValue::AqlValue(uint8_t const* pointer) noexcept {
@@ -1448,99 +1451,16 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t> const& buffer,
                 static_cast<velocypack::ValueLength>(len), rm);
 }
 
-AqlValue::AqlValue(AqlValue const& other) noexcept {
-  auto t = other.type();
-  switch (t) {
-    case VPACK_MANAGED_SLICE: {
-      auto len = other._data.managedSliceMeta.getLength();
-      initFromSlice(VPackSlice{other._data.managedSliceMeta.pointer},
-                    static_cast<VPackValueLength>(len), nullptr);
-      break;
-    }
-    case VPACK_MANAGED_STRING: {
-      // deep copy the std::string
-      auto const* str = other._data.managedStringMeta.pointer;
-      TRI_ASSERT(str != nullptr);
-      _data.managedStringMeta.pointer = new std::string(*str);
-      setType(AqlValueType::VPACK_MANAGED_STRING);
-      break;
-    }
-    case VPACK_SUPERVISED_SLICE: {
-      auto len = other._data.supervisedSliceMeta.getLength();
-      auto rm = other._data.supervisedSliceMeta.getResourceMonitor();
-      // allocate supervised slice and copy payload
-      setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                        MemoryOriginType::New, true);
-      uint8_t* base = allocateSupervised(*rm, len);
-      _data.supervisedSliceMeta.pointer = base;
-      // copy payload bytes
-      std::memcpy(base + kPrefix,
-                  other._data.supervisedSliceMeta.getPayloadPtr(),
-                  static_cast<std::size_t>(len));
-      break;
-    }
-    case VPACK_SUPERVISED_STRING: {
-      auto len = other._data.supervisedStringMeta.getLength();
-      auto rm = other._data.supervisedStringMeta.getResourceMonitor();
-      // allocate supervised string and copy string content
-      setType(AqlValueType::VPACK_SUPERVISED_STRING);
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_STRING,
-                        MemoryOriginType::New, true);
-      uint8_t* base = allocateSupervised(*rm, len);
-      _data.supervisedStringMeta.pointer = base;
-      // construct a new std::string in the payload area
-      auto tmpSlice = other._data.supervisedStringMeta.toSlice();
-      std::string tmp = tmpSlice.copyString();
-      auto* strObj = reinterpret_cast<std::string*>(base + kPrefix);
-      new (strObj) std::string(tmp);
-      break;
-    }
-    case RANGE: {
-      _data.rangeMeta.range =
-          new Range(other.range()->_low, other.range()->_high);
-      setType(AqlValueType::RANGE);
-      break;
-    }
-    default: {
-      _data.words[0] = other._data.words[0];
-      _data.words[1] = other._data.words[1];
-      break;
-    }
-  }
-}
+AqlValue::AqlValue(AqlValue const& other)
+    : AqlValue(other.clone()) {}  // delegate to move-ctor from temp
 
-/*
-AqlValue::AqlValue(AqlValue&& other) noexcept {
-  _data.words[0] = other._data.words[0];
-  _data.words[1] = other._data.words[1];
-  // leave 'other' in a well‑defined state by resetting it to None
-  other.erase();
-}
- */
-
-AqlValue& AqlValue::operator=(AqlValue const& other) noexcept {
+AqlValue& AqlValue::operator=(AqlValue const& other) {
   if (this != &other) {
     if (requiresDestruction()) {
       destroy();
     }
-    auto t = other.type();
-    switch (t) {
-      case VPACK_MANAGED_SLICE:
-      case VPACK_MANAGED_STRING:
-      case VPACK_SUPERVISED_SLICE:
-      case VPACK_SUPERVISED_STRING:
-      case RANGE: {
-        AqlValue tmp = other.clone();
-        *this = std::move(tmp);
-        break;
-      }
-      default: {
-        _data.words[0] = other._data.words[0];
-        _data.words[1] = other._data.words[1];
-        break;
-      }
-    }
+    AqlValue tmp = other.clone();
+    *this = std::move(tmp);
   }
   return *this;
 }
@@ -1554,7 +1474,6 @@ AqlValue::AqlValue(AqlValue const& other, arangodb::ResourceMonitor& rm) {
     case VPACK_SUPERVISED_STRING: {
       auto s = other.slice(t);
       auto len = static_cast<std::uint64_t>(s.byteSize());
-      setType(AqlValueType::VPACK_SUPERVISED_SLICE);
       setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
                         MemoryOriginType::New, true);
       uint8_t* base = allocateSupervised(rm, len);

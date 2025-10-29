@@ -417,8 +417,8 @@ struct AqlValue final {
   /// @brief AqlValues can be copied and moved as required
   /// memory management is not performed via AqlValue destructor but via
   /// explicit calls to destroy()
-  AqlValue(AqlValue const&) noexcept;
-  AqlValue& operator=(AqlValue const&) noexcept;
+  AqlValue(AqlValue const&);
+  AqlValue& operator=(AqlValue const&);
   AqlValue(AqlValue const&, arangodb::ResourceMonitor&);
   AqlValue(AqlValue&&) noexcept = default;
   AqlValue& operator=(AqlValue&&) noexcept = default;
