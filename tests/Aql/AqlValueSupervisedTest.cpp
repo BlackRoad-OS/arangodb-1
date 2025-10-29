@@ -466,7 +466,7 @@ TEST(AqlValueSupervisedTest, MutipleValuesSumAccounting) {
   EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, CloneKeepsAccoutingUNtilBothDestroed) {
+TEST(AqlValueSupervisedTest, CloneKeepsAccoutingUNtilBothDestroyed) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
 
@@ -723,18 +723,22 @@ TEST(AqlValueSupervisedTest, Materialize_RangeAndNonRange) {
   mat.destroy();
   r.destroy();
 
-  // non-range supervised → returns itself (hasCopied=false)
+  // non-range supervised → returns by value; copy-ctor clones (accounts)
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
   Builder obj = makeObj({{"q", Value(7)}});
   AqlValue v(obj.slice(), 0, &rm);
+  std::uint64_t base = rm.current();
+
   bool copied2 = false;
   AqlValue mat2 = v.materialize(nullptr, copied2);
-  EXPECT_FALSE(copied2);
-  // same content
+  EXPECT_FALSE(copied2);  // API flag is about "materialize", not copy-ctor
   EXPECT_TRUE(mat2.slice().binaryEquals(obj.slice()));
+  EXPECT_EQ(rm.current(), base * 2);  // v + clone
+  mat2.destroy();
+  EXPECT_EQ(rm.current(), base);
   v.destroy();
-  // mat2 is an alias; nothing to destroy
+  EXPECT_EQ(rm.current(), 0);
 }
 
 TEST(AqlValueSupervisedTest, Slice_TypedDispatch) {
@@ -762,4 +766,71 @@ TEST(AqlValueSupervisedTest, Equality_SupervisedVsManaged_ContentEqual) {
 
   sup.destroy();
   man.destroy();
+}
+
+TEST(AqlValueSupervisedTest, HasKey_ObjectVsNonObject) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // supervised object
+  Builder obj = makeObj({{"a", Value(1)}, {"b", Value("x")}});
+  AqlValue v(obj.slice(), 0, &rm);
+  EXPECT_TRUE(v.hasKey("a"));
+  EXPECT_TRUE(v.hasKey("b"));
+  EXPECT_FALSE(v.hasKey("c"));
+  v.destroy();
+
+  // non-object (array)
+  Builder arr = makeArray({Value(1), Value(2)});
+  AqlValue a(arr.slice(), 0, &rm);
+  EXPECT_FALSE(a.hasKey("a"));
+  a.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Compare_NumericCrossForms) {
+  // int64 vs uint64/double
+  AqlValue i(AqlValueHintInt{42});
+  AqlValue u(AqlValueHintUInt{42});
+  AqlValue d(AqlValueHintDouble{42.0});
+  AqlValue i2(AqlValueHintInt{43});
+
+  EXPECT_EQ(AqlValue::Compare(nullptr, i, u, /*utf8*/ false), 0);
+  EXPECT_EQ(AqlValue::Compare(nullptr, i, d, /*utf8*/ false), 0);
+  EXPECT_LT(AqlValue::Compare(nullptr, i, i2, /*utf8*/ false), 0);
+  EXPECT_GT(AqlValue::Compare(nullptr, i2, d, /*utf8*/ false), 0);
+}
+
+TEST(AqlValueSupervisedTest, Compare_SupervisedVsManaged_EqualContent) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder b = makeObj({{"k", Value(1)}, {"s", Value("v")}});
+  Slice s = b.slice();
+
+  AqlValue sup(s, 0, &rm);  // supervised
+  AqlValue man(s);          // managed
+
+  EXPECT_EQ(AqlValue::Compare(nullptr, sup, man, /*utf8*/ true), 0);
+  sup.destroy();
+  man.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Compare_RangeOrdering) {
+  // [1..3] vs [1..4] → smaller high is less
+  AqlValue r1(1, 3);
+  AqlValue r2(1, 4);
+  EXPECT_LT(AqlValue::Compare(nullptr, r1, r2, /*utf8*/ false), 0);
+
+  // [2..4] vs [1..4] → larger low is greater
+  AqlValue r3(2, 4);
+  EXPECT_GT(AqlValue::Compare(nullptr, r3, r2, /*utf8*/ false), 0);
+
+  // equal
+  AqlValue r4(2, 4);
+  EXPECT_EQ(AqlValue::Compare(nullptr, r3, r4, /*utf8*/ false), 0);
+
+  r1.destroy();
+  r2.destroy();
+  r3.destroy();
+  r4.destroy();
 }
