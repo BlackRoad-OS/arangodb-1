@@ -497,18 +497,17 @@ TEST(AqlValueSupervisedTest, ShortString_MemoryAccounting) {
   const std::size_t payloadSize = 1 + s.size();  // tag + chars
   const std::uint64_t before = rm.current();
 
-  {
-    AqlValue v(std::string_view{s}, &rm);
+  AqlValue v(std::string_view{s}, &rm);
 
-    // Memory should increase by kPrefix + payloadSize
-    EXPECT_EQ(rm.current() - before, ptrOverhead() + payloadSize);
+  // Memory should increase by kPrefix + payloadSize
+  EXPECT_EQ(rm.current() - before, ptrOverhead() + payloadSize);
 
-    // Slice should decode back to original string
-    auto slice = v.slice();
-    ASSERT_TRUE(slice.isString());
-    EXPECT_EQ(slice.stringView(), s);
-  }
+  // Slice should decode back to original string
+  auto slice = v.slice();
+  ASSERT_TRUE(slice.isString());
+  EXPECT_EQ(slice.stringView(), s);
 
+  v.destroy();
   // After destruction, usage returns to baseline
   EXPECT_EQ(rm.current(), before);
 }
@@ -522,16 +521,17 @@ TEST(AqlValueSupervisedTest, LongString_ResourceMonitorUsage) {
   // prefix + 0xBF + 8-byte length + characters
 
   std::uint64_t before = rm.current();
-  {
-    AqlValue v(std::string_view{s}, &rm);
 
-    auto slice = v.slice();
-    ASSERT_TRUE(slice.isString());
-    EXPECT_EQ(slice.stringView(), s);
+  AqlValue v(std::string_view{s}, &rm);
 
-    std::uint64_t after = rm.current();
-    EXPECT_EQ(after - before, expectedBytes);
-  }
+  auto slice = v.slice();
+  ASSERT_TRUE(slice.isString());
+  EXPECT_EQ(slice.stringView(), s);
+
+  std::uint64_t after = rm.current();
+  EXPECT_EQ(after - before, expectedBytes);
+
+  v.destroy();
   EXPECT_EQ(rm.current(), before);
 }
 TEST(AqlValueSupervisedTest, GetTypeString_Basics_SupervisedAndManaged) {
