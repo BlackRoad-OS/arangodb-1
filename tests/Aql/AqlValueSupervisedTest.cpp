@@ -10,6 +10,8 @@
 #include <velocypack/Slice.h>
 #include <velocypack/Buffer.h>
 
+#include "Logger/LogMacros.h"
+
 using namespace arangodb;
 using namespace arangodb::aql;
 using namespace arangodb::velocypack;
@@ -426,15 +428,17 @@ TEST(AqlValueSupervisedTest, AccountsAndMovesFromSource) {
   auto s = makeString(4096, 'x').slice();
   auto data = makeDocDataFromSlice(s);
 
+  auto tempPtr = data.get();
   AqlValue v(data, &rm);
 
   size_t expected = static_cast<size_t>(s.byteSize()) + ptrOverhead();
   EXPECT_EQ(v.memoryUsage(), expected);
   EXPECT_EQ(rm.current(), expected);
 
+
   // Source string should be empty
-  ASSERT_NE(data.get(), nullptr);
-  EXPECT_EQ(data->size(), 0U);
+  EXPECT_EQ(data.get(), nullptr);
+  EXPECT_EQ(tempPtr->size(), 0U);
 
   v.destroy();
   EXPECT_EQ(rm.current(), 0);
@@ -682,16 +686,18 @@ TEST(AqlValueSupervisedTest,
   ResourceMonitor rm(g);
 
   // supervised (with RM)
-  Builder b1 = makeObj({{"k", Value("v")}});
+  std::string big1(300, 'a');
+  Builder b1;
+  b1.add(Value(big1));
   Slice s1 = b1.slice();
   AqlValue sv(s1, 0, &rm);
   EXPECT_EQ(static_cast<uint8_t const*>(sv.data()), sv.slice().start());
   sv.destroy();
 
   // managed (no RM, large enough to be out-of-line)
-  std::string big(300, 'a');
+  std::string big2(300, 'a');
   Builder b2;
-  b2.add(Value(big));
+  b2.add(Value(big2));
   AqlValue mv(b2.slice());
   EXPECT_EQ(static_cast<uint8_t const*>(mv.data()), mv.slice().start());
   mv.destroy();
