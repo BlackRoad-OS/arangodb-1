@@ -66,7 +66,7 @@ typename ProviderImpl::Step ProviderTracer<ProviderImpl>::startVertex(
 }
 
 template<class ProviderImpl>
-futures::Future<std::vector<typename ProviderImpl::Step*>>
+std::vector<typename ProviderImpl::Step*>
 ProviderTracer<ProviderImpl>::fetchVertices(
     std::vector<typename ProviderImpl::Step*> const& looseEnds) {
   double start = TRI_microtime();
