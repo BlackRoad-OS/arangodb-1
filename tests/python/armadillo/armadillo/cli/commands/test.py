@@ -20,30 +20,48 @@ from ...core.errors import ArmadilloError
 from ..timeout_handler import TimeoutHandler, TimeoutType
 
 
+# Centralized descriptions - single source of truth for CLI help and model documentation
+_HELP = {
+    "cluster": "Use cluster deployment instead of single server",
+    "timeout": "Per-test timeout in seconds",
+    "global_timeout": "Global timeout for entire test session in seconds (default: 900s)",
+    "output_idle_timeout": "Kill pytest if no output for N seconds (detects hung tests, default: disabled)",
+    "output_dir": "Output directory for results",
+    "formats": "Result output formats",
+    "build_dir": "ArangoDB build directory (auto-detected if not specified)",
+    "keep_instances_on_failure": "Keep instances running on test failure for debugging",
+    "parallel": "Run tests in parallel",
+    "max_workers": "Maximum parallel workers",
+    "extra_args": "Additional arguments to pass to pytest",
+    "show_server_logs": "Show ArangoDB server log output",
+    "compact": "Use compact pytest-style output instead of detailed verbose output",
+}
+
+
 class TestRunOptions(BaseModel):
     """Pydantic model for test run command options."""
 
     test_paths: List[str] = Field(
-        default_factory=lambda: ["tests/"], description=_DESCRIPTIONS["test_paths"]
+        default_factory=lambda: ["tests/"], description="Test paths to execute"
     )
-    cluster: bool = Field(False, description=_DESCRIPTIONS["cluster"])
-    timeout: Optional[float] = Field(None, description=_DESCRIPTIONS["timeout"])
-    global_timeout: Optional[float] = Field(None, description=_DESCRIPTIONS["global_timeout"])
-    output_idle_timeout: Optional[float] = Field(None, description=_DESCRIPTIONS["output_idle_timeout"])
-    output_dir: Path = Field(Path("./test-results"), description=_DESCRIPTIONS["output_dir"])
+    cluster: bool = Field(False, description=_HELP["cluster"])
+    timeout: Optional[float] = Field(None, description=_HELP["timeout"])
+    global_timeout: Optional[float] = Field(None, description=_HELP["global_timeout"])
+    output_idle_timeout: Optional[float] = Field(None, description=_HELP["output_idle_timeout"])
+    output_dir: Path = Field(Path("./test-results"), description=_HELP["output_dir"])
     formats: List[str] = Field(
-        default_factory=lambda: ["junit", "json"], description=_DESCRIPTIONS["formats"]
+        default_factory=lambda: ["junit", "json"], description=_HELP["formats"]
     )
-    build_dir: Optional[Path] = Field(None, description=_DESCRIPTIONS["build_dir"])
-    keep_instances_on_failure: bool = Field(
-        False, description=_DESCRIPTIONS["keep_instances_on_failure"]
+    build_dir: Optional[Path] = Field(None, description=_HELP["build_dir"])
+    keep_instances_on_failure: bool = Field(False, description=_HELP["keep_instances_on_failure"])
+    parallel: bool = Field(False, description=_HELP["parallel"])
+    max_workers: Optional[int] = Field(None, description=_HELP["max_workers"])
+    extra_args: Optional[List[str]] = Field(None, description=_HELP["extra_args"])
+    log_level: str = Field(
+        "WARNING", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
     )
-    parallel: bool = Field(False, description=_DESCRIPTIONS["parallel"])
-    max_workers: Optional[int] = Field(None, description=_DESCRIPTIONS["max_workers"])
-    extra_args: Optional[List[str]] = Field(None, description=_DESCRIPTIONS["extra_args"])
-    log_level: str = Field("WARNING", description=_DESCRIPTIONS["log_level"])
-    show_server_logs: bool = Field(False, description=_DESCRIPTIONS["show_server_logs"])
-    compact: bool = Field(False, description=_DESCRIPTIONS["compact"])
+    show_server_logs: bool = Field(False, description=_HELP["show_server_logs"])
+    compact: bool = Field(False, description=_HELP["compact"])
 
     @field_validator("formats")
     @classmethod
@@ -92,54 +110,19 @@ test_app = typer.Typer(help="Execute tests")
 def run(
     ctx: typer.Context,
     test_paths: List[str] = typer.Argument(help="Test paths to execute"),
-    cluster: bool = typer.Option(
-        False, "--cluster", help="Use cluster deployment instead of single server"
-    ),
-    timeout: Optional[float] = typer.Option(
-        None, "--timeout", help="Per-test timeout in seconds"
-    ),
-    global_timeout: Optional[float] = typer.Option(
-        None, "--global-timeout", help="Global timeout for entire test session in seconds (default: 900s)"
-    ),
-    output_idle_timeout: Optional[float] = typer.Option(
-        None, "--output-idle-timeout", help="Kill pytest if no output for N seconds (detects hung tests, default: disabled)"
-    ),
-    output_dir: Path = typer.Option(
-        Path("./test-results"),
-        "--output-dir",
-        "-o",
-        help="Output directory for results",
-    ),
-    formats: List[str] = typer.Option(
-        ["junit", "json"], "--format", help="Result output formats"
-    ),
-    build_dir: Optional[Path] = typer.Option(
-        None,
-        "--build-dir",
-        "-b",
-        help="ArangoDB build directory (auto-detected if not specified)",
-    ),
-    keep_instances_on_failure: bool = typer.Option(
-        False,
-        "--keep-instances-on-failure",
-        help="Keep instances running on test failure for debugging",
-    ),
-    parallel: bool = typer.Option(False, "--parallel", help="Run tests in parallel"),
-    max_workers: Optional[int] = typer.Option(
-        None, "--max-workers", help="Maximum parallel workers"
-    ),
-    extra_args: Optional[List[str]] = typer.Option(
-        None, "--pytest-arg", help="Additional arguments to pass to pytest"
-    ),
-    show_server_logs: bool = typer.Option(
-        False, "--show-server-logs", help="Show ArangoDB server log output"
-    ),
-    compact: bool = typer.Option(
-        False,
-        "--compact",
-        "-c",
-        help="Use compact pytest-style output instead of detailed verbose output",
-    ),
+    cluster: bool = typer.Option(False, "--cluster", help=_HELP["cluster"]),
+    timeout: Optional[float] = typer.Option(None, "--timeout", help=_HELP["timeout"]),
+    global_timeout: Optional[float] = typer.Option(None, "--global-timeout", help=_HELP["global_timeout"]),
+    output_idle_timeout: Optional[float] = typer.Option(None, "--output-idle-timeout", help=_HELP["output_idle_timeout"]),
+    output_dir: Path = typer.Option(Path("./test-results"), "--output-dir", "-o", help=_HELP["output_dir"]),
+    formats: List[str] = typer.Option(["junit", "json"], "--format", help=_HELP["formats"]),
+    build_dir: Optional[Path] = typer.Option(None, "--build-dir", "-b", help=_HELP["build_dir"]),
+    keep_instances_on_failure: bool = typer.Option(False, "--keep-instances-on-failure", help=_HELP["keep_instances_on_failure"]),
+    parallel: bool = typer.Option(False, "--parallel", help=_HELP["parallel"]),
+    max_workers: Optional[int] = typer.Option(None, "--max-workers", help=_HELP["max_workers"]),
+    extra_args: Optional[List[str]] = typer.Option(None, "--pytest-arg", help=_HELP["extra_args"]),
+    show_server_logs: bool = typer.Option(False, "--show-server-logs", help=_HELP["show_server_logs"]),
+    compact: bool = typer.Option(False, "--compact", "-c", help=_HELP["compact"]),
 ):
     """Run tests with ArangoDB instances."""
     try:
