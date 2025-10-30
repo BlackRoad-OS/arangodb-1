@@ -117,6 +117,156 @@ def test_isolated_operation(arango_single_server_function):
 - `arango_deployment`: Auto-selects single or cluster based on configuration
 - `arango_coordinators` / `arango_dbservers` / `arango_agents`: Role-filtered server lists
 
+## Timeouts
+
+Armadillo provides three complementary timeout mechanisms to prevent hung tests and ensure reliable test execution:
+
+### Per-Test Timeout (`--timeout`)
+
+**Purpose**: Kill individual tests that run longer than expected  
+**Default**: Disabled (no timeout)  
+**Mechanism**: Uses `pytest-timeout` with SIGALRM on Linux  
+**Behavior**: Interrupts blocking I/O, **aborts remaining tests**  
+
+```bash
+# Set 120 second timeout per test
+armadillo test run tests/ --timeout 120
+```
+
+**When to use:**
+- Tests that should complete quickly but might hang
+- Prevents single slow test from blocking entire suite
+- Useful for debugging which specific test is hanging
+
+**⚠️ Important: Timeout Aborts Session**
+
+When a test times out, **all remaining tests are skipped** (similar to server crash behavior). This prevents unreliable results from corrupted database state. Normal test failures continue to gather maximum information.
+
+**Limitations:**
+- Linux/Unix only (uses SIGALRM)
+- Won't interrupt pure CPU-bound code without I/O
+- May kill legitimately slow tests on loaded CI runners
+- **Aborts remaining tests** (by design for integration tests)
+
+### Global Timeout (`--global-timeout`)
+
+**Purpose**: Kill entire test session if it exceeds total time budget  
+**Default**: 900 seconds (15 minutes)  
+**Mechanism**: Framework-level timeout monitoring  
+**Behavior**: Terminates pytest subprocess and all child processes  
+
+```bash
+# Set 30 minute global timeout for entire session
+armadillo test run tests/ --global-timeout 1800
+```
+
+**When to use:**
+- CI/CD pipelines with hard time limits
+- Prevent test suite from running indefinitely
+- Catch cascading failures or test explosion
+
+**Trade-offs:**
+- Kills entire suite, even if only one test is slow
+- Need to balance against expected suite duration
+- Consider cluster startup time (~2-5 minutes)
+
+### Output-Idle Timeout (`--output-idle-timeout`)
+
+**Purpose**: Kill pytest if no stdout/stderr for N seconds  
+**Default**: Disabled (no timeout)  
+**Mechanism**: Monitors subprocess output, escalates SIGTERM → SIGKILL  
+**Behavior**: Detects tests that hang silently without producing output  
+
+```bash
+# Kill pytest if no output for 5 minutes
+armadillo test run tests/ --output-idle-timeout 300
+```
+
+**When to use:**
+- Detect truly hung tests that neither fail nor timeout
+- CI environments where silent hangs are common
+- Tests that should produce regular progress output
+
+**How it works:**
+1. Monitors pytest stdout/stderr line-by-line
+2. If no output for N seconds, sends SIGTERM
+3. Waits 5 seconds for graceful shutdown
+4. If still alive, sends SIGKILL
+5. Preserves all output formatting
+
+### Recommended Settings
+
+**Local development** (fast feedback):
+```bash
+armadillo test run tests/ --timeout 60
+```
+
+**CI/CD pipelines** (comprehensive protection):
+```bash
+armadillo test run tests/ \
+  --timeout 120 \
+  --global-timeout 1800 \
+  --output-idle-timeout 300
+```
+
+**Debugging hung tests**:
+```bash
+# Start with output-idle to identify which test hangs
+armadillo test run tests/ --output-idle-timeout 60 -vv
+```
+
+### Timeout Interaction
+
+All three timeouts work together:
+- **Per-test** fires first for individual slow tests
+- **Output-idle** catches tests that hang silently
+- **Global** provides final safety net for entire session
+
+If a test violates multiple timeouts, the first to trigger wins.
+
+### Best Practices
+
+1. **Start conservative**: Use longer timeouts initially, then tighten based on actual test duration
+2. **Monitor CI timing**: Adjust timeouts based on 95th percentile of test runs
+3. **Consider infrastructure**: Shared CI runners may be slower than dedicated hardware
+4. **Use output-idle sparingly**: Only enable if you've seen silent hangs in practice
+5. **Test your timeouts**: Armadillo includes integration tests to verify timeout enforcement
+
+### Troubleshooting
+
+**Tests killed by per-test timeout:**
+- Check if test is actually hung or just slow
+- Increase `--timeout` or optimize the test
+- Consider splitting long tests into smaller units
+
+**Tests killed by output-idle timeout:**
+- Ensure tests produce regular output (print statements, logging)
+- Increase `--output-idle-timeout` for legitimately slow operations
+- Check for infinite loops or deadlocks
+
+**Entire suite killed by global timeout:**
+- Check if suite duration is expected
+- Increase `--global-timeout` or split into smaller suites
+- Investigate cascading failures or test explosion
+
+### Timeout Extensibility
+
+Timeout handling is centralized in `armadillo/cli/timeout_handler.py` with extension points for diagnostic collection:
+
+```python
+# Future: Add diagnostic collection before terminating
+def collect_diagnostics(timeout_type: TimeoutType, elapsed: float):
+    """Collect logs, coredumps, process states before killing process."""
+    # Collect server logs from temp_dir
+    # Trigger coredumps from running processes  
+    # Capture process states (ps, lsof, etc.)
+    # Save test artifacts
+
+timeout_handler.set_pre_terminate_hook(collect_diagnostics)
+```
+
+See `armadillo/cli/timeout_handler.py` for implementation details.
+
 ## Architecture
 
 ```

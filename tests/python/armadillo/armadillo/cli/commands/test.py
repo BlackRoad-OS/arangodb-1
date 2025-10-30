@@ -4,6 +4,8 @@ import os
 import sys
 import signal
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Optional, List
 import typer
@@ -15,45 +17,33 @@ from ...core.config_initializer import initialize_config
 from ...core.log import get_logger
 from ...core.types import DeploymentMode
 from ...core.errors import ArmadilloError
+from ..timeout_handler import TimeoutHandler, TimeoutType
 
 
 class TestRunOptions(BaseModel):
     """Pydantic model for test run command options."""
 
     test_paths: List[str] = Field(
-        default_factory=lambda: ["tests/"], description="Test paths to execute"
+        default_factory=lambda: ["tests/"], description=_DESCRIPTIONS["test_paths"]
     )
-    cluster: bool = Field(
-        False, description="Use cluster deployment instead of single server"
-    )
-    timeout: Optional[float] = Field(
-        None, description="Test timeout in seconds per test"
-    )
-    output_dir: Path = Field(
-        Path("./test-results"), description="Output directory for results"
-    )
+    cluster: bool = Field(False, description=_DESCRIPTIONS["cluster"])
+    timeout: Optional[float] = Field(None, description=_DESCRIPTIONS["timeout"])
+    global_timeout: Optional[float] = Field(None, description=_DESCRIPTIONS["global_timeout"])
+    output_idle_timeout: Optional[float] = Field(None, description=_DESCRIPTIONS["output_idle_timeout"])
+    output_dir: Path = Field(Path("./test-results"), description=_DESCRIPTIONS["output_dir"])
     formats: List[str] = Field(
-        default_factory=lambda: ["junit", "json"], description="Result output formats"
+        default_factory=lambda: ["junit", "json"], description=_DESCRIPTIONS["formats"]
     )
-    build_dir: Optional[Path] = Field(
-        None, description="ArangoDB build directory (auto-detected if not specified)"
-    )
+    build_dir: Optional[Path] = Field(None, description=_DESCRIPTIONS["build_dir"])
     keep_instances_on_failure: bool = Field(
-        False, description="Keep instances running on test failure for debugging"
+        False, description=_DESCRIPTIONS["keep_instances_on_failure"]
     )
-    parallel: bool = Field(False, description="Run tests in parallel")
-    max_workers: Optional[int] = Field(None, description="Maximum parallel workers")
-    extra_args: Optional[List[str]] = Field(
-        None, description="Additional arguments to pass to pytest"
-    )
-    log_level: str = Field(
-        "WARNING", description="Framework logging level (DEBUG, INFO, WARNING, ERROR)"
-    )
-    show_server_logs: bool = Field(False, description="Show ArangoDB server log output")
-    compact: bool = Field(
-        False,
-        description="Use compact pytest-style output instead of detailed verbose output",
-    )
+    parallel: bool = Field(False, description=_DESCRIPTIONS["parallel"])
+    max_workers: Optional[int] = Field(None, description=_DESCRIPTIONS["max_workers"])
+    extra_args: Optional[List[str]] = Field(None, description=_DESCRIPTIONS["extra_args"])
+    log_level: str = Field("WARNING", description=_DESCRIPTIONS["log_level"])
+    show_server_logs: bool = Field(False, description=_DESCRIPTIONS["show_server_logs"])
+    compact: bool = Field(False, description=_DESCRIPTIONS["compact"])
 
     @field_validator("formats")
     @classmethod
@@ -106,7 +96,13 @@ def run(
         False, "--cluster", help="Use cluster deployment instead of single server"
     ),
     timeout: Optional[float] = typer.Option(
-        None, "--timeout", help="Test timeout in seconds per test"
+        None, "--timeout", help="Per-test timeout in seconds"
+    ),
+    global_timeout: Optional[float] = typer.Option(
+        None, "--global-timeout", help="Global timeout for entire test session in seconds (default: 900s)"
+    ),
+    output_idle_timeout: Optional[float] = typer.Option(
+        None, "--output-idle-timeout", help="Kill pytest if no output for N seconds (detects hung tests, default: disabled)"
     ),
     output_dir: Path = typer.Option(
         Path("./test-results"),
@@ -160,6 +156,8 @@ def run(
             test_paths=test_paths,
             cluster=cluster,
             timeout=timeout,
+            global_timeout=global_timeout,
+            output_idle_timeout=output_idle_timeout,
             output_dir=output_dir,
             formats=formats,
             build_dir=build_dir,
@@ -200,6 +198,10 @@ def _execute_test_run(options: TestRunOptions) -> None:
         "compact_mode": options.compact,
         "is_test_mode": False,  # Explicit: not in test mode
     }
+
+    # Configure global timeout if specified (default is 900s in ArmadilloConfig)
+    if options.global_timeout:
+        config_kwargs["test_timeout"] = options.global_timeout
 
     if options.build_dir:
         bin_dir = options.build_dir.resolve()
@@ -284,11 +286,65 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Execute tests
     console.print(f"[cyan]Running tests with command:[/cyan] {' '.join(pytest_args)}")
 
-    # Start pytest subprocess
-    process = subprocess.Popen(
-        pytest_args,
-        cwd=Path.cwd(),
+    # Determine effective global timeout (use explicit value or default from config)
+    effective_global_timeout = options.global_timeout if options.global_timeout else config.test_timeout
+    console.print(f"[cyan]Global timeout: {effective_global_timeout}s[/cyan]")
+
+    # Start pytest subprocess (with or without output monitoring)
+    if options.output_idle_timeout:
+        # Enable output idle timeout monitoring - requires stdout/stderr capture
+        process = subprocess.Popen(
+            pytest_args,
+            cwd=Path.cwd(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,  # Line buffered
+            universal_newlines=True,
+        )
+    else:
+        # No idle timeout monitoring - simple execution
+        process = subprocess.Popen(
+            pytest_args,
+            cwd=Path.cwd(),
+        )
+
+    # Create centralized timeout handler
+    timeout_handler = TimeoutHandler(
+        process=process,
+        console=console,
+        global_timeout=effective_global_timeout,
+        output_idle_timeout=options.output_idle_timeout,
     )
+
+    # TODO: Future extension point for diagnostic collection
+    # Example:
+    # def collect_diagnostics(timeout_type: TimeoutType, elapsed: float):
+    #     """Collect logs, coredumps, process states before termination."""
+    #     logger.info(f"Collecting diagnostics for {timeout_type.value} timeout...")
+    #     # - Collect server logs from temp_dir
+    #     # - Request coredumps from running processes
+    #     # - Capture process states (ps, lsof, etc.)
+    #     # - Save test artifacts
+    #
+    # timeout_handler.set_pre_terminate_hook(collect_diagnostics)
+
+    # Start timeout monitoring
+    timeout_handler.start_monitoring()
+
+    # If output idle monitoring is enabled, stream output and update timestamp
+    if options.output_idle_timeout:
+        def output_reader():
+            """Read and forward output line-by-line, updating timeout handler."""
+            try:
+                for line in process.stdout:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    timeout_handler.update_output_timestamp()
+            except Exception as e:
+                logger.error(f"Error reading process output: {e}")
+
+        reader_thread = threading.Thread(target=output_reader, daemon=True)
+        reader_thread.start()
 
     # Track signal handling state
     signal_count = 0
@@ -325,16 +381,28 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Wait for subprocess to complete
     try:
         returncode = process.wait()
+        timeout_handler.stop_monitoring()
     except KeyboardInterrupt:
         # First Ctrl-C: signal handler forwarded SIGINT to subprocess for graceful cleanup
         # Wait for it to finish
         try:
             returncode = process.wait()
+            timeout_handler.stop_monitoring()
         except KeyboardInterrupt:
             # Second Ctrl-C while waiting: force kill
             if process.poll() is None:
                 process.kill()
+            timeout_handler.stop_monitoring()
             sys.exit(130)
+
+    # Check if timeout was triggered and adjust exit message
+    if timeout_handler.was_timeout_triggered():
+        timeout_type = timeout_handler.get_timeout_type()
+        if timeout_type == TimeoutType.GLOBAL:
+            console.print(f"[red]❌ Tests killed due to global timeout ({effective_global_timeout}s)[/red]")
+        elif timeout_type == TimeoutType.OUTPUT_IDLE:
+            console.print(f"[red]❌ Tests killed due to output idle timeout ({options.output_idle_timeout}s)[/red]")
+        sys.exit(124)  # timeout exit code
 
     if returncode == 0:
         console.print("[green]✅ All tests passed![/green]")

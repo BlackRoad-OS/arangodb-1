@@ -28,9 +28,10 @@ from ..utils.crypto import random_id
 
 logger = get_logger(__name__)
 
-# Global flag to track if we should abort remaining tests due to crash
+# Global flags to track if we should abort remaining tests
 _abort_remaining_tests = False
 _crash_detected_during_test = None  # Store nodeid of test where crash was detected
+_timeout_detected_during_test = None  # Store nodeid of test where timeout was detected
 
 
 class ArmadilloPlugin:
@@ -142,16 +143,17 @@ class ArmadilloPlugin:
 
     def pytest_sessionstart(self, _session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
-        global _abort_remaining_tests, _crash_detected_during_test
+        global _abort_remaining_tests, _crash_detected_during_test, _timeout_detected_during_test
         logger.debug("ArmadilloPlugin: Session start")
         # Config already loaded by CLI and pytest_configure
         # Don't call load_config() again to avoid duplicate build detection
         configure_logging()
         # Note: Session-level directory isolation not currently enabled
         # (would require ApplicationContext integration in pytest fixtures)
-        # Clear any crash state from previous runs
+        # Clear any crash/timeout state from previous runs
         _abort_remaining_tests = False
         _crash_detected_during_test = None
+        _timeout_detected_during_test = None
         clear_crash_state()
 
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
@@ -690,8 +692,8 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_runtest_setup(item):
-    """Handle test setup - check if we should skip due to previous crash or deployment failure."""
-    global _abort_remaining_tests, _crash_detected_during_test
+    """Handle test setup - check if we should skip due to previous crash, timeout, or deployment failure."""
+    global _abort_remaining_tests, _crash_detected_during_test, _timeout_detected_during_test
 
     # If deployment failed, skip all tests
     if _plugin._deployment_failed:
@@ -699,8 +701,16 @@ def pytest_runtest_setup(item):
             f"Test skipped due to deployment failure: {_plugin._deployment_failure_reason}"
         )
 
+    # If a timeout was detected in a previous test, skip all remaining tests
+    # (timeout means system is in unknown state, similar to crash)
+    if _abort_remaining_tests and _timeout_detected_during_test and _timeout_detected_during_test != item.nodeid:
+        pytest.skip(
+            f"Skipping test due to timeout in previous test: {_timeout_detected_during_test}\n"
+            f"System may be in unknown state after timeout."
+        )
+
     # If a crash was detected in a previous test, skip all remaining tests
-    if _abort_remaining_tests and _crash_detected_during_test != item.nodeid:
+    if _abort_remaining_tests and _crash_detected_during_test and _crash_detected_during_test != item.nodeid:
         pytest.skip(
             f"Skipping test due to server crash in previous test: {_crash_detected_during_test}"
         )
@@ -727,12 +737,60 @@ def pytest_runtest_teardown(item, nextitem):
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_runtest_makereport(item, call):
-    """Hook to modify test reports and detect crashes."""
-    global _abort_remaining_tests, _crash_detected_during_test
+    """Hook to modify test reports and detect crashes/timeouts."""
+    global _abort_remaining_tests, _crash_detected_during_test, _timeout_detected_during_test
 
     # Let pytest create the report first
     outcome = yield
     report = outcome.get_result()
+
+    # Check for timeout during test execution
+    # pytest-timeout raises specific exceptions that we can detect
+    if call.when == "call" and call.excinfo is not None:
+        exc_type = call.excinfo.type
+        exc_typename = exc_type.__name__ if exc_type else ""
+        exc_module = exc_type.__module__ if exc_type and hasattr(exc_type, '__module__') else ""
+
+        # Detect pytest-timeout exceptions
+        # pytest-timeout can raise: Timeout, TimeoutError, or wrapped exceptions
+        is_timeout = (
+            exc_typename == "Timeout" or
+            (exc_typename == "Failed" and "Timeout" in str(call.excinfo.value)) or
+            (exc_module == "pytest_timeout" and exc_typename in ("Timeout", "TimeoutError"))
+        )
+
+        if is_timeout:
+            _timeout_detected_during_test = item.nodeid
+            _abort_remaining_tests = True
+
+            timeout_message = (
+                f"Test timed out and was terminated.\n\n"
+                f"⚠️  WARNING: System may be in unknown state after timeout.\n"
+                f"   Aborting remaining tests to prevent unreliable results.\n\n"
+                f"   This is similar to a server crash - we cannot trust the state\n"
+                f"   of the database after forcefully killing a running test.\n\n"
+                f"Original timeout error:\n{call.excinfo.exconly()}"
+            )
+
+            # Update the report with clear timeout message
+            report.longrepr = timeout_message
+            report.outcome = "failed"
+
+            logger.error(
+                "Test %s timed out - aborting remaining tests to prevent unreliable results",
+                item.nodeid
+            )
+
+            # Record as timeout in the result collector
+            if not _is_compact_mode_enabled():
+                reporter = get_armadillo_reporter()
+                reporter.result_collector.record_test_result(
+                    nodeid=item.nodeid,
+                    outcome=ExecutionOutcome.TIMEOUT,
+                    duration=getattr(report, "duration", 0.0),
+                    details=timeout_message,
+                    crash_info=None,
+                )
 
     # Check for crashes after the test phase completes
     if call.when == "call" and has_any_crash():
