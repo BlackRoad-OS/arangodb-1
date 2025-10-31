@@ -428,17 +428,13 @@ TEST(AqlValueSupervisedTest, AccountsAndMovesFromSource) {
   auto s = makeString(4096, 'x').slice();
   auto data = makeDocDataFromSlice(s);
 
-  auto tempPtr = data.get();
   AqlValue v(data, &rm);
+  EXPECT_EQ(data.get(), nullptr); // Source string should be empty
 
   size_t expected = static_cast<size_t>(s.byteSize()) + ptrOverhead();
   EXPECT_EQ(v.memoryUsage(), expected);
   EXPECT_EQ(rm.current(), expected);
-
-
-  // Source string should be empty
-  EXPECT_EQ(data.get(), nullptr);
-  EXPECT_EQ(tempPtr->size(), 0U);
+  EXPECT_TRUE(v.slice().binaryEquals(s));
 
   v.destroy();
   EXPECT_EQ(rm.current(), 0);
@@ -1019,14 +1015,14 @@ TEST(AqlValueSupervisedTest, CopyConstructor) {
 
     // Original supervised string
     AqlValue v(std::string_view{big}, &rm);
-    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_STRING) << v.type();
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE) << v.type();
     auto* pv = v.slice().start();
     std::uint64_t afterV = rm.current();
-    EXPECT_GT(afterV, v.memoryUsage());
+    EXPECT_EQ(afterV, v.memoryUsage());
 
     // Copy-ctor; deep copy
     AqlValue cpy = v;
-    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_STRING);
+    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
     auto* pc = cpy.slice().start();
 
     EXPECT_TRUE(cpy.slice().binaryEquals(v.slice())); // Same contents
