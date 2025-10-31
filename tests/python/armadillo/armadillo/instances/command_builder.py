@@ -39,7 +39,7 @@ class ServerCommandBuilder:
 
     def build_command(self, params: ServerCommandParams) -> List[str]:
         """Build ArangoDB command line arguments."""
-        repository_root = self._get_repository_root()
+        repository_root = self.get_repository_root()
         if self._config_provider.bin_dir:
             arangod_path = str(self._config_provider.bin_dir / "arangod")
         else:
@@ -92,11 +92,11 @@ class ServerCommandBuilder:
         return command
 
     def get_repository_root(self) -> Path:
-        """Get the ArangoDB repository root directory."""
-        return self._get_repository_root()
+        """Get the ArangoDB repository root directory.
 
-    def _get_repository_root(self) -> Path:
-        """Get the ArangoDB repository root directory."""
+        Searches for repository root by looking for js/ and etc/ directories,
+        starting from bin_dir if configured, otherwise from current directory.
+        """
         if self._config_provider.bin_dir:
             bin_path = Path(self._config_provider.bin_dir)
             if bin_path.name == "bin" and bin_path.parent.exists():

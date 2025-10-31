@@ -295,7 +295,7 @@ class InstanceManager:
             except (ServerShutdownError, ProcessError, OSError, RuntimeError) as e:
                 logger.error("Shutdown via orchestrator failed: %s", e)
                 # Fallback to direct shutdown if orchestrator fails
-                self._direct_shutdown_deployment(timeout)
+                self._direct_shutdown_deployment()
 
             # Release allocated ports
             self._release_ports()
@@ -310,11 +310,10 @@ class InstanceManager:
             shutdown_time = time.time() - self.state.timing.shutdown_time
             logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
 
-    def _direct_shutdown_deployment(self, _timeout: float) -> None:
+    def _direct_shutdown_deployment(self) -> None:
         """Direct shutdown implementation as fallback when orchestrator fails.
 
-        Args:
-            _timeout: Maximum time to wait for shutdown (currently unused; using fixed timeouts)
+        Uses fixed timeouts from configuration based on server roles.
         """
         logger.info("Using direct shutdown for %d servers", len(self.state.servers))
 
