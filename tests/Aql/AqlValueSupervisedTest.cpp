@@ -717,33 +717,57 @@ TEST(AqlValueSupervisedTest, ToVelocyPack_Roundtrip_Supervised) {
   v.destroy();
 }
 
-TEST(AqlValueSupervisedTest, Materialize_RangeAndNonRange) {
-  // range → materializes array copy (hasCopied=true)
-  AqlValue r(2, 4);  // [2,3,4]
-  bool copied = false;
-  AqlValue mat = r.materialize(nullptr, copied);
-  EXPECT_TRUE(copied);
-  EXPECT_TRUE(mat.slice().isArray());
-  EXPECT_EQ(mat.length(), 3U);
-  EXPECT_EQ(mat.at(0, copied, false).toInt64(), 2);
-  mat.destroy();
-  r.destroy();
-
-  // non-range supervised → returns by value; copy-ctor clones (accounts)
+// This test checks the behavior of materialize() function's default case
+TEST(AqlValueSupervisedTest, Materialize_NonRange) {
+  /* Non-range SupervisedSlice */
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
-  Builder obj = makeObj({{"q", Value(7)}});
-  AqlValue v(obj.slice(), 0, &rm);
+
+  std::string big(8 * 1024, 'x');
+  Builder obj;
+  obj.openObject();
+  obj.add("q", Value(7));
+  obj.add("big", Value(big));
+  obj.close();
+
+  AqlValue v1(obj.slice(), /*length*/ 0, &rm);  // SupervisedSlice
   std::uint64_t base = rm.current();
 
+  bool copied1 = true;
+  AqlValue mat1 = v1.materialize(nullptr, copied1);
+  // materialize()'s default case calls copy ctor of SupervisedSlice
+  // Copy ctor of SupervisedSlice creates a new copy of AqlValue
+  EXPECT_FALSE(copied1); // This should be true
+
+  EXPECT_TRUE(v1.slice().binaryEquals(obj.slice()));
+  EXPECT_TRUE(mat1.slice().binaryEquals(obj.slice()));
+
+  // Because there are two copies of SupervisedSlice AqlValues
+  EXPECT_EQ(rm.current(), 2 * base);
+
+  mat1.destroy();
+  EXPECT_EQ(rm.current(), base);
+
+  v1.destroy();
+  EXPECT_EQ(rm.current(), 0);
+
+  /* Non-range SupervisedString */
+  std::string bigStr(16 * 1024, 'y');  // 16KB string
+  AqlValue v2(std::string_view{bigStr}, &rm);  // SupervisedString
+  base = rm.current();
+
   bool copied2 = false;
-  AqlValue mat2 = v.materialize(nullptr, copied2);
-  EXPECT_FALSE(copied2);  // API flag is about "materialize", not copy-ctor
-  EXPECT_TRUE(mat2.slice().binaryEquals(obj.slice()));
-  EXPECT_EQ(rm.current(), base * 2);  // v + clone
+  AqlValue mat2 = v2.materialize(nullptr, copied2);
+  EXPECT_FALSE(copied2);
+  EXPECT_TRUE(mat2.slice().isString());
+  EXPECT_EQ(mat2.slice().stringView(), bigStr);
+
+  EXPECT_EQ(rm.current(), 2 * base);  // cloned supervised string accounted
+
   mat2.destroy();
   EXPECT_EQ(rm.current(), base);
-  v.destroy();
+
+  v2.destroy();
   EXPECT_EQ(rm.current(), 0);
 }
 
