@@ -864,3 +864,184 @@ TEST(AqlValueSupervisedTest, Compare_RangeOrdering) {
   r3.destroy();
   r4.destroy();
 }
+
+// Checks the behavior of copy constructor AqlValue(AqlValue const other&)
+// For supervised AqlValue (VPACK_SUPERVISED_SLICE, VPACK_SUPERVISED_STRING), it will create a new heap obj.
+// Other than them, it won't create a new heap obj i.e. shallow copy
+TEST(AqlValueSupervisedTest, CopyConstructor) {
+  // 1) VPACK_INLINE_INT64
+  {
+    Builder b;
+    b.add(Value(42));
+    AqlValue v(b.slice()); // Creates VPACK_INLINE_INT64
+    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_INT64);
+
+    // Invokes copy constructor; creates another copy of the AqlValue
+    AqlValue cpy = v;
+    EXPECT_EQ(cpy.type(), v.type());
+    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+
+    cpy.destroy();
+    // Checks v is still alive after cpy is destroyed
+    EXPECT_TRUE(v.slice().isInteger());
+    EXPECT_EQ(v.slice().getNumber<int64_t>(), 42);
+    v.destroy();
+  }
+
+  // 2) VPACK_INLINE_UINT64
+  {
+    Builder b;
+    uint64_t u = (1ULL << 63);  // 9223372036854775808
+    b.add(Value(u));
+    AqlValue v(b.slice());  // Creates VPACK_INLINE_UINT64
+    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_UINT64) << "type() = " << static_cast<int>(v.type());
+
+    // Copy constructor
+    AqlValue cpy = v;
+    EXPECT_EQ(cpy.type(), v.type());
+    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+
+    cpy.destroy();
+    // Ensure v is still alive after destroying copy
+    EXPECT_TRUE(v.slice().isInteger());
+    EXPECT_EQ(v.slice().getNumber<uint64_t>(), 1ULL << 63);
+    v.destroy();
+  }
+
+  // 3) VPACK_INLINE_DOUBLE
+  {
+    Builder b;
+    b.add(Value(3.1415926535));
+    AqlValue v(b.slice());  // Creates VPACK_INLINE_DOUBLE
+    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_DOUBLE);
+
+    // Copy constructor
+    AqlValue cpy = v;
+    EXPECT_EQ(cpy.type(), v.type());
+    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+
+    cpy.destroy();
+    // Ensure v is still alive after destroying copy
+    EXPECT_TRUE(v.slice().isDouble());
+    EXPECT_DOUBLE_EQ(v.slice().getNumber<double>(), 3.1415926535);
+
+    v.destroy();
+  }
+
+  // // 4) VPACK_MANAGED_SLICE
+  // {
+  //   std::string big(300, 'a');
+  //   arangodb::velocypack::Builder b;
+  //   b.add(arangodb::velocypack::Value(big));
+  //
+  //   AqlValue v(b.slice());  // VPACK_MANAGED_SLICE
+  //   ASSERT_EQ(v.type(), AqlValue::VPACK_MANAGED_SLICE);
+  //
+  //   auto* p1 = v.slice().start();
+  //
+  //   // Copy constructor; shallow copy
+  //   AqlValue cpy = v;
+  //   ASSERT_EQ(cpy.type(), AqlValue::VPACK_MANAGED_SLICE);
+  //
+  //   // Shallow copy -> pointers are identical, contents are identical
+  //   EXPECT_EQ(cpy.slice().start(), v.slice().start());
+  //   EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+  //
+  //   // Destroying the copy will destroy the original's heap data too
+  //   // So v's pointer is dangling
+  //   cpy.destroy();
+  // }
+
+  // // 5) MANAGED_STRING — shallow copy
+  // {
+  //   std::string big(300, 'x');
+  //   AqlValue v(std::string_view{big});  // VPACK_MANAGED_STRING
+  //   ASSERT_EQ(v.type(), AqlValue::VPACK_MANAGED_STRING);
+  //
+  //   // Copy ctor; shallow copy
+  //   AqlValue cpy = v;
+  //   ASSERT_EQ(cpy.type(), AqlValue::VPACK_MANAGED_STRING);
+  //
+  //   // Same pointers and same contents
+  //   EXPECT_EQ(v.data(), cpy.data());
+  //   EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+  //
+  //   // Destroy the copy; the original's heap data is also destroyed
+  //   cpy.destroy();
+  // }
+
+  // 6) SupervisedSlice: copy ctor deep copy
+  {
+    auto& g = GlobalResourceMonitor::instance();
+    ResourceMonitor rm(g);
+
+    Builder obj = makeObj({{"k", Value(std::string(300, 'a'))}});
+    VPackSlice src = obj.slice();
+
+    std::uint64_t base = rm.current();
+
+    AqlValue v(src, /*length*/ 0, &rm); // Original supervised slice
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    auto* pv = v.slice().start();
+    std::uint64_t afterV = rm.current();
+    EXPECT_EQ(afterV, v.memoryUsage());
+
+    // Copy-ctor -> deep copy
+    AqlValue cpy = v;
+    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    auto* pc = cpy.slice().start();
+
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice())); // Same contents
+    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
+    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
+
+    // Destroy the copy; original is still alive
+    cpy.destroy();
+    EXPECT_EQ(rm.current(), afterV);
+    EXPECT_TRUE(v.slice().binaryEquals(src)); // The original is alive
+    EXPECT_EQ(v.slice().start(), pv);
+
+    // Destroy the original; RM returns to base
+    v.destroy();
+    EXPECT_EQ(rm.current(), base);
+  }
+
+  // 7) SupervisedString: copy-ctor deep copy
+  {
+    auto& g = GlobalResourceMonitor::instance();
+    ResourceMonitor rm(g);
+
+    std::string big(300, 'x');
+    std::uint64_t base = rm.current();
+
+    // Original supervised string
+    AqlValue v(std::string_view{big}, &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_STRING) << v.type();
+    auto* pv = v.slice().start();
+    std::uint64_t afterV = rm.current();
+    EXPECT_GT(afterV, v.memoryUsage());
+
+    // Copy-ctor; deep copy
+    AqlValue cpy = v;
+    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_STRING);
+    auto* pc = cpy.slice().start();
+
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice())); // Same contents
+    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
+    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
+
+    // Destroy the copy; original is still alive
+    cpy.destroy();
+    EXPECT_EQ(rm.current(), afterV);
+    EXPECT_TRUE(v.slice().isString()); // The original is alive
+    EXPECT_EQ(v.slice().getStringLength(), big.size());
+    EXPECT_EQ(v.slice().start(), pv);
+
+    // Destroy the original; RM returns to base
+    v.destroy();
+    EXPECT_EQ(rm.current(), base);
+  }
+}
