@@ -357,6 +357,8 @@ struct AqlValue final {
     Malloc = 1,  // memory allocated by malloc
   };
 
+  static constexpr std::size_t kPrefix = sizeof(arangodb::ResourceMonitor*);
+
  public:
   // construct an empty AqlValue
   // note: this is the default constructor and should be as cheap as possible
@@ -419,6 +421,7 @@ struct AqlValue final {
   /// explicit calls to destroy()
   AqlValue(AqlValue const&);
   AqlValue& operator=(AqlValue const&);
+  void copyFrom(AqlValue const& other, ResourceMonitor* rm = nullptr);
   AqlValue(AqlValue const&, arangodb::ResourceMonitor&);
   AqlValue(AqlValue&&) noexcept = default;
   AqlValue& operator=(AqlValue&&) noexcept = default;
@@ -574,8 +577,60 @@ struct AqlValue final {
   void setManagedSliceData(MemoryOriginType mot,
                            velocypack::ValueLength length);
 
+  // helpers for supervised values
   // @brief set the first 2 bytes for SupervisedSlice and SupervisedString
-  void setSupervisedData(AqlValueType at, MemoryOriginType mot, bool owned);
+  void setSupervisedData(AqlValueType at, MemoryOriginType mot);
+
+  static inline bool isSupervised_(AqlValueType t) noexcept;
+  inline void initFromSupervised(AqlValue const& src,
+                                 arangodb::ResourceMonitor* rm);
+  inline void swap(AqlValue& other) noexcept;
+
+  static inline uint8_t* allocateSupervised(
+      arangodb::ResourceMonitor& rm, std::uint64_t len,
+      MemoryOriginType mot = MemoryOriginType::New) {
+    std::size_t total = kPrefix + static_cast<std::size_t>(len);
+    void* base = nullptr;
+
+    // choose allocator based on MemoryOriginType
+    if (mot == MemoryOriginType::Malloc) {
+      base = std::malloc(total);
+    } else {
+      base = ::operator new(total);  // default (New)
+    }
+
+    if (ADB_UNLIKELY(base == nullptr)) {
+      THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
+    }
+
+    *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
+    if (len) {
+      rm.increaseMemoryUsage(len);
+    }
+    rm.increaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
+    return reinterpret_cast<uint8_t*>(base);
+  }
+
+  void copyFrom(AqlValue const&);
+
+  static inline void deallocateSupervised(
+      uint8_t* base, std::uint64_t len,
+      MemoryOriginType mot = MemoryOriginType::New) noexcept {
+    if (base == nullptr) {
+      return;
+    }
+    auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
+    if (len) {
+      rm->decreaseMemoryUsage(len);
+    }
+    rm->decreaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
+
+    if (mot == MemoryOriginType::Malloc) {
+      std::free(base);
+    } else {  // MemoryOriginType::New
+      ::operator delete(static_cast<void*>(base));
+    }
+  }
 };
 
 static_assert(std::is_copy_constructible_v<AqlValue>);
