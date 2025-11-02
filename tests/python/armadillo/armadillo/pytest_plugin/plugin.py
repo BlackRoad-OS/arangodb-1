@@ -10,6 +10,7 @@ import traceback
 from typing import Generator, Optional, Dict, Any, List
 from ..core.config import get_config
 from ..core.config_initializer import initialize_config
+from ..core.context import ApplicationContext
 from ..core.log import (
     configure_logging,
     get_logger,
@@ -18,7 +19,7 @@ from ..core.log import (
     clear_log_context,
 )
 from ..core.time import set_global_deadline, stop_watchdog
-from ..core.types import ServerRole, DeploymentMode, ClusterConfig, ExecutionOutcome
+from ..core.types import ServerRole, DeploymentMode, ClusterConfig, ExecutionOutcome, ArmadilloConfig
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
 from ..core.errors import ServerStartupError, ArmadilloError, ResultProcessingError
 from ..instances.server import ArangoServer
@@ -39,10 +40,10 @@ class ArmadilloPlugin:
 
     def __init__(self) -> None:
         self._session_deployments: Dict[str, InstanceManager] = {}
-        self._armadillo_config: Optional[Any] = None
+        self._armadillo_config: Optional[ArmadilloConfig] = None
         self._deployment_failed: bool = False
         self._deployment_failure_reason: Optional[str] = None
-        self._session_app_context: Optional[Any] = None  # Shared context for all session deployments
+        self._session_app_context: Optional[ApplicationContext] = None  # Shared context for all session deployments
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
@@ -281,8 +282,8 @@ def _get_or_create_cluster(self) -> "InstanceManager":
                 crashed_servers = list(crash_states.keys())
                 crash_details = []
                 for server_id, crash_info in crash_states.items():
-                    exit_code = crash_info.get("exit_code", -1)
-                    signal_num = crash_info.get("signal", -1)
+                    exit_code = crash_info.exit_code
+                    signal_num = crash_info.signal or -1
                     crash_details.append(
                         f"{server_id} (exit code {exit_code}, signal {signal_num})"
                     )
@@ -340,8 +341,8 @@ def _get_or_create_single_server(self) -> ArangoServer:
                 crashed_servers = list(crash_states.keys())
                 crash_details = []
                 for server_id, crash_info in crash_states.items():
-                    exit_code = crash_info.get("exit_code", -1)
-                    signal_num = crash_info.get("signal", -1)
+                    exit_code = crash_info.exit_code
+                    signal_num = crash_info.signal or -1
                     crash_details.append(
                         f"{server_id} (exit code {exit_code}, signal {signal_num})"
                     )
@@ -820,9 +821,9 @@ def pytest_runtest_makereport(item, call):
         # Build comprehensive crash message
         crash_messages = []
         for process_id, crash_info in crash_states.items():
-            exit_code = crash_info.get("exit_code", "unknown")
-            signal_num = crash_info.get("signal")
-            stderr = crash_info.get("stderr", "")
+            exit_code = crash_info.exit_code
+            signal_num = crash_info.signal
+            stderr = crash_info.stderr or ""
 
             msg = f"Process {process_id} crashed during test execution"
             if signal_num:

@@ -34,6 +34,15 @@ class ExecutionOutcome(Enum):
     CRASHED = "crashed"
 
 
+class CrashInfo(BaseModel):
+    """Information about a crashed process."""
+
+    exit_code: int
+    timestamp: float
+    stderr: Optional[str] = None
+    signal: Optional[int] = None
+
+
 class ServerConfig(BaseModel):
     """Configuration for a single ArangoDB server."""
 
@@ -168,7 +177,7 @@ class ExecutionResult(BaseModel):
     teardown_duration: float = 0.0
     error_message: Optional[str] = None
     failure_message: Optional[str] = None
-    crash_info: Optional[Dict[str, Any]] = None
+    crash_info: Optional[CrashInfo] = None
 
 
 class SuiteExecutionResults(BaseModel):

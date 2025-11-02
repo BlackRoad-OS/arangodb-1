@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass, field
-from ..core.types import ExecutionOutcome
+from ..core.types import ExecutionOutcome, CrashInfo
 from ..core.errors import ResultProcessingError, SerializationError, FilesystemError
 from ..core.log import get_logger
 from ..utils.codec import to_json_string
@@ -40,7 +40,7 @@ class TestResultParams:
     timing: TestTiming
     error_message: Optional[str] = None
     failure_message: Optional[str] = None
-    crash_info: Optional[Dict[str, Any]] = None
+    crash_info: Optional[Dict[str, CrashInfo]] = None
 
 
 @dataclass
@@ -57,7 +57,7 @@ class TestResult:
     teardown_duration_seconds: float = 0.0
     markers: List[str] = field(default_factory=list)
     details: Optional[str] = None
-    crash_info: Optional[Dict[str, Any]] = None
+    crash_info: Optional[Dict[str, CrashInfo]] = None
     artifacts: List[str] = field(default_factory=list)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
@@ -119,7 +119,7 @@ class ResultCollector:
         teardown_duration: float = 0.0,
         markers: Optional[List[str]] = None,
         details: Optional[str] = None,
-        crash_info: Optional[Dict[str, Any]] = None,
+        crash_info: Optional[Dict[str, CrashInfo]] = None,
         artifacts: Optional[List[str]] = None,
         started_at: Optional[datetime] = None,
         finished_at: Optional[datetime] = None,
@@ -337,7 +337,11 @@ class ResultCollector:
                         "teardown_duration_seconds": test.teardown_duration_seconds,
                         "markers": test.markers,
                         "details": test.details,
-                        "crash_info": test.crash_info,
+                        "crash_info": (
+                            {pid: crash.model_dump() for pid, crash in test.crash_info.items()}
+                            if test.crash_info
+                            else None
+                        ),
                         "artifacts": test.artifacts,
                         "started_at": test.started_at,
                         "finished_at": test.finished_at,
