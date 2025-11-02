@@ -76,48 +76,112 @@ inline DocumentData makeDocDataFromSlice(Slice s) {
 }
 }  // namespace
 
-TEST(AqlValueSupervisedTest, SliceOwnedAccountsPayloadPrefix) {
+// Test for AqlValue(DocumentData&, ResourceMonitor* = nullptr)
+TEST(AqlValueSupervisedTest, DocumentDataCtorAccountsCorrectSize) {
   auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-  ASSERT_EQ(resourceMonitor.current(), 0);
+  ResourceMonitor rm(global);
+  ASSERT_EQ(rm.current(), 0);
 
-  auto builder = makeLargeArray(4096, 'a');
-  Slice slice = builder.slice();
-  AqlValue aqlVal(slice, 0, &resourceMonitor);
+  auto s = makeString(4096, 'x').slice();
+  auto data = makeDocDataFromSlice(s);
 
-  EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(slice.byteSize()) + ptrOverhead());
+  AqlValue v(data, &rm);
+  EXPECT_EQ(data.get(), nullptr);  // Source string should be empty
 
-  EXPECT_TRUE(aqlVal.slice().isArray());
-  {
-    ValueLength l = 0;
-    (void)aqlVal.slice().at(0).getStringUnchecked(l);
-    EXPECT_EQ(l, 4096);
-  }
+  size_t expected = static_cast<size_t>(s.byteSize()) + ptrOverhead();
+  // checks correct counting with internal logic
+  EXPECT_EQ(v.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(rm.current(), expected);
+  EXPECT_TRUE(v.slice().binaryEquals(s));
 
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  v.destroy();
+  EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, SliceLengthOwnedMatchesSliceCtor) {
+// Test for AqlValue(DocumentData&, ResourceMonitor* = nullptr)
+TEST(AqlValueSupervisedTest, MutipleDocumentDataCtorAccountsCorrectSize) {
   auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
+  ResourceMonitor rm(global);
 
-  auto builder = makeLargeArray(1024, 'a');
-  Slice slice = builder.slice();
-  AqlValue aqlVal(slice, static_cast<ValueLength>(slice.byteSize()),
-                  &resourceMonitor);
+  auto s1 = makeString(1500, 'a').slice();
+  auto s2 = makeString(2500, 'b').slice();
+  auto d1 = makeDocDataFromSlice(s1);
+  auto d2 = makeDocDataFromSlice(s2);
 
-  EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(slice.byteSize()) + ptrOverhead());
+  AqlValue v1(d1, &rm);
+  AqlValue v2(d2, &rm);
 
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  size_t e1 = static_cast<size_t>(s1.byteSize()) + ptrOverhead();
+  size_t e2 = static_cast<size_t>(s2.byteSize()) + ptrOverhead();
+
+  // checks correct counting with internal logic
+  EXPECT_EQ(v1.memoryUsage(), e1);
+  EXPECT_EQ(v2.memoryUsage(), e2);
+  // checks correct counting with external logic
+  EXPECT_EQ(rm.current(), e1 + e2);
+
+  v1.destroy();
+  EXPECT_EQ(rm.current(), e2);
+
+  v2.destroy();
+  EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, BufferOwnedAccountsPayloadPrefix) {
+// Test for AqlValue(string_view, ResourceMonitor* nullptr) <- short str
+TEST(AqlValueSupervisedTest, ShortStringViewCtorAccountsCorrectSize) {
+  auto& global = GlobalResourceMonitor::instance();
+  arangodb::ResourceMonitor rm(global);
+
+  std::string s(15, 'x');  // 15 chars, fits short str (<= 126), not inline
+  auto payloadSize = 1 + s.size();  // tag&len (= 1) + chars
+  auto expected = ptrOverhead() + payloadSize;
+
+  AqlValue v(std::string_view{s}, &rm);
+
+  // checks correct counting with internal logic
+  EXPECT_EQ(v.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(v.memoryUsage(), rm.current());
+
+  // Slice should decode back to original string
+  auto slice = v.slice();
+  ASSERT_TRUE(slice.isString());
+  EXPECT_EQ(slice.stringView(), s);
+
+  v.destroy();
+  // After destruction, usage returns to 0
+  EXPECT_EQ(rm.current(), 0);
+}
+
+// Test for AqlValue(string_view, ResourceMonitor* nullptr) <- long str
+TEST(AqlValueSupervisedTest, LongStringViewCtorAccountsCorrectSize) {
+  auto& global = GlobalResourceMonitor::instance();
+  arangodb::ResourceMonitor rm(global);
+
+  std::string s(300, 'A');              // triggers long string encoding
+  auto payloadSize = 1 + 8 + s.size();  // len + tag + chars
+  std::size_t expected = ptrOverhead() + payloadSize;
+
+  AqlValue v(std::string_view{s}, &rm);
+
+  // checks correct counting with internal logic
+  EXPECT_EQ(v.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(v.memoryUsage(), rm.current());
+
+  // Slice should decode back to original string
+  auto slice = v.slice();
+  ASSERT_TRUE(slice.isString());
+  EXPECT_EQ(slice.stringView(), s);
+
+  v.destroy();
+  // After destruction, usage returns to 0
+  EXPECT_EQ(rm.current(), 0);
+}
+
+// Test for AqlValue(Buffer&&, ResourceMonitor* = nullptr)
+TEST(AqlValueSupervisedTest, BufferCtorAccountsCorrectSize) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
@@ -127,15 +191,84 @@ TEST(AqlValueSupervisedTest, BufferOwnedAccountsPayloadPrefix) {
   buffer.append(slice.start(), slice.byteSize());
 
   AqlValue aqlVal(buffer, &resourceMonitor);
-  EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(slice.byteSize()) + ptrOverhead());
+
+  auto expected = static_cast<size_t>(slice.byteSize()) + ptrOverhead();
+  // checks correct counting with internal logic
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
 
   aqlVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, HintSliceCopyOwnedAccountsPayloadPrefix) {
+// Test for AqlValue(Slice, ResourceMonitor* = nullptr)
+TEST(AqlValueSupervisedTest, SliceCtorAccountsCorrectSize) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor resourceMonitor(global);
+
+  auto builder = makeLargeArray(1024, 'a');
+  Slice slice = builder.slice();
+  AqlValue aqlVal(slice, static_cast<ValueLength>(slice.byteSize()),
+                  &resourceMonitor);
+
+  auto expected = static_cast<size_t>(slice.byteSize() + ptrOverhead());
+  // checks correct counting with internal logic
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
+
+  EXPECT_TRUE(aqlVal.slice().isArray());
+  {
+    ValueLength l = 0;
+    (void)aqlVal.slice().at(0).getStringUnchecked(l);
+    EXPECT_EQ(l, 1024);
+  }
+
+  aqlVal.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0);
+}
+
+// Test for AqlValue(Slice, ResourceMonitor* = nullptr)
+// This creates multiple supervised AqlValues
+TEST(AqlValueSupervisedTest, MultipleSliceCtorAccountsCorrectSize) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor resourceMonitor(global);
+
+  auto bA = makeLargeArray(1000, 'a');
+  auto bB = makeLargeArray(2000, 'b');
+  auto bC = makeLargeArray(3000, 'c');
+  Slice sliceA = bA.slice();
+  Slice sliceB = bB.slice();
+  Slice sliceC = bC.slice();
+
+  AqlValue a1(sliceA, 0, &resourceMonitor); // SUPERVISED_SLICE
+  AqlValue a2(sliceB, 0, &resourceMonitor); // SUPERVISED_SLICE
+  AqlValue a3(sliceC, 0, &resourceMonitor); // SUPERVISED_SLICE
+
+  size_t e1 = static_cast<size_t>(sliceA.byteSize()) + ptrOverhead();
+  size_t e2 = static_cast<size_t>(sliceB.byteSize()) + ptrOverhead();
+  size_t e3 = static_cast<size_t>(sliceC.byteSize()) + ptrOverhead();
+
+  // checks correct counting with internal logic
+  EXPECT_EQ(a1.memoryUsage() + a2.memoryUsage() + a3.memoryUsage(),
+    e1 + e2 + e3);
+  // checks correct counting with external logic
+  EXPECT_EQ(a1.memoryUsage() + a2.memoryUsage() + a3.memoryUsage(),
+    resourceMonitor.current());
+
+  a1.destroy();
+  EXPECT_EQ(resourceMonitor.current(), e2 + e3);
+
+  a2.destroy();
+  EXPECT_EQ(resourceMonitor.current(), e3);
+
+  a3.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0);
+}
+
+// Test for AqlValue(AqlValueHintSliceCopy, ResourceMonitor* = nullptr)
+TEST(AqlValueSupervisedTest, HintSliceCopyCtorAccountsCorrectSize) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
@@ -144,24 +277,211 @@ TEST(AqlValueSupervisedTest, HintSliceCopyOwnedAccountsPayloadPrefix) {
   AqlValueHintSliceCopy hint{slice};
   AqlValue aqlVal(hint, &resourceMonitor);
 
-  EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(slice.byteSize()) + ptrOverhead());
+  auto expected = static_cast<size_t>(slice.byteSize()) + ptrOverhead();
+  // checks correct counting with internal logic
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
 
   aqlVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, InlineNotAccount) {
+// Checks the behavior of copy constructor AqlValue(AqlValue const other&)
+// For supervised AqlValue (VPACK_SUPERVISED_SLICE, VPACK_SUPERVISED_STRING),
+// it will create a new heap obj.
+// Other than them, it won't create a new heap obj i.e. shallow copy
+TEST(AqlValueSupervisedTest, CopyCtorAccountsCorrectSize) {
+  // 1) VPACK_INLINE_INT64
+  {
+    Builder b;
+    b.add(Value(42));
+    AqlValue v(b.slice());  // Creates VPACK_INLINE_INT64
+    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_INT64);
+
+    // Invokes copy constructor; creates another copy of the AqlValue
+    AqlValue cpy = v;
+    EXPECT_EQ(cpy.type(), v.type());
+    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+
+    cpy.destroy();
+    // Checks v is still alive after cpy is destroyed
+    EXPECT_TRUE(v.slice().isInteger());
+    EXPECT_EQ(v.slice().getNumber<int64_t>(), 42);
+    v.destroy();
+  }
+
+  // 2) VPACK_INLINE_UINT64
+  {
+    Builder b;
+    uint64_t u = (1ULL << 63);  // 9223372036854775808
+    b.add(Value(u));
+    AqlValue v(b.slice());  // Creates VPACK_INLINE_UINT64
+    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_UINT64)
+        << "type() = " << static_cast<int>(v.type());
+
+    // Copy constructor
+    AqlValue cpy = v;
+    EXPECT_EQ(cpy.type(), v.type());
+    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+
+    cpy.destroy();
+    // Ensure v is still alive after destroying copy
+    EXPECT_TRUE(v.slice().isInteger());
+    EXPECT_EQ(v.slice().getNumber<uint64_t>(), 1ULL << 63);
+    v.destroy();
+  }
+
+  // 3) VPACK_INLINE_DOUBLE
+  {
+    Builder b;
+    b.add(Value(3.1415926535));
+    AqlValue v(b.slice());  // Creates VPACK_INLINE_DOUBLE
+    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_DOUBLE);
+
+    // Copy constructor
+    AqlValue cpy = v;
+    EXPECT_EQ(cpy.type(), v.type());
+    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+
+    cpy.destroy();
+    // Ensure v is still alive after destroying copy
+    EXPECT_TRUE(v.slice().isDouble());
+    EXPECT_DOUBLE_EQ(v.slice().getNumber<double>(), 3.1415926535);
+
+    v.destroy();
+  }
+
+  // // 4) VPACK_MANAGED_SLICE
+  // {
+  //   std::string big(300, 'a');
+  //   arangodb::velocypack::Builder b;
+  //   b.add(arangodb::velocypack::Value(big));
+  //
+  //   AqlValue v(b.slice());  // VPACK_MANAGED_SLICE
+  //   ASSERT_EQ(v.type(), AqlValue::VPACK_MANAGED_SLICE);
+  //
+  //   auto* p1 = v.slice().start();
+  //
+  //   // Copy constructor; shallow copy
+  //   AqlValue cpy = v;
+  //   ASSERT_EQ(cpy.type(), AqlValue::VPACK_MANAGED_SLICE);
+  //
+  //   // Shallow copy -> pointers are identical, contents are identical
+  //   EXPECT_EQ(cpy.slice().start(), v.slice().start());
+  //   EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+  //
+  //   // Destroying the copy will destroy the original's heap data too
+  //   // So v's pointer is dangling
+  //   cpy.destroy();
+  // }
+
+  // // 5) MANAGED_STRING — shallow copy
+  // {
+  //   std::string big(300, 'x');
+  //   AqlValue v(std::string_view{big});  // VPACK_MANAGED_STRING
+  //   ASSERT_EQ(v.type(), AqlValue::VPACK_MANAGED_STRING);
+  //
+  //   // Copy ctor; shallow copy
+  //   AqlValue cpy = v;
+  //   ASSERT_EQ(cpy.type(), AqlValue::VPACK_MANAGED_STRING);
+  //
+  //   // Same pointers and same contents
+  //   EXPECT_EQ(v.data(), cpy.data());
+  //   EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
+  //
+  //   // Destroy the copy; the original's heap data is also destroyed
+  //   cpy.destroy();
+  // }
+
+  // 6) SupervisedSlice: copy ctor deep copy
+  {
+    auto& g = GlobalResourceMonitor::instance();
+    ResourceMonitor rm(g);
+
+    Builder obj = makeObj({{"k", Value(std::string(300, 'a'))}});
+    VPackSlice src = obj.slice();
+
+    std::uint64_t base = rm.current();
+
+    AqlValue v(src, /*length*/ 0, &rm);  // Original supervised slice
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    auto* pv = v.slice().start();
+    std::uint64_t afterV = rm.current();
+    EXPECT_EQ(afterV, v.memoryUsage());
+
+    // Copy-ctor -> deep copy
+    AqlValue cpy = v;
+    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    auto* pc = cpy.slice().start();
+
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));  // Same contents
+    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
+    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
+
+    // Destroy the copy; original is still alive
+    cpy.destroy();
+    EXPECT_EQ(rm.current(), afterV);
+    EXPECT_TRUE(v.slice().binaryEquals(src));  // The original is alive
+    EXPECT_EQ(v.slice().start(), pv);
+
+    // Destroy the original; RM returns to base
+    v.destroy();
+    EXPECT_EQ(rm.current(), base);
+  }
+
+  // 7) SupervisedString: copy-ctor deep copy
+  {
+    auto& g = GlobalResourceMonitor::instance();
+    ResourceMonitor rm(g);
+
+    std::string big(300, 'x');
+    std::uint64_t base = rm.current();
+
+    // Original supervised string
+    AqlValue v(std::string_view{big}, &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE) << v.type();
+    auto* pv = v.slice().start();
+    std::uint64_t afterV = rm.current();
+    EXPECT_EQ(afterV, v.memoryUsage());
+
+    // Copy-ctor; deep copy
+    AqlValue cpy = v;
+    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    auto* pc = cpy.slice().start();
+
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));  // Same contents
+    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
+    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
+
+    // Destroy the copy; original is still alive
+    cpy.destroy();
+    EXPECT_EQ(rm.current(), afterV);
+    EXPECT_TRUE(v.slice().isString());  // The original is alive
+    EXPECT_EQ(v.slice().getStringLength(), big.size());
+    EXPECT_EQ(v.slice().start(), pv);
+
+    // Destroy the original; RM returns to base
+    v.destroy();
+    EXPECT_EQ(rm.current(), base);
+  }
+}
+
+// Test if small value won't create a Supervised AqlValue
+TEST(AqlValueSupervisedTest, InlineCtorNotAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
   auto builder = makeString(14, 'a');
   Slice slice = builder.slice();
+  // Passing resourceMonitor*, but won't create a supervised AqlValue
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
-  EXPECT_EQ(aqlVal.memoryUsage(), 0);
-  EXPECT_EQ(resourceMonitor.current(), 0);
+  EXPECT_EQ(aqlVal.memoryUsage(), 0); // No external memory usage
+  EXPECT_EQ(resourceMonitor.current(), 0); // No increase for resourceMonitor
   EXPECT_TRUE(aqlVal.slice().isString());
   {
     ValueLength l = 0;
@@ -174,24 +494,28 @@ TEST(AqlValueSupervisedTest, InlineNotAccount) {
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, BoundaryOverInlineAccounts) {
+// Test the boundary when AqlValue allocates data in external memory space
+TEST(AqlValueSupervisedTest, BoundaryOverInlineCtorAccounts) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
+  // This is the very boundary when AqlValue allocates the data in the heap
   auto builder = makeString(16, 'a');
   Slice slice = builder.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
 
-  EXPECT_GT(aqlVal.memoryUsage(), 0);
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(slice.byteSize()) + ptrOverhead());
-  EXPECT_EQ(resourceMonitor.current(), aqlVal.memoryUsage());
+  auto expected = static_cast<size_t>(slice.byteSize()) + ptrOverhead();
+  // checks correct counting with internal logic
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
 
   aqlVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, AdoptedBytesCtorNoAccount) {
+// Test the behavior of AqlValue(uint8_t const* pointer) -> VPACK_SLICE_POINTER
+TEST(AqlValueSupervisedTest, PointerCtorNotAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
@@ -200,78 +524,55 @@ TEST(AqlValueSupervisedTest, AdoptedBytesCtorNoAccount) {
   Slice slice1 = builder1.slice();
   Slice slice2 = builder2.slice();
 
-  AqlValue aOwned(slice1, 0, &resourceMonitor);
-  size_t billed = resourceMonitor.current();
-  ASSERT_EQ(billed, aOwned.memoryUsage());
-  ASSERT_GE(billed, ptrOverhead());
+  auto expected = static_cast<size_t>(slice1.byteSize()) + ptrOverhead();
+  AqlValue owned(slice1, 0, &resourceMonitor);
+  ASSERT_EQ(owned.memoryUsage(), expected);
+  ASSERT_EQ(owned.memoryUsage(), resourceMonitor.current());
 
-  AqlValue aAdopt(slice2.begin());  // take a look
+  // This just shares the pointer, won't create new obj.
+  // Creates VPACK_SLICE_POINTER
+  AqlValue adopted(slice2.begin());
 
-  EXPECT_EQ(resourceMonitor.current(), billed);
-  EXPECT_EQ(aAdopt.memoryUsage(), 0);
+  // Creating VPACK_SLICE_POINTER won't increase resourceMonitor memory usage
+  EXPECT_EQ(resourceMonitor.current(), expected);
+  EXPECT_EQ(adopted.memoryUsage(), 0);
 
-  aAdopt.destroy();
-  EXPECT_EQ(resourceMonitor.current(), billed);
+  adopted.destroy();
+  // resourceMonitor memory usage won't be affected
+  EXPECT_EQ(resourceMonitor.current(), expected);
 
-  aOwned.destroy();
+  owned.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, OwnedThenAdoptedElsewhereDoesNotChangeAccounting) {
+// Test the behavior of AqlValue(uint8_t const* pointer) -> VPACK_SLICE_POINTER
+// Even if it takes pointer of SupervisedBuffer, it shouldn't count memory
+TEST(AqlValueSupervisedTest, PointerCtorForSupervisedBufferNotAccount) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
-  auto builder1 = makeLargeArray(1500, 'a');
-  auto builder2 = makeLargeArray(1500, 'b');
-  Slice slice1 = builder1.slice();
-  Slice slice2 = builder2.slice();
-
-  AqlValue aOwned(slice1, 0, &resourceMonitor);
-  size_t base = resourceMonitor.current();
-  ASSERT_EQ(base, aOwned.memoryUsage());
-  ASSERT_GE(base, ptrOverhead());
-
-  AqlValue aAdoptB(slice2.begin());
-  EXPECT_EQ(resourceMonitor.current(), base);
-  EXPECT_EQ(aAdoptB.memoryUsage(), 0);
-
-  aAdoptB.destroy();
-  EXPECT_EQ(resourceMonitor.current(), base);
-
-  aOwned.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
-}
-
-TEST(AqlValueSupervisedTest, AdoptSupervisedBufferDoesNotAccountOrFree) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
+  // Creates supervisedBuffer obj
   SupervisedBuffer supervised(resourceMonitor);
   Builder builder(supervised);
   builder.openArray();
   builder.add(Value(std::string(1500, 'a')));
   builder.close();
 
-  const size_t before = resourceMonitor.current();
-  ASSERT_GT(before, 0);
+  auto before = resourceMonitor.current();
 
-  Builder builder2;
-  builder2.add(Value(7));
-  AqlValue inlineVal(builder2.slice(), 0, &resourceMonitor);
-  ASSERT_EQ(inlineVal.memoryUsage(), 0);
-  ASSERT_EQ(resourceMonitor.current(), before);
-
-  AqlValue adopted(builder2.slice().begin());
+  AqlValue adopted(builder.slice().begin()); // VPAKC_SLICE_POINTER
   EXPECT_EQ(adopted.memoryUsage(), 0);
+  // Memory usage of resourceMonitor should not increase
   EXPECT_EQ(resourceMonitor.current(), before);
 
   adopted.destroy();
-  inlineVal.destroy();
+  // Memory usage of resourceMonitor should not decrease
   EXPECT_EQ(resourceMonitor.current(), before);
 }
 
-TEST(AqlValueSupervisedTest,
-     DestroyOriginalAndCloneKeepAccountingUntilDestroyed) {
+// Test the behavior of clone(); for supervised AqlValue, it should create
+// a new copy of heap obj, hence counts double memory usage
+TEST(AqlValueSupervisedTest, FuncCloneCreatesAnotherCopy) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
@@ -281,42 +582,21 @@ TEST(AqlValueSupervisedTest,
   builder.close();
   Slice slice = builder.slice();
 
-  AqlValue aqlVal(slice, 0, &resourceMonitor);
-  AqlValue cloneVal = aqlVal.clone();
+  AqlValue aqlVal(slice, 0, &resourceMonitor); // SUPERVISED_SLICE
+  AqlValue cloneVal = aqlVal.clone(); // Create new copy of heap data
+  // Those AqlValues are independent, so memory usage should be doubled
   EXPECT_EQ(resourceMonitor.current(),
             aqlVal.memoryUsage() + cloneVal.memoryUsage());
 
   aqlVal.destroy();
-
+  // cloneVal is still alive
   EXPECT_EQ(resourceMonitor.current(), cloneVal.memoryUsage());
 
   cloneVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, CloneEraseKeepAccounting) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
-  Builder builder;
-  builder.openArray();
-  builder.add(Value(std::string(1024, 'a')));
-  builder.close();
-  Slice slice = builder.slice();
-
-  AqlValue aqlVal(slice, 0, &resourceMonitor);
-  size_t base = resourceMonitor.current();
-
-  AqlValue c = aqlVal.clone();
-  EXPECT_EQ(resourceMonitor.current(), base + c.memoryUsage());
-
-  c.destroy();
-  EXPECT_EQ(resourceMonitor.current(), base);
-
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
-}
-
+// ???
 TEST(AqlValueSupervisedTest, TypeArrayNumberStringNullObjectNone) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
@@ -353,117 +633,24 @@ TEST(AqlValueSupervisedTest, TypeArrayNumberStringNullObjectNone) {
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, PayloadLengthsMatchPrefixNotCounted) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
-  auto b = makeLargeArray(1234, 'a');
-  Slice slice = b.slice();
-  AqlValue aqlVal(slice, 0, &resourceMonitor);
-
-  EXPECT_EQ(aqlVal.slice().byteSize(), slice.byteSize());
-  EXPECT_EQ(aqlVal.memoryUsage(),
-            static_cast<size_t>(aqlVal.slice().byteSize()) + ptrOverhead());
-
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
-}
-
-TEST(AqlValueSupervisedTest, MultipleOwnedSumAccounting) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
-  auto bA = makeLargeArray(1000, 'a');
-  auto bB = makeLargeArray(2000, 'b');
-  auto bC = makeLargeArray(3000, 'c');
-  Slice sliceA = bA.slice();
-  Slice sliceB = bB.slice();
-  Slice sliceC = bC.slice();
-
-  AqlValue aqlVal1(sliceA, 0, &resourceMonitor);
-  AqlValue aqlVal2(sliceB, 0, &resourceMonitor);
-  AqlValue aqlVal3(sliceC, 0, &resourceMonitor);
-
-  size_t exp1 = static_cast<size_t>(sliceA.byteSize()) + ptrOverhead();
-  size_t exp2 = static_cast<size_t>(sliceB.byteSize()) + ptrOverhead();
-  size_t exp3 = static_cast<size_t>(sliceC.byteSize()) + ptrOverhead();
-
-  EXPECT_EQ(
-      resourceMonitor.current(),
-      aqlVal1.memoryUsage() + aqlVal2.memoryUsage() + aqlVal3.memoryUsage());
-  EXPECT_EQ(resourceMonitor.current(), exp1 + exp2 + exp3);
-
-  aqlVal2.destroy();
-  EXPECT_EQ(resourceMonitor.current(), exp1 + exp3);
-
-  aqlVal1.destroy();
-  EXPECT_EQ(resourceMonitor.current(), exp3);
-
-  aqlVal3.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
-}
-
-TEST(AqlValueSupervisedTest, DestroySafe) {
+// Test the behavior of duplicate destroy()
+TEST(AqlValueSupervisedTest, DuplicateDestoryIsSafe) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
   auto b = makeLargeArray(2000, 'a');
   Slice slice = b.slice();
   AqlValue aqlVal(slice, 0, &resourceMonitor);
-  size_t billed = resourceMonitor.current();
-  EXPECT_GT(billed, 0);
+  auto expected = slice.byteSize() + ptrOverhead();
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
 
   aqlVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
 
+  // destroy() calls erase() where zero outs the AqlValue's 16 bytes
   aqlVal.destroy();
   EXPECT_EQ(resourceMonitor.current(), 0);
-}
-
-TEST(AqlValueSupervisedTest, AccountsAndMovesFromSource) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(global);
-  ASSERT_EQ(rm.current(), 0);
-
-  auto s = makeString(4096, 'x').slice();
-  auto data = makeDocDataFromSlice(s);
-
-  AqlValue v(data, &rm);
-  EXPECT_EQ(data.get(), nullptr); // Source string should be empty
-
-  size_t expected = static_cast<size_t>(s.byteSize()) + ptrOverhead();
-  EXPECT_EQ(v.memoryUsage(), expected);
-  EXPECT_EQ(rm.current(), expected);
-  EXPECT_TRUE(v.slice().binaryEquals(s));
-
-  v.destroy();
-  EXPECT_EQ(rm.current(), 0);
-}
-
-TEST(AqlValueSupervisedTest, MutipleValuesSumAccounting) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(global);
-
-  auto s1 = makeString(1500, 'a').slice();
-  auto s2 = makeString(2500, 'b').slice();
-  auto d1 = makeDocDataFromSlice(s1);
-  auto d2 = makeDocDataFromSlice(s2);
-
-  AqlValue v1(d1, &rm);
-  AqlValue v2(d2, &rm);
-
-  size_t e1 = static_cast<size_t>(s1.byteSize()) + ptrOverhead();
-  size_t e2 = static_cast<size_t>(s2.byteSize()) + ptrOverhead();
-
-  EXPECT_EQ(v1.memoryUsage(), e1);
-  EXPECT_EQ(v2.memoryUsage(), e2);
-  EXPECT_EQ(rm.current(), e1 + e2);
-
-  v1.destroy();
-  EXPECT_EQ(rm.current(), e2);
-
-  v2.destroy();
-  EXPECT_EQ(rm.current(), 0);
 }
 
 TEST(AqlValueSupervisedTest, CloneKeepsAccoutingUNtilBothDestroyed) {
@@ -489,51 +676,6 @@ TEST(AqlValueSupervisedTest, CloneKeepsAccoutingUNtilBothDestroyed) {
   EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, ShortString_MemoryAccounting) {
-  auto& global = GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor rm(global);
-
-  std::string s(15, 'x');  // 15 chars, fits short-string (<= 126), not inline
-  const std::size_t payloadSize = 1 + s.size();  // tag + chars
-  const std::uint64_t before = rm.current();
-
-  AqlValue v(std::string_view{s}, &rm);
-
-  // Memory should increase by kPrefix + payloadSize
-  EXPECT_EQ(rm.current() - before, ptrOverhead() + payloadSize);
-
-  // Slice should decode back to original string
-  auto slice = v.slice();
-  ASSERT_TRUE(slice.isString());
-  EXPECT_EQ(slice.stringView(), s);
-
-  v.destroy();
-  // After destruction, usage returns to baseline
-  EXPECT_EQ(rm.current(), before);
-}
-
-TEST(AqlValueSupervisedTest, LongString_ResourceMonitorUsage) {
-  auto& global = GlobalResourceMonitor::instance();
-  arangodb::ResourceMonitor rm(global);
-
-  std::string s(300, 'A');  // triggers long string encoding
-  std::size_t expectedBytes = ptrOverhead() + (1 + 8 + s.size());
-  // prefix + 0xBF + 8-byte length + characters
-
-  std::uint64_t before = rm.current();
-
-  AqlValue v(std::string_view{s}, &rm);
-
-  auto slice = v.slice();
-  ASSERT_TRUE(slice.isString());
-  EXPECT_EQ(slice.stringView(), s);
-
-  std::uint64_t after = rm.current();
-  EXPECT_EQ(after - before, expectedBytes);
-
-  v.destroy();
-  EXPECT_EQ(rm.current(), before);
-}
 TEST(AqlValueSupervisedTest, GetTypeString_Basics_SupervisedAndManaged) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
@@ -733,7 +875,7 @@ TEST(AqlValueSupervisedTest, Materialize_NonRange) {
   AqlValue mat1 = v1.materialize(nullptr, copied1);
   // materialize()'s default case calls copy ctor of SupervisedSlice
   // Copy ctor of SupervisedSlice creates a new copy of AqlValue
-  EXPECT_FALSE(copied1); // This should be true
+  EXPECT_FALSE(copied1);  // This should be true
 
   EXPECT_TRUE(v1.slice().binaryEquals(obj.slice()));
   EXPECT_TRUE(mat1.slice().binaryEquals(obj.slice()));
@@ -748,7 +890,7 @@ TEST(AqlValueSupervisedTest, Materialize_NonRange) {
   EXPECT_EQ(rm.current(), 0);
 
   /* Non-range SupervisedString */
-  std::string bigStr(16 * 1024, 'y');  // 16KB string
+  std::string bigStr(16 * 1024, 'y');          // 16KB string
   AqlValue v2(std::string_view{bigStr}, &rm);  // SupervisedString
   base = rm.current();
 
@@ -859,185 +1001,4 @@ TEST(AqlValueSupervisedTest, Compare_RangeOrdering) {
   r2.destroy();
   r3.destroy();
   r4.destroy();
-}
-
-// Checks the behavior of copy constructor AqlValue(AqlValue const other&)
-// For supervised AqlValue (VPACK_SUPERVISED_SLICE, VPACK_SUPERVISED_STRING), it will create a new heap obj.
-// Other than them, it won't create a new heap obj i.e. shallow copy
-TEST(AqlValueSupervisedTest, CopyConstructor) {
-  // 1) VPACK_INLINE_INT64
-  {
-    Builder b;
-    b.add(Value(42));
-    AqlValue v(b.slice()); // Creates VPACK_INLINE_INT64
-    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_INT64);
-
-    // Invokes copy constructor; creates another copy of the AqlValue
-    AqlValue cpy = v;
-    EXPECT_EQ(cpy.type(), v.type());
-    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
-    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
-
-    cpy.destroy();
-    // Checks v is still alive after cpy is destroyed
-    EXPECT_TRUE(v.slice().isInteger());
-    EXPECT_EQ(v.slice().getNumber<int64_t>(), 42);
-    v.destroy();
-  }
-
-  // 2) VPACK_INLINE_UINT64
-  {
-    Builder b;
-    uint64_t u = (1ULL << 63);  // 9223372036854775808
-    b.add(Value(u));
-    AqlValue v(b.slice());  // Creates VPACK_INLINE_UINT64
-    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_UINT64) << "type() = " << static_cast<int>(v.type());
-
-    // Copy constructor
-    AqlValue cpy = v;
-    EXPECT_EQ(cpy.type(), v.type());
-    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
-    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
-
-    cpy.destroy();
-    // Ensure v is still alive after destroying copy
-    EXPECT_TRUE(v.slice().isInteger());
-    EXPECT_EQ(v.slice().getNumber<uint64_t>(), 1ULL << 63);
-    v.destroy();
-  }
-
-  // 3) VPACK_INLINE_DOUBLE
-  {
-    Builder b;
-    b.add(Value(3.1415926535));
-    AqlValue v(b.slice());  // Creates VPACK_INLINE_DOUBLE
-    EXPECT_EQ(v.type(), AqlValue::VPACK_INLINE_DOUBLE);
-
-    // Copy constructor
-    AqlValue cpy = v;
-    EXPECT_EQ(cpy.type(), v.type());
-    ASSERT_EQ(cpy.memoryUsage(), v.memoryUsage());
-    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
-
-    cpy.destroy();
-    // Ensure v is still alive after destroying copy
-    EXPECT_TRUE(v.slice().isDouble());
-    EXPECT_DOUBLE_EQ(v.slice().getNumber<double>(), 3.1415926535);
-
-    v.destroy();
-  }
-
-  // // 4) VPACK_MANAGED_SLICE
-  // {
-  //   std::string big(300, 'a');
-  //   arangodb::velocypack::Builder b;
-  //   b.add(arangodb::velocypack::Value(big));
-  //
-  //   AqlValue v(b.slice());  // VPACK_MANAGED_SLICE
-  //   ASSERT_EQ(v.type(), AqlValue::VPACK_MANAGED_SLICE);
-  //
-  //   auto* p1 = v.slice().start();
-  //
-  //   // Copy constructor; shallow copy
-  //   AqlValue cpy = v;
-  //   ASSERT_EQ(cpy.type(), AqlValue::VPACK_MANAGED_SLICE);
-  //
-  //   // Shallow copy -> pointers are identical, contents are identical
-  //   EXPECT_EQ(cpy.slice().start(), v.slice().start());
-  //   EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
-  //
-  //   // Destroying the copy will destroy the original's heap data too
-  //   // So v's pointer is dangling
-  //   cpy.destroy();
-  // }
-
-  // // 5) MANAGED_STRING — shallow copy
-  // {
-  //   std::string big(300, 'x');
-  //   AqlValue v(std::string_view{big});  // VPACK_MANAGED_STRING
-  //   ASSERT_EQ(v.type(), AqlValue::VPACK_MANAGED_STRING);
-  //
-  //   // Copy ctor; shallow copy
-  //   AqlValue cpy = v;
-  //   ASSERT_EQ(cpy.type(), AqlValue::VPACK_MANAGED_STRING);
-  //
-  //   // Same pointers and same contents
-  //   EXPECT_EQ(v.data(), cpy.data());
-  //   EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));
-  //
-  //   // Destroy the copy; the original's heap data is also destroyed
-  //   cpy.destroy();
-  // }
-
-  // 6) SupervisedSlice: copy ctor deep copy
-  {
-    auto& g = GlobalResourceMonitor::instance();
-    ResourceMonitor rm(g);
-
-    Builder obj = makeObj({{"k", Value(std::string(300, 'a'))}});
-    VPackSlice src = obj.slice();
-
-    std::uint64_t base = rm.current();
-
-    AqlValue v(src, /*length*/ 0, &rm); // Original supervised slice
-    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
-    auto* pv = v.slice().start();
-    std::uint64_t afterV = rm.current();
-    EXPECT_EQ(afterV, v.memoryUsage());
-
-    // Copy-ctor -> deep copy
-    AqlValue cpy = v;
-    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
-    auto* pc = cpy.slice().start();
-
-    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice())); // Same contents
-    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
-    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
-
-    // Destroy the copy; original is still alive
-    cpy.destroy();
-    EXPECT_EQ(rm.current(), afterV);
-    EXPECT_TRUE(v.slice().binaryEquals(src)); // The original is alive
-    EXPECT_EQ(v.slice().start(), pv);
-
-    // Destroy the original; RM returns to base
-    v.destroy();
-    EXPECT_EQ(rm.current(), base);
-  }
-
-  // 7) SupervisedString: copy-ctor deep copy
-  {
-    auto& g = GlobalResourceMonitor::instance();
-    ResourceMonitor rm(g);
-
-    std::string big(300, 'x');
-    std::uint64_t base = rm.current();
-
-    // Original supervised string
-    AqlValue v(std::string_view{big}, &rm);
-    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE) << v.type();
-    auto* pv = v.slice().start();
-    std::uint64_t afterV = rm.current();
-    EXPECT_EQ(afterV, v.memoryUsage());
-
-    // Copy-ctor; deep copy
-    AqlValue cpy = v;
-    ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
-    auto* pc = cpy.slice().start();
-
-    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice())); // Same contents
-    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
-    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
-
-    // Destroy the copy; original is still alive
-    cpy.destroy();
-    EXPECT_EQ(rm.current(), afterV);
-    EXPECT_TRUE(v.slice().isString()); // The original is alive
-    EXPECT_EQ(v.slice().getStringLength(), big.size());
-    EXPECT_EQ(v.slice().start(), pv);
-
-    // Destroy the original; RM returns to base
-    v.destroy();
-    EXPECT_EQ(rm.current(), base);
-  }
 }
