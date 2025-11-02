@@ -435,7 +435,7 @@ class ArangoServer:
                         process_stats = get_process_stats(self.server_id)
 
                         return ServerStats(
-                            process_id=process_stats.pid if process_stats else 0,
+                            server_id=process_stats.pid if process_stats else 0,
                             memory_usage=(
                                 process_stats.memory_rss if process_stats else 0
                             ),

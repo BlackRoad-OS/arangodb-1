@@ -820,12 +820,12 @@ def pytest_runtest_makereport(item, call):
 
         # Build comprehensive crash message
         crash_messages = []
-        for process_id, crash_info in crash_states.items():
+        for server_id, crash_info in crash_states.items():
             exit_code = crash_info.exit_code
             signal_num = crash_info.signal
             stderr = crash_info.stderr or ""
 
-            msg = f"Process {process_id} crashed during test execution"
+            msg = f"Server {server_id} crashed during test execution"
             if signal_num:
                 msg += f" (signal {signal_num})"
             msg += f" with exit code {exit_code}"
@@ -977,92 +977,92 @@ def _cleanup_all_processes(emergency=True):
         from ..core.process import _process_supervisor
 
         if hasattr(_process_supervisor, "_processes"):
-            process_ids = list(_process_supervisor._processes.keys())
+            server_ids = list(_process_supervisor._processes.keys())
             logger.info(
-                "Found %d processes to cleanup: %s", len(process_ids), process_ids
+                "Found %d processes to cleanup: %s", len(server_ids), server_ids
             )
-            if process_ids:
+            if server_ids:
                 if emergency:
                     logger.warning(
                         "Emergency cleanup of %s processes: %s",
-                        len(process_ids),
-                        process_ids,
+                        len(server_ids),
+                        server_ids,
                     )
                 logger.info(
                     "Phase 1: Attempting graceful shutdown (SIGTERM, 3s timeout)"
                 )
                 graceful_failed = []
-                for process_id in process_ids:
+                for server_id in server_ids:
                     try:
                         # Check if process is already dead before trying to stop it
-                        if process_id in _process_supervisor._processes:
-                            process = _process_supervisor._processes[process_id]
+                        if server_id in _process_supervisor._processes:
+                            process = _process_supervisor._processes[server_id]
                             if process.poll() is not None:
                                 logger.debug(
                                     "Process %s already dead (exit code: %s), skipping",
-                                    process_id,
+                                    server_id,
                                     process.returncode,
                                 )
                                 # Remove it from tracking since it's already dead
-                                _process_supervisor._cleanup_process(process_id)
+                                _process_supervisor._cleanup_process(server_id)
                                 continue
 
-                        logger.debug("Sending SIGTERM to process group %s", process_id)
-                        _process_supervisor.stop(process_id, graceful=True, timeout=3.0)
-                        logger.debug("Process %s terminated gracefully", process_id)
+                        logger.debug("Sending SIGTERM to process group %s", server_id)
+                        _process_supervisor.stop(server_id, graceful=True, timeout=3.0)
+                        logger.debug("Process %s terminated gracefully", server_id)
                     except (OSError, ProcessLookupError) as e:
                         logger.warning(
-                            "Graceful termination failed for %s: %s", process_id, e
+                            "Graceful termination failed for %s: %s", server_id, e
                         )
-                        graceful_failed.append(process_id)
+                        graceful_failed.append(server_id)
                     except Exception as e:
                         # Emergency cleanup must continue even on unexpected errors
                         logger.error(
                             "Unexpected error during graceful termination of %s: %s",
-                            process_id,
+                            server_id,
                             e,
                             exc_info=True,
                         )
-                        graceful_failed.append(process_id)
+                        graceful_failed.append(server_id)
                 if graceful_failed:
                     logger.warning(
                         "Phase 2: Force killing %s stubborn processes: %s",
                         len(graceful_failed),
                         graceful_failed,
                     )
-                    for process_id in graceful_failed:
+                    for server_id in graceful_failed:
                         try:
                             # Check if process is already dead before trying to force kill it
-                            if process_id in _process_supervisor._processes:
-                                process = _process_supervisor._processes[process_id]
+                            if server_id in _process_supervisor._processes:
+                                process = _process_supervisor._processes[server_id]
                                 if process.poll() is not None:
                                     logger.debug(
                                         "Process %s already dead (exit code: %s), skipping force kill",
-                                        process_id,
+                                        server_id,
                                         process.returncode,
                                     )
                                     # Remove it from tracking since it's already dead
-                                    _process_supervisor._cleanup_process(process_id)
+                                    _process_supervisor._cleanup_process(server_id)
                                     continue
 
                             logger.debug(
-                                "Sending SIGKILL to process group %s", process_id
+                                "Sending SIGKILL to process group %s", server_id
                             )
                             _process_supervisor.stop(
-                                process_id, graceful=False, timeout=2.0
+                                server_id, graceful=False, timeout=2.0
                             )
-                            logger.debug("Process %s force killed", process_id)
+                            logger.debug("Process %s force killed", server_id)
                         except (OSError, ProcessLookupError) as e:
                             logger.error(
                                 "CRITICAL: Failed to force kill process %s: %s",
-                                process_id,
+                                server_id,
                                 e,
                             )
                         except Exception as e:
                             # Emergency cleanup must continue even on unexpected errors
                             logger.error(
                                 "CRITICAL: Unexpected error force killing process %s: %s",
-                                process_id,
+                                server_id,
                                 e,
                                 exc_info=True,
                             )
@@ -1071,16 +1071,16 @@ def _cleanup_all_processes(emergency=True):
                 # Final verification: check if any processes are still running
                 try:
                     remaining_processes = []
-                    for process_id in process_ids:
-                        if process_id in _process_supervisor._processes:
-                            process = _process_supervisor._processes[process_id]
+                    for server_id in server_ids:
+                        if server_id in _process_supervisor._processes:
+                            process = _process_supervisor._processes[server_id]
                             try:
                                 # Check if process is still alive
                                 if process.poll() is None:  # None means still running
-                                    remaining_processes.append(process_id)
+                                    remaining_processes.append(server_id)
                             except (OSError, ProcessLookupError, ValueError):
                                 # Process might be in inconsistent state - treat as potentially alive
-                                remaining_processes.append(process_id)
+                                remaining_processes.append(server_id)
 
                     if remaining_processes:
                         logger.error(

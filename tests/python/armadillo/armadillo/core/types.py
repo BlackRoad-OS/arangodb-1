@@ -202,7 +202,7 @@ class HealthStatus(BaseModel):
 class ServerStats(BaseModel):
     """Server statistics and metrics."""
 
-    process_id: int
+    pid: int
     memory_usage: int
     cpu_percent: float
     connection_count: int

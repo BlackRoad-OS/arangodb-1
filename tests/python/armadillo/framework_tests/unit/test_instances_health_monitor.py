@@ -114,7 +114,7 @@ class TestHealthMonitor:
         mock_server = Mock()
         mock_server.server_id = "server1"
         mock_stats = ServerStats(
-            process_id=1234,
+            pid=1234,
             memory_usage=1024,
             cpu_percent=10.5,
             connection_count=50,
@@ -148,7 +148,7 @@ class TestHealthMonitor:
         server1 = Mock()
         server1.server_id = "server1"
         stats1 = ServerStats(
-            process_id=1234,
+            pid=1234,
             memory_usage=1024,
             cpu_percent=10.5,
             connection_count=50,
@@ -159,7 +159,7 @@ class TestHealthMonitor:
         server2 = Mock()
         server2.server_id = "server2"
         stats2 = ServerStats(
-            process_id=1235,
+            pid=1235,
             memory_usage=2048,
             cpu_percent=20.5,
             connection_count=100,

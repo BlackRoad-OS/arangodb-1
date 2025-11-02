@@ -245,7 +245,7 @@ class TestServerStats:
     def test_server_stats_creation(self):
         """Test ServerStats creation."""
         stats = ServerStats(
-            process_id=12345,
+            pid=12345,
             memory_usage=1024 * 1024,
             cpu_percent=25.5,
             connection_count=10,
@@ -253,7 +253,7 @@ class TestServerStats:
             additional_metrics={"cache_hit_rate": 0.95},
         )
 
-        assert stats.process_id == 12345
+        assert stats.pid == 12345
         assert stats.memory_usage == 1024 * 1024
         assert stats.cpu_percent == 25.5
         assert stats.connection_count == 10
