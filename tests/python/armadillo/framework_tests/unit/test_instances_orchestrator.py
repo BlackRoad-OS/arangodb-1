@@ -10,6 +10,18 @@ from pathlib import Path
 
 from armadillo.instances.orchestrator import ClusterOrchestrator, ClusterState
 from armadillo.core.types import ServerRole
+from armadillo.core.context import ApplicationContext
+
+
+@pytest.fixture
+def mock_app_context():
+    """Create a mock ApplicationContext for testing."""
+    mock_context = Mock(spec=ApplicationContext)
+    mock_context.config = Mock()
+    mock_context.config.infrastructure = Mock()
+    mock_context.config.infrastructure.orchestrator_max_workers = 4  # Reasonable default
+    mock_context.auth_provider = Mock()
+    return mock_context
 
 
 class TestClusterStateBasic:
@@ -74,24 +86,24 @@ class TestClusterOrchestratorBasic:
     """Test ClusterOrchestrator basic functionality."""
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_can_be_created(self, mock_get_manager):
+    def test_orchestrator_can_be_created(self, mock_get_manager, mock_app_context):
         """Test ClusterOrchestrator can be instantiated."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("test_deployment")
+        orchestrator = ClusterOrchestrator("test_deployment", mock_app_context)
 
         assert orchestrator is not None
         assert orchestrator.deployment_id == "test_deployment"
         assert orchestrator.instance_manager == mock_manager
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_has_expected_attributes(self, mock_get_manager):
+    def test_orchestrator_has_expected_attributes(self, mock_get_manager, mock_app_context):
         """Test orchestrator has expected attributes."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("test")
+        orchestrator = ClusterOrchestrator("test", mock_app_context)
 
         # Check that expected attributes exist
         assert hasattr(orchestrator, "deployment_id")
@@ -102,12 +114,12 @@ class TestClusterOrchestratorBasic:
         assert hasattr(orchestrator, "_state_last_updated")
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_has_expected_methods(self, mock_get_manager):
+    def test_orchestrator_has_expected_methods(self, mock_get_manager, mock_app_context):
         """Test orchestrator has expected public methods."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("test")
+        orchestrator = ClusterOrchestrator("test", mock_app_context)
 
         # Check that key methods exist (based on what we can infer from the structure)
         expected_methods = ["_cluster_state", "_state_last_updated"]
@@ -116,13 +128,13 @@ class TestClusterOrchestratorBasic:
             assert hasattr(orchestrator, attr)
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_unique_deployment_ids(self, mock_get_manager):
+    def test_unique_deployment_ids(self, mock_get_manager, mock_app_context):
         """Test deployment IDs are preserved correctly."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator1 = ClusterOrchestrator("deployment_one")
-        orchestrator2 = ClusterOrchestrator("deployment_two")
+        orchestrator1 = ClusterOrchestrator("deployment_one", mock_app_context)
+        orchestrator2 = ClusterOrchestrator("deployment_two", mock_app_context)
 
         assert orchestrator1.deployment_id != orchestrator2.deployment_id
         assert orchestrator1.deployment_id == "deployment_one"
@@ -133,28 +145,28 @@ class TestClusterOrchestratorInitialization:
     """Test ClusterOrchestrator initialization."""
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_initial_state(self, mock_get_manager):
+    def test_orchestrator_initial_state(self, mock_get_manager, mock_app_context):
         """Test orchestrator initial state."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("init_test")
+        orchestrator = ClusterOrchestrator("init_test", mock_app_context)
 
         # Initial state should be None
         assert orchestrator._cluster_state is None
         assert orchestrator._state_last_updated is None
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_manager_integration(self, mock_get_manager):
+    def test_orchestrator_manager_integration(self, mock_get_manager, mock_app_context):
         """Test orchestrator integrates with instance manager."""
         mock_manager = Mock()
         mock_manager.deployment_id = "test_deployment"
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("test_deployment")
+        orchestrator = ClusterOrchestrator("test_deployment", mock_app_context)
 
         # Should have called get_instance_manager with correct deployment ID
-        mock_get_manager.assert_called_once_with("test_deployment")
+        mock_get_manager.assert_called_once_with("test_deployment", mock_app_context)
         assert orchestrator.instance_manager == mock_manager
 
 
@@ -162,38 +174,38 @@ class TestClusterOrchestratorErrorHandling:
     """Test basic error handling."""
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_handles_invalid_deployment_id(self, mock_get_manager):
+    def test_orchestrator_handles_invalid_deployment_id(self, mock_get_manager, mock_app_context):
         """Test orchestrator creation with edge case deployment IDs."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
         # Test with empty string
-        orchestrator1 = ClusterOrchestrator("")
+        orchestrator1 = ClusterOrchestrator("", mock_app_context)
         assert orchestrator1.deployment_id == ""
 
         # Test with special characters
-        orchestrator2 = ClusterOrchestrator("test-deployment_123")
+        orchestrator2 = ClusterOrchestrator("test-deployment_123", mock_app_context)
         assert orchestrator2.deployment_id == "test-deployment_123"
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_handles_manager_failure(self, mock_get_manager):
+    def test_orchestrator_handles_manager_failure(self, mock_get_manager, mock_app_context):
         """Test orchestrator handles instance manager initialization failure."""
         mock_get_manager.side_effect = Exception("Manager initialization failed")
 
         with pytest.raises(Exception):
-            ClusterOrchestrator("failing_deployment")
+            ClusterOrchestrator("failing_deployment", mock_app_context)
 
 
 class TestClusterOrchestratorMockIntegration:
     """Test orchestrator with minimal safe mocking."""
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_state_management(self, mock_get_manager):
+    def test_orchestrator_state_management(self, mock_get_manager, mock_app_context):
         """Test orchestrator state management capabilities."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("state_test")
+        orchestrator = ClusterOrchestrator("state_test", mock_app_context)
 
         # Test that we can set cluster state
         test_state = ClusterState(
@@ -209,12 +221,12 @@ class TestClusterOrchestratorMockIntegration:
         assert orchestrator._cluster_state.is_agency_healthy() is True
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_orchestrator_time_tracking(self, mock_get_manager):
+    def test_orchestrator_time_tracking(self, mock_get_manager, mock_app_context):
         """Test orchestrator tracks state update time."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("time_test")
+        orchestrator = ClusterOrchestrator("time_test", mock_app_context)
 
         # Initially no last updated time
         assert orchestrator._state_last_updated is None
@@ -232,12 +244,12 @@ class TestClusterOrchestratorPublicInterface:
     """Test the public interface works as expected."""
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_has_expected_properties(self, mock_get_manager):
+    def test_has_expected_properties(self, mock_get_manager, mock_app_context):
         """Test orchestrator has expected public properties."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
-        orchestrator = ClusterOrchestrator("interface_test")
+        orchestrator = ClusterOrchestrator("interface_test", mock_app_context)
 
         # Check that public properties exist
         assert hasattr(orchestrator, "deployment_id")
@@ -246,14 +258,14 @@ class TestClusterOrchestratorPublicInterface:
         assert hasattr(orchestrator, "instance_manager")
 
     @patch("armadillo.instances.orchestrator.get_instance_manager")
-    def test_deployment_id_consistency(self, mock_get_manager):
+    def test_deployment_id_consistency(self, mock_get_manager, mock_app_context):
         """Test deployment ID is consistent throughout."""
         mock_manager = Mock()
         mock_get_manager.return_value = mock_manager
 
         test_id = "consistency_test_123"
-        orchestrator = ClusterOrchestrator(test_id)
+        orchestrator = ClusterOrchestrator(test_id, mock_app_context)
 
         assert orchestrator.deployment_id == test_id
         # Should have requested manager for same deployment ID
-        mock_get_manager.assert_called_once_with(test_id)
+        mock_get_manager.assert_called_once_with(test_id, mock_app_context)

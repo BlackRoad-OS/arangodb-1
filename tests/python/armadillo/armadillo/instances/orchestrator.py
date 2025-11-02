@@ -98,16 +98,17 @@ class ClusterOperation:
 class ClusterOrchestrator:
     """Advanced orchestration for multi-server ArangoDB cluster operations."""
 
-    def __init__(self, deployment_id: str) -> None:
+    def __init__(self, deployment_id: str, app_context: "ApplicationContext") -> None:
         """Initialize cluster orchestrator.
 
         Args:
             deployment_id: Unique deployment identifier
+            app_context: ApplicationContext to use
         """
         self.deployment_id = deployment_id
-        self.config = get_config()
-        self.auth_provider = get_auth_provider()
-        self.instance_manager = get_instance_manager(deployment_id)
+        self.config = app_context.config
+        self.auth_provider = app_context.auth_provider
+        self.instance_manager = get_instance_manager(deployment_id, app_context)
         self._cluster_state: Optional[ClusterState] = None
         self._state_last_updated: Optional[float] = None
         self._active_operations: Dict[str, ClusterOperation] = {}
@@ -602,18 +603,23 @@ _cluster_orchestrators: Dict[str, ClusterOrchestrator] = {}
 _orchestrator_lock = threading.Lock()
 
 
-def get_cluster_orchestrator(deployment_id: str) -> ClusterOrchestrator:
+def get_cluster_orchestrator(
+    deployment_id: str, app_context: "ApplicationContext"
+) -> ClusterOrchestrator:
     """Get or create cluster orchestrator for deployment.
 
     Args:
         deployment_id: Unique deployment identifier
+        app_context: ApplicationContext to use
 
     Returns:
         Cluster orchestrator instance
     """
     with _orchestrator_lock:
         if deployment_id not in _cluster_orchestrators:
-            _cluster_orchestrators[deployment_id] = ClusterOrchestrator(deployment_id)
+            _cluster_orchestrators[deployment_id] = ClusterOrchestrator(
+                deployment_id, app_context
+            )
         return _cluster_orchestrators[deployment_id]
 
 

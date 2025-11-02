@@ -42,6 +42,7 @@ class ArmadilloPlugin:
         self._armadillo_config: Optional[Any] = None
         self._deployment_failed: bool = False
         self._deployment_failure_reason: Optional[str] = None
+        self._session_app_context: Optional[Any] = None  # Shared context for all session deployments
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
@@ -211,7 +212,7 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
     from ..instances.manager import get_instance_manager
 
     deployment_id = "test_single_server_session"
-    manager = get_instance_manager(deployment_id)
+    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
 
     try:
         logger.info("Starting session single server")
@@ -265,7 +266,7 @@ def _get_or_create_cluster(self) -> "InstanceManager":
     """Get or create session cluster deployment."""
     if "cluster" not in self._session_deployments:
         deployment_id = f"cluster_{random_id(8)}"
-        manager = get_instance_manager(deployment_id)
+        manager = get_instance_manager(deployment_id, app_context=self._session_app_context)
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
         plan = manager.create_deployment_plan(cluster_config)
@@ -324,7 +325,7 @@ def _get_or_create_single_server(self) -> ArangoServer:
         from ..instances.manager import get_instance_manager
 
         deployment_id = "test_single_server"
-        manager = get_instance_manager(deployment_id)
+        manager = get_instance_manager(deployment_id, app_context=self._session_app_context)
 
         logger.info("Starting session single server")
 
@@ -395,7 +396,7 @@ def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     from ..instances.manager import get_instance_manager
 
     deployment_id = f"test_func_{random_id(8)}"
-    manager = get_instance_manager(deployment_id)
+    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
 
     try:
         logger.info("Starting function server %s", deployment_id)
@@ -421,7 +422,7 @@ def arango_single_server_function() -> Generator[ArangoServer, None, None]:
 def arango_cluster() -> Generator[InstanceManager, None, None]:
     """Provide a full ArangoDB cluster for testing."""
     deployment_id = f"cluster_{random_id(8)}"
-    manager = get_instance_manager(deployment_id)
+    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
     try:
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
@@ -449,7 +450,7 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
 def arango_cluster_function() -> Generator[InstanceManager, None, None]:
     """Provide a function-scoped ArangoDB cluster."""
     deployment_id = f"cluster_func_{random_id(8)}"
-    manager = get_instance_manager(deployment_id)
+    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
     try:
         logger.info("Starting function cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)
@@ -607,8 +608,16 @@ def pytest_sessionstart(session):
     signal.signal(signal.SIGTERM, _signal_handler)
     from ..core.config import get_config as get_framework_config
     from ..core.types import DeploymentMode as DepMode
+    from ..core.context import ApplicationContext
 
     framework_config = get_framework_config()
+
+    # Create shared ApplicationContext for the entire pytest session
+    # This ensures all deployments share the same context (port allocator, filesystem, etc.)
+    session_id = random_id(8)
+    _plugin._session_app_context = ApplicationContext.create(framework_config)
+    _plugin._session_app_context.filesystem.set_test_session_id(session_id)
+
     deployment_mode = framework_config.deployment_mode
     logger.info("Starting %s deployment for test session...", deployment_mode.value)
     try:
@@ -627,6 +636,13 @@ def pytest_sessionstart(session):
     ) as e:
         logger.error("Failed to start %s deployment: %s", deployment_mode.value, e)
         raise
+
+    # Print test artifacts directory (clean access via shared context)
+    from ..utils.output import print_status
+    artifacts_dir = _plugin._session_app_context.filesystem.work_dir()
+    print_status(f"📁 Test artifacts: {artifacts_dir}")
+    logger.info("Test artifacts directory: %s", artifacts_dir)
+
     if not framework_config.compact_mode:
         reporter = get_armadillo_reporter()
         reporter.pytest_sessionstart(session)

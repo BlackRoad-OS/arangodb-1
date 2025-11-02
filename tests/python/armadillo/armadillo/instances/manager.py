@@ -677,19 +677,20 @@ _instance_managers: Dict[str, InstanceManager] = {}
 _manager_lock = threading.Lock()
 
 
-def get_instance_manager(deployment_id: str) -> InstanceManager:
+def get_instance_manager(
+    deployment_id: str, app_context: ApplicationContext
+) -> InstanceManager:
     """Get or create instance manager for deployment.
 
     Args:
         deployment_id: Unique deployment identifier
+        app_context: ApplicationContext to use (required - must be passed explicitly)
 
     Returns:
         Instance manager instance
     """
     with _manager_lock:
         if deployment_id not in _instance_managers:
-            # Create ApplicationContext for this manager
-            app_context = ApplicationContext.create(get_config())
             _instance_managers[deployment_id] = InstanceManager(
                 deployment_id, app_context=app_context
             )
