@@ -1029,7 +1029,6 @@ void AqlValue::destroy() noexcept {
       break;
     }
     case VPACK_SUPERVISED_STRING: {
-      auto lo = _data.supervisedStringMeta.lengthOrigin;
       auto len =
           static_cast<std::uint64_t>(_data.supervisedStringMeta.getLength());
       deallocateSupervised(_data.supervisedStringMeta.pointer, len,
@@ -1573,14 +1572,12 @@ size_t AqlValue::memoryUsage() const noexcept {
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
     case VPACK_SUPERVISED_SLICE: {
-      auto const lo = _data.supervisedSliceMeta.lengthOrigin;
       auto const len = static_cast<size_t>(
           velocypack::Slice(_data.supervisedSliceMeta.getPayloadPtr())
               .byteSize());  // change to getLength
       return len + kPrefix;
     }
     case VPACK_SUPERVISED_STRING: {
-      auto const lo = _data.supervisedStringMeta.lengthOrigin;
       auto const len =
           static_cast<size_t>(_data.supervisedStringMeta.getLength());
       return len + kPrefix;
