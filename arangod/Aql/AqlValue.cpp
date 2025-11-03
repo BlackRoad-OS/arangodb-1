@@ -1517,50 +1517,6 @@ AqlValue& AqlValue::operator=(AqlValue const& other) {
   return *this;
 }
 
-AqlValue::AqlValue(AqlValue const& other, arangodb::ResourceMonitor& rm) {
-  auto t = other.type();
-  TRI_ASSERT(t == VPACK_SUPERVISED_SLICE || t == VPACK_SUPERVISED_STRING);
-
-  switch (t) {
-    case VPACK_SUPERVISED_SLICE:
-    case VPACK_SUPERVISED_STRING: {
-      auto s = other.slice(t);
-      auto len = static_cast<std::uint64_t>(s.byteSize());
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                        MemoryOriginType::New);
-      uint8_t* base = allocateSupervised(rm, len, );
-      _data.supervisedSliceMeta.pointer = base;
-      std::memcpy(base + kPrefix, s.start(), static_cast<std::size_t>(len));
-      break;
-    }
-    default:
-      break;
-  }
-}
-
-AqlValue::AqlValue(AqlValue const& other, void const* data) noexcept {
-  TRI_ASSERT(data != nullptr);
-  auto t = other.type();
-  setType(t);
-  switch (t) {
-    case VPACK_MANAGED_SLICE:
-      _data.managedSliceMeta.lengthOrigin =
-          other._data.managedSliceMeta.lengthOrigin;
-      _data.managedSliceMeta.pointer =
-          const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
-      break;
-    case VPACK_MANAGED_STRING:
-      _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
-      break;
-    case RANGE:
-      _data.rangeMeta.range = static_cast<Range const*>(data);
-      break;
-    default:
-      TRI_ASSERT(false);
-      break;
-  }
-}
-
 bool AqlValue::requiresDestruction() const noexcept {
   auto t = type();
   switch (t) {
@@ -1725,7 +1681,6 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
   uint64_t lo = 0;
   //   little: [ len:6 ][ origin:1 ][ type:1 ]
   //   big:    [ type:1 ][ origin:1 ][ len:6 ]
-  uint64_t lo = 0;
   if constexpr (basics::isLittleEndian()) {
     lo |= (static_cast<uint64_t>(mot) << 8);
     lo |= static_cast<uint64_t>(at);
@@ -1733,6 +1688,8 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
     lo |= (static_cast<uint64_t>(mot) << 48);
     lo |= (static_cast<uint64_t>(at) << 56);
   }
+
+  setType(at);
 
   if (at == VPACK_SUPERVISED_SLICE) {
     TRI_ASSERT(type() == VPACK_SUPERVISED_SLICE);
