@@ -11,6 +11,7 @@ from pathlib import Path
 from armadillo.instances.server import ArangoServer, ServerPaths
 from armadillo.core.types import ServerRole, ClusterConfig, TimeoutConfig
 from armadillo.core.context import ApplicationContext
+from armadillo.core.value_objects import ServerId
 
 
 class TestArangoServerBasic:
@@ -20,11 +21,11 @@ class TestArangoServerBasic:
         """Test ArangoServer can be instantiated using factory method."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test_server", app_context=app_context, port=8529
+            server_id=ServerId("test_server"), app_context=app_context, port=8529
         )
 
         assert server is not None
-        assert server.server_id == "test_server"
+        assert server.server_id == ServerId("test_server")
         assert server.port == 8529
         assert server.role == ServerRole.SINGLE
         assert server.endpoint == "http://127.0.0.1:8529"
@@ -43,11 +44,11 @@ class TestArangoServerBasic:
         for role in roles:
             if role == ServerRole.SINGLE:
                 server = ArangoServer.create_single_server(
-                    server_id=f"test_{role.value}", app_context=app_context, port=8530
+                    server_id=ServerId(f"test_{role.value}"), app_context=app_context, port=8530
                 )
             else:
                 server = ArangoServer.create_cluster_server(
-                    server_id=f"test_{role.value}",
+                    server_id=ServerId(f"test_{role.value}"),
                     role=role,
                     port=8530,
                     app_context=app_context,
@@ -61,12 +62,12 @@ class TestArangoServerBasic:
         app_context = ApplicationContext.for_testing()
 
         server1 = ArangoServer.create_single_server(
-            server_id="test1",
+            server_id=ServerId("test1"),
             app_context=app_context,
             port=8531,
         )
         server2 = ArangoServer.create_single_server(
-            server_id="test2",
+            server_id=ServerId("test2"),
             app_context=app_context,
             port=8532,
         )
@@ -79,7 +80,7 @@ class TestArangoServerBasic:
         app_context = ApplicationContext.for_testing()
 
         server = ArangoServer.create_single_server(
-            server_id="test",
+            server_id=ServerId("test"),
             app_context=app_context,
             port=8529,
         )
@@ -94,7 +95,7 @@ class TestArangoServerLifecycle:
         """Set up test environment."""
         self.app_context = ApplicationContext.for_testing()
         self.server = ArangoServer.create_single_server(
-            server_id="test_server",
+            server_id=ServerId("test_server"),
             app_context=self.app_context,
             port=8529,
         )
@@ -115,7 +116,7 @@ class TestArangoServerLifecycle:
         # Check process ID was set
         call_args = mock_start.call_args
         process_id = call_args[0][0]
-        assert "test_server" in process_id or "arangod" in process_id
+        assert process_id == ServerId("test_server")
 
     @patch("armadillo.instances.server.stop_supervised_process")
     def test_stop_server_calls_process(self, mock_stop):
@@ -135,7 +136,7 @@ class TestArangoServerLifecycle:
 
         self.server.stop()
 
-        mock_stop.assert_called_once_with("test_server", graceful=True, timeout=30.0)
+        mock_stop.assert_called_once_with(ServerId("test_server"), graceful=True, timeout=30.0)
 
     def test_stop_server_not_started(self):
         """Test stopping server that wasn't started doesn't crash."""
@@ -164,7 +165,7 @@ class TestArangoServerConfiguration:
         """Set up test environment."""
         self.app_context = ApplicationContext.for_testing()
         self.server = ArangoServer.create_single_server(
-            server_id="test",
+            server_id=ServerId("test"),
             app_context=self.app_context,
             port=8529,
         )
@@ -203,7 +204,7 @@ class TestArangoServerErrorHandling:
         """Set up test environment."""
         self.app_context = ApplicationContext.for_testing()
         self.server = ArangoServer.create_single_server(
-            server_id="test",
+            server_id=ServerId("test"),
             app_context=self.app_context,
             port=8529,
         )
@@ -251,7 +252,7 @@ class TestArangoServerErrorHandling:
         with pytest.raises((TypeError, ValueError)):
             # This should be caught by the strict type validation
             ArangoServer.create_single_server(
-                server_id="test",
+                server_id=ServerId("test"),
                 app_context=app_context,
                 port="not_a_port",  # type: ignore
             )
@@ -270,7 +271,7 @@ class TestArangoServerIntegration:
         """Test complete start->check->stop workflow."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="lifecycle_test",
+            server_id=ServerId("lifecycle_test"),
             app_context=app_context,
             port=8529,
         )

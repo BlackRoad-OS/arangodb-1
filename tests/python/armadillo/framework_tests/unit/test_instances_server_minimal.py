@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 from armadillo.instances.server import ArangoServer
 from armadillo.core.types import ServerRole
 from armadillo.core.context import ApplicationContext
+from armadillo.core.value_objects import ServerId
 
 
 class TestArangoServerBasic:
@@ -19,11 +20,11 @@ class TestArangoServerBasic:
         """Test ArangoServer can be instantiated."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test_server", app_context=app_context, port=8529
+            server_id=ServerId("test_server"), app_context=app_context, port=8529
         )
 
         assert server is not None
-        assert server.server_id == "test_server"
+        assert server.server_id == ServerId("test_server")
         assert server.port == 8529
         assert server.role == ServerRole.SINGLE
         assert server.endpoint == "http://127.0.0.1:8529"
@@ -39,11 +40,11 @@ class TestArangoServerBasic:
         ]:
             if role == ServerRole.SINGLE:
                 server = ArangoServer.create_single_server(
-                    server_id=f"test_{role.value}", app_context=app_context, port=8530
+                    server_id=ServerId(f"test_{role.value}"), app_context=app_context, port=8530
                 )
             else:
                 server = ArangoServer.create_cluster_server(
-                    server_id=f"test_{role.value}",
+                    server_id=ServerId(f"test_{role.value}"),
                     role=role,
                     port=8530,
                     app_context=app_context,
@@ -54,10 +55,10 @@ class TestArangoServerBasic:
         """Test server creation with different ports."""
         app_context = ApplicationContext.for_testing()
         server1 = ArangoServer.create_single_server(
-            server_id="test1", app_context=app_context, port=8531
+            server_id=ServerId("test1"), app_context=app_context, port=8531
         )
         server2 = ArangoServer.create_single_server(
-            server_id="test2", app_context=app_context, port=8532
+            server_id=ServerId("test2"), app_context=app_context, port=8532
         )
 
         assert server1.endpoint == "http://127.0.0.1:8531"
@@ -67,7 +68,7 @@ class TestArangoServerBasic:
         """Test server is not running initially."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test", app_context=app_context, port=8529
+            server_id=ServerId("test"), app_context=app_context, port=8529
         )
         assert server.is_running() is False
 
@@ -75,18 +76,18 @@ class TestArangoServerBasic:
         """Test server IDs are preserved correctly."""
         app_context = ApplicationContext.for_testing()
         server1 = ArangoServer.create_single_server(
-            server_id="server_one", app_context=app_context, port=8529
+            server_id=ServerId("server_one"), app_context=app_context, port=8529
         )
         server2 = ArangoServer.create_cluster_server(
-            server_id="server_two",
+            server_id=ServerId("server_two"),
             role=ServerRole.COORDINATOR,
             port=8530,
             app_context=app_context,
         )
 
         assert server1.server_id != server2.server_id
-        assert server1.server_id == "server_one"
-        assert server2.server_id == "server_two"
+        assert server1.server_id == ServerId("server_one")
+        assert server2.server_id == ServerId("server_two")
 
 
 class TestArangoServerConfiguration:
@@ -96,7 +97,7 @@ class TestArangoServerConfiguration:
         """Test _build_command method exists and is callable."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test", app_context=app_context, port=8529
+            server_id=ServerId("test"), app_context=app_context, port=8529
         )
 
         # Just verify the method exists and doesn't crash when called
@@ -117,7 +118,7 @@ class TestArangoServerErrorHandling:
         app_context = ApplicationContext.for_testing()
         with pytest.raises((TypeError, ValueError)):
             ArangoServer.create_single_server(
-                server_id="test",
+                server_id=ServerId("test"),
                 app_context=app_context,
                 port="clearly_not_a_port",  # type: ignore
             )
@@ -126,7 +127,7 @@ class TestArangoServerErrorHandling:
         """Test stop when server not running doesn't crash."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test", app_context=app_context, port=8529
+            server_id=ServerId("test"), app_context=app_context, port=8529
         )
 
         # Should not crash when stopping non-running server
@@ -144,7 +145,7 @@ class TestArangoServerPublicInterface:
         """Test server has expected public methods."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test", app_context=app_context, port=8529
+            server_id=ServerId("test"), app_context=app_context, port=8529
         )
 
         # Check that public methods exist
@@ -159,7 +160,7 @@ class TestArangoServerPublicInterface:
         """Test server has expected public properties."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test", app_context=app_context, port=8529
+            server_id=ServerId("test"), app_context=app_context, port=8529
         )
 
         # Check that public properties exist
@@ -172,7 +173,7 @@ class TestArangoServerPublicInterface:
         """Test endpoint format is consistent."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="test", app_context=app_context, port=9999
+            server_id=ServerId("test"), app_context=app_context, port=9999
         )
 
         # Should be HTTP URL with 127.0.0.1 and correct port
@@ -193,13 +194,13 @@ class TestArangoServerPublicInterface:
         for role, expected_value in test_cases:
             if role == ServerRole.SINGLE:
                 server = ArangoServer.create_single_server(
-                    server_id=f"test_{expected_value}",
+                    server_id=ServerId(f"test_{expected_value}"),
                     app_context=app_context,
                     port=8529,
                 )
             else:
                 server = ArangoServer.create_cluster_server(
-                    server_id=f"test_{expected_value}",
+                    server_id=ServerId(f"test_{expected_value}"),
                     role=role,
                     port=8529,
                     app_context=app_context,
@@ -217,7 +218,7 @@ class TestArangoServerMockIntegration:
         """Test start attempts to create a process."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="mock_test", app_context=app_context, port=8529
+            server_id=ServerId("mock_test"), app_context=app_context, port=8529
         )
         mock_start_process.return_value = Mock(pid=12345)
 
@@ -238,7 +239,7 @@ class TestArangoServerMockIntegration:
         """Test stop attempts to terminate process."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
-            server_id="mock_test", app_context=app_context, port=8529
+            server_id=ServerId("mock_test"), app_context=app_context, port=8529
         )
 
         # Set server as if it's running
