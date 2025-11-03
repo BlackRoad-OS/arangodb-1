@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass, field
 from ..core.types import ExecutionOutcome, CrashInfo
+from ..core.value_objects import ServerId
 from ..core.errors import ResultProcessingError, SerializationError, FilesystemError
 from ..core.log import get_logger
 from ..utils.codec import to_json_string
@@ -40,7 +41,7 @@ class TestResultParams:
     timing: TestTiming
     error_message: Optional[str] = None
     failure_message: Optional[str] = None
-    crash_info: Optional[Dict[str, CrashInfo]] = None
+    crash_info: Optional[Dict[ServerId, CrashInfo]] = None
 
 
 @dataclass
@@ -57,7 +58,7 @@ class TestResult:
     teardown_duration_seconds: float = 0.0
     markers: List[str] = field(default_factory=list)
     details: Optional[str] = None
-    crash_info: Optional[Dict[str, CrashInfo]] = None
+    crash_info: Optional[Dict[ServerId, CrashInfo]] = None
     artifacts: List[str] = field(default_factory=list)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
@@ -119,7 +120,7 @@ class ResultCollector:
         teardown_duration: float = 0.0,
         markers: Optional[List[str]] = None,
         details: Optional[str] = None,
-        crash_info: Optional[Dict[str, CrashInfo]] = None,
+        crash_info: Optional[Dict[ServerId, CrashInfo]] = None,
         artifacts: Optional[List[str]] = None,
         started_at: Optional[datetime] = None,
         finished_at: Optional[datetime] = None,
@@ -338,7 +339,7 @@ class ResultCollector:
                         "markers": test.markers,
                         "details": test.details,
                         "crash_info": (
-                            {pid: crash.model_dump() for pid, crash in test.crash_info.items()}
+                            {str(server_id): crash.model_dump() for server_id, crash in test.crash_info.items()}
                             if test.crash_info
                             else None
                         ),

@@ -422,10 +422,11 @@ class TestResultCollectorEdgeCases:
     def test_test_with_crash_info(self):
         """Test test result with crash information."""
         from armadillo.core.types import CrashInfo
+        from armadillo.core.value_objects import ServerId
         collector = ResultCollector()
 
         crash_info = {
-            "srv1": CrashInfo(
+            ServerId("srv1"): CrashInfo(
                 exit_code=-11,
                 timestamp=1234567890.0,
                 stderr="Segmentation fault",
@@ -445,7 +446,7 @@ class TestResultCollectorEdgeCases:
 
         test = results["test_suites"]["tests/test_crash.py"]["tests"]["test_segfault"]
         assert test["outcome"] == "crashed"
-        assert "srv1" in test["crash_info"]
+        assert "srv1" in test["crash_info"]  # Should be string key in JSON
         assert test["crash_info"]["srv1"]["exit_code"] == -11
         assert test["crash_info"]["srv1"]["signal"] == 11
 

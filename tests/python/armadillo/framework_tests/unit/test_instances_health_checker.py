@@ -37,7 +37,7 @@ class TestServerHealthChecker:
             )
 
             result = self.health_checker.check_readiness(
-                "test_server", "http://localhost:8529"
+                ServerId("test_server"), "http://localhost:8529"
             )
 
             assert result is True
@@ -50,7 +50,7 @@ class TestServerHealthChecker:
     def test_check_readiness_process_not_running(self, mock_is_running):
         """Test readiness check when process is not running."""
         result = self.health_checker.check_readiness(
-            "test_server", "http://localhost:8529"
+            ServerId("test_server"), "http://localhost:8529"
         )
 
         assert result is False
