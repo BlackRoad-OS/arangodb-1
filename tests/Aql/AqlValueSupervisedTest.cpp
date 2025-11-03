@@ -1197,3 +1197,144 @@ TEST(AqlValueSupervisedTest, Materialize_RangeBranchSetsHasCopiedTrue) {
   mat.destroy();
   r.destroy();
 }
+
+TEST(AqlValueSupervisedTest, Compare_NaN_OrderAcrossForms) {
+  using std::numeric_limits;
+  double nan = numeric_limits<double>::quiet_NaN();
+
+  // left: int64, right: NaN(double)  -> returns cmp_less
+  AqlValue i(AqlValueHintInt{1});
+  AqlValue dn(AqlValueHintDouble{nan});
+  EXPECT_LT(AqlValue::Compare(nullptr, i, dn, /*utf8*/ false), 0);
+
+  // left: NaN(double), right: int64  -> returns cmp_greater
+  EXPECT_GT(AqlValue::Compare(nullptr, dn, i, /*utf8*/ false), 0);
+
+  // NaN vs NaN -> equal
+  AqlValue dn2(AqlValueHintDouble{nan});
+  EXPECT_EQ(AqlValue::Compare(nullptr, dn, dn2, /*utf8*/ false), 0);
+
+  dn2.destroy();
+  dn.destroy();
+  i.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Compare_RangeVsArray_EqualAfterMaterialize) {
+  // range [1..3] should compare equal to array [1,2,3]
+  AqlValue r(1, 3);
+
+  arangodb::velocypack::Builder b;
+  b.openArray();
+  b.add(arangodb::velocypack::Value(1));
+  b.add(arangodb::velocypack::Value(2));
+  b.add(arangodb::velocypack::Value(3));
+  b.close();
+
+  AqlValue arr(b.slice());  // managed
+  EXPECT_EQ(AqlValue::Compare(nullptr, r, arr, /*utf8*/ false), 0);
+  EXPECT_EQ(AqlValue::Compare(nullptr, arr, r, /*utf8*/ false), 0);
+
+  arr.destroy();
+  r.destroy();
+}
+
+TEST(AqlValueSupervisedTest, Compare_SupervisedArrays_Lexicographic) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // a = [1,2] ; b = [1,3]  (both supervised slices)
+  arangodb::velocypack::Builder ba;
+  ba.openArray();
+  ba.add(arangodb::velocypack::Value(1));
+  ba.add(arangodb::velocypack::Value(2));
+  ba.close();
+  arangodb::velocypack::Builder bb;
+  bb.openArray();
+  bb.add(arangodb::velocypack::Value(1));
+  bb.add(arangodb::velocypack::Value(3));
+  bb.close();
+
+  AqlValue a(ba.slice(), 0, &rm);
+  AqlValue b(bb.slice(), 0, &rm);
+
+  // a < b and b > a
+  EXPECT_LT(AqlValue::Compare(nullptr, a, b, /*utf8*/ false), 0);
+  EXPECT_GT(AqlValue::Compare(nullptr, b, a, /*utf8*/ false), 0);
+
+  a.destroy();
+  b.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+TEST(AqlValueSupervisedTest, Compare_SupervisedStrings_Utf8Toggle) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // Make supervised strings via slice ctor with RM (short strings become
+  // supervised slice in your impl) "apple" < "banana" under both binary and
+  // UTF-8 compares
+  {
+    arangodb::velocypack::Builder s1;
+    s1.add(arangodb::velocypack::Value("apple"));
+    arangodb::velocypack::Builder s2;
+    s2.add(arangodb::velocypack::Value("banana"));
+    AqlValue v1(s1.slice(), 0, &rm);
+    AqlValue v2(s2.slice(), 0, &rm);
+
+    EXPECT_LT(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ false), 0);
+    EXPECT_LT(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ true), 0);
+
+    v1.destroy();
+    v2.destroy();
+  }
+
+  // Also check equality path (same supervised content)
+  {
+    arangodb::velocypack::Builder s1;
+    s1.add(arangodb::velocypack::Value("same"));
+    arangodb::velocypack::Builder s2;
+    s2.add(arangodb::velocypack::Value("same"));
+    AqlValue v1(s1.slice(), 0, &rm);
+    AqlValue v2(s2.slice(), 0, &rm);
+
+    EXPECT_EQ(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ false), 0);
+    EXPECT_EQ(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ true), 0);
+
+    v1.destroy();
+    v2.destroy();
+  }
+
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+TEST(AqlValueSupervisedTest,
+     Compare_SupervisedVsManaged_ObjectsWithDifferentFields) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // obj1 = {a:1, b:2}, obj2 = {a:1, c:2}
+  auto make = [](char k2) {
+    arangodb::velocypack::Builder b;
+    b.openObject();
+    b.add("a", arangodb::velocypack::Value(1));
+    std::string k;
+    k.push_back(k2);
+    b.add(k, arangodb::velocypack::Value(2));
+    b.close();
+    return b;
+  };
+
+  auto b1 = make('b');  // has "b"
+  auto b2 = make('c');  // has "c"
+
+  AqlValue sup(b1.slice(), 0, &rm);  // supervised
+  AqlValue man(b2.slice());          // managed
+
+  // Field-name ordering: "b" < "c" ⇒ sup < man
+  EXPECT_LT(AqlValue::Compare(nullptr, sup, man, /*utf8*/ true), 0);
+  EXPECT_GT(AqlValue::Compare(nullptr, man, sup, /*utf8*/ true), 0);
+
+  sup.destroy();
+  man.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
