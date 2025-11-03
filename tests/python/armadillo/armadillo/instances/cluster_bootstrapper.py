@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ..core.types import ServerRole, TimeoutConfig, InfrastructureConfig
 from ..core.config import get_config
 from ..core.log import Logger
+from ..core.value_objects import ServerId
 from ..core.errors import ServerStartupError, AgencyError, ClusterError, ProcessError
 from .server import ArangoServer
 
@@ -40,8 +41,8 @@ class ClusterBootstrapper:
 
     def bootstrap_cluster(
         self,
-        servers: Dict[str, ArangoServer],
-        startup_order: List[str],
+        servers: Dict[ServerId, ArangoServer],
+        startup_order: List[ServerId],
         timeout: float = 300.0,
     ) -> None:
         """Bootstrap a cluster deployment in proper sequence.
@@ -101,9 +102,9 @@ class ClusterBootstrapper:
 
     def _start_servers_by_role(
         self,
-        servers: Dict[str, ArangoServer],
+        servers: Dict[ServerId, ArangoServer],
         role: ServerRole,
-        startup_order: List[str],
+        startup_order: List[ServerId],
         timeout: float = 60.0,
     ) -> None:
         """Start all servers of a specific role in parallel.
@@ -135,7 +136,7 @@ class ClusterBootstrapper:
         # Start all servers of this role in parallel
         futures = []
         for server_id, server in servers_to_start:
-            self._logger.info("Starting %s %s", role_name, server_id)
+            self._logger.info("Starting %s %s", role_name, str(server_id))
             future = self._executor.submit(server.start, timeout)
             futures.append((server_id, future))
 
@@ -145,20 +146,20 @@ class ClusterBootstrapper:
                 future.result(timeout=timeout)
                 startup_order.append(server_id)
                 self._logger.info(
-                    "%s %s started successfully", role_name.title(), server_id
+                    "%s %s started successfully", role_name.title(), str(server_id)
                 )
             except (ServerStartupError, ProcessError, OSError, TimeoutError) as e:
                 raise ServerStartupError(
-                    f"Failed to start {role_name} {server_id}: {e}"
+                    f"Failed to start {role_name} {str(server_id)}: {e}"
                 ) from e
             except Exception as e:
                 # Defensive catch-all for server startup
                 raise ServerStartupError(
-                    f"Unexpected error starting {role_name} {server_id}: {e}"
+                    f"Unexpected error starting {role_name} {str(server_id)}: {e}"
                 ) from e
 
     def wait_for_agency_ready(
-        self, servers: Dict[str, ArangoServer], timeout: float = 30.0
+        self, servers: Dict[ServerId, ArangoServer], timeout: float = 30.0
     ) -> None:
         """Wait for agency to achieve consensus and elect a leader.
 
@@ -215,7 +216,7 @@ class ClusterBootstrapper:
         )
 
     def wait_for_cluster_ready(
-        self, servers: Dict[str, ArangoServer], timeout: float = 60.0
+        self, servers: Dict[ServerId, ArangoServer], timeout: float = 60.0
     ) -> None:
         """Wait for all cluster servers to be ready and responding.
 
@@ -253,7 +254,9 @@ class ClusterBootstrapper:
                         all_ready = False
                         break
                 except (requests.RequestException, OSError) as e:
-                    self._logger.debug("Coordinator %s not ready: %s", server_id, e)
+                    self._logger.debug(
+                        "Coordinator %s not ready: %s", str(server_id), e
+                    )
                     all_ready = False
                     break
 
@@ -266,8 +269,8 @@ class ClusterBootstrapper:
         raise ClusterError(f"Cluster did not become ready within {timeout}s")
 
     def _get_agents(
-        self, servers: Dict[str, ArangoServer]
-    ) -> List[Tuple[str, ArangoServer]]:
+        self, servers: Dict[ServerId, ArangoServer]
+    ) -> List[Tuple[ServerId, ArangoServer]]:
         """Get list of agent servers.
 
         Args:
@@ -283,7 +286,7 @@ class ClusterBootstrapper:
         ]
 
     def _check_agent_config(
-        self, server_id: str, server: ArangoServer
+        self, server_id: ServerId, server: ArangoServer
     ) -> Optional[Dict[str, Any]]:
         """Check configuration of a single agent.
 
@@ -295,7 +298,9 @@ class ClusterBootstrapper:
             Agent config dict if successful, None if agent not ready
         """
         try:
-            self._logger.debug("Checking agent %s at %s", server_id, server.endpoint)
+            self._logger.debug(
+                "Checking agent %s at %s", str(server_id), server.endpoint
+            )
             response = requests.get(
                 f"{server.endpoint}/_api/agency/config",
                 timeout=self._timeouts.health_check_quick,

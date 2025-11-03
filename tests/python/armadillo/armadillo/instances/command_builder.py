@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from ..core.types import ServerRole, ServerConfig
 from ..core.config import ConfigProvider
 from ..core.log import Logger
+from ..core.value_objects import ServerId
 
 
 @dataclass
 class ServerCommandParams:
     """Parameters for building server commands."""
 
-    server_id: str
+    server_id: ServerId
     role: ServerRole
     port: int
     data_dir: Path
@@ -86,7 +87,7 @@ class ServerCommandBuilder:
                         command.extend([f"--{key}", str(item)])
                 else:
                     command.extend([f"--{key}", str(value)])
-        self._logger.debug(">>> ARANGOD COMMAND FOR %s <<<", params.server_id)
+        self._logger.debug(">>> ARANGOD COMMAND FOR %s <<<", str(params.server_id))
         self._logger.debug("Command: %s", " ".join(command))
         self._logger.debug(">>> END ARANGOD COMMAND <<<")
         return command

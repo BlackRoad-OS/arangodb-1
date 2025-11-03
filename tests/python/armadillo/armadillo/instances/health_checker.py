@@ -5,6 +5,7 @@ import asyncio
 from typing import Protocol, Optional
 import aiohttp
 from ..core.log import Logger
+from ..core.value_objects import ServerId
 from ..core.process import is_process_running
 from ..core.types import HealthStatus, TimeoutConfig
 from ..core.errors import HealthCheckError, NetworkError
@@ -14,7 +15,7 @@ from ..utils.auth import AuthProvider
 class HealthChecker(Protocol):
     """Protocol for server health checkers to enable dependency injection."""
 
-    def check_readiness(self, server_id: str, endpoint: str) -> bool:
+    def check_readiness(self, server_id: ServerId, endpoint: str) -> bool:
         """Check if server is ready to accept connections during startup."""
 
     def check_health(self, endpoint: str, timeout: float = 5.0) -> HealthStatus:
@@ -34,12 +35,12 @@ class ServerHealthChecker:
         self._auth_provider = auth_provider
         self._timeout_config = timeout_config or TimeoutConfig()
 
-    def check_readiness(self, server_id: str, endpoint: str) -> bool:
+    def check_readiness(self, server_id: ServerId, endpoint: str) -> bool:
         """Check if server is ready to accept connections during startup."""
         try:
             if not is_process_running(server_id):
                 self._logger.debug(
-                    "Readiness check failed for %s: Process not running", server_id
+                    "Readiness check failed for %s: Process not running", str(server_id)
                 )
                 return False
             health = self.check_health(
@@ -47,7 +48,9 @@ class ServerHealthChecker:
             )
             if not health.is_healthy:
                 self._logger.debug(
-                    "Readiness check failed for %s: %s", server_id, health.error_message
+                    "Readiness check failed for %s: %s",
+                    str(server_id),
+                    health.error_message,
                 )
             return health.is_healthy
         except (
@@ -57,7 +60,9 @@ class ServerHealthChecker:
             OSError,
             Exception,
         ) as e:
-            self._logger.debug("Readiness check exception for %s: %s", server_id, e)
+            self._logger.debug(
+                "Readiness check exception for %s: %s", str(server_id), e
+            )
             return False
 
     def check_health(self, endpoint: str, timeout: float = 5.0) -> HealthStatus:

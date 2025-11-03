@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
 from ..core.types import ServerConfig, ServerRole
+from ..core.value_objects import ServerId
 from ..utils.filesystem import FilesystemService
 
 
@@ -39,7 +40,7 @@ DeploymentPlan = Union[SingleServerDeploymentPlan, ClusterDeploymentPlan]
 
 
 def create_single_server_plan(
-    server_id: str,
+    server_id: ServerId,
     port: int,
     filesystem: FilesystemService,
     server_args: Optional[dict] = None,
@@ -55,7 +56,7 @@ def create_single_server_plan(
     args = server_args or {}
     args["server.authentication"] = "false"
 
-    base_dir = filesystem.server_dir(server_id)
+    base_dir = filesystem.server_dir(str(server_id))
     server_config = ServerConfig(
         role=ServerRole.SINGLE,
         port=port,

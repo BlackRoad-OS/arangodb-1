@@ -15,6 +15,7 @@ from ..core.types import (
 )
 from ..core.config import get_config
 from ..core.context import ApplicationContext
+from ..core.value_objects import ServerId
 from ..core.errors import (
     ServerError,
     ServerStartupError,
@@ -62,10 +63,10 @@ class DeploymentTiming:
 class DeploymentState:
     """Runtime state of a deployment."""
 
-    servers: Dict[str, ArangoServer] = field(default_factory=dict)
+    servers: Dict[ServerId, ArangoServer] = field(default_factory=dict)
     deployment_plan: Optional[DeploymentPlan] = None
-    startup_order: List[str] = field(default_factory=list)
-    shutdown_order: List[str] = field(default_factory=list)
+    startup_order: List[ServerId] = field(default_factory=list)
+    shutdown_order: List[ServerId] = field(default_factory=list)
     status: DeploymentStatus = field(default_factory=DeploymentStatus)
     timing: DeploymentTiming = field(default_factory=DeploymentTiming)
 
@@ -267,7 +268,11 @@ class InstanceManager:
         # Use config default if not specified (scales with server count)
         if timeout is None:
             num_servers = len(self.state.servers)
-            timeout = self._app_context.config.timeouts.server_shutdown * max(1, num_servers) * 1.2
+            timeout = (
+                self._app_context.config.timeouts.server_shutdown
+                * max(1, num_servers)
+                * 1.2
+            )
 
         timeout = clamp_timeout(timeout, "shutdown")
         self.state.timing.shutdown_time = time.time()
@@ -370,7 +375,9 @@ class InstanceManager:
                 "Some servers failed to shutdown cleanly: %s", failed_shutdowns
             )
 
-    def _shutdown_server(self, server: "ArangoServer", timeout: Optional[float] = None) -> None:
+    def _shutdown_server(
+        self, server: "ArangoServer", timeout: Optional[float] = None
+    ) -> None:
         """Shutdown a single server with bulletproof termination and polling.
 
         Combines graceful shutdown with emergency force kill fallback and
@@ -482,7 +489,7 @@ class InstanceManager:
         self.state.deployment_plan = current_plan
         self.deploy_servers(timeout / 2)
 
-    def get_server(self, server_id: str) -> Optional[ArangoServer]:
+    def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
         """Get server instance by ID.
 
         Args:

@@ -5,6 +5,7 @@ import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
 from armadillo.core.types import HealthStatus
+from armadillo.core.value_objects import ServerId
 from armadillo.instances.health_checker import ServerHealthChecker
 
 
@@ -40,7 +41,7 @@ class TestServerHealthChecker:
             )
 
             assert result is True
-            mock_is_running.assert_called_once_with("test_server")
+            mock_is_running.assert_called_once_with(ServerId("test_server"))
             mock_check_health.assert_called_once_with(
                 "http://localhost:8529", timeout=2.0
             )
@@ -88,7 +89,9 @@ class TestServerHealthChecker:
         # Check the lazy formatting call with the actual exception object
         call_args = self.mock_logger.debug.call_args
         assert call_args[0][0] == "Readiness check exception for %s: %s"
-        assert call_args[0][1] == "test_server"
+        assert (
+            call_args[0][1] == "test_server"
+        )  # String log message, not ServerId object
         assert str(call_args[0][2]) == "Process check error"
 
     @patch("asyncio.run")

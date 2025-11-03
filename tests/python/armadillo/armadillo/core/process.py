@@ -19,7 +19,8 @@ from .errors import (
 )
 from .time import clamp_timeout, timeout_scope
 from .log import get_logger, log_process_event
-from .types import ProcessStats, CrashInfo
+from .types import ProcessStats, CrashInfo, ServerRole
+from .value_objects import ServerId, ServerContext
 
 logger = get_logger(__name__)
 
@@ -133,15 +134,15 @@ class ProcessSupervisor:
     """Manages long-running processes with health monitoring and crash detection."""
 
     def __init__(self) -> None:
-        self._processes: Dict[str, subprocess.Popen] = {}
-        self._process_info: Dict[str, ProcessInfo] = {}
-        self._monitoring_threads: Dict[str, threading.Thread] = {}
-        self._streaming_threads: Dict[str, threading.Thread] = {}
+        self._processes: Dict[ServerId, subprocess.Popen] = {}
+        self._process_info: Dict[ServerId, ProcessInfo] = {}
+        self._monitoring_threads: Dict[ServerId, threading.Thread] = {}
+        self._streaming_threads: Dict[ServerId, threading.Thread] = {}
         self._stop_monitoring = threading.Event()
-        self._crash_state: Dict[str, CrashInfo] = {}  # Track crash information per server
-        self._lock = threading.Lock()  # Protect crash state access
+        self._crash_state: Dict[ServerId, CrashInfo] = {}
+        self._lock = threading.Lock()
 
-    def _stream_output(self, server_id: str, process: subprocess.Popen) -> None:
+    def _stream_output(self, server_id: ServerId, process: subprocess.Popen) -> None:
         """Stream process output to terminal in real-time."""
         if not process.stdout:
             logger.warning("No stdout available for %s", server_id)
@@ -168,7 +169,7 @@ class ProcessSupervisor:
 
     def start(
         self,
-        server_id: str,
+        server_id: ServerId,
         command: List[str],
         cwd: Optional[Path] = None,
         env: Optional[Dict[str, str]] = None,
@@ -179,15 +180,13 @@ class ProcessSupervisor:
         """Start a supervised process.
 
         Args:
-            server_id: Logical server identifier (e.g., "agent_0", "dbserver_1")
+            server_id: Logical server identifier
             command: Command and arguments to execute
             cwd: Working directory (optional)
             env: Environment variables (optional)
             startup_timeout: Maximum time to wait for startup (seconds)
             readiness_check: Function to check if process is ready (optional)
             inherit_console: If True, process inherits parent's stdout/stderr directly
-                           (no buffering delays). If False, output is captured and
-                           streamed with [server_id] prefixes (default: False)
 
         Returns:
             ProcessInfo object with process details
@@ -269,7 +268,7 @@ class ProcessSupervisor:
             ) from e
 
     def stop(
-        self, server_id: str, graceful: bool = True, timeout: float = 30.0
+        self, server_id: ServerId, graceful: bool = True, timeout: float = 30.0
     ) -> None:
         """Stop a supervised process with bulletproof termination.
 
@@ -424,7 +423,7 @@ class ProcessSupervisor:
         finally:
             self._cleanup_process(server_id)
 
-    def is_running(self, server_id: str) -> bool:
+    def is_running(self, server_id: ServerId) -> bool:
         """Check if process is running."""
         if server_id not in self._processes:
             logger.debug("is_running(%s): not in _processes", server_id)
@@ -438,11 +437,11 @@ class ProcessSupervisor:
             )
         return is_running
 
-    def get_process_info(self, server_id: str) -> Optional[ProcessInfo]:
+    def get_process_info(self, server_id: ServerId) -> Optional[ProcessInfo]:
         """Get process information."""
         return self._process_info.get(server_id)
 
-    def get_stats(self, server_id: str) -> Optional[ProcessStats]:
+    def get_stats(self, server_id: ServerId) -> Optional[ProcessStats]:
         """Get process statistics."""
         if not self.is_running(server_id):
             return None
@@ -551,7 +550,7 @@ class ProcessSupervisor:
         self._monitoring_threads[server_id] = monitor_thread
         monitor_thread.start()
 
-    def _monitor_process(self, server_id: str) -> None:
+    def _monitor_process(self, server_id: ServerId) -> None:
         """Monitor process for crashes and health."""
         process = self._processes.get(server_id)
         if not process:
@@ -567,7 +566,7 @@ class ProcessSupervisor:
                 logger.error("Error monitoring process %s: %s", server_id, e)
                 break
 
-    def _handle_process_exit(self, server_id: str, exit_code: int) -> None:
+    def _handle_process_exit(self, server_id: ServerId, exit_code: int) -> None:
         """Handle unexpected process exit."""
         _ = self._process_info.get(server_id)  # For future crash analysis
         if exit_code == 0:
@@ -598,7 +597,7 @@ class ProcessSupervisor:
                     signal=-exit_code if exit_code < 0 else None,
                 )
 
-    def _cleanup_process(self, server_id: str) -> None:
+    def _cleanup_process(self, server_id: ServerId) -> None:
         """Clean up process resources."""
         if self._processes.pop(server_id, None):
             logger.debug("Removed process %s from tracking", server_id)
@@ -611,12 +610,8 @@ class ProcessSupervisor:
         if monitor_thread:
             logger.debug("Cleaned up monitoring thread for %s", server_id)
 
-    def get_crash_state(self) -> Dict[str, CrashInfo]:
-        """Get crash state for all servers.
-
-        Returns:
-            Dict mapping server IDs to CrashInfo objects (empty dict if no crashes)
-        """
+    def get_crash_state(self) -> Dict[ServerId, CrashInfo]:
+        """Get crash state for all servers."""
         with self._lock:
             return dict(self._crash_state)
 
@@ -630,6 +625,20 @@ class ProcessSupervisor:
         with self._lock:
             self._crash_state.clear()
 
+    def get_server_context(
+        self, server_id: ServerId, role: ServerRole
+    ) -> Optional[ServerContext]:
+        """Create diagnostic snapshot combining server identity with runtime state."""
+        process_info = self._process_info.get(server_id)
+        pid = process_info.pid if process_info else None
+
+        return ServerContext(
+            server_id=server_id,
+            role=role,
+            pid=pid,
+            port=None,  # Port not tracked at process level
+        )
+
 
 _process_executor = ProcessExecutor()
 _process_supervisor = ProcessSupervisor()
@@ -641,38 +650,34 @@ def execute_command(command: List[str], **kwargs) -> ProcessResult:
 
 
 def start_supervised_process(
-    server_id: str, command: List[str], **kwargs
+    server_id: ServerId, command: List[str], **kwargs
 ) -> ProcessInfo:
     """Start a supervised process."""
     return _process_supervisor.start(server_id, command, **kwargs)
 
 
-def stop_supervised_process(server_id: str, **kwargs) -> None:
+def stop_supervised_process(server_id: ServerId, **kwargs) -> None:
     """Stop a supervised process."""
     _process_supervisor.stop(server_id, **kwargs)
 
 
-def is_process_running(server_id: str) -> bool:
+def is_process_running(server_id: ServerId) -> bool:
     """Check if supervised process is running."""
     return _process_supervisor.is_running(server_id)
 
 
-def get_process_info(server_id: str) -> Optional[ProcessInfo]:
+def get_process_info(server_id: ServerId) -> Optional[ProcessInfo]:
     """Get supervised process information."""
     return _process_supervisor.get_process_info(server_id)
 
 
-def get_process_stats(server_id: str) -> Optional[ProcessStats]:
+def get_process_stats(server_id: ServerId) -> Optional[ProcessStats]:
     """Get supervised process statistics."""
     return _process_supervisor.get_stats(server_id)
 
 
-def get_crash_state() -> Dict[str, CrashInfo]:
-    """Get crash state for all supervised servers.
-
-    Returns:
-        Dict mapping server IDs to CrashInfo objects (empty dict if no crashes)
-    """
+def get_crash_state() -> Dict[ServerId, CrashInfo]:
+    """Get crash state for all supervised servers."""
     return _process_supervisor.get_crash_state()
 
 

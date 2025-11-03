@@ -4,6 +4,7 @@ from typing import Optional
 import time
 from ..core.types import ServerRole, TimeoutConfig
 from ..core.log import Logger
+from ..core.value_objects import ServerId
 from ..core.errors import (
     ServerError,
     ServerStartupError,
@@ -63,7 +64,7 @@ class DeploymentOrchestrator:
         self._cluster_bootstrapper = cluster_bootstrapper
         self._health_monitor = health_monitor
         self._timeouts = timeout_config or TimeoutConfig()
-        self._startup_order: list[str] = []
+        self._startup_order: list[ServerId] = []
 
     def _create_strategy(self, plan: DeploymentPlan) -> DeploymentStrategy:
         """Create deployment strategy based on plan type."""
@@ -144,7 +145,9 @@ class DeploymentOrchestrator:
             raise
 
     def shutdown_deployment(
-        self, shutdown_order: Optional[list[str]] = None, timeout: Optional[float] = None
+        self,
+        shutdown_order: Optional[list[str]] = None,
+        timeout: Optional[float] = None,
     ) -> None:
         """Shutdown all servers in the deployment.
 
@@ -267,7 +270,7 @@ class DeploymentOrchestrator:
 
         self._logger.info("All server instances created and registered")
 
-    def get_startup_order(self) -> list[str]:
+    def get_startup_order(self) -> list[ServerId]:
         """Get the order in which servers were started.
 
         Returns:

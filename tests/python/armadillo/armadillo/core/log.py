@@ -174,14 +174,36 @@ def log_process_event(
 
 
 def log_server_event(
-    logger: logging.Logger, event: str, server_id: Optional[str] = None, **kwargs
+    logger: logging.Logger,
+    event: str,
+    server_id: Union[str, "ServerContext", None] = None,
+    **kwargs,
 ) -> None:
-    """Log a server-related event."""
+    """Log a server-related event.
+
+    Accepts either a string server_id or a ServerContext for enriched logging
+    with PID information.
+    """
+    from .value_objects import ServerContext
+
     extra = {"event_type": "server", "server_event": event}
-    if server_id is not None:
+
+    if isinstance(server_id, ServerContext):
+        # Enriched logging with PID
+        extra["server_id"] = str(server_id.server_id)
+        extra["role"] = server_id.role.value
+        if server_id.pid is not None:
+            extra["pid"] = server_id.pid
+        display_id = str(server_id)  # Uses ServerContext.__str__()
+    elif server_id is not None:
+        # Legacy string server_id
         extra["server_id"] = server_id
+        display_id = server_id
+    else:
+        display_id = None
+
     extra.update(kwargs)
-    logger.info("Server %s %s", server_id, event, extra=extra)
+    logger.info("Server %s %s", display_id, event, extra=extra)
 
 
 def log_test_event(

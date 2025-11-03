@@ -19,6 +19,7 @@ from ..core.types import (
 from ..core.errors import ServerStartupError, ServerShutdownError
 from ..core.config import get_config, ConfigProvider
 from ..core.context import ApplicationContext
+from ..core.value_objects import ServerId, ServerContext
 from ..core.process import (
     start_supervised_process,
     stop_supervised_process,
@@ -128,7 +129,7 @@ class ArangoServer:
 
     def __init__(
         self,
-        server_id: str,
+        server_id: ServerId,
         *,
         role: ServerRole,
         port: int,
@@ -137,14 +138,10 @@ class ArangoServer:
     ) -> None:
         """Initialize ArangoDB server with explicit dependencies.
 
-        **Recommended**: Use factory methods instead of calling __init__ directly:
-        - ``ArangoServer.create_single_server(server_id, app_context, port=None)``
-        - ``ArangoServer.create_cluster_server(server_id, role, port, app_context, config=None)``
-
         Args:
             server_id: Unique server identifier
-            role: Server role (SINGLE, AGENT, DBSERVER, COORDINATOR)
-            port: Port number (must be allocated beforehand)
+            role: Server role
+            port: Port number
             paths: Server file system paths
             app_context: Application context with all dependencies
         """
@@ -170,7 +167,7 @@ class ArangoServer:
     @classmethod
     def create_single_server(
         cls,
-        server_id: str,
+        server_id: ServerId,
         app_context: ApplicationContext,
         port: Optional[int] = None,
     ) -> "ArangoServer":
@@ -188,11 +185,11 @@ class ArangoServer:
 
         Example:
             >>> ctx = ApplicationContext.create(config)
-            >>> server = ArangoServer.create_single_server("srv1", ctx)
+            >>> server = ArangoServer.create_single_server(ServerId("srv1"), ctx)
             >>> server.start()
         """
         actual_port = port or app_context.port_allocator.allocate_port()
-        paths = ServerPaths.from_config(server_id, None, app_context.filesystem)
+        paths = ServerPaths.from_config(str(server_id), None, app_context.filesystem)
         return cls(
             server_id,
             role=ServerRole.SINGLE,
@@ -204,7 +201,7 @@ class ArangoServer:
     @classmethod
     def create_cluster_server(
         cls,
-        server_id: str,
+        server_id: ServerId,
         role: ServerRole,
         port: int,
         app_context: ApplicationContext,
@@ -226,12 +223,22 @@ class ArangoServer:
 
         Example:
             >>> ctx = ApplicationContext.create(config)
-            >>> agent = ArangoServer.create_cluster_server("agent1", ServerRole.AGENT, 8529, ctx)
+            >>> agent = ArangoServer.create_cluster_server(ServerId("agent1"), ServerRole.AGENT, 8529, ctx)
             >>> agent.start()
         """
-        paths = ServerPaths.from_config(server_id, config, app_context.filesystem)
+        paths = ServerPaths.from_config(str(server_id), config, app_context.filesystem)
         return cls(
             server_id, role=role, port=port, paths=paths, app_context=app_context
+        )
+
+    def get_context(self) -> ServerContext:
+        """Create diagnostic snapshot with server identity and runtime state."""
+        process_info = self._runtime.process_info
+        return ServerContext(
+            server_id=self.server_id,
+            role=self.role,
+            pid=process_info.pid if process_info else None,
+            port=self.port,
         )
 
     # Internal properties for dependency access

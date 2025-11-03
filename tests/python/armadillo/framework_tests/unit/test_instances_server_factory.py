@@ -7,6 +7,7 @@ from unittest.mock import Mock
 from armadillo.core.types import ServerRole, ServerConfig
 from armadillo.core.context import ApplicationContext
 from armadillo.core.errors import ServerError
+from armadillo.core.value_objects import ServerId
 from armadillo.instances.server_factory import StandardServerFactory
 
 
@@ -36,10 +37,10 @@ class TestStandardServerFactory:
         servers = self.factory.create_server_instances([server_config])
 
         assert len(servers) == 1
-        assert "server_0" in servers
+        assert ServerId("server_0") in servers
 
-        server = servers["server_0"]
-        assert server.server_id == "server_0"
+        server = servers[ServerId("server_0")]
+        assert server.server_id == ServerId("server_0")
         assert server.role == ServerRole.SINGLE
         assert server.port == 8529
         assert server.paths.data_dir == Path("/fake/data")
@@ -82,22 +83,22 @@ class TestStandardServerFactory:
         servers = self.factory.create_server_instances(servers_config)
 
         assert len(servers) == 3
-        assert "agent_0" in servers
-        assert "dbserver_1" in servers
-        assert "coordinator_2" in servers
+        assert ServerId("agent_0") in servers
+        assert ServerId("dbserver_1") in servers
+        assert ServerId("coordinator_2") in servers
 
         # Check agent
-        agent = servers["agent_0"]
+        agent = servers[ServerId("agent_0")]
         assert agent.role == ServerRole.AGENT
         assert agent.port == 8530
 
         # Check dbserver
-        dbserver = servers["dbserver_1"]
+        dbserver = servers[ServerId("dbserver_1")]
         assert dbserver.role == ServerRole.DBSERVER
         assert dbserver.port == 8531
 
         # Check coordinator
-        coordinator = servers["coordinator_2"]
+        coordinator = servers[ServerId("coordinator_2")]
         assert coordinator.role == ServerRole.COORDINATOR
         assert coordinator.port == 8532
 
@@ -106,14 +107,21 @@ class TestStandardServerFactory:
 
     def test_generate_server_id(self):
         """Test server ID generation for different roles."""
-        assert self.factory._generate_server_id(ServerRole.AGENT, 0) == "agent_0"
-        assert self.factory._generate_server_id(ServerRole.AGENT, 2) == "agent_2"
-        assert self.factory._generate_server_id(ServerRole.DBSERVER, 1) == "dbserver_1"
-        assert (
-            self.factory._generate_server_id(ServerRole.COORDINATOR, 3)
-            == "coordinator_3"
+        assert self.factory._generate_server_id(ServerRole.AGENT, 0) == ServerId(
+            "agent_0"
         )
-        assert self.factory._generate_server_id(ServerRole.SINGLE, 0) == "server_0"
+        assert self.factory._generate_server_id(ServerRole.AGENT, 2) == ServerId(
+            "agent_2"
+        )
+        assert self.factory._generate_server_id(ServerRole.DBSERVER, 1) == ServerId(
+            "dbserver_1"
+        )
+        assert self.factory._generate_server_id(ServerRole.COORDINATOR, 3) == ServerId(
+            "coordinator_3"
+        )
+        assert self.factory._generate_server_id(ServerRole.SINGLE, 0) == ServerId(
+            "server_0"
+        )
 
     def test_invalid_port_type_error(self):
         """Test error handling for invalid port types."""
@@ -141,11 +149,11 @@ class TestStandardServerFactory:
         )
 
         servers = self.factory.create_server_instances([server_config])
-        server = servers["server_0"]
+        server = servers[ServerId("server_0")]
 
         # Check that the minimal config was passed correctly
         # We can't directly access it, but we can verify the server was created successfully
-        assert server.server_id == "server_0"
+        assert server.server_id == ServerId("server_0")
         assert server.paths.config.args["custom"] == "arg"
 
         # Verify that data_dir and log_file from ServerConfig are preserved
@@ -165,7 +173,7 @@ class TestStandardServerFactory:
         )
 
         servers = self.factory.create_server_instances([server_config])
-        server = servers["server_0"]
+        server = servers[ServerId("server_0")]
 
         # Check that directories were set
         assert server.paths.data_dir == Path("/custom/data/dir")
@@ -185,7 +193,7 @@ class TestStandardServerFactory:
         )
 
         servers = self.factory.create_server_instances([server_config])
-        server = servers["server_0"]
+        server = servers[ServerId("server_0")]
 
         # Check that server has the expected dependencies via app_context
         # These are tested by verifying the server was created successfully with all required components
@@ -237,14 +245,14 @@ class TestStandardServerFactory:
         servers = self.factory.create_server_instances(servers_config)
 
         assert len(servers) == 3
-        assert "agent_0" in servers
-        assert "agent_1" in servers
-        assert "agent_2" in servers
+        assert ServerId("agent_0") in servers
+        assert ServerId("agent_1") in servers
+        assert ServerId("agent_2") in servers
 
         # Check that they have different ports as expected
-        assert servers["agent_0"].port == 8530
-        assert servers["agent_1"].port == 8531
-        assert servers["agent_2"].port == 8532
+        assert servers[ServerId("agent_0")].port == 8530
+        assert servers[ServerId("agent_1")].port == 8531
+        assert servers[ServerId("agent_2")].port == 8532
 
     def test_args_copying(self):
         """Test that server config args are properly copied."""
@@ -257,7 +265,7 @@ class TestStandardServerFactory:
         )
 
         servers = self.factory.create_server_instances([server_config])
-        server = servers["server_0"]
+        server = servers[ServerId("server_0")]
 
         # Original args should be copied, not referenced
         assert server.paths.config.args == {"original": "value"}

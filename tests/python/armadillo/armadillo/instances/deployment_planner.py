@@ -3,6 +3,7 @@
 from typing import Optional, List
 
 from ..core.types import ServerRole, ServerConfig, ClusterConfig
+from ..core.value_objects import ServerId
 from ..core.log import Logger
 from ..core.config import ConfigProvider
 from ..utils.ports import PortAllocator
@@ -28,7 +29,7 @@ class DeploymentPlanner:
         self._server_config_builder = ServerConfigBuilder(config_provider, logger)
 
     def create_single_server_plan(
-        self, server_id: str, server_args: Optional[dict] = None
+        self, server_id: ServerId, server_args: Optional[dict] = None
     ) -> SingleServerDeploymentPlan:
         """Create a deployment plan for a single server."""
         args = server_args or {}
@@ -43,8 +44,8 @@ class DeploymentPlanner:
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
             port=port,
-            data_dir=self._filesystem.server_dir(server_id) / "data",
-            log_file=self._filesystem.server_dir(server_id) / "arangod.log",
+            data_dir=self._filesystem.server_dir(str(server_id)) / "data",
+            log_file=self._filesystem.server_dir(str(server_id)) / "arangod.log",
             args=args,
         )
 

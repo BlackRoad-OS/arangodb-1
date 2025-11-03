@@ -8,6 +8,7 @@ from ..core.config import ConfigProvider
 from ..core.context import ApplicationContext
 from ..core.log import Logger
 from ..core.errors import ServerError
+from ..core.value_objects import ServerId
 from ..utils.ports import PortAllocator
 from ..utils.auth import get_auth_provider
 from .server import ArangoServer, ServerPaths
@@ -20,7 +21,7 @@ class ServerFactory(Protocol):
 
     def create_server_instances(
         self, servers_config: list[ServerConfig]
-    ) -> Dict[str, ArangoServer]:
+    ) -> Dict[ServerId, ArangoServer]:
         """Create ArangoServer instances from ServerConfig objects."""
 
 
@@ -41,7 +42,7 @@ class StandardServerFactory:
 
     def create_server_instances(
         self, servers_config: list[ServerConfig]
-    ) -> Dict[str, ArangoServer]:
+    ) -> Dict[ServerId, ArangoServer]:
         """Create ArangoServer instances from ServerConfig objects.
 
         Args:
@@ -60,25 +61,25 @@ class StandardServerFactory:
             servers[server_id] = server
             self._app_context.logger.debug(
                 "Created server instance %s with role %s on port %s",
-                server_id,
+                str(server_id),
                 server_config.role.value,
                 server_config.port,
             )
         return servers
 
-    def _generate_server_id(self, role: ServerRole, index: int) -> str:
+    def _generate_server_id(self, role: ServerRole, index: int) -> ServerId:
         """Generate server ID based on role and index."""
         if role == ServerRole.AGENT:
-            return f"agent_{index}"
+            return ServerId(f"agent_{index}")
         elif role == ServerRole.DBSERVER:
-            return f"dbserver_{index}"
+            return ServerId(f"dbserver_{index}")
         elif role == ServerRole.COORDINATOR:
-            return f"coordinator_{index}"
+            return ServerId(f"coordinator_{index}")
         else:
-            return f"server_{index}"
+            return ServerId(f"server_{index}")
 
     def _create_single_server(
-        self, server_id: str, server_config: ServerConfig
+        self, server_id: ServerId, server_config: ServerConfig
     ) -> ArangoServer:
         """Create a single ArangoServer instance using the new factory method.
 

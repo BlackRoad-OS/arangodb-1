@@ -3,6 +3,7 @@
 from typing import Dict, List, Optional
 import threading
 from ..core.types import ServerRole
+from ..core.value_objects import ServerId
 from .server import ArangoServer
 
 
@@ -14,10 +15,10 @@ class ServerRegistry:
 
     def __init__(self) -> None:
         """Initialize empty server registry."""
-        self._servers: Dict[str, ArangoServer] = {}
+        self._servers: Dict[ServerId, ArangoServer] = {}
         self._lock = threading.RLock()
 
-    def register_server(self, server_id: str, server: ArangoServer) -> None:
+    def register_server(self, server_id: ServerId, server: ArangoServer) -> None:
         """Register a server instance.
 
         Args:
@@ -32,7 +33,7 @@ class ServerRegistry:
                 raise ValueError(f"Server {server_id} is already registered")
             self._servers[server_id] = server
 
-    def unregister_server(self, server_id: str) -> Optional[ArangoServer]:
+    def unregister_server(self, server_id: ServerId) -> Optional[ArangoServer]:
         """Unregister and return a server instance.
 
         Args:
@@ -44,7 +45,7 @@ class ServerRegistry:
         with self._lock:
             return self._servers.pop(server_id, None)
 
-    def get_server(self, server_id: str) -> Optional[ArangoServer]:
+    def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
         """Get a server instance by ID.
 
         Args:
@@ -56,7 +57,7 @@ class ServerRegistry:
         with self._lock:
             return self._servers.get(server_id)
 
-    def get_all_servers(self) -> Dict[str, ArangoServer]:
+    def get_all_servers(self) -> Dict[ServerId, ArangoServer]:
         """Get all registered servers.
 
         Returns:
@@ -77,7 +78,7 @@ class ServerRegistry:
         with self._lock:
             return [server for server in self._servers.values() if server.role == role]
 
-    def get_server_ids_by_role(self, role: ServerRole) -> List[str]:
+    def get_server_ids_by_role(self, role: ServerRole) -> List[ServerId]:
         """Get all server IDs with a specific role.
 
         Args:
@@ -105,7 +106,7 @@ class ServerRegistry:
         servers = self.get_servers_by_role(role)
         return [server.get_endpoint() for server in servers]
 
-    def has_server(self, server_id: str) -> bool:
+    def has_server(self, server_id: ServerId) -> bool:
         """Check if a server is registered.
 
         Args:
@@ -143,7 +144,7 @@ class ServerRegistry:
         with self._lock:
             self._servers.clear()
 
-    def get_server_ids(self) -> List[str]:
+    def get_server_ids(self) -> List[ServerId]:
         """Get all registered server IDs.
 
         Returns:
