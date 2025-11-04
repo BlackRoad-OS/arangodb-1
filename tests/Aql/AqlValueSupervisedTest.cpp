@@ -754,7 +754,7 @@ TEST(AqlValueSupervisedTest, HasKeyFuncForSupervisedSliceReturnsCorrectValue) {
 // Test behavior of getTypeString() function for SupervisedSlice
 // This function returns the actual type (not AqlValueType) of the heap data
 TEST(AqlValueSupervisedTest,
-     GetTypeStringFuncForSupervisedSliceReturnsCorrectValue) {
+     FuncGetTypeStringFuncForSupervisedSliceReturnsCorrectValue) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
   std::string big(4096, 'x');
@@ -849,88 +849,121 @@ TEST(AqlValueSupervisedTest, FuncAtWithDoCopyTrueReturnsCopy) {
   EXPECT_EQ(rm.current(), 0);
 }
 
-TEST(AqlValueSupervisedTest, GetKeyAttributeFuncReturnsCopyOfAqlValue) {
+TEST(AqlValueSupervisedTest, FuncGetFromAndToAttributesReturnCopy) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
 
   const std::string big(4096, 'x');
   const std::string fromValue = "vertices/users/" + big;
+  const std::string toValue   = "vertices/posts/12345-" + big;
 
-  // -----------------------------
-  // Source document WITH _from
-  // -----------------------------
+  // ===========================================================================
+  // Document WITH both _from and _to
+  // ===========================================================================
   Builder bEdge;
   bEdge.openObject();
   bEdge.add("_from", Value(fromValue));
-  bEdge.add("_to", Value("vertices/posts/12345"));
-  bEdge.add("note", Value(big));
+  bEdge.add("_to",   Value(toValue));
+  bEdge.add("note",  Value(big));  // keep object large
   bEdge.close();
 
-  AqlValue src(Slice(bEdge.slice()), 0, &rm);
+  AqlValue src(Slice(bEdge.slice()), /*byteSize*/ 0, &rm);
   ASSERT_EQ(src.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   auto base = rm.current();
 
-  // Case 1: doCopy = false => not create copy
+  // ---- getFromAttribute: doCopy = false (reference) ----
   {
     bool mustDestroy = false;
     AqlValue out = src.getFromAttribute(mustDestroy, /*doCopy*/ false);
 
     EXPECT_FALSE(mustDestroy);
     EXPECT_TRUE(out.isString());
-
-    auto s = out.slice();
-    EXPECT_EQ(s.copyString(), fromValue);
-
-    // Didn't create a copy -> no increase memory
-    EXPECT_EQ(rm.current(), base);
+    EXPECT_EQ(out.slice().copyString(), fromValue);
+    EXPECT_EQ(rm.current(), base); // no additional memory
   }
 
-  // Case 2: doCopy = true => create copy
+  // ---- getFromAttribute: doCopy = true (owning copy) ----
   {
     bool mustDestroy = false;
     AqlValue out = src.getFromAttribute(mustDestroy, /*doCopy*/ true);
 
     EXPECT_TRUE(mustDestroy);
     EXPECT_TRUE(out.isString());
+    EXPECT_EQ(out.slice().copyString(), fromValue);
 
-    // Created a copy -> increase memory
+    // Memory accounted for the copy
     EXPECT_EQ(rm.current(), base + out.memoryUsage());
 
-    auto s = out.slice();
-    ASSERT_TRUE(s.isString());
-    EXPECT_EQ(s.copyString(), fromValue);
+    out.destroy();
+    EXPECT_EQ(rm.current(), base); // back to base after destroy
+  }
+
+  // ---- getToAttribute: doCopy = false (reference) ----
+  {
+    bool mustDestroy = false;
+    AqlValue out = src.getToAttribute(mustDestroy, /*doCopy*/ false);
+
+    EXPECT_FALSE(mustDestroy);
+    EXPECT_TRUE(out.isString());
+    EXPECT_EQ(out.slice().copyString(), toValue);
+    EXPECT_EQ(rm.current(), base); // no additional memory
+  }
+
+  // ---- getToAttribute: doCopy = true (owning copy) ----
+  {
+    bool mustDestroy = false;
+    AqlValue out = src.getToAttribute(mustDestroy, /*doCopy*/ true);
+
+    EXPECT_TRUE(mustDestroy);
+    EXPECT_TRUE(out.isString());
+    EXPECT_EQ(out.slice().copyString(), toValue);
+
+    // Memory accounted for the copy
+    EXPECT_EQ(rm.current(), base + out.memoryUsage());
 
     out.destroy();
-    EXPECT_EQ(rm.current(), base); // memory count goes back to original
+    EXPECT_EQ(rm.current(), base); // back to base after destroy
   }
+
   src.destroy();
   EXPECT_EQ(rm.current(), 0U);
 
-  // -----------------------------
-  // Source document WITHOUT _from
-  // -----------------------------
-  Builder bNoFrom;
-  bNoFrom.openObject();
-  bNoFrom.add("foo", Value(1));
-  bNoFrom.add("bar", Value(big));
-  bNoFrom.close();
+  // ===========================================================================
+  // Document WITHOUT _from and WITHOUT _to (negative cases)
+  // ===========================================================================
+  Builder bNoAttrs;
+  bNoAttrs.openObject();
+  bNoAttrs.add("foo", Value(1));
+  bNoAttrs.add("bar", Value(big)); // still large, but no _from/_to
+  bNoAttrs.close();
 
-  AqlValue srcNoFrom(Slice(bNoFrom.slice()), /*byteSize*/ 0, &rm);
-  ASSERT_EQ(srcNoFrom.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  AqlValue srcNoAttrs(Slice(bNoAttrs.slice()), /*byteSize*/ 0, &rm);
+  ASSERT_EQ(srcNoAttrs.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
   base = rm.current();
+
+  // ---- getFromAttribute: missing -> null, no ownership ----
   {
     bool mustDestroy = false;
-    AqlValue out = srcNoFrom.getFromAttribute(mustDestroy, /*doCopy*/ true);
+    AqlValue out = srcNoAttrs.getFromAttribute(mustDestroy, /*doCopy*/ true);
 
     EXPECT_FALSE(mustDestroy);
     EXPECT_EQ(out.getTypeString(), "null");
-
-    // AqlValue out is null -> no increase memory
-    EXPECT_EQ(rm.current(), base);
+    EXPECT_EQ(rm.current(), base); // no memory increase
   }
 
-  srcNoFrom.destroy();
+  // ---- getToAttribute: missing -> null, no ownership ----
+  {
+    bool mustDestroy = false;
+    AqlValue out = srcNoAttrs.getToAttribute(mustDestroy, /*doCopy*/ true);
+
+    EXPECT_FALSE(mustDestroy);
+    EXPECT_EQ(out.getTypeString(), "null");
+    EXPECT_EQ(rm.current(), base); // no memory increase
+  }
+
+  srcNoAttrs.destroy();
   EXPECT_EQ(rm.current(), 0U);
 }
 
@@ -971,6 +1004,77 @@ TEST(AqlValueSupervisedTest, FuncDataReturnsPointerToActualData) {
   EXPECT_EQ(rm.current(), a1.memoryUsage());
   a1.destroy();
   EXPECT_EQ(rm.current(), 0u);
+}
+
+// Test behavior of toVelocyPack() function
+// This function returns Builder object that represents the heap data
+// Need to instantiate AqlValues using various ctors!!!!!
+TEST(AqlValueSupervisedTest, FuncToVelocyPackReturnsCorrectBuilder) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  const Options* opts = &Options::Defaults;
+  const std::string big(4096, 'x');
+
+  // STRING
+  {
+    Builder bin;
+    bin.add(Value(std::string("hello-") + big));
+    AqlValue v(Slice(bin.slice()), /*byteSize*/ 0, &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    Builder bout;
+    v.toVelocyPack(opts, bout, /*allowUnindexed*/ true);
+
+    // Compare JSON representations for equality
+    EXPECT_EQ(Slice(bin.slice()).toJson(opts), Slice(bout.slice()).toJson(opts));
+
+    v.destroy();
+  }
+
+  // OBJECT
+  {
+    Builder bin;
+    bin.openObject();
+    bin.add("k1", Value(1));
+    bin.add("k2", Value(2));
+    bin.add("pad", Value(big));
+    bin.add("msg", Value("ok"));
+    bin.close();
+
+    AqlValue v(Slice(bin.slice()), 0, &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    Builder bout;
+    v.toVelocyPack(opts, bout, /*allowUnindexed*/ false);
+
+    EXPECT_EQ(Slice(bin.slice()).toJson(opts), Slice(bout.slice()).toJson(opts));
+
+    v.destroy();
+  }
+
+  // ARRAY
+  {
+    Builder bin;
+    bin.openArray();
+    bin.add(Value("a"));
+    bin.add(Value("b"));
+    bin.add(Value(big));             // make array large
+    bin.add(Value("c"));
+    bin.close();
+
+    AqlValue v(Slice(bin.slice()), 0, &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    Builder bout;
+    v.toVelocyPack(opts, bout, /*allowUnindexed*/ true);
+
+    EXPECT_EQ(Slice(bin.slice()).toJson(opts), Slice(bout.slice()).toJson(opts));
+
+    v.destroy();
+  }
+
+  EXPECT_EQ(rm.current(), 0U);
 }
 
 // Test the behavior of materialize() function's default case
