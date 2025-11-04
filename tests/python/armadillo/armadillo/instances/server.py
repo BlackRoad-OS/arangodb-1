@@ -52,7 +52,7 @@ class ServerPaths:
     @classmethod
     def from_config(
         cls,
-        server_id: str,
+        server_id: ServerId,
         config: Optional[ServerConfig],
         filesystem: FilesystemService,
     ) -> "ServerPaths":
@@ -79,7 +79,7 @@ class ServerPaths:
             )
         else:
             # Default directory structure
-            base_dir = filesystem.server_dir(server_id)
+            base_dir = filesystem.server_dir(str(server_id))
             return cls(
                 base_dir=base_dir,
                 data_dir=base_dir / "data",
@@ -111,7 +111,7 @@ class ServerRuntimeState:
 class ArangoServerInfo:
     """Information about an ArangoDB server instance."""
 
-    server_id: str
+    server_id: ServerId
     role: ServerRole
     port: int
     endpoint: str

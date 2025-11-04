@@ -482,7 +482,7 @@ class ProcessSupervisor:
         self._stop_monitoring.set()
 
     def _wait_for_readiness(
-        self, server_id: str, readiness_check: Callable[[], bool], timeout: float
+        self, server_id: ServerId, readiness_check: Callable[[], bool], timeout: float
     ) -> None:
         """Wait for process to become ready."""
         start_time = time.time()
@@ -524,7 +524,7 @@ class ProcessSupervisor:
             timeout=timeout,
         )
 
-    def _start_output_streaming(self, server_id: str) -> None:
+    def _start_output_streaming(self, server_id: ServerId) -> None:
         """Start output streaming thread for process."""
         process = self._processes.get(server_id)
         if not process:
@@ -539,7 +539,7 @@ class ProcessSupervisor:
         self._streaming_threads[server_id] = streaming_thread
         streaming_thread.start()
 
-    def _start_monitoring(self, server_id: str) -> None:
+    def _start_monitoring(self, server_id: ServerId) -> None:
         """Start monitoring thread for process."""
         monitor_thread = threading.Thread(
             target=self._monitor_process,

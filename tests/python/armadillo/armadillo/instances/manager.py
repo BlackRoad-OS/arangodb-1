@@ -515,7 +515,7 @@ class InstanceManager:
         # Delegate to ServerRegistry for better performance
         return self._server_registry.get_servers_by_role(role)
 
-    def get_all_servers(self) -> Dict[str, ArangoServer]:
+    def get_all_servers(self) -> Dict[ServerId, ArangoServer]:
         """Get all servers as a dictionary.
 
         Returns:
@@ -584,7 +584,7 @@ class InstanceManager:
 
         return health_status
 
-    def collect_server_stats(self) -> Dict[str, ServerStats]:
+    def collect_server_stats(self) -> Dict[ServerId, ServerStats]:
         """Collect statistics from all servers.
 
         Returns:
@@ -648,7 +648,7 @@ class InstanceManager:
         # Add server details
         info["servers"] = {}
         for server_id, server in self.state.servers.items():
-            info["servers"][server_id] = {
+            info["servers"][str(server_id)] = {
                 "role": server.role.value,
                 "endpoint": server.endpoint,
                 "is_running": server.is_running(),
