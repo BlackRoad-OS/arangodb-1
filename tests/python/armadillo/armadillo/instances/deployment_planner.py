@@ -3,7 +3,7 @@
 from typing import Optional, List
 
 from ..core.types import ServerRole, ServerConfig, ClusterConfig
-from ..core.value_objects import ServerId
+from ..core.value_objects import ServerId, DeploymentId
 from ..core.log import Logger
 from ..core.config import ConfigProvider
 from ..utils.ports import PortAllocator
@@ -54,7 +54,7 @@ class DeploymentPlanner:
 
     def create_cluster_plan(
         self,
-        deployment_id: str,
+        deployment_id: DeploymentId,
         cluster_config: Optional[ClusterConfig] = None,
     ) -> ClusterDeploymentPlan:
         """Create deployment plan for cluster mode."""
@@ -78,7 +78,7 @@ class DeploymentPlanner:
     def _plan_cluster(
         self,
         plan: ClusterDeploymentPlan,
-        deployment_id: str,
+        deployment_id: DeploymentId,
         cluster_config: Optional[ClusterConfig],
     ) -> None:
         """Plan cluster deployment with agents, dbservers, and coordinators."""
@@ -107,7 +107,7 @@ class DeploymentPlanner:
     def _create_agents(
         self,
         plan: ClusterDeploymentPlan,
-        deployment_id: str,
+        deployment_id: DeploymentId,
         cluster_config: ClusterConfig,
     ) -> List[str]:
         """Create agent server configurations."""
@@ -128,10 +128,10 @@ class DeploymentPlanner:
             agent_config = ServerConfig(
                 role=ServerRole.AGENT,
                 port=port,
-                data_dir=self._filesystem.server_dir(deployment_id)
+                data_dir=self._filesystem.server_dir(str(deployment_id))
                 / f"agent_{i}"
                 / "data",
-                log_file=self._filesystem.server_dir(deployment_id)
+                log_file=self._filesystem.server_dir(str(deployment_id))
                 / f"agent_{i}"
                 / "arangod.log",
                 args=args,
@@ -143,7 +143,7 @@ class DeploymentPlanner:
     def _create_dbservers(
         self,
         plan: ClusterDeploymentPlan,
-        deployment_id: str,
+        deployment_id: DeploymentId,
         cluster_config: ClusterConfig,
         agent_endpoints: List[str],
     ) -> None:
@@ -163,10 +163,10 @@ class DeploymentPlanner:
             dbserver_config = ServerConfig(
                 role=ServerRole.DBSERVER,
                 port=port,
-                data_dir=self._filesystem.server_dir(deployment_id)
+                data_dir=self._filesystem.server_dir(str(deployment_id))
                 / f"dbserver_{i}"
                 / "data",
-                log_file=self._filesystem.server_dir(deployment_id)
+                log_file=self._filesystem.server_dir(str(deployment_id))
                 / f"dbserver_{i}"
                 / "arangod.log",
                 args=args,
@@ -176,7 +176,7 @@ class DeploymentPlanner:
     def _create_coordinators(
         self,
         plan: ClusterDeploymentPlan,
-        deployment_id: str,
+        deployment_id: DeploymentId,
         cluster_config: ClusterConfig,
         agent_endpoints: List[str],
     ) -> List[str]:
@@ -199,10 +199,10 @@ class DeploymentPlanner:
             coordinator_config = ServerConfig(
                 role=ServerRole.COORDINATOR,
                 port=port,
-                data_dir=self._filesystem.server_dir(deployment_id)
+                data_dir=self._filesystem.server_dir(str(deployment_id))
                 / f"coordinator_{i}"
                 / "data",
-                log_file=self._filesystem.server_dir(deployment_id)
+                log_file=self._filesystem.server_dir(str(deployment_id))
                 / f"coordinator_{i}"
                 / "arangod.log",
                 args=args,

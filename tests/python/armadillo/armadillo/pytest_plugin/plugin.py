@@ -27,6 +27,7 @@ from ..core.types import (
     ExecutionOutcome,
     ArmadilloConfig,
 )
+from ..core.value_objects import DeploymentId
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
 from ..core.errors import ServerStartupError, ArmadilloError, ResultProcessingError
 from ..instances.server import ArangoServer
@@ -222,7 +223,9 @@ def arango_single_server() -> Generator[ArangoServer, None, None]:
     from ..instances.manager import get_instance_manager
 
     deployment_id = "test_single_server_session"
-    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
+    manager = get_instance_manager(
+        DeploymentId(deployment_id), _plugin._session_app_context
+    )
 
     try:
         logger.info("Starting session single server")
@@ -277,7 +280,7 @@ def _get_or_create_cluster(self) -> "InstanceManager":
     if "cluster" not in self._session_deployments:
         deployment_id = f"cluster_{random_id(8)}"
         manager = get_instance_manager(
-            deployment_id, app_context=self._session_app_context
+            DeploymentId(deployment_id), app_context=self._session_app_context
         )
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
@@ -338,7 +341,7 @@ def _get_or_create_single_server(self) -> ArangoServer:
 
         deployment_id = "test_single_server"
         manager = get_instance_manager(
-            deployment_id, app_context=self._session_app_context
+            DeploymentId(deployment_id), app_context=self._session_app_context
         )
 
         logger.info("Starting session single server")
@@ -412,7 +415,9 @@ def arango_single_server_function() -> Generator[ArangoServer, None, None]:
     from ..instances.manager import get_instance_manager
 
     deployment_id = f"test_func_{random_id(8)}"
-    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
+    manager = get_instance_manager(
+        DeploymentId(deployment_id), _plugin._session_app_context
+    )
 
     try:
         logger.info("Starting function server %s", deployment_id)
@@ -438,7 +443,9 @@ def arango_single_server_function() -> Generator[ArangoServer, None, None]:
 def arango_cluster() -> Generator[InstanceManager, None, None]:
     """Provide a full ArangoDB cluster for testing."""
     deployment_id = f"cluster_{random_id(8)}"
-    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
+    manager = get_instance_manager(
+        DeploymentId(deployment_id), _plugin._session_app_context
+    )
     try:
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
@@ -466,7 +473,9 @@ def arango_cluster() -> Generator[InstanceManager, None, None]:
 def arango_cluster_function() -> Generator[InstanceManager, None, None]:
     """Provide a function-scoped ArangoDB cluster."""
     deployment_id = f"cluster_func_{random_id(8)}"
-    manager = get_instance_manager(deployment_id, _plugin._session_app_context)
+    manager = get_instance_manager(
+        DeploymentId(deployment_id), _plugin._session_app_context
+    )
     try:
         logger.info("Starting function cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)

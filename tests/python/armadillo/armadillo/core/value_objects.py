@@ -65,3 +65,32 @@ class ServerContext:
 
     def is_single(self) -> bool:
         return self.role == ServerRole.SINGLE
+
+
+@dataclass(frozen=True)
+class DeploymentId:
+    """Validated deployment identifier. Hashable for use as dictionary key."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.value or not self.value.strip():
+            raise ValueError("DeploymentId cannot be empty")
+
+        # Allow alphanumeric characters, underscores, and hyphens
+        normalized = self.value.replace("_", "").replace("-", "")
+        if not normalized.isalnum():
+            raise ValueError(
+                f"DeploymentId must be alphanumeric with _ or -: {self.value}"
+            )
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __hash__(self) -> int:
+        return hash(self.value)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, DeploymentId):
+            return self.value == other.value
+        return False

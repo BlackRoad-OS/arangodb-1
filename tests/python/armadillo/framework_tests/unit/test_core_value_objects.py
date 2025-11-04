@@ -1,8 +1,8 @@
-"""Unit tests for core value objects (ServerId and ServerContext)."""
+"""Unit tests for core value objects (ServerId, ServerContext, DeploymentId)."""
 
 import pytest
 
-from armadillo.core.value_objects import ServerId, ServerContext
+from armadillo.core.value_objects import ServerId, ServerContext, DeploymentId
 from armadillo.core.types import ServerRole
 
 
@@ -239,3 +239,103 @@ class TestServerIdIntegration:
         # Simulate crash log
         crash_msg = f"Server {context} crashed with exit code 139"
         assert crash_msg == "Server agent_0[pid:12345] crashed with exit code 139"
+
+
+class TestDeploymentId:
+    """Tests for DeploymentId value object."""
+
+    def test_create_valid_deployment_id(self):
+        """Test creating valid deployment IDs."""
+        deployment_id = DeploymentId("test_deployment")
+        assert deployment_id.value == "test_deployment"
+        assert str(deployment_id) == "test_deployment"
+
+    def test_create_deployment_id_with_hyphen(self):
+        """Test deployment ID with hyphens."""
+        deployment_id = DeploymentId("test-deployment-1")
+        assert deployment_id.value == "test-deployment-1"
+
+    def test_create_deployment_id_with_underscore(self):
+        """Test deployment ID with underscores."""
+        deployment_id = DeploymentId("cluster_func_abc123")
+        assert deployment_id.value == "cluster_func_abc123"
+
+    def test_deployment_id_empty_raises_error(self):
+        """Test that empty deployment ID raises ValueError."""
+        with pytest.raises(ValueError, match="DeploymentId cannot be empty"):
+            DeploymentId("")
+
+    def test_deployment_id_whitespace_only_raises_error(self):
+        """Test that whitespace-only deployment ID raises ValueError."""
+        with pytest.raises(ValueError, match="DeploymentId cannot be empty"):
+            DeploymentId("   ")
+
+    def test_deployment_id_invalid_characters_raises_error(self):
+        """Test that invalid characters raise ValueError."""
+        with pytest.raises(ValueError, match="DeploymentId must be alphanumeric"):
+            DeploymentId("deployment@test")
+
+        with pytest.raises(ValueError, match="DeploymentId must be alphanumeric"):
+            DeploymentId("test.deployment")
+
+        with pytest.raises(ValueError, match="DeploymentId must be alphanumeric"):
+            DeploymentId("deploy/ment")
+
+    def test_deployment_id_equality(self):
+        """Test DeploymentId equality comparison."""
+        id1 = DeploymentId("cluster_session")
+        id2 = DeploymentId("cluster_session")
+        id3 = DeploymentId("cluster_func")
+
+        assert id1 == id2
+        assert id1 != id3
+        assert id1 != "cluster_session"  # Should not equal strings
+
+    def test_deployment_id_hash(self):
+        """Test DeploymentId can be hashed and used in sets/dicts."""
+        id1 = DeploymentId("deployment_1")
+        id2 = DeploymentId("deployment_1")
+        id3 = DeploymentId("deployment_2")
+
+        # Same ID should have same hash
+        assert hash(id1) == hash(id2)
+
+        # Can be used in sets
+        id_set = {id1, id2, id3}
+        assert len(id_set) == 2  # id1 and id2 are the same
+
+        # Can be used as dict keys
+        deployment_dict = {id1: "manager1", id3: "manager3"}
+        assert deployment_dict[id2] == "manager1"  # id2 equals id1
+
+    def test_deployment_id_immutable(self):
+        """Test that DeploymentId is immutable."""
+        deployment_id = DeploymentId("test_deployment")
+        with pytest.raises(AttributeError):
+            deployment_id.value = "other_deployment"  # type: ignore
+
+    def test_deployment_id_as_dict_key(self):
+        """Test realistic usage pattern with deployment tracking."""
+        deployments = {}
+
+        # Track multiple deployments
+        cluster_session = DeploymentId("cluster_session")
+        cluster_func = DeploymentId("cluster_func_abc123")
+        single_server = DeploymentId("test_single_server")
+
+        deployments[cluster_session] = {"type": "cluster", "servers": 6}
+        deployments[cluster_func] = {"type": "cluster", "servers": 3}
+        deployments[single_server] = {"type": "single", "servers": 1}
+
+        # Lookup with new instance (same value)
+        assert deployments[DeploymentId("cluster_session")] == {
+            "type": "cluster",
+            "servers": 6,
+        }
+
+        # Check membership
+        assert DeploymentId("cluster_session") in deployments
+        assert DeploymentId("nonexistent") not in deployments
+
+        # Iterate
+        assert len(deployments) == 3

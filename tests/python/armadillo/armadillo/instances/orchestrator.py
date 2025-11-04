@@ -8,6 +8,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 from ..core.types import ServerRole, TimeoutConfig
+from ..core.value_objects import DeploymentId
 from ..core.errors import (
     ClusterError,
     AgencyError,
@@ -98,7 +99,9 @@ class ClusterOperation:
 class ClusterOrchestrator:
     """Advanced orchestration for multi-server ArangoDB cluster operations."""
 
-    def __init__(self, deployment_id: str, app_context: "ApplicationContext") -> None:
+    def __init__(
+        self, deployment_id: DeploymentId, app_context: "ApplicationContext"
+    ) -> None:
         """Initialize cluster orchestrator.
 
         Args:
@@ -599,12 +602,12 @@ class ClusterOrchestrator:
             logger.info("Cancelled %s active operations", len(self._active_operations))
 
 
-_cluster_orchestrators: Dict[str, ClusterOrchestrator] = {}
+_cluster_orchestrators: Dict[DeploymentId, ClusterOrchestrator] = {}
 _orchestrator_lock = threading.Lock()
 
 
 def get_cluster_orchestrator(
-    deployment_id: str, app_context: "ApplicationContext"
+    deployment_id: DeploymentId, app_context: "ApplicationContext"
 ) -> ClusterOrchestrator:
     """Get or create cluster orchestrator for deployment.
 

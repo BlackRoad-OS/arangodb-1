@@ -15,7 +15,7 @@ from ..core.types import (
 )
 from ..core.config import get_config
 from ..core.context import ApplicationContext
-from ..core.value_objects import ServerId
+from ..core.value_objects import ServerId, DeploymentId
 from ..core.errors import (
     ServerError,
     ServerStartupError,
@@ -79,7 +79,7 @@ class ThreadingResources:
     lock: threading.RLock
 
     @classmethod
-    def create_for_deployment(cls, deployment_id: str) -> "ThreadingResources":
+    def create_for_deployment(cls, deployment_id: DeploymentId) -> "ThreadingResources":
         """Create threading resources for a deployment."""
         config = get_config()
         return cls(
@@ -100,7 +100,7 @@ class InstanceManager:
 
     def __init__(
         self,
-        deployment_id: str,
+        deployment_id: DeploymentId,
         *,
         app_context: ApplicationContext,
     ) -> None:
@@ -680,12 +680,12 @@ class InstanceManager:
 
 
 # Global instance manager registry
-_instance_managers: Dict[str, InstanceManager] = {}
+_instance_managers: Dict[DeploymentId, InstanceManager] = {}
 _manager_lock = threading.Lock()
 
 
 def get_instance_manager(
-    deployment_id: str, app_context: ApplicationContext
+    deployment_id: DeploymentId, app_context: ApplicationContext
 ) -> InstanceManager:
     """Get or create instance manager for deployment.
 
