@@ -283,9 +283,15 @@ struct AqlValue final {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(
             pointer + sizeof(arangodb::ResourceMonitor*)));
       }
-      uint64_t getLength() const noexcept {
-        return velocypack::Slice(pointer + sizeof(arangodb::ResourceMonitor*))
-            .byteSize();
+      uint64_t getLength()
+          const noexcept {  // get bytes of lengthOrigin, get rid of supervised
+                            // string, make ctors default, add logic for managed
+                            // string and supervised slice in boolean methods
+        if constexpr (basics::isLittleEndian()) {
+          return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
+        } else {
+          return (lengthOrigin & 0x0000ffffffffffffULL);
+        }
       }
 
       uint64_t getOrigin() const noexcept {
@@ -314,41 +320,6 @@ struct AqlValue final {
     static_assert(sizeof(supervisedSliceMeta) == 16,
                   "VPACK_SUPERVISED_SLICE layout must be 16 bytes!");
 
-    // VPACK_SUPERVISED_STRING
-    struct {
-      velocypack::Slice toSlice() const {
-        auto const* s = reinterpret_cast<std::string const*>(getPayloadPtr());
-        return velocypack::Slice(reinterpret_cast<uint8_t const*>(s->data()));
-      }
-      uint64_t getLength() const noexcept {
-        auto const* s = reinterpret_cast<std::string const*>(getPayloadPtr());
-        return static_cast<uint64_t>(s->size());
-      }
-      uint64_t getOrigin() const noexcept {
-        if constexpr (basics::isLittleEndian()) {
-          return (lengthOrigin & 0x000000000000ff00ULL) >> 8;
-        } else {
-          return (lengthOrigin & 0x00ff000000000000ULL) >> 48;
-        }
-      }
-
-      arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
-        // PD points to [ RM* | string object ]
-        return *reinterpret_cast<arangodb::ResourceMonitor* const*>(pointer);
-      }
-
-      uint8_t* getPayloadPtr() const noexcept {
-        // payload starts at the 9th byte
-        return pointer + sizeof(arangodb::ResourceMonitor*);
-      }
-
-      uint64_t lengthOrigin;  // First byte: AqlValueType
-                              // Second byte: Memory Origin
-                              // The following 6 bytes: padding
-      uint8_t* pointer;
-    } supervisedStringMeta;
-    static_assert(sizeof(supervisedStringMeta) == 16,
-                  "VPACK_SUPERVISED_STRING layout must be 16 bytes!");
   } _data;
 
   /// @brief type of memory that we are dealing with for values of type
@@ -420,8 +391,8 @@ struct AqlValue final {
   /// @brief AqlValues can be copied and moved as required
   /// memory management is not performed via AqlValue destructor but via
   /// explicit calls to destroy()
-  AqlValue(AqlValue const&);
-  AqlValue& operator=(AqlValue const&);
+  AqlValue(AqlValue const&) = default;
+  AqlValue& operator=(AqlValue const&) = default;
   void copyFrom(AqlValue const& other, ResourceMonitor* rm = nullptr);
   AqlValue(AqlValue const&, arangodb::ResourceMonitor&);
   AqlValue(AqlValue&&) noexcept = default;
