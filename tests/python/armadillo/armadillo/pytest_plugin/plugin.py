@@ -19,7 +19,13 @@ from ..core.log import (
     clear_log_context,
 )
 from ..core.time import set_global_deadline, stop_watchdog
-from ..core.types import ServerRole, DeploymentMode, ClusterConfig, ExecutionOutcome, ArmadilloConfig
+from ..core.types import (
+    ServerRole,
+    DeploymentMode,
+    ClusterConfig,
+    ExecutionOutcome,
+    ArmadilloConfig,
+)
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
 from ..core.errors import ServerStartupError, ArmadilloError, ResultProcessingError
 from ..instances.server import ArangoServer
@@ -43,7 +49,9 @@ class ArmadilloPlugin:
         self._armadillo_config: Optional[ArmadilloConfig] = None
         self._deployment_failed: bool = False
         self._deployment_failure_reason: Optional[str] = None
-        self._session_app_context: Optional[ApplicationContext] = None  # Shared context for all session deployments
+        self._session_app_context: Optional[ApplicationContext] = (
+            None  # Shared context for all session deployments
+        )
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
@@ -267,7 +275,9 @@ def _get_or_create_cluster(self) -> "InstanceManager":
     """Get or create session cluster deployment."""
     if "cluster" not in self._session_deployments:
         deployment_id = f"cluster_{random_id(8)}"
-        manager = get_instance_manager(deployment_id, app_context=self._session_app_context)
+        manager = get_instance_manager(
+            deployment_id, app_context=self._session_app_context
+        )
         logger.info("Starting session cluster deployment %s", deployment_id)
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
         plan = manager.create_deployment_plan(cluster_config)
@@ -326,7 +336,9 @@ def _get_or_create_single_server(self) -> ArangoServer:
         from ..instances.manager import get_instance_manager
 
         deployment_id = "test_single_server"
-        manager = get_instance_manager(deployment_id, app_context=self._session_app_context)
+        manager = get_instance_manager(
+            deployment_id, app_context=self._session_app_context
+        )
 
         logger.info("Starting session single server")
 
@@ -369,7 +381,9 @@ def _get_or_create_single_server(self) -> ArangoServer:
             return None
         except Exception as e:
             # Unexpected errors - boundary must not crash pytest
-            error_msg = f"Single server deployment failed with unexpected error: {str(e)}"
+            error_msg = (
+                f"Single server deployment failed with unexpected error: {str(e)}"
+            )
             logger.error(error_msg, exc_info=True)
             self._deployment_failed = True
             self._deployment_failure_reason = error_msg
@@ -640,6 +654,7 @@ def pytest_sessionstart(session):
 
     # Print test artifacts directory (clean access via shared context)
     from ..utils.output import print_status
+
     artifacts_dir = _plugin._session_app_context.filesystem.work_dir()
     print_status(f"📁 Test artifacts: {artifacts_dir}")
     logger.info("Test artifacts directory: %s", artifacts_dir)
@@ -657,6 +672,80 @@ def _is_compact_mode_enabled():
 
     framework_config = get_framework_config()
     return framework_config.compact_mode
+
+
+def _cleanup_temp_dir_if_needed(session, exitstatus):
+    """Clean up session work directory based on test results and configuration.
+
+    Cleanup logic:
+    - On failure (exitstatus != 0): always keep work_dir (for debugging)
+    - On success with --keep-temp-dir: keep work_dir
+    - On success without flag: cleanup session work_dir
+
+    Note: This cleans up the session-specific work directory (e.g., /tmp/armadillo/work/session_XXX),
+    not the entire temp_dir, to avoid interfering with other concurrent test sessions.
+    """
+    import shutil
+    import os
+    from ..utils.output import print_status
+
+    try:
+        # Get the session work directory from the plugin's app context
+        if (
+            not hasattr(_plugin, "_session_app_context")
+            or _plugin._session_app_context is None
+        ):
+            logger.debug("No session app context - skipping temp cleanup")
+            return
+
+        session_work_dir = _plugin._session_app_context.filesystem.work_dir()
+        config = _plugin._session_app_context.config
+
+        # Check if tests were successful
+        tests_passed = exitstatus == 0
+
+        # Check if keep_temp_dir is set (either from CLI or environment)
+        keep_temp_dir = (
+            config.keep_temp_dir or os.getenv("ARMADILLO_KEEP_TEMP_DIR") == "1"
+        )
+
+        # Determine if we should cleanup
+        should_cleanup = tests_passed and not keep_temp_dir
+
+        if should_cleanup and session_work_dir and session_work_dir.exists():
+            # Use dim/gray for cleanup (less prominent)
+            print_status(
+                f"\033[2m🧹 Cleaning up test artifacts: {session_work_dir}\033[0m"
+            )
+            logger.info("Cleaning up session work directory: %s", session_work_dir)
+            try:
+                shutil.rmtree(session_work_dir)
+                logger.info("Session work directory cleaned up successfully")
+            except (OSError, PermissionError) as e:
+                logger.warning(
+                    "Failed to clean up session work directory %s: %s",
+                    session_work_dir,
+                    e,
+                )
+                print_status(f"\033[91m⚠️  Failed to clean up: {e}\033[0m")
+        elif tests_passed and keep_temp_dir:
+            # Use yellow for explicit preservation (user requested)
+            print_status(
+                f"\033[93m📦 Preserving test artifacts: {session_work_dir}\033[0m"
+            )
+            logger.info("Preserving session work directory at: %s", session_work_dir)
+        elif not tests_passed:
+            # Use yellow for preservation on failure (important for debugging)
+            print_status(
+                f"\033[93m📦 Preserving test artifacts for debugging: {session_work_dir}\033[0m"
+            )
+            logger.info(
+                "Tests failed - preserving session work directory for debugging at: %s",
+                session_work_dir,
+            )
+
+    except Exception as e:
+        logger.error("Error in session work directory cleanup: %s", e, exc_info=True)
 
 
 @pytest.hookimpl(trylast=True)
@@ -699,6 +788,10 @@ def pytest_sessionfinish(session, exitstatus):
         _cleanup_all_deployments(emergency=False)
         _cleanup_all_processes(emergency=False)
         logger.debug("Armadillo pytest plugin cleanup completed")
+
+        # Cleanup session work directory AFTER servers are shut down
+        # Only runs if cleanup was successful (we're still in try block)
+        _cleanup_temp_dir_if_needed(session, exitstatus)
     except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
         logger.error("Error during pytest plugin cleanup: %s", e)
     finally:
@@ -720,14 +813,22 @@ def pytest_runtest_setup(item):
 
     # If a timeout was detected in a previous test, skip all remaining tests
     # (timeout means system is in unknown state, similar to crash)
-    if _abort_remaining_tests and _timeout_detected_during_test and _timeout_detected_during_test != item.nodeid:
+    if (
+        _abort_remaining_tests
+        and _timeout_detected_during_test
+        and _timeout_detected_during_test != item.nodeid
+    ):
         pytest.skip(
             f"Skipping test due to timeout in previous test: {_timeout_detected_during_test}\n"
             f"System may be in unknown state after timeout."
         )
 
     # If a crash was detected in a previous test, skip all remaining tests
-    if _abort_remaining_tests and _crash_detected_during_test and _crash_detected_during_test != item.nodeid:
+    if (
+        _abort_remaining_tests
+        and _crash_detected_during_test
+        and _crash_detected_during_test != item.nodeid
+    ):
         pytest.skip(
             f"Skipping test due to server crash in previous test: {_crash_detected_during_test}"
         )
@@ -766,14 +867,19 @@ def pytest_runtest_makereport(item, call):
     if call.when == "call" and call.excinfo is not None:
         exc_type = call.excinfo.type
         exc_typename = exc_type.__name__ if exc_type else ""
-        exc_module = exc_type.__module__ if exc_type and hasattr(exc_type, '__module__') else ""
+        exc_module = (
+            exc_type.__module__ if exc_type and hasattr(exc_type, "__module__") else ""
+        )
 
         # Detect pytest-timeout exceptions
         # pytest-timeout can raise: Timeout, TimeoutError, or wrapped exceptions
         is_timeout = (
-            exc_typename == "Timeout" or
-            (exc_typename == "Failed" and "Timeout" in str(call.excinfo.value)) or
-            (exc_module == "pytest_timeout" and exc_typename in ("Timeout", "TimeoutError"))
+            exc_typename == "Timeout"
+            or (exc_typename == "Failed" and "Timeout" in str(call.excinfo.value))
+            or (
+                exc_module == "pytest_timeout"
+                and exc_typename in ("Timeout", "TimeoutError")
+            )
         )
 
         if is_timeout:
@@ -795,7 +901,7 @@ def pytest_runtest_makereport(item, call):
 
             logger.error(
                 "Test %s timed out - aborting remaining tests to prevent unreliable results",
-                item.nodeid
+                item.nodeid,
             )
 
             # Record as timeout in the result collector
@@ -1092,7 +1198,9 @@ def _cleanup_all_processes(emergency=True):
                         logger.info("All processes successfully terminated")
                 except Exception as e:
                     # Final verification errors should not prevent cleanup completion
-                    logger.error("Error during final process verification: %s", e, exc_info=True)
+                    logger.error(
+                        "Error during final process verification: %s", e, exc_info=True
+                    )
             else:
                 logger.debug("No supervised processes to cleanup")
         else:
@@ -1102,7 +1210,9 @@ def _cleanup_all_processes(emergency=True):
         logger.error("Stack trace: %s", traceback.format_exc())
     except Exception as e:
         # Emergency cleanup is last resort - must complete even on unexpected errors
-        logger.error("Unexpected error during emergency process cleanup: %s", e, exc_info=True)
+        logger.error(
+            "Unexpected error during emergency process cleanup: %s", e, exc_info=True
+        )
         logger.error("Stack trace: %s", traceback.format_exc())
 
 

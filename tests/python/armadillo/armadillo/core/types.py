@@ -121,6 +121,7 @@ class ArmadilloConfig(BaseModel):
     result_formats: List[str] = Field(default_factory=lambda: ["junit", "json"])
     temp_dir: Optional[Path] = None
     keep_instances_on_failure: bool = False
+    keep_temp_dir: bool = False  # Keep temp directory after successful test runs
 
     # Runtime configuration
     bin_dir: Optional[Path] = None

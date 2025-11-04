@@ -30,6 +30,7 @@ _HELP = {
     "formats": "Result output formats",
     "build_dir": "ArangoDB build directory (auto-detected if not specified)",
     "keep_instances_on_failure": "Keep instances running on test failure for debugging",
+    "keep_temp_dir": "Keep temp directory after successful test runs (default: cleanup on success)",
     "parallel": "Run tests in parallel",
     "max_workers": "Maximum parallel workers",
     "extra_args": "Additional arguments to pass to pytest",
@@ -54,6 +55,7 @@ class TestRunOptions(BaseModel):
     )
     build_dir: Optional[Path] = Field(None, description=_HELP["build_dir"])
     keep_instances_on_failure: bool = Field(False, description=_HELP["keep_instances_on_failure"])
+    keep_temp_dir: bool = Field(False, description=_HELP["keep_temp_dir"])
     parallel: bool = Field(False, description=_HELP["parallel"])
     max_workers: Optional[int] = Field(None, description=_HELP["max_workers"])
     extra_args: Optional[List[str]] = Field(None, description=_HELP["extra_args"])
@@ -118,6 +120,7 @@ def run(
     formats: List[str] = typer.Option(["junit", "json"], "--format", help=_HELP["formats"]),
     build_dir: Optional[Path] = typer.Option(None, "--build-dir", "-b", help=_HELP["build_dir"]),
     keep_instances_on_failure: bool = typer.Option(False, "--keep-instances-on-failure", help=_HELP["keep_instances_on_failure"]),
+    keep_temp_dir: bool = typer.Option(False, "--keep-temp-dir", help=_HELP["keep_temp_dir"]),
     parallel: bool = typer.Option(False, "--parallel", help=_HELP["parallel"]),
     max_workers: Optional[int] = typer.Option(None, "--max-workers", help=_HELP["max_workers"]),
     extra_args: Optional[List[str]] = typer.Option(None, "--pytest-arg", help=_HELP["extra_args"]),
@@ -145,6 +148,7 @@ def run(
             formats=formats,
             build_dir=build_dir,
             keep_instances_on_failure=keep_instances_on_failure,
+            keep_temp_dir=keep_temp_dir,
             parallel=parallel,
             max_workers=max_workers,
             extra_args=extra_args,
@@ -247,6 +251,15 @@ def _execute_test_run(options: TestRunOptions) -> None:
         )
     else:
         os.environ.pop("ARMADILLO_KEEP_INSTANCES_ON_FAILURE", None)
+
+    # Configure temp directory retention
+    if options.keep_temp_dir:
+        os.environ["ARMADILLO_KEEP_TEMP_DIR"] = "1"
+        console.print(
+            "[yellow]🔧 Temp directory will be preserved after successful test runs[/yellow]"
+        )
+    else:
+        os.environ.pop("ARMADILLO_KEEP_TEMP_DIR", None)
 
     # Add extra arguments
     if options.extra_args:

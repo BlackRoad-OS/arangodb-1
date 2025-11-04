@@ -203,7 +203,7 @@ class DeploymentOrchestrator:
         all_servers_to_stop = non_agents + agents
 
         if all_servers_to_stop:
-            order_names = [s.server_id for s in all_servers_to_stop]
+            order_names = [str(s.server_id) for s in all_servers_to_stop]
             self._logger.info("Shutdown order: %s", " -> ".join(order_names))
 
         failed_shutdowns = []
