@@ -138,6 +138,40 @@ def configure_logging(**kwargs) -> None:
     _log_manager.configure(**kwargs)
 
 
+def add_file_logging(log_file: Path, level: Union[int, str] = logging.DEBUG) -> None:
+    """Add file logging to already-configured logging system.
+
+    This is useful for adding detailed file logging after the temp directory
+    is created, without disrupting the already-configured console logging.
+
+    Args:
+        log_file: Path to the log file
+        level: Logging level for the file handler (default: DEBUG for detailed logs)
+    """
+    from .log_formatters import StructuredFormatter
+
+    # Ensure parent directory exists
+    log_file = Path(log_file)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Create file handler with structured formatter
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(
+        StructuredFormatter(
+            include_context=True,
+            context_getter=_log_manager._manager._context.get_context,
+        )
+    )
+    file_handler.setLevel(level)
+
+    # Add handler to all existing loggers in the isolated manager
+    for logger in _log_manager._manager._loggers.values():
+        logger.addHandler(file_handler)
+
+    # Store the handler so we can add it to newly created loggers
+    _log_manager._manager._json_handler = file_handler
+
+
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance."""
     return _log_manager.get_logger(name)

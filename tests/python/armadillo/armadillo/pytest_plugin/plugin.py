@@ -14,6 +14,7 @@ from ..core.config_initializer import initialize_config
 from ..core.context import ApplicationContext
 from ..core.log import (
     configure_logging,
+    add_file_logging,
     get_logger,
     log_test_event,
     set_log_context,
@@ -668,6 +669,12 @@ def pytest_sessionstart(session):
     artifacts_dir = _plugin._session_app_context.filesystem.work_dir()
     print_status(f"📁 Test artifacts: {artifacts_dir}")
     logger.info("Test artifacts directory: %s", artifacts_dir)
+
+    # Enable detailed file logging now that we have a temp directory
+    # Console stays at INFO/WARNING level, but file captures DEBUG for debugging
+    framework_log_file = artifacts_dir / "armadillo.log"
+    add_file_logging(framework_log_file, level="DEBUG")
+    logger.info("Framework debug logging enabled: %s", framework_log_file)
 
     if not framework_config.compact_mode:
         reporter = get_armadillo_reporter()
