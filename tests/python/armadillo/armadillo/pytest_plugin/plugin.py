@@ -5,6 +5,7 @@ import logging
 import signal
 import sys
 import pytest
+import pytest_timeout
 import time
 import traceback
 from typing import Generator, Optional, Dict, Any, List
@@ -863,23 +864,19 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
 
     # Check for timeout during test execution
-    # pytest-timeout raises specific exceptions that we can detect
+    # We use pytest-timeout for per-test timeouts, but it only aborts the current
+    # test and continues with remaining tests. We need to abort ALL remaining tests
+    # because after forcefully killing a test, the database state is unknown (similar
+    # to a server crash). pytest-timeout doesn't provide a hook API for this, so we
+    # detect its failure by checking the exception message.
     if call.when == "call" and call.excinfo is not None:
         exc_type = call.excinfo.type
         exc_typename = exc_type.__name__ if exc_type else ""
-        exc_module = (
-            exc_type.__module__ if exc_type and hasattr(exc_type, "__module__") else ""
-        )
 
-        # Detect pytest-timeout exceptions
-        # pytest-timeout can raise: Timeout, TimeoutError, or wrapped exceptions
-        is_timeout = (
-            exc_typename == "Timeout"
-            or (exc_typename == "Failed" and "Timeout" in str(call.excinfo.value))
-            or (
-                exc_module == "pytest_timeout"
-                and exc_typename in ("Timeout", "TimeoutError")
-            )
+        # pytest-timeout calls pytest.fail() with message: "Timeout (>Xs) from pytest-timeout."
+        # We detect this by checking for the characteristic message prefix
+        is_timeout = exc_typename == "Failed" and "from pytest-timeout" in str(
+            call.excinfo.value
         )
 
         if is_timeout:
