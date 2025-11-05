@@ -7,7 +7,7 @@ Armadillo is a modern Python testing framework built on pytest that replaces Ara
 ### ✅ Current Implementation
 - **Multi-Server Support**: Single server and cluster deployments with unified infrastructure
 - **Cluster Management**: Agency coordination, database server management, rolling restarts
-- **Layered Timeout System**: Global deadlines, per-test timeouts, watchdog enforcement  
+- **Layered Timeout System**: Global deadlines, per-test timeouts, watchdog enforcement
 - **Structured Logging**: JSON + Rich terminal output with context tracking
 - **Process Supervision**: Robust process management with crash detection and cleanup
 - **Pytest Integration**: Native plugin with fixtures and markers
@@ -67,28 +67,50 @@ armadillo version
 
 ## Writing Tests
 
+### Test Organization Requirements
+
+**All tests using Armadillo fixtures MUST be organized in packages** (directories with `conftest.py`):
+
+```
+tests/
+├── shell_api/              # Package for shell API tests
+│   ├── conftest.py         # Marks this as a package (can be empty)
+│   ├── test_collections.py
+│   └── test_documents.py
+│
+└── replication/            # Package for replication tests
+    ├── conftest.py
+    ├── test_sync.py
+    └── test_async.py
+```
+
+Each package gets its own deployment (single server or cluster), which is shared by all tests in that package. This provides:
+- ✅ **Cost-effective**: One deployment per directory (not per file or per test)
+- ✅ **Clear ownership**: Server exit codes map to specific test packages
+- ✅ **Natural grouping**: Related tests share infrastructure
+
 ### Basic Test with Single Server
 ```python
+# tests/shell_api/test_collections.py
 import pytest
 
 @pytest.mark.arango_single
 def test_basic_operation(arango_single_server):
-    """Test with session-scoped server."""
+    """Test with package-scoped server (shared by all tests in shell_api/)."""
     server = arango_single_server
     assert server.is_running()
 
     # Your test code here
 ```
 
-### Function-Scoped Server
+### Using Database Client
 ```python
-@pytest.mark.arango_single
-def test_isolated_operation(arango_single_server_function):
-    """Test with function-scoped server."""
-    server = arango_single_server_function
-
-    # Fresh server instance for this test
-    assert server.is_running()
+# tests/shell_api/test_queries.py
+def test_query_execution(adb):
+    """Use adb fixture for convenient database access."""
+    # adb is an ArangoDB database client (_system database)
+    result = adb.aql.execute("RETURN 1")
+    assert list(result) == [1]
 ```
 
 ### Available Markers
@@ -110,11 +132,14 @@ def test_isolated_operation(arango_single_server_function):
 - `@pytest.mark.performance`: Performance measurement test
 
 ### Available Fixtures
-- `arango_single_server` (session): Single server for entire test session
-- `arango_single_server_function` (function): Single server per test function
-- `arango_cluster` (session): Full cluster deployment manager
-- `arango_cluster_function` (function): Cluster per test function
-- `arango_deployment`: Auto-selects single or cluster based on configuration
+
+All deployment fixtures are **package-scoped** (one deployment per test package):
+
+- `arango_single_server` (package): Single server shared by all tests in the package
+- `arango_cluster` (package): Full cluster deployment shared by package
+- `arango_deployment` (package): Auto-selects single or cluster based on configuration
+- `adb` (package): ArangoDB database client for `_system` database
+- `base_url` (package): Base URL for HTTP requests to the deployment
 - `arango_coordinators` / `arango_dbservers` / `arango_agents`: Role-filtered server lists
 
 ## Timeouts
@@ -123,10 +148,10 @@ Armadillo provides three complementary timeout mechanisms to prevent hung tests 
 
 ### Per-Test Timeout (`--timeout`)
 
-**Purpose**: Kill individual tests that run longer than expected  
-**Default**: Disabled (no timeout)  
-**Mechanism**: Uses `pytest-timeout` with SIGALRM on Linux  
-**Behavior**: Interrupts blocking I/O, **aborts remaining tests**  
+**Purpose**: Kill individual tests that run longer than expected
+**Default**: Disabled (no timeout)
+**Mechanism**: Uses `pytest-timeout` with SIGALRM on Linux
+**Behavior**: Interrupts blocking I/O, **aborts remaining tests**
 
 ```bash
 # Set 120 second timeout per test
@@ -150,10 +175,10 @@ When a test times out, **all remaining tests are skipped** (similar to server cr
 
 ### Global Timeout (`--global-timeout`)
 
-**Purpose**: Kill entire test session if it exceeds total time budget  
-**Default**: 900 seconds (15 minutes)  
-**Mechanism**: Framework-level timeout monitoring  
-**Behavior**: Terminates pytest subprocess and all child processes  
+**Purpose**: Kill entire test session if it exceeds total time budget
+**Default**: 900 seconds (15 minutes)
+**Mechanism**: Framework-level timeout monitoring
+**Behavior**: Terminates pytest subprocess and all child processes
 
 ```bash
 # Set 30 minute global timeout for entire session
@@ -172,10 +197,10 @@ armadillo test run tests/ --global-timeout 1800
 
 ### Output-Idle Timeout (`--output-idle-timeout`)
 
-**Purpose**: Kill pytest if no stdout/stderr for N seconds  
-**Default**: Disabled (no timeout)  
-**Mechanism**: Monitors subprocess output, escalates SIGTERM → SIGKILL  
-**Behavior**: Detects tests that hang silently without producing output  
+**Purpose**: Kill pytest if no stdout/stderr for N seconds
+**Default**: Disabled (no timeout)
+**Mechanism**: Monitors subprocess output, escalates SIGTERM → SIGKILL
+**Behavior**: Detects tests that hang silently without producing output
 
 ```bash
 # Kill pytest if no output for 5 minutes
@@ -258,7 +283,7 @@ Timeout handling is centralized in `armadillo/cli/timeout_handler.py` with exten
 def collect_diagnostics(timeout_type: TimeoutType, elapsed: float):
     """Collect logs, coredumps, process states before killing process."""
     # Collect server logs from temp_dir
-    # Trigger coredumps from running processes  
+    # Trigger coredumps from running processes
     # Capture process states (ps, lsof, etc.)
     # Save test artifacts
 

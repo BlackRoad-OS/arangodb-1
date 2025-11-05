@@ -1,38 +1,14 @@
 """Pytest configuration for Armadillo integration tests.
 
-This module provides common fixtures that depend on the Armadillo pytest plugin.
-The plugin fixtures (arango_single_server, arango_cluster, etc.) are provided directly
-by the plugin and don't need to be imported here.
+This module provides common configuration for all test packages.
+
+IMPORTANT: Do NOT define package-scoped fixtures here!
+Package-scoped fixtures are scoped to where they're DEFINED, not where they're USED.
+Defining them here would cause all subpackages to share the same instance.
+Instead, use tests/conftest_helpers.py to create fixtures in each subpackage's conftest.py.
 """
 
 import pytest
-from arango import ArangoClient
-
-# Note: Plugin fixtures like arango_single_server, arango_cluster, etc. are automatically
-# available when the plugin is loaded via pytest.ini or command line (-p armadillo.pytest_plugin.plugin)
-
-
-# Common fixtures for all test suites
-@pytest.fixture(scope="session")
-def adb(arango_deployment):
-    """ArangoDB _system database client (short alias)."""
-    server = arango_deployment  # Works with both single server and cluster coordinator
-    client = ArangoClient(hosts=server.endpoint)
-    return client.db("_system")
-
-
-@pytest.fixture(scope="session")
-def base_url(arango_deployment):
-    """Get base URL for HTTP requests to any deployment.
-
-    Args:
-        arango_deployment: The ArangoDB deployment (single server or cluster coordinator)
-
-    Returns:
-        str: Base URL for HTTP requests (e.g., "http://127.0.0.1:8529")
-    """
-    server = arango_deployment  # Works with both single server and cluster coordinator
-    return server.endpoint
 
 
 # Pytest markers for test organization

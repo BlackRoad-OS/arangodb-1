@@ -28,15 +28,15 @@ class TestArmadilloPluginBasic:
         plugin = ArmadilloPlugin()
 
         assert plugin is not None
-        assert hasattr(plugin, "_session_deployments")
+        assert hasattr(plugin, "_package_deployments")
         assert hasattr(plugin, "_armadillo_config")
 
     def test_plugin_initial_state(self):
         """Test plugin initial state."""
         plugin = ArmadilloPlugin()
 
-        assert isinstance(plugin._session_deployments, dict)
-        assert len(plugin._session_deployments) == 0
+        assert isinstance(plugin._package_deployments, dict)
+        assert len(plugin._package_deployments) == 0
         assert plugin._armadillo_config is None
 
     def test_plugin_has_expected_methods(self):
@@ -122,10 +122,10 @@ class TestArmadilloPluginSessionManagement:
 
         # Add mock deployment
         mock_manager = Mock()
-        plugin._session_deployments["test_deployment"] = mock_manager
+        plugin._package_deployments["test_deployment"] = mock_manager
 
-        assert len(plugin._session_deployments) == 1
-        assert plugin._session_deployments["test_deployment"] == mock_manager
+        assert len(plugin._package_deployments) == 1
+        assert plugin._package_deployments["test_deployment"] == mock_manager
 
     def test_plugin_tracks_deployments(self):
         """Test plugin can track deployments."""
@@ -133,10 +133,10 @@ class TestArmadilloPluginSessionManagement:
 
         # Add mock deployment
         mock_deployment = Mock()
-        plugin._session_deployments["test_deployment"] = mock_deployment
+        plugin._package_deployments["test_deployment"] = mock_deployment
 
-        assert len(plugin._session_deployments) == 1
-        assert plugin._session_deployments["test_deployment"] == mock_deployment
+        assert len(plugin._package_deployments) == 1
+        assert plugin._package_deployments["test_deployment"] == mock_deployment
 
 
 class TestArmadilloPluginErrorHandling:
@@ -193,11 +193,11 @@ class TestArmadilloPluginIntegration:
         plugin2 = ArmadilloPlugin()
 
         # Add data to one plugin
-        plugin1._session_deployments["deployment1"] = Mock()
+        plugin1._package_deployments["deployment1"] = Mock()
         plugin1._armadillo_config = {"test": "config"}
 
         # Other plugin should be unaffected
-        assert len(plugin2._session_deployments) == 0
+        assert len(plugin2._package_deployments) == 0
         assert plugin2._armadillo_config is None
 
     def test_plugin_config_persistence(self):

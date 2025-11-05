@@ -8,6 +8,7 @@ import pytest
 import pytest_timeout
 import time
 import traceback
+from pathlib import Path
 from typing import Generator, Optional, Dict, Any, List
 from ..core.config import get_config
 from ..core.config_initializer import initialize_config
@@ -48,12 +49,12 @@ class ArmadilloPlugin:
     """Main pytest plugin for Armadillo framework."""
 
     def __init__(self) -> None:
-        self._session_deployments: Dict[str, InstanceManager] = {}
+        self._package_deployments: Dict[str, InstanceManager] = {}
         self._armadillo_config: Optional[ArmadilloConfig] = None
         self._deployment_failed: bool = False
         self._deployment_failure_reason: Optional[str] = None
         self._session_app_context: Optional[ApplicationContext] = (
-            None  # Shared context for all session deployments
+            None  # Shared context for all package deployments
         )
 
     def pytest_configure(self, config: pytest.Config) -> None:
@@ -121,7 +122,7 @@ class ArmadilloPlugin:
     def pytest_unconfigure(self, _config: pytest.Config) -> None:
         """Clean up after pytest run."""
         logger.debug("Starting pytest plugin cleanup")
-        deployments_to_clean = list(self._session_deployments.items())
+        deployments_to_clean = list(self._package_deployments.items())
         for deployment_id, manager in deployments_to_clean:
             try:
                 if manager.is_deployed():
@@ -136,7 +137,7 @@ class ArmadilloPlugin:
                 logger.error(
                     "Error during plugin cleanup of deployment %s: %s", deployment_id, e
                 )
-        self._session_deployments.clear()
+        self._package_deployments.clear()
         stop_watchdog()
         logger.info("Armadillo pytest plugin unconfigured")
 
@@ -172,7 +173,7 @@ class ArmadilloPlugin:
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug("ArmadilloPlugin: Session finish with exit status %s", exitstatus)
-        for deployment_id, manager in list(self._session_deployments.items()):
+        for deployment_id, manager in list(self._package_deployments.items()):
             try:
                 logger.debug("Stopping session deployment %s", deployment_id)
                 manager.shutdown_deployment(timeout=60.0)
@@ -218,340 +219,145 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     _plugin.pytest_unconfigure(config)
 
 
-@pytest.fixture(scope="session")
-def arango_single_server() -> Generator[ArangoServer, None, None]:
-    """Provide a single ArangoDB server for testing using unified infrastructure."""
+def create_package_deployment(package_name: str):
+    """Helper function to create a deployment for a test package.
+
+    This is intended to be called from package conftest.py files to create
+    package-scoped deployments. Plugin fixtures don't scope per-package correctly,
+    so each package must define its own fixture that calls this helper.
+
+    Example usage in tests/mypackage/conftest.py:
+        @pytest.fixture(scope="package")
+        def _package_deployment(request):
+            from pathlib import Path
+            from armadillo.pytest_plugin.plugin import create_package_deployment
+            package_name = Path(__file__).parent.name
+            yield from create_package_deployment(package_name)
+
+    Args:
+        package_name: Name of the test package (directory name)
+
+    Yields:
+        ServerInstance: The deployment's server/coordinator instance
+    """
     from ..instances.manager import get_instance_manager
 
-    deployment_id = "test_single_server_session"
-    manager = get_instance_manager(
-        DeploymentId(deployment_id), _plugin._session_app_context
-    )
-
-    try:
-        logger.info("Starting session single server")
-
-        plan = manager.create_single_server_plan()
-        manager.deploy_servers(plan, timeout=60.0)
-
-        # Store manager for tracking and cleanup
-        _plugin._session_deployments[deployment_id] = manager
-
-        # Get the server instance to yield
-        servers = manager.get_all_servers()
-        server = next(iter(servers.values()))
-        logger.info("Session single server ready at %s", server.endpoint)
-
-        yield server
-    finally:
-        logger.info("Stopping session single server")
-        try:
-            manager.shutdown_deployment(timeout=30.0)
-            logger.debug("Session single server stopped successfully")
-        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-            logger.error("Error stopping session server: %s", e)
-        finally:
-            _plugin._session_deployments.pop(deployment_id, None)
-            logger.debug("Session single server removed from plugin tracking")
-
-
-@pytest.fixture(scope="session")
-def arango_deployment():
-    """Provide ArangoDB deployment based on CLI configuration - deployment agnostic.
-
-    Returns the appropriate server/coordinator endpoint regardless of whether
-    we're running single server or cluster mode.
-    """
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
+
     if deployment_mode == DeploymentMode.CLUSTER:
-        logger.info("Auto-detecting cluster deployment for tests")
-        cluster_manager = _plugin._get_or_create_cluster()
-        coordinators = cluster_manager.get_servers_by_role(ServerRole.COORDINATOR)
-        if not coordinators:
-            raise RuntimeError("No coordinators available in cluster")
-        return coordinators[0]
-    else:
-        logger.info("Auto-detecting single server deployment for tests")
-        return _plugin._get_or_create_single_server()
-
-
-def _get_or_create_cluster(self) -> "InstanceManager":
-    """Get or create session cluster deployment."""
-    if "cluster" not in self._session_deployments:
-        deployment_id = f"cluster_{random_id(8)}"
+        # Create cluster deployment for this package
+        deployment_id = f"cluster_{package_name}_{random_id(6)}"
         manager = get_instance_manager(
-            DeploymentId(deployment_id), app_context=self._session_app_context
+            DeploymentId(deployment_id), _plugin._session_app_context
         )
-        logger.info("Starting session cluster deployment %s", deployment_id)
-        cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-        plan = manager.create_deployment_plan(cluster_config)
-
         try:
+            logger.info(
+                "Starting package cluster deployment %s for %s",
+                deployment_id,
+                package_name,
+            )
+            cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
+            plan = manager.create_deployment_plan(cluster_config)
             manager.deploy_servers(plan, timeout=300.0)
-            logger.info("Session cluster deployment ready")
-        except ServerStartupError as e:
-            # Check if any servers crashed during deployment
-            crash_states = get_crash_state()
-            if crash_states:
-                crashed_servers = list(crash_states.keys())
-                crash_details = []
-                for server_id, crash_info in crash_states.items():
-                    exit_code = crash_info.exit_code
-                    signal_num = crash_info.signal or -1
-                    crash_details.append(
-                        f"{server_id} (exit code {exit_code}, signal {signal_num})"
-                    )
+            logger.info("Package cluster deployment %s ready", deployment_id)
+            _plugin._package_deployments[deployment_id] = manager
 
-                # Create a cleaner error message
-                error_msg = f"Cluster deployment failed due to server crashes: {', '.join(crashed_servers)}"
-                logger.error(error_msg)
-                for detail in crash_details:
-                    logger.error("  %s", detail)
-            else:
-                error_msg = f"Cluster deployment failed: {str(e)}"
-                logger.error(error_msg)
-
-            # Set deployment failure flag instead of raising exception
-            self._deployment_failed = True
-            self._deployment_failure_reason = error_msg
-            return None
-        except ArmadilloError as e:
-            # Framework errors during deployment - expected failure modes
-            error_msg = f"Cluster deployment failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            self._deployment_failed = True
-            self._deployment_failure_reason = error_msg
-            return None
-        except Exception as e:
-            # Unexpected errors - boundary must not crash pytest
-            error_msg = f"Cluster deployment failed with unexpected error: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            self._deployment_failed = True
-            self._deployment_failure_reason = error_msg
-            return None
-
-        self._session_deployments["cluster"] = manager
-    return self._session_deployments["cluster"]
-
-
-def _get_or_create_single_server(self) -> ArangoServer:
-    """Get or create session single server using unified infrastructure."""
-    if "single" not in self._session_deployments:
-        from ..instances.manager import get_instance_manager
-
-        deployment_id = "test_single_server"
-        manager = get_instance_manager(
-            DeploymentId(deployment_id), app_context=self._session_app_context
-        )
-
-        logger.info("Starting session single server")
-
-        plan = manager.create_single_server_plan()
-
-        try:
-            manager.deploy_servers(plan, timeout=60.0)
-        except ServerStartupError as e:
-            # Check if server crashed during deployment
-            crash_states = get_crash_state()
-            if crash_states:
-                crashed_servers = list(crash_states.keys())
-                crash_details = []
-                for server_id, crash_info in crash_states.items():
-                    exit_code = crash_info.exit_code
-                    signal_num = crash_info.signal or -1
-                    crash_details.append(
-                        f"{server_id} (exit code {exit_code}, signal {signal_num})"
-                    )
-
-                # Create a cleaner error message
-                error_msg = f"Single server deployment failed due to server crashes: {', '.join(crashed_servers)}"
-                logger.error(error_msg)
-                for detail in crash_details:
-                    logger.error("  %s", detail)
-            else:
-                error_msg = f"Single server deployment failed: {str(e)}"
-                logger.error(error_msg)
-
-            # Set deployment failure flag instead of raising exception
-            self._deployment_failed = True
-            self._deployment_failure_reason = error_msg
-            return None
-        except ArmadilloError as e:
-            # Framework errors during deployment - expected failure modes
-            error_msg = f"Single server deployment failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            self._deployment_failed = True
-            self._deployment_failure_reason = error_msg
-            return None
-        except Exception as e:
-            # Unexpected errors - boundary must not crash pytest
-            error_msg = (
-                f"Single server deployment failed with unexpected error: {str(e)}"
-            )
-            logger.error(error_msg, exc_info=True)
-            self._deployment_failed = True
-            self._deployment_failure_reason = error_msg
-            return None
-
-        # Store manager (not individual server) for cleanup
-        self._session_deployments["single"] = manager
-        logger.info("Session single server ready")
-
-    # Return the single server from the manager
-    manager = self._session_deployments["single"]
-    servers = manager.get_all_servers()
-    if not servers:
-        raise RuntimeError("Single server deployment has no servers")
-    return next(iter(servers.values()))
-
-
-ArmadilloPlugin._get_or_create_cluster = _get_or_create_cluster
-ArmadilloPlugin._get_or_create_single_server = _get_or_create_single_server
-
-
-@pytest.fixture(scope="function")
-def arango_single_server_function() -> Generator[ArangoServer, None, None]:
-    """Provide a function-scoped single ArangoDB server using unified infrastructure."""
-    from ..instances.manager import get_instance_manager
-
-    deployment_id = f"test_func_{random_id(8)}"
-    manager = get_instance_manager(
-        DeploymentId(deployment_id), _plugin._session_app_context
-    )
-
-    try:
-        logger.info("Starting function server %s", deployment_id)
-
-        plan = manager.create_single_server_plan()
-        manager.deploy_servers(plan, timeout=30.0)
-
-        # Get the server instance to yield
-        servers = manager.get_all_servers()
-        server = next(iter(servers.values()))
-        logger.info("Function server %s ready at %s", deployment_id, server.endpoint)
-
-        yield server
-    finally:
-        logger.info("Stopping function server %s", deployment_id)
-        try:
-            manager.shutdown_deployment(timeout=15.0)
-        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-            logger.error("Error stopping function server %s: %s", deployment_id, e)
-
-
-@pytest.fixture(scope="session")
-def arango_cluster() -> Generator[InstanceManager, None, None]:
-    """Provide a full ArangoDB cluster for testing."""
-    deployment_id = f"cluster_{random_id(8)}"
-    manager = get_instance_manager(
-        DeploymentId(deployment_id), _plugin._session_app_context
-    )
-    try:
-        logger.info("Starting session cluster deployment %s", deployment_id)
-        cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-        plan = manager.create_deployment_plan(cluster_config)
-        manager.deploy_servers(plan, timeout=300.0)
-        logger.info("Session cluster deployment %s ready", deployment_id)
-        _plugin._session_deployments[deployment_id] = manager
-        logger.debug("Cluster deployment %s registered with plugin", deployment_id)
-        yield manager
-    finally:
-        logger.info("Stopping session cluster deployment %s", deployment_id)
-        try:
-            manager.shutdown_deployment(timeout=120.0)
-            logger.debug("Cluster deployment %s stopped successfully", deployment_id)
-        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-            logger.error("Error stopping cluster deployment %s: %s", deployment_id, e)
+            coordinators = manager.get_servers_by_role(ServerRole.COORDINATOR)
+            if not coordinators:
+                raise RuntimeError("No coordinators available in cluster")
+            yield coordinators[0]
         finally:
-            _plugin._session_deployments.pop(deployment_id, None)
-            logger.debug(
-                "Cluster deployment %s removed from plugin tracking", deployment_id
-            )
-
-
-@pytest.fixture(scope="function")
-def arango_cluster_function() -> Generator[InstanceManager, None, None]:
-    """Provide a function-scoped ArangoDB cluster."""
-    deployment_id = f"cluster_func_{random_id(8)}"
-    manager = get_instance_manager(
-        DeploymentId(deployment_id), _plugin._session_app_context
-    )
-    try:
-        logger.info("Starting function cluster deployment %s", deployment_id)
-        cluster_config = ClusterConfig(agents=3, dbservers=1, coordinators=1)
-        plan = manager.create_deployment_plan(cluster_config)
-        manager.deploy_servers(plan, timeout=180.0)
-        logger.info("Function cluster deployment %s ready", deployment_id)
-        yield manager
-    finally:
-        logger.info("Stopping function cluster deployment %s", deployment_id)
+            logger.info("Stopping package cluster deployment %s", deployment_id)
+            try:
+                manager.shutdown_deployment(timeout=120.0)
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
+                logger.error(
+                    "Error stopping cluster deployment %s: %s", deployment_id, e
+                )
+            finally:
+                _plugin._package_deployments.pop(deployment_id, None)
+    else:
+        # Single server mode
+        deployment_id = f"single_{package_name}_{random_id(6)}"
+        manager = get_instance_manager(
+            DeploymentId(deployment_id), _plugin._session_app_context
+        )
         try:
-            manager.shutdown_deployment(timeout=60.0)
-        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-            logger.error("Error stopping function cluster %s: %s", deployment_id, e)
+            logger.info("Starting package single server for %s", package_name)
+            plan = manager.create_single_server_plan()
+            manager.deploy_servers(plan, timeout=60.0)
+            _plugin._package_deployments[deployment_id] = manager
 
-
-@pytest.fixture
-def arango_coordinators(
-    arango_cluster,
-) -> List[ArangoServer]:  # pylint: disable=redefined-outer-name
-    """Provide list of coordinator servers from cluster."""
-    return arango_cluster.get_servers_by_role(ServerRole.COORDINATOR)
-
-
-@pytest.fixture
-def arango_dbservers(
-    arango_cluster,
-) -> List[ArangoServer]:  # pylint: disable=redefined-outer-name
-    """Provide list of database servers from cluster."""
-    return arango_cluster.get_servers_by_role(ServerRole.DBSERVER)
-
-
-@pytest.fixture
-def arango_agents(
-    arango_cluster,
-) -> List[ArangoServer]:  # pylint: disable=redefined-outer-name
-    """Provide list of agent servers from cluster."""
-    return arango_cluster.get_servers_by_role(ServerRole.AGENT)
+            servers = manager.get_all_servers()
+            server = next(iter(servers.values()))
+            logger.info(
+                "Package single server ready at %s (package: %s)",
+                server.endpoint,
+                package_name,
+            )
+            yield server
+        finally:
+            logger.info("Stopping package single server for %s", package_name)
+            try:
+                manager.shutdown_deployment(timeout=30.0)
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
+                logger.error("Error stopping package server: %s", e)
+            finally:
+                _plugin._package_deployments.pop(deployment_id, None)
 
 
 def pytest_fixture_setup(fixturedef, request):
     """Automatic fixture setup based on markers."""
-    if hasattr(request, "node") and hasattr(request.node, "iter_markers"):
-        if any(
-            (marker.name == "arango_cluster" for marker in request.node.iter_markers())
-        ):
-            logger.debug(
-                "Test %s requires cluster - using arango_cluster fixture",
-                request.node.nodeid,
-            )
-        elif any(
-            (marker.name == "arango_single" for marker in request.node.iter_markers())
-        ):
-            logger.debug(
-                "Test %s requires single server - using arango_single_server fixture",
-                request.node.nodeid,
-            )
+    # Reserved for future automatic fixture setup based on markers
+    pass
 
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on markers and configuration."""
+    # Validate package structure - all tests must be in a package (directory with conftest.py)
     for item in items:
-        if any(
-            (
-                fixture in ["arango_cluster", "arango_cluster_function"]
-                for fixture in getattr(item, "fixturenames", [])
-            )
-        ):
-            item.add_marker(pytest.mark.slow)
-        elif any(
-            (
-                fixture in ["arango_single_server_function"]
-                for fixture in getattr(item, "fixturenames", [])
-            )
-        ):
-            item.add_marker(pytest.mark.fast)
+        # Check if test uses deployment fixtures
+        uses_deployment_fixtures = any(
+            fixture in ["adb", "base_url", "_package_deployment"]
+            for fixture in getattr(item, "fixturenames", [])
+        )
+
+        if uses_deployment_fixtures:
+            test_path = Path(item.fspath)
+            parent_dir = test_path.parent
+
+            # Check if parent directory has a conftest.py (i.e., it's a package)
+            conftest_path = parent_dir / "conftest.py"
+
+            if not conftest_path.exists():
+                pytest.fail(
+                    f"Test {item.nodeid} uses deployment fixtures but is not in a package.\n"
+                    f"All tests using deployment fixtures must be organized in packages (directories with conftest.py).\n"
+                    f"Please create {conftest_path} in the test directory.",
+                    pytrace=False,
+                )
+
+            # Check for nested packages (parent packages above this one)
+            # This creates separate deployments which may be intentional (isolation) or accidental (cost)
+            current = parent_dir.parent
+            nested_packages = []
+            # Walk up the directory tree looking for additional conftest.py files
+            while current != current.parent:  # Stop at filesystem root
+                parent_conftest = current / "conftest.py"
+                if parent_conftest.exists():
+                    nested_packages.append(str(current.relative_to(Path.cwd())))
+                current = current.parent
+
+            if nested_packages:
+                logger.warning(
+                    "Test package %s is nested within parent package(s): %s. "
+                    "Each package gets its own deployment (this may be intentional for isolation).",
+                    parent_dir.name,
+                    ", ".join(nested_packages),
+                )
+
+        # Add markers based on test names
         if "stress" in item.name.lower() or "load" in item.name.lower():
             item.add_marker(pytest.mark.stress_test)
             item.add_marker(pytest.mark.slow)
@@ -644,24 +450,13 @@ def pytest_sessionstart(session):
     _plugin._session_app_context = ApplicationContext.create(framework_config)
     _plugin._session_app_context.filesystem.set_test_session_id(session_id)
 
+    # Note: With package-scoped fixtures, deployments are created lazily per-package,
+    # not at session start. This allows each test package to have its own deployment.
     deployment_mode = framework_config.deployment_mode
-    logger.info("Starting %s deployment for test session...", deployment_mode.value)
-    try:
-        if deployment_mode == DepMode.CLUSTER:
-            _plugin._get_or_create_cluster()
-            logger.info("Cluster deployment ready for tests")
-        else:
-            _plugin._get_or_create_single_server()
-            logger.info("Single server deployment ready for tests")
-    except (
-        OSError,
-        ProcessLookupError,
-        RuntimeError,
-        ImportError,
-        AttributeError,
-    ) as e:
-        logger.error("Failed to start %s deployment: %s", deployment_mode.value, e)
-        raise
+    logger.info(
+        "Session initialized for %s deployment mode (deployments will be created per-package)",
+        deployment_mode.value,
+    )
 
     # Print test artifacts directory (clean access via shared context)
     from ..utils.output import print_status
@@ -708,6 +503,8 @@ def _cleanup_temp_dir_if_needed(session, exitstatus):
 
     try:
         # Get the session work directory from the plugin's app context
+        # Note: hasattr check is legitimate here - _session_app_context is created
+        # in pytest_sessionstart hook, so it may not exist during early cleanup
         if (
             not hasattr(_plugin, "_session_app_context")
             or _plugin._session_app_context is None
@@ -1022,69 +819,66 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 def _cleanup_all_deployments(emergency=True):
     """Cleanup all tracked deployments with bulletproof shutdown."""
-    if hasattr(_plugin, "_session_deployments"):
-        deployments = list(_plugin._session_deployments.items())
+    deployments = list(_plugin._package_deployments.items())
+    if deployments:
         logger.debug(
             "_cleanup_all_deployments: found %d deployments, emergency=%s",
             len(deployments),
             emergency,
         )
-        if deployments:
-            if emergency:
-                logger.warning("Emergency cleanup of %s deployments", len(deployments))
-            for deployment_id, manager in deployments:
+        if emergency:
+            logger.warning("Emergency cleanup of %s deployments", len(deployments))
+        for deployment_id, manager in deployments:
+            try:
+                if emergency:
+                    logger.info("Emergency shutdown of deployment: %s", deployment_id)
+                manager.shutdown_deployment(timeout=15.0)
+                logger.debug("Deployment %s shutdown completed", deployment_id)
+            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
+                logger.error(
+                    "Failed emergency cleanup of deployment %s: %s",
+                    deployment_id,
+                    e,
+                )
                 try:
-                    if emergency:
-                        logger.info(
-                            "Emergency shutdown of deployment: %s", deployment_id
-                        )
-                    manager.shutdown_deployment(timeout=15.0)
-                    logger.debug("Deployment %s shutdown completed", deployment_id)
-                except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-                    logger.error(
-                        "Failed emergency cleanup of deployment %s: %s",
+                    logger.warning(
+                        "Attempting direct process cleanup for failed deployment %s",
                         deployment_id,
-                        e,
                     )
+                    # Try to get servers using the public API for force cleanup
                     try:
+                        servers = manager.get_all_servers()
+                    except (AttributeError, RuntimeError) as get_e:
                         logger.warning(
-                            "Attempting direct process cleanup for failed deployment %s",
+                            "Could not get servers from manager %s: %s",
                             deployment_id,
+                            get_e,
                         )
-                        # Try to get servers using the public API for force cleanup
-                        try:
-                            servers = manager.get_all_servers()
-                        except (AttributeError, RuntimeError) as get_e:
-                            logger.warning(
-                                "Could not get servers from manager %s: %s",
-                                deployment_id,
-                                get_e,
-                            )
-                            servers = {}
+                        servers = {}
 
-                        if servers:
-                            for server_id, server in servers.items():
-                                try:
-                                    # Use the public API to force stop the server
-                                    server.stop(graceful=False, timeout=5.0)
-                                    logger.debug("Force stopped server %s", server_id)
-                                except (
-                                    OSError,
-                                    ProcessLookupError,
-                                    AttributeError,
-                                ) as server_e:
-                                    logger.error(
-                                        "Failed to force stop server %s: %s",
-                                        server_id,
-                                        server_e,
-                                    )
-                    except (OSError, ProcessLookupError, AttributeError) as force_e:
-                        logger.error(
-                            "Failed direct process cleanup for deployment %s: %s",
-                            deployment_id,
-                            force_e,
-                        )
-        _plugin._session_deployments.clear()
+                    if servers:
+                        for server_id, server in servers.items():
+                            try:
+                                # Use the public API to force stop the server
+                                server.stop(graceful=False, timeout=5.0)
+                                logger.debug("Force stopped server %s", server_id)
+                            except (
+                                OSError,
+                                ProcessLookupError,
+                                AttributeError,
+                            ) as server_e:
+                                logger.error(
+                                    "Failed to force stop server %s: %s",
+                                    server_id,
+                                    server_e,
+                                )
+                except (OSError, ProcessLookupError, AttributeError) as force_e:
+                    logger.error(
+                        "Failed direct process cleanup for deployment %s: %s",
+                        deployment_id,
+                        force_e,
+                    )
+        _plugin._package_deployments.clear()
         if emergency:
             logger.info("Emergency deployment cleanup completed")
 
@@ -1232,9 +1026,7 @@ def _cleanup_all_processes(emergency=True):
 def _emergency_cleanup():
     """Emergency cleanup function registered with atexit."""
     # Check if there's actually anything to clean up
-    has_deployments = (
-        hasattr(_plugin, "_session_deployments") and _plugin._session_deployments
-    )
+    has_deployments = bool(_plugin._package_deployments)
 
     try:
         from ..core.process import _process_supervisor
