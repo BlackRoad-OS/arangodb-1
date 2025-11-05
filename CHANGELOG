@@ -1,6 +1,8 @@
 devel
 -----
 
+* Update tzdata as of 05.11.2025.
+
 * Updated bundled version of Snappy library to 1.2.2. It fixes an ALUBSAN
   issue found in ARM64.
 
