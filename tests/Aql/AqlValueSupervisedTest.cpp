@@ -115,7 +115,7 @@ TEST(AqlValueSupervisedTest, LongStringViewCtorAccountsCorrectSize) {
 }
 
 // Test for AqlValue(Buffer&&, ResourceMonitor* = nullptr)
-TEST(AqlValueSupervisedTest, BufferCtorAccountsCorrectSize) {
+TEST(AqlValueSupervisedTest, BufferMoveCtorAccountsCorrectSize) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor resourceMonitor(global);
 
@@ -124,7 +124,39 @@ TEST(AqlValueSupervisedTest, BufferCtorAccountsCorrectSize) {
   velocypack::Buffer<uint8_t> buffer;
   buffer.append(slice.start(), slice.byteSize());
 
+  AqlValue aqlVal(std::move(buffer), &resourceMonitor);
+  EXPECT_EQ(aqlVal.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  // Check that the original buffer is now empty after move
+  EXPECT_EQ(buffer.size(), 0U);
+  EXPECT_TRUE(buffer.empty());
+
+  auto expected = static_cast<size_t>(slice.byteSize()) + ptrOverhead();
+  // checks correct counting with internal logic
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  // checks correct counting with external logic
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
+
+  aqlVal.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0);
+}
+
+// Test for AqlValue(Buffer&, ResourceMonitor* = nullptr)
+TEST(AqlValueSupervisedTest, BufferCtorAccountsCorrectSize) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor resourceMonitor(global);
+
+  auto builder = makeLargeArray(2048, 'a');
+  Slice slice = builder.slice();
+  velocypack::Buffer<uint8_t> buffer;
+  buffer.append(slice.start(), slice.byteSize());
+  auto before = buffer.size();
+
   AqlValue aqlVal(buffer, &resourceMonitor);
+  EXPECT_EQ(aqlVal.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  // Buffer obj itself doesn't change
+  EXPECT_EQ(buffer.size(), before);
 
   auto expected = static_cast<size_t>(slice.byteSize()) + ptrOverhead();
   // checks correct counting with internal logic
@@ -367,6 +399,44 @@ TEST(AqlValueSupervisedTest, CopyCtorAccountsCorrectSize) {
     v.destroy();
     EXPECT_EQ(rm.current(), base);
   }
+}
+
+TEST(AqlValueSupervisedTest, MoveCtorAccountsCorrectSize) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  const std::string big(4096, 'x');
+
+  Builder bin;
+  const std::string sVal = std::string("hello-") + big;
+  bin.add(Value(sVal));
+  AqlValue a(Slice(bin.slice()), /*byteSize*/ 0, &rm);  // SupervisedSlice
+  ASSERT_EQ(a.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  const std::size_t base = rm.current();
+
+  // Move constructor (default)
+  AqlValue b(std::move(a));
+  EXPECT_EQ(rm.current(), base) << "Move construction must not allocate";
+  EXPECT_EQ(b.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_TRUE(b.isString());
+  EXPECT_EQ(b.slice().copyString(), sVal);
+
+  // a.destroy(); // This is safe to call
+  // EXPECT_EQ(rm.current(), base); // Should not change
+
+  // Chain move constructor
+  AqlValue c(std::move(b));
+  EXPECT_EQ(rm.current(), base);
+  EXPECT_TRUE(c.isString());
+  EXPECT_EQ(c.slice().copyString(), sVal);
+
+  // b.destroy(); // This is safe to call
+  // EXPECT_EQ(rm.current(), base); // Should not change
+
+  // Destroy the owner; accounting returns to previous level (0 here)
+  c.destroy();
+  EXPECT_EQ(rm.current(), 0U);
 }
 
 // Test if small value won't create a Supervised AqlValue
