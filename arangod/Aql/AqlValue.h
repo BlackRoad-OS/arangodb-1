@@ -138,7 +138,6 @@ struct AqlValue final {
                            // std::string always bigger than 15 bytes,
                            // std::string* allocated via new
     VPACK_SUPERVISED_SLICE,
-    VPACK_SUPERVISED_STRING,
     RANGE,  // a pointer to a range remembering lower and upper bound, managed
     VPACK_INLINE_INT64,   // contains vpack data, inline and unpacked 64bit int
                           // number value (in little-endian)
@@ -283,10 +282,7 @@ struct AqlValue final {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(
             pointer + sizeof(arangodb::ResourceMonitor*)));
       }
-      uint64_t getLength()
-          const noexcept {  // get bytes of lengthOrigin, get rid of supervised
-                            // string, make ctors default, add logic for managed
-                            // string and supervised slice in boolean methods
+      uint64_t getLength() const noexcept {
         if constexpr (basics::isLittleEndian()) {
           return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
         } else {

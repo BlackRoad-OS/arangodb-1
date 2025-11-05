@@ -89,6 +89,8 @@ bool AqlValue::isNone() const noexcept {
       return VPackSlice(_data.managedSliceMeta.pointer).isNone();
     case VPACK_SUPERVISED_SLICE:
       return VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).isNone();
+    case VPACK_MANAGED_STRING:
+      return _data.managedStringMeta.toSlice().isNone();
     default:
       return false;
   }
@@ -113,6 +115,10 @@ bool AqlValue::isNull(bool emptyIsNull) const noexcept {
       VPackSlice s{_data.supervisedSliceMeta.getPayloadPtr()};
       return s.isNull() || (emptyIsNull && s.isNone());
     }
+    case VPACK_MANAGED_STRING: {
+      auto s = _data.managedStringMeta.toSlice();
+      return s.isNull() || (emptyIsNull && s.isNone());
+    }
     default:
       return false;
   }
@@ -129,6 +135,8 @@ bool AqlValue::isBoolean() const noexcept {
       return VPackSlice{_data.managedSliceMeta.pointer}.isBoolean();
     case VPACK_SUPERVISED_SLICE:
       return VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()}.isBoolean();
+    case VPACK_MANAGED_STRING:
+      return _data.managedStringMeta.toSlice().isBoolean();
     default:
       return false;
   }
@@ -149,6 +157,8 @@ bool AqlValue::isNumber() const noexcept {
       return VPackSlice{_data.managedSliceMeta.pointer}.isNumber();
     case VPACK_SUPERVISED_SLICE:
       return VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()}.isNumber();
+    case VPACK_MANAGED_STRING:
+      return _data.managedStringMeta.toSlice().isNumber();
     default:
       return false;
   }
@@ -1412,8 +1422,15 @@ bool AqlValue::requiresDestruction() const noexcept {
 }
 
 bool AqlValue::isEmpty() const noexcept {
-  return _data.aqlValueType == VPACK_INLINE &&
-         _data.inlineSliceMeta.slice[0] == '\x00';
+  if (_data.aqlValueType == VPACK_INLINE &&
+      _data.inlineSliceMeta.slice[0] == '\x00') {
+    return true;
+  }
+  if (_data.aqlValueType == VPACK_MANAGED_STRING &&
+      _data.managedStringMeta.pointer == nullptr) {
+    return true;
+  }
+  return false;
 }
 
 bool AqlValue::isPointer() const noexcept {
