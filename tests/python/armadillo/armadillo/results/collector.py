@@ -87,6 +87,7 @@ class ResultCollector:
         self.test_suites: Dict[str, TestSuite] = {}
         self.start_time = time.time()
         self.metadata: Dict[str, Any] = {}
+        self.server_health: Dict[str, Any] = {}  # deployment_id -> ServerHealthInfo
         self._finalized = False
         self._suite_start_times: Dict[str, float] = {}
 
@@ -172,6 +173,14 @@ class ResultCollector:
         """Set metadata for the test run."""
         self.metadata.update(metadata)
 
+    def set_server_health(self, health_data: Dict[str, Any]) -> None:
+        """Set server health data from deployments.
+
+        Args:
+            health_data: Dictionary mapping deployment_id to ServerHealthInfo dict
+        """
+        self.server_health = health_data
+
     def _safe_platform_info(self, info_type: str) -> str:
         """Safely retrieve platform information, handling potential subprocess issues."""
         try:
@@ -232,6 +241,7 @@ class ResultCollector:
             },
             "summary": summary,
             "test_suites": self._serialize_suites(),
+            "server_health": self.server_health if self.server_health else {},
         }
 
         self._finalized = True
@@ -339,7 +349,10 @@ class ResultCollector:
                         "markers": test.markers,
                         "details": test.details,
                         "crash_info": (
-                            {str(server_id): crash.model_dump() for server_id, crash in test.crash_info.items()}
+                            {
+                                str(server_id): crash.model_dump()
+                                for server_id, crash in test.crash_info.items()
+                            }
                             if test.crash_info
                             else None
                         ),
@@ -455,6 +468,45 @@ class ResultCollector:
                         error.text = str(test_data["crash_info"])
                     elif details:
                         error.text = details
+
+        # Add server health issues as system-err elements
+        server_health = results.get("server_health", {})
+        if server_health:
+            health_errors = 0
+            for deployment_id, health_info in server_health.items():
+                # Add system-err element for each deployment with issues
+                system_err = ET.SubElement(testsuite, "system-err")
+                err_lines = [f"Server health issues in deployment: {deployment_id}"]
+
+                # Add exit code issues
+                if health_info.get("exit_codes"):
+                    err_lines.append("\nNon-zero exit codes:")
+                    for server_id, exit_code in health_info["exit_codes"].items():
+                        context = ""
+                        if exit_code == 134:
+                            context = " (SIGABRT - likely ASAN/sanitizer failure)"
+                        elif exit_code < 0:
+                            context = f" (signal {-exit_code})"
+                        err_lines.append(f"  {server_id}: {exit_code}{context}")
+                        health_errors += 1
+
+                # Add crash issues
+                if health_info.get("crashes"):
+                    err_lines.append("\nCrashes:")
+                    for server_id, crash in health_info["crashes"].items():
+                        err_lines.append(
+                            f"  {server_id}: exit_code={crash.get('exit_code')}"
+                        )
+                        if crash.get("stderr"):
+                            err_lines.append(f"    stderr: {crash['stderr'][:200]}")
+                        health_errors += 1
+
+                system_err.text = "\n".join(err_lines)
+
+            # Update errors attribute if health issues found
+            if health_errors > 0:
+                current_errors = int(testsuite.get("errors", "0"))
+                testsuite.set("errors", str(current_errors + health_errors))
 
         rough_string = ET.tostring(testsuite, encoding="unicode")
         reparsed = minidom.parseString(rough_string)

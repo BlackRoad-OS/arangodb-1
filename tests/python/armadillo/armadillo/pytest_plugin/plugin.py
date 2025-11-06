@@ -485,6 +485,19 @@ def pytest_sessionfinish(session, exitstatus):
         logger.error("Setting exit status to 1 due to deployment failure")
         session.exitstatus = 1
 
+    # Check for server health issues (e.g., sanitizer failures)
+    if _plugin._server_health:
+        logger.error(
+            "Server health issues detected in %d deployment(s)",
+            len(_plugin._server_health),
+        )
+        for deployment_id, health_info in _plugin._server_health.items():
+            logger.error(
+                "Deployment %s: %s", deployment_id, health_info.get_failure_summary()
+            )
+        logger.error("Setting exit status to 1 due to server health issues")
+        session.exitstatus = 1
+
     # Capture the test end time BEFORE server shutdown begins
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
@@ -506,7 +519,10 @@ def pytest_sessionfinish(session, exitstatus):
             output_dir = Path("./test-results")
 
             # Export results (JSON by default, JUnit is handled by pytest's --junitxml)
-            reporter.export_results(output_dir, formats=["json"])
+            # Include server health info for post-test validation reporting
+            reporter.export_results(
+                output_dir, formats=["json"], server_health=_plugin._server_health
+            )
         except (ResultProcessingError, OSError, IOError) as e:
             logger.error("Failed to export test results: %s", e, exc_info=True)
 
