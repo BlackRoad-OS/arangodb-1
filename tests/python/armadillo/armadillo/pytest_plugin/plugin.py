@@ -1002,6 +1002,23 @@ def _emergency_cleanup():
         logger.error("Emergency cleanup stack trace: %s", traceback.format_exc())
 
 
+def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> None:
+    """Capture and store server health after deployment shutdown.
+
+    Args:
+        manager: The instance manager that was shut down
+        deployment_id: Identifier for this deployment
+    """
+    health = manager.get_server_health()
+    if health.has_issues():
+        _plugin._server_health[deployment_id] = health
+        logger.warning(
+            "Server health issues detected in %s: %s",
+            deployment_id,
+            health.get_failure_summary(),
+        )
+
+
 def create_package_deployment(package_name: str):
     """Helper function to create a deployment for a test package.
 
@@ -1055,14 +1072,7 @@ def create_package_deployment(package_name: str):
             try:
                 manager.shutdown_deployment(timeout=120.0)
                 # Capture server health for post-test validation
-                health = manager.get_server_health()
-                if health.has_issues():
-                    _plugin._server_health[deployment_id] = health
-                    logger.warning(
-                        "Server health issues detected in %s: %s",
-                        deployment_id,
-                        health.get_failure_summary(),
-                    )
+                _capture_deployment_health(manager, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping cluster deployment %s: %s", deployment_id, e
@@ -1094,14 +1104,7 @@ def create_package_deployment(package_name: str):
             try:
                 manager.shutdown_deployment(timeout=30.0)
                 # Capture server health for post-test validation
-                health = manager.get_server_health()
-                if health.has_issues():
-                    _plugin._server_health[deployment_id] = health
-                    logger.warning(
-                        "Server health issues detected in %s: %s",
-                        deployment_id,
-                        health.get_failure_summary(),
-                    )
+                _capture_deployment_health(manager, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error("Error stopping package server: %s", e)
             finally:
