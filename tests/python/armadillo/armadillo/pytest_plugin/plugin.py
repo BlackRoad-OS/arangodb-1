@@ -763,12 +763,21 @@ def _cleanup_all_deployments(emergency=True):
                     logger.info("Emergency shutdown of deployment: %s", deployment_id)
                 manager.shutdown_deployment(timeout=15.0)
                 logger.debug("Deployment %s shutdown completed", deployment_id)
+                # Always capture health, even in emergency cleanup
+                _capture_deployment_health(manager, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Failed emergency cleanup of deployment %s: %s",
                     deployment_id,
                     e,
                 )
+                # Even if shutdown failed, try to capture health
+                try:
+                    _capture_deployment_health(manager, deployment_id)
+                except Exception as health_err:
+                    logger.debug(
+                        "Could not capture health for %s: %s", deployment_id, health_err
+                    )
                 try:
                     logger.warning(
                         "Attempting direct process cleanup for failed deployment %s",
