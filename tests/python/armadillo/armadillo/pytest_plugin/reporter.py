@@ -427,14 +427,14 @@ class ArmadilloReporter:
         self,
         output_dir: Path,
         formats: Optional[list] = None,
-        server_health: Optional[Dict] = None,
+        server_health: Optional[Dict["DeploymentId", "ServerHealthInfo"]] = None,
     ) -> None:
         """Export collected results to specified formats.
 
         Args:
             output_dir: Directory to write result files to
             formats: List of export formats (e.g., ["json", "junit"])
-            server_health: Optional dict of server health info by deployment_id
+            server_health: Optional dict of ServerHealthInfo by DeploymentId
         """
         if formats is None:
             formats = ["json"]
@@ -453,18 +453,9 @@ class ArmadilloReporter:
                 show_server_logs=config.show_server_logs,
             )
 
-            # Set server health if provided
+            # Set server health if provided (ServerHealthInfo instances)
             if server_health:
-                # Convert ServerHealthInfo objects to dicts for serialization
-                health_dicts = {}
-                for deployment_id, health_info in server_health.items():
-                    if hasattr(health_info, "model_dump"):
-                        # Pydantic model
-                        health_dicts[deployment_id] = health_info.model_dump()
-                    else:
-                        # Already a dict
-                        health_dicts[deployment_id] = health_info
-                self.result_collector.set_server_health(health_dicts)
+                self.result_collector.set_server_health(server_health)
 
             # Export results
             exported_files = self.result_collector.export_results(formats, output_dir)

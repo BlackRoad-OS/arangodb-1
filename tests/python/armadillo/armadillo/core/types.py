@@ -43,6 +43,15 @@ class CrashInfo(BaseModel):
     signal: Optional[int] = None
 
 
+def _get_exit_code_context(exit_code: int) -> str:
+    """Get human-readable context for an exit code."""
+    if exit_code == 134:
+        return " (SIGABRT - likely ASAN/sanitizer failure)"
+    elif exit_code < 0:
+        return f" (signal {-exit_code})"
+    return ""
+
+
 class ServerHealthInfo(BaseModel):
     """Health information about servers after deployment shutdown.
 
@@ -74,14 +83,45 @@ class ServerHealthInfo(BaseModel):
         for server_id, exit_code in self.exit_codes.items():
             if exit_code != 0:
                 msg = f"Server {server_id} exited with code {exit_code}"
-                # Add context for common exit codes
-                if exit_code == 134:
-                    msg += " (typically ASAN/sanitizer failure)"
-                elif exit_code < 0:
-                    msg += f" (killed by signal {-exit_code})"
+                msg += _get_exit_code_context(exit_code)
                 issues.append(msg)
 
         return issues
+
+    def format_for_junit(self, deployment_id: str) -> tuple[str, int]:
+        """Format health issues for JUnit XML system-err element.
+
+        Args:
+            deployment_id: Identifier of the deployment with issues
+
+        Returns:
+            Tuple of (formatted_text, error_count) where formatted_text is ready
+            for inclusion in JUnit XML and error_count is the number of issues found
+        """
+        lines = [f"Server health issues in deployment: {deployment_id}"]
+        error_count = 0
+
+        # Format exit code issues
+        non_zero_exits = {
+            sid: code for sid, code in self.exit_codes.items() if code != 0
+        }
+        if non_zero_exits:
+            lines.append("\nNon-zero exit codes:")
+            for server_id, exit_code in non_zero_exits.items():
+                context = _get_exit_code_context(exit_code)
+                lines.append(f"  {server_id}: {exit_code}{context}")
+                error_count += 1
+
+        # Format crash issues
+        if self.crashes:
+            lines.append("\nCrashes:")
+            for server_id, crash in self.crashes.items():
+                lines.append(f"  {server_id}: exit_code={crash.exit_code}")
+                if crash.stderr:
+                    lines.append(f"    stderr: {crash.stderr[:200]}")
+                error_count += 1
+
+        return "\n".join(lines), error_count
 
 
 class ServerConfig(BaseModel):

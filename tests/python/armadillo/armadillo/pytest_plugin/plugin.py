@@ -51,7 +51,7 @@ class ArmadilloPlugin:
 
     def __init__(self) -> None:
         self._package_deployments: Dict[str, InstanceManager] = {}
-        self._server_health: Dict[str, "ServerHealthInfo"] = (
+        self._server_health: Dict[DeploymentId, ServerHealthInfo] = (
             {}
         )  # deployment_id -> health info
         self._armadillo_config: Optional[ArmadilloConfig] = None
@@ -1007,11 +1007,12 @@ def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> 
 
     Args:
         manager: The instance manager that was shut down
-        deployment_id: Identifier for this deployment
+        deployment_id: Identifier for this deployment (string)
     """
     health = manager.get_server_health()
     if health.has_issues():
-        _plugin._server_health[deployment_id] = health
+        # Convert string to DeploymentId value object
+        _plugin._server_health[DeploymentId(deployment_id)] = health
         logger.warning(
             "Server health issues detected in %s: %s",
             deployment_id,

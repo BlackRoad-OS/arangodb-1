@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass, field
-from ..core.types import ExecutionOutcome, CrashInfo
-from ..core.value_objects import ServerId
+from ..core.types import ExecutionOutcome, CrashInfo, ServerHealthInfo
+from ..core.value_objects import ServerId, DeploymentId
 from ..core.errors import ResultProcessingError, SerializationError, FilesystemError
 from ..core.log import get_logger
 from ..utils.codec import to_json_string
@@ -87,7 +87,9 @@ class ResultCollector:
         self.test_suites: Dict[str, TestSuite] = {}
         self.start_time = time.time()
         self.metadata: Dict[str, Any] = {}
-        self.server_health: Dict[str, Any] = {}  # deployment_id -> ServerHealthInfo
+        self.server_health: Dict[DeploymentId, ServerHealthInfo] = (
+            {}
+        )  # DeploymentId -> ServerHealthInfo instances
         self._finalized = False
         self._suite_start_times: Dict[str, float] = {}
 
@@ -173,11 +175,13 @@ class ResultCollector:
         """Set metadata for the test run."""
         self.metadata.update(metadata)
 
-    def set_server_health(self, health_data: Dict[str, Any]) -> None:
+    def set_server_health(
+        self, health_data: Dict[DeploymentId, ServerHealthInfo]
+    ) -> None:
         """Set server health data from deployments.
 
         Args:
-            health_data: Dictionary mapping deployment_id to ServerHealthInfo dict
+            health_data: Dictionary mapping DeploymentId to ServerHealthInfo instances
         """
         self.server_health = health_data
 
@@ -241,7 +245,14 @@ class ResultCollector:
             },
             "summary": summary,
             "test_suites": self._serialize_suites(),
-            "server_health": self.server_health if self.server_health else {},
+            "server_health": (
+                {
+                    str(deployment_id): health.model_dump()
+                    for deployment_id, health in self.server_health.items()
+                }
+                if self.server_health
+                else {}
+            ),
         }
 
         self._finalized = True
@@ -470,38 +481,19 @@ class ResultCollector:
                         error.text = details
 
         # Add server health issues as system-err elements
-        server_health = results.get("server_health", {})
-        if server_health:
+        # Note: self.server_health contains ServerHealthInfo instances
+        if self.server_health:
             health_errors = 0
-            for deployment_id, health_info in server_health.items():
-                # Add system-err element for each deployment with issues
+            for deployment_id, health_info in self.server_health.items():
+                # Format health issues for JUnit XML (convert DeploymentId to string)
+                formatted_text, error_count = health_info.format_for_junit(
+                    str(deployment_id)
+                )
+
+                # Add system-err element with formatted health issues
                 system_err = ET.SubElement(testsuite, "system-err")
-                err_lines = [f"Server health issues in deployment: {deployment_id}"]
-
-                # Add exit code issues
-                if health_info.get("exit_codes"):
-                    err_lines.append("\nNon-zero exit codes:")
-                    for server_id, exit_code in health_info["exit_codes"].items():
-                        context = ""
-                        if exit_code == 134:
-                            context = " (SIGABRT - likely ASAN/sanitizer failure)"
-                        elif exit_code < 0:
-                            context = f" (signal {-exit_code})"
-                        err_lines.append(f"  {server_id}: {exit_code}{context}")
-                        health_errors += 1
-
-                # Add crash issues
-                if health_info.get("crashes"):
-                    err_lines.append("\nCrashes:")
-                    for server_id, crash in health_info["crashes"].items():
-                        err_lines.append(
-                            f"  {server_id}: exit_code={crash.get('exit_code')}"
-                        )
-                        if crash.get("stderr"):
-                            err_lines.append(f"    stderr: {crash['stderr'][:200]}")
-                        health_errors += 1
-
-                system_err.text = "\n".join(err_lines)
+                system_err.text = formatted_text
+                health_errors += error_count
 
             # Update errors attribute if health issues found
             if health_errors > 0:
