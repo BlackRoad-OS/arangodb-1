@@ -43,6 +43,47 @@ class CrashInfo(BaseModel):
     signal: Optional[int] = None
 
 
+class ServerHealthInfo(BaseModel):
+    """Health information about servers after deployment shutdown.
+
+    Tracks both crashes (unexpected termination) and exit codes (intentional shutdown).
+    Non-zero exit codes may indicate issues even when tests pass (e.g., sanitizer failures).
+    """
+
+    crashes: Dict[str, CrashInfo] = Field(
+        default_factory=dict
+    )  # server_id -> crash info
+    exit_codes: Dict[str, int] = Field(default_factory=dict)  # server_id -> exit code
+
+    def has_issues(self) -> bool:
+        """Check if there are any server health issues."""
+        return bool(self.crashes) or any(code != 0 for code in self.exit_codes.values())
+
+    def get_failure_summary(self) -> List[str]:
+        """Get human-readable summary of server health issues."""
+        issues = []
+
+        # Report crashes
+        for server_id, crash_info in self.crashes.items():
+            msg = f"Server {server_id} crashed with exit code {crash_info.exit_code}"
+            if crash_info.signal:
+                msg += f" (signal {crash_info.signal})"
+            issues.append(msg)
+
+        # Report non-zero exit codes
+        for server_id, exit_code in self.exit_codes.items():
+            if exit_code != 0:
+                msg = f"Server {server_id} exited with code {exit_code}"
+                # Add context for common exit codes
+                if exit_code == 134:
+                    msg += " (typically ASAN/sanitizer failure)"
+                elif exit_code < 0:
+                    msg += f" (killed by signal {-exit_code})"
+                issues.append(msg)
+
+        return issues
+
+
 class ServerConfig(BaseModel):
     """Configuration for a single ArangoDB server."""
 

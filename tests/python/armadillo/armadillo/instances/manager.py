@@ -12,6 +12,7 @@ from ..core.types import (
     ClusterConfig,
     HealthStatus,
     ServerStats,
+    ServerHealthInfo,
 )
 from ..core.config import get_config
 from ..core.context import ApplicationContext
@@ -314,6 +315,32 @@ class InstanceManager:
 
             shutdown_time = time.time() - self.state.timing.shutdown_time
             logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
+
+    def get_server_health(self) -> ServerHealthInfo:
+        """Collect server health information after deployment shutdown.
+
+        Returns health data including:
+        - Exit codes from intentional shutdown (non-zero may indicate sanitizer issues)
+        - Crash information from unexpected termination
+
+        Should be called after shutdown_deployment() to capture exit codes.
+
+        Returns:
+            ServerHealthInfo with crashes and exit codes
+        """
+        from ..core.process import _process_supervisor
+
+        # Get exit codes from intentional shutdown
+        exit_codes = _process_supervisor.get_exit_codes()
+
+        # Get crash state from unexpected termination
+        crashes = _process_supervisor.get_crash_state()
+
+        # Convert to string keys for ServerHealthInfo (it uses Dict[str, ...])
+        return ServerHealthInfo(
+            crashes={str(k): v for k, v in crashes.items()},
+            exit_codes={str(k): v for k, v in exit_codes.items()},
+        )
 
     def _direct_shutdown_deployment(self) -> None:
         """Direct shutdown implementation as fallback when orchestrator fails.

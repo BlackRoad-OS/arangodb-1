@@ -140,6 +140,7 @@ class ProcessSupervisor:
         self._streaming_threads: Dict[ServerId, threading.Thread] = {}
         self._stop_monitoring = threading.Event()
         self._crash_state: Dict[ServerId, CrashInfo] = {}
+        self._exit_codes: Dict[ServerId, int] = {}  # Track exit codes for health checks
         self._lock = threading.Lock()
 
     def _stream_output(self, server_id: ServerId, process: subprocess.Popen) -> None:
@@ -267,6 +268,27 @@ class ProcessSupervisor:
                 f"Failed to start process {server_id}: {e}{error_output}"
             ) from e
 
+    def _capture_exit_code(
+        self, server_id: ServerId, process: subprocess.Popen, context: str = ""
+    ) -> None:
+        """Capture exit code for post-test health validation.
+
+        Args:
+            server_id: Server identifier
+            process: Process that has exited
+            context: Optional context message for logging (e.g., "after SIGKILL")
+        """
+        if process.returncode is not None:
+            with self._lock:
+                self._exit_codes[server_id] = process.returncode
+            context_msg = f" ({context})" if context else ""
+            logger.debug(
+                "Process %s exited with code %d%s",
+                server_id,
+                process.returncode,
+                context_msg,
+            )
+
     def stop(
         self, server_id: ServerId, graceful: bool = True, timeout: float = 30.0
     ) -> None:
@@ -318,6 +340,7 @@ class ProcessSupervisor:
                         pass
                 try:
                     process.wait(timeout=timeout)
+                    self._capture_exit_code(server_id, process)
                     log_process_event(
                         logger,
                         "supervisor.stopped",
@@ -361,6 +384,7 @@ class ProcessSupervisor:
                     pass
             try:
                 process.wait(timeout=5.0)
+                self._capture_exit_code(server_id, process, "after SIGKILL")
                 log_process_event(
                     logger,
                     "supervisor.stopped",
@@ -624,6 +648,23 @@ class ProcessSupervisor:
         """Clear crash state for all servers."""
         with self._lock:
             self._crash_state.clear()
+
+    def get_exit_codes(self) -> Dict[ServerId, int]:
+        """Get exit codes for all stopped servers.
+
+        Returns exit codes captured when servers were intentionally stopped.
+        Non-zero exit codes may indicate issues (e.g., sanitizer failures).
+
+        Returns:
+            Dictionary mapping server_id to exit code
+        """
+        with self._lock:
+            return dict(self._exit_codes)
+
+    def clear_exit_codes(self) -> None:
+        """Clear stored exit codes."""
+        with self._lock:
+            self._exit_codes.clear()
 
     def get_server_context(
         self, server_id: ServerId, role: ServerRole
