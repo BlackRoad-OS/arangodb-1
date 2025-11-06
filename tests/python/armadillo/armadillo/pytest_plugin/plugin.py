@@ -50,7 +50,7 @@ class ArmadilloPlugin:
     """Main pytest plugin for Armadillo framework."""
 
     def __init__(self) -> None:
-        self._package_deployments: Dict[str, InstanceManager] = {}
+        self._package_deployments: Dict[DeploymentId, InstanceManager] = {}
         self._server_health: Dict[DeploymentId, ServerHealthInfo] = (
             {}
         )  # deployment_id -> health info
@@ -1057,10 +1057,8 @@ def create_package_deployment(package_name: str):
 
     if deployment_mode == DeploymentMode.CLUSTER:
         # Create cluster deployment for this package
-        deployment_id = f"cluster_{package_name}_{random_id(6)}"
-        manager = get_instance_manager(
-            DeploymentId(deployment_id), _plugin._session_app_context
-        )
+        deployment_id = DeploymentId(f"cluster_{package_name}_{random_id(6)}")
+        manager = get_instance_manager(deployment_id, _plugin._session_app_context)
         try:
             logger.info(
                 "Starting package cluster deployment %s for %s",
@@ -1082,7 +1080,7 @@ def create_package_deployment(package_name: str):
             try:
                 manager.shutdown_deployment(timeout=120.0)
                 # Capture server health for post-test validation
-                _capture_deployment_health(manager, deployment_id)
+                _capture_deployment_health(manager, str(deployment_id))
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping cluster deployment %s: %s", deployment_id, e
@@ -1091,10 +1089,8 @@ def create_package_deployment(package_name: str):
                 _plugin._package_deployments.pop(deployment_id, None)
     else:
         # Single server mode
-        deployment_id = f"single_{package_name}_{random_id(6)}"
-        manager = get_instance_manager(
-            DeploymentId(deployment_id), _plugin._session_app_context
-        )
+        deployment_id = DeploymentId(f"single_{package_name}_{random_id(6)}")
+        manager = get_instance_manager(deployment_id, _plugin._session_app_context)
         try:
             logger.info("Starting package single server for %s", package_name)
             plan = manager.create_single_server_plan()
@@ -1114,7 +1110,7 @@ def create_package_deployment(package_name: str):
             try:
                 manager.shutdown_deployment(timeout=30.0)
                 # Capture server health for post-test validation
-                _capture_deployment_health(manager, deployment_id)
+                _capture_deployment_health(manager, str(deployment_id))
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error("Error stopping package server: %s", e)
             finally:

@@ -326,20 +326,33 @@ class InstanceManager:
         Should be called after shutdown_deployment() to capture exit codes.
 
         Returns:
-            ServerHealthInfo with crashes and exit codes
+            ServerHealthInfo with crashes and exit codes (filtered to this deployment's servers)
         """
         from ..core.process import _process_supervisor
 
-        # Get exit codes from intentional shutdown
-        exit_codes = _process_supervisor.get_exit_codes()
+        # Get all health data from the global supervisor
+        all_exit_codes = _process_supervisor.get_exit_codes()
+        all_crashes = _process_supervisor.get_crash_state()
 
-        # Get crash state from unexpected termination
-        crashes = _process_supervisor.get_crash_state()
+        # Get the set of server IDs that belong to this deployment
+        deployment_server_ids = set(self.state.servers.keys())
+
+        # Filter to only include servers from THIS deployment
+        relevant_crashes = {
+            server_id: crash_info
+            for server_id, crash_info in all_crashes.items()
+            if server_id in deployment_server_ids
+        }
+        relevant_exit_codes = {
+            server_id: exit_code
+            for server_id, exit_code in all_exit_codes.items()
+            if server_id in deployment_server_ids
+        }
 
         # Convert to string keys for ServerHealthInfo (it uses Dict[str, ...])
         return ServerHealthInfo(
-            crashes={str(k): v for k, v in crashes.items()},
-            exit_codes={str(k): v for k, v in exit_codes.items()},
+            crashes={str(k): v for k, v in relevant_crashes.items()},
+            exit_codes={str(k): v for k, v in relevant_exit_codes.items()},
         )
 
     def _direct_shutdown_deployment(self) -> None:
