@@ -28,6 +28,7 @@ from ..core.types import (
     ClusterConfig,
     ExecutionOutcome,
     ArmadilloConfig,
+    ServerHealthInfo,
 )
 from ..core.value_objects import DeploymentId
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
@@ -50,6 +51,9 @@ class ArmadilloPlugin:
 
     def __init__(self) -> None:
         self._package_deployments: Dict[str, InstanceManager] = {}
+        self._server_health: Dict[str, "ServerHealthInfo"] = (
+            {}
+        )  # deployment_id -> health info
         self._armadillo_config: Optional[ArmadilloConfig] = None
         self._deployment_failed: bool = False
         self._deployment_failure_reason: Optional[str] = None
@@ -217,94 +221,6 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Plugin cleanup entry point."""
     _plugin.pytest_unconfigure(config)
-
-
-def create_package_deployment(package_name: str):
-    """Helper function to create a deployment for a test package.
-
-    This is intended to be called from package conftest.py files to create
-    package-scoped deployments. Plugin fixtures don't scope per-package correctly,
-    so each package must define its own fixture that calls this helper.
-
-    Example usage in tests/mypackage/conftest.py:
-        @pytest.fixture(scope="package")
-        def _package_deployment(request):
-            from pathlib import Path
-            from armadillo.pytest_plugin.plugin import create_package_deployment
-            package_name = Path(__file__).parent.name
-            yield from create_package_deployment(package_name)
-
-    Args:
-        package_name: Name of the test package (directory name)
-
-    Yields:
-        ServerInstance: The deployment's server/coordinator instance
-    """
-    from ..instances.manager import get_instance_manager
-
-    framework_config = get_config()
-    deployment_mode = framework_config.deployment_mode
-
-    if deployment_mode == DeploymentMode.CLUSTER:
-        # Create cluster deployment for this package
-        deployment_id = f"cluster_{package_name}_{random_id(6)}"
-        manager = get_instance_manager(
-            DeploymentId(deployment_id), _plugin._session_app_context
-        )
-        try:
-            logger.info(
-                "Starting package cluster deployment %s for %s",
-                deployment_id,
-                package_name,
-            )
-            cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-            plan = manager.create_deployment_plan(cluster_config)
-            manager.deploy_servers(plan, timeout=300.0)
-            logger.info("Package cluster deployment %s ready", deployment_id)
-            _plugin._package_deployments[deployment_id] = manager
-
-            coordinators = manager.get_servers_by_role(ServerRole.COORDINATOR)
-            if not coordinators:
-                raise RuntimeError("No coordinators available in cluster")
-            yield coordinators[0]
-        finally:
-            logger.info("Stopping package cluster deployment %s", deployment_id)
-            try:
-                manager.shutdown_deployment(timeout=120.0)
-            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-                logger.error(
-                    "Error stopping cluster deployment %s: %s", deployment_id, e
-                )
-            finally:
-                _plugin._package_deployments.pop(deployment_id, None)
-    else:
-        # Single server mode
-        deployment_id = f"single_{package_name}_{random_id(6)}"
-        manager = get_instance_manager(
-            DeploymentId(deployment_id), _plugin._session_app_context
-        )
-        try:
-            logger.info("Starting package single server for %s", package_name)
-            plan = manager.create_single_server_plan()
-            manager.deploy_servers(plan, timeout=60.0)
-            _plugin._package_deployments[deployment_id] = manager
-
-            servers = manager.get_all_servers()
-            server = next(iter(servers.values()))
-            logger.info(
-                "Package single server ready at %s (package: %s)",
-                server.endpoint,
-                package_name,
-            )
-            yield server
-        finally:
-            logger.info("Stopping package single server for %s", package_name)
-            try:
-                manager.shutdown_deployment(timeout=30.0)
-            except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-                logger.error("Error stopping package server: %s", e)
-            finally:
-                _plugin._package_deployments.pop(deployment_id, None)
 
 
 def pytest_fixture_setup(fixturedef, request):
@@ -1122,6 +1038,15 @@ def create_package_deployment(package_name: str):
             logger.info("Stopping package cluster deployment %s", deployment_id)
             try:
                 manager.shutdown_deployment(timeout=120.0)
+                # Capture server health for post-test validation
+                health = manager.get_server_health()
+                if health.has_issues():
+                    _plugin._server_health[deployment_id] = health
+                    logger.warning(
+                        "Server health issues detected in %s: %s",
+                        deployment_id,
+                        health.get_failure_summary(),
+                    )
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping cluster deployment %s: %s", deployment_id, e
@@ -1152,6 +1077,15 @@ def create_package_deployment(package_name: str):
             logger.info("Stopping package single server for %s", package_name)
             try:
                 manager.shutdown_deployment(timeout=30.0)
+                # Capture server health for post-test validation
+                health = manager.get_server_health()
+                if health.has_issues():
+                    _plugin._server_health[deployment_id] = health
+                    logger.warning(
+                        "Server health issues detected in %s: %s",
+                        deployment_id,
+                        health.get_failure_summary(),
+                    )
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error("Error stopping package server: %s", e)
             finally:
