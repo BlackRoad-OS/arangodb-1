@@ -196,10 +196,6 @@ class ArmadilloReporter:
                 "start": time.time(),
             }
 
-        # Print [ RUN ] message here - this hook may not be captured like pytest_runtest_call
-        run_msg = f"{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
-        self._write_to_terminal(run_msg)
-
     def pytest_runtest_setup(self, item):
         """Handle test setup start."""
         test_name = self._get_test_name(item.nodeid)
@@ -207,8 +203,14 @@ class ArmadilloReporter:
             self.test_times[test_name]["setup_start"] = time.time()
 
     def pytest_runtest_call(self, item):
-        """Handle test call start."""
+        """Handle test call start - print [ RUN ] here after fixture setup."""
         test_name = self._get_test_name(item.nodeid)
+
+        # Print [ RUN ] message here, AFTER fixture setup has completed
+        # This ensures deployment logs don't mix with test output
+        run_msg = f"{self._get_timestamp()} {self._colorize('[ RUN        ]', Colors.YELLOW)} {test_name}\n"
+        self._write_to_terminal(run_msg)
+
         if test_name in self.test_times:
             # Calculate setup time
             if "setup_start" in self.test_times[test_name]:
@@ -217,17 +219,10 @@ class ArmadilloReporter:
                 ) * 1000  # Convert to milliseconds
             self.test_times[test_name]["call_start"] = time.time()
 
-        # [ RUN ] message now printed in pytest_runtest_logstart to avoid capture issues
-
     def pytest_runtest_teardown(self, item):
         """Handle test teardown start."""
         test_name = self._get_test_name(item.nodeid)
         if test_name in self.test_times:
-            # Calculate call time
-            if "call_start" in self.test_times[test_name]:
-                self.test_times[test_name]["call"] = (
-                    time.time() - self.test_times[test_name]["call_start"]
-                ) * 1000  # Convert to milliseconds
             self.test_times[test_name]["teardown_start"] = time.time()
 
     def pytest_runtest_logreport(self, report: TestReport):
@@ -235,6 +230,39 @@ class ArmadilloReporter:
         # Store all reports for later aggregation
         if report.when == "call":
             self.test_reports[report.nodeid] = report
+
+            # Print PASSED immediately after call finishes (before teardown)
+            # to avoid mixing with fixture teardown logs (like deployment shutdown)
+            test_name = self._get_test_name(report.nodeid)
+
+            # Calculate call time
+            if (
+                test_name in self.test_times
+                and "call_start" in self.test_times[test_name]
+            ):
+                self.test_times[test_name]["call"] = (
+                    time.time() - self.test_times[test_name]["call_start"]
+                ) * 1000
+
+            # Check if test passed (not skipped, not crashed, report outcome is passed)
+            if (
+                not self.test_skipped.get(report.nodeid, False)
+                and not has_any_crash()
+                and report.outcome == "passed"
+            ):
+
+                setup_time = int(self.test_times.get(test_name, {}).get("setup", 0))
+                call_time = int(self.test_times.get(test_name, {}).get("call", 0))
+
+                # Print PASSED message now (before teardown)
+                write_stdout(
+                    f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
+                    f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: 0ms)\n"
+                )
+
+                # Mark that we've printed this test result
+                self.test_times[test_name]["result_printed"] = True
+                self.passed_tests += 1
 
         # Track skips in any phase
         if report.outcome == "skipped":
@@ -269,18 +297,21 @@ class ArmadilloReporter:
 
             # Print test result
             if outcome == "passed":
-                self.passed_tests += 1
-                setup_time = int(self.test_times.get(test_name, {}).get("setup", 0))
-                call_time = int(self.test_times.get(test_name, {}).get("call", 0))
-                teardown_time = int(
-                    self.test_times.get(test_name, {}).get("teardown", 0)
-                )
+                # Check if we already printed this result during call phase
+                # (to avoid duplicate output - we print early to avoid mixing with teardown logs)
+                if not self.test_times.get(test_name, {}).get("result_printed", False):
+                    self.passed_tests += 1
+                    setup_time = int(self.test_times.get(test_name, {}).get("setup", 0))
+                    call_time = int(self.test_times.get(test_name, {}).get("call", 0))
+                    teardown_time = int(
+                        self.test_times.get(test_name, {}).get("teardown", 0)
+                    )
 
-                # Write directly to stdout
-                write_stdout(
-                    f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
-                    f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: {teardown_time}ms)\n"
-                )
+                    # Write directly to stdout (fallback for edge cases)
+                    write_stdout(
+                        f"{self._get_timestamp()} {self._colorize('[     PASSED ]', Colors.GREEN)} {test_name} "
+                        f"(setUp: {setup_time}ms, test: {call_time}ms, tearDown: {teardown_time}ms)\n"
+                    )
             elif outcome == "skipped":
                 # Test was skipped (e.g., due to crash in previous test)
                 write_stdout(
