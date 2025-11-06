@@ -417,10 +417,7 @@ def pytest_sessionstart(session):
             from ..core.process import _process_supervisor
 
             while (time.time() - start_time) < cleanup_timeout:
-                if (
-                    not hasattr(_process_supervisor, "_processes")
-                    or not _process_supervisor._processes
-                ):
+                if not _process_supervisor._processes:
                     logger.info("All supervised processes terminated successfully")
                     break
                 time.sleep(0.5)  # Check every 500ms
@@ -889,8 +886,8 @@ def _cleanup_all_processes(emergency=True):
         logger.info("Starting _cleanup_all_processes")
         from ..core.process import _process_supervisor
 
-        if hasattr(_process_supervisor, "_processes"):
-            server_ids = list(_process_supervisor._processes.keys())
+        server_ids = list(_process_supervisor._processes.keys())
+        if server_ids:
             logger.info(
                 "Found %d processes to cleanup: %s", len(server_ids), server_ids
             )
@@ -1031,10 +1028,7 @@ def _emergency_cleanup():
     try:
         from ..core.process import _process_supervisor
 
-        has_processes = (
-            hasattr(_process_supervisor, "_processes")
-            and _process_supervisor._processes
-        )
+        has_processes = bool(_process_supervisor._processes)
     except (ImportError, AttributeError):
         has_processes = False
 
@@ -1062,10 +1056,7 @@ def _emergency_cleanup():
         try:
             from ..core.process import _process_supervisor
 
-            if (
-                hasattr(_process_supervisor, "_processes")
-                and _process_supervisor._processes
-            ):
+            if _process_supervisor._processes:
                 logger.warning("Some processes still running, using nuclear cleanup...")
                 from ..core.process import kill_all_supervised_processes
 

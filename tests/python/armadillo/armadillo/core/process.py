@@ -828,68 +828,65 @@ def kill_all_supervised_processes() -> None:
     """
     logger.warning("Emergency kill of all supervised processes (including children)")
     try:
-        if hasattr(_process_supervisor, "_processes"):
-            processes = dict(_process_supervisor._processes)
-            if processes:
-                logger.warning(
-                    "Emergency killing %s supervised processes and their children",
-                    len(processes),
-                )
-                logger.debug("Phase 1: Attempting SIGTERM on process trees")
-                failed_trees = []
-                for server_id, process in processes.items():
-                    try:
-                        pid = process.pid
-                        logger.debug(
-                            "Emergency SIGTERM for process tree %s (root PID: %s)",
-                            server_id,
-                            pid,
-                        )
-                        if not kill_process_tree(pid, signal.SIGTERM, timeout=2.0):
-                            failed_trees.append((server_id, pid))
-                    except (
-                        OSError,
-                        ProcessLookupError,
-                        AttributeError,
-                        psutil.Error,
-                    ) as e:
-                        logger.error(
-                            "Error in SIGTERM phase for process %s: %s", server_id, e
-                        )
-                        failed_trees.append((server_id, getattr(process, "pid", None)))
-                if failed_trees:
-                    logger.warning(
-                        "Phase 2: Force killing %s stubborn process trees",
-                        len(failed_trees),
+        processes = dict(_process_supervisor._processes)
+        if processes:
+            logger.warning(
+                "Emergency killing %s supervised processes and their children",
+                len(processes),
+            )
+            logger.debug("Phase 1: Attempting SIGTERM on process trees")
+            failed_trees = []
+            for server_id, process in processes.items():
+                try:
+                    pid = process.pid
+                    logger.debug(
+                        "Emergency SIGTERM for process tree %s (root PID: %s)",
+                        server_id,
+                        pid,
                     )
-                    for server_id, pid in failed_trees:
-                        if pid is not None:
-                            try:
-                                logger.debug(
-                                    "Emergency SIGKILL for process tree %s (root PID: %s)",
+                    if not kill_process_tree(pid, signal.SIGTERM, timeout=2.0):
+                        failed_trees.append((server_id, pid))
+                except (
+                    OSError,
+                    ProcessLookupError,
+                    AttributeError,
+                    psutil.Error,
+                ) as e:
+                    logger.error(
+                        "Error in SIGTERM phase for process %s: %s", server_id, e
+                    )
+                    failed_trees.append((server_id, getattr(process, "pid", None)))
+            if failed_trees:
+                logger.warning(
+                    "Phase 2: Force killing %s stubborn process trees",
+                    len(failed_trees),
+                )
+                for server_id, pid in failed_trees:
+                    if pid is not None:
+                        try:
+                            logger.debug(
+                                "Emergency SIGKILL for process tree %s (root PID: %s)",
+                                server_id,
+                                pid,
+                            )
+                            if not kill_process_tree(pid, signal.SIGKILL, timeout=2.0):
+                                logger.error(
+                                    "CRITICAL: Could not kill process tree %s (PID: %s) even with SIGKILL",
                                     server_id,
                                     pid,
                                 )
-                                if not kill_process_tree(
-                                    pid, signal.SIGKILL, timeout=2.0
-                                ):
-                                    logger.error(
-                                        "CRITICAL: Could not kill process tree %s (PID: %s) even with SIGKILL",
-                                        server_id,
-                                        pid,
-                                    )
-                            except (OSError, ProcessLookupError, psutil.Error) as e:
-                                logger.error(
-                                    "Error in SIGKILL phase for process %s: %s",
-                                    server_id,
-                                    e,
-                                )
-                _process_supervisor._processes.clear()
-                _process_supervisor._process_info.clear()
-                _process_supervisor._streaming_threads.clear()
-                logger.warning("Emergency process tree kill completed")
-            else:
-                logger.debug("No supervised processes to kill")
+                        except (OSError, ProcessLookupError, psutil.Error) as e:
+                            logger.error(
+                                "Error in SIGKILL phase for process %s: %s",
+                                server_id,
+                                e,
+                            )
+            _process_supervisor._processes.clear()
+            _process_supervisor._process_info.clear()
+            _process_supervisor._streaming_threads.clear()
+            logger.warning("Emergency process tree kill completed")
+        else:
+            logger.debug("No supervised processes to kill")
     except (
         OSError,
         ProcessLookupError,
