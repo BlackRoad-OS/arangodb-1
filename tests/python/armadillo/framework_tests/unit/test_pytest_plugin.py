@@ -5,6 +5,7 @@ Tests essential ArmadilloPlugin functionality with minimal mocking.
 """
 
 import pytest
+import time
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
@@ -288,9 +289,16 @@ class TestArmadilloReporter:
 
         # Simulate test start
         nodeid = "test_file.py::TestClass::test_method"
-        location = ("test_file.py", 10, "TestClass.test_method")
 
-        reporter.pytest_runtest_logstart(nodeid, location)
+        # Create a mock item with nodeid
+        mock_item = Mock()
+        mock_item.nodeid = nodeid
+
+        # Initialize test timing
+        test_name = reporter._get_test_name(nodeid)
+        reporter.test_times[test_name] = {"setup_start": time.time()}
+
+        reporter.pytest_runtest_call(mock_item)
 
         # Should have written RUN header to stdout
         mock_write.assert_called()
@@ -523,7 +531,15 @@ class TestArmadilloReporterRegressionTests:
         reporter = ArmadilloReporter()
         nodeid = "test_file.py::TestClass::test_method"
 
-        reporter.pytest_runtest_logstart(nodeid, ("test_file.py", 10, "test_method"))
+        # Create a mock item with nodeid
+        mock_item = Mock()
+        mock_item.nodeid = nodeid
+
+        # Initialize test timing
+        test_name = reporter._get_test_name(nodeid)
+        reporter.test_times[test_name] = {"setup_start": time.time()}
+
+        reporter.pytest_runtest_call(mock_item)
 
         # Should have written something to stdout
         mock_write.assert_called()
