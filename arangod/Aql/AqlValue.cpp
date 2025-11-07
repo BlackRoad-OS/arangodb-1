@@ -300,7 +300,8 @@ AqlValue AqlValue::at(int64_t position, bool& mustDestroy, bool doCopy) const {
         if (position >= 0 && position < n) {
           if (doCopy) {
             mustDestroy = true;
-            return AqlValue(s.at(position), s.byteSize(), rm);
+            auto elem = s.at(position);
+            return AqlValue(elem, elem.byteSize(), rm);
           }
           // return a reference to an existing slice
           return AqlValue(s.at(position).begin());
@@ -1199,7 +1200,11 @@ AqlValue::AqlValue(AqlValue const& other,
       _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
       break;
     case VPACK_SUPERVISED_SLICE: {
-      setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New);
+      auto mot = static_cast<MemoryOriginType>(
+          other._data.supervisedSliceMeta.getOrigin());
+      auto len = static_cast<velocypack::ValueLength>(
+          other._data.supervisedSliceMeta.getLength());
+      setSupervisedData(VPACK_SUPERVISED_SLICE, mot, len);
       _data.supervisedSliceMeta.pointer =
           const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
       break;
@@ -1268,8 +1273,8 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
     // create a full-featured Builder object here
     const std::size_t byteSize = s.size() + 1;
     if (rm != nullptr) {  // if this should be supervised
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                        MemoryOriginType::New);
+      setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New,
+                        static_cast<velocypack::ValueLength>(byteSize));
       // allocate block: [ rm* (prefix) | VelocyPack slice bytes (payload) ]
       // kPrefix = sizeof(ResourceMonitor*)
       // byteSize = size of the VelocyPack payload
@@ -1283,6 +1288,9 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
       // [ ResourceMonitor* ][ 0x40+len ][ 'a' 'b' 'c' ... ]
       std::memcpy(base + kPrefix + 1, s.data(), s.size());
       _data.supervisedSliceMeta.pointer = base;
+      TRI_ASSERT(
+          _data.supervisedSliceMeta.getLength() ==
+          VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
     } else {
       setManagedSliceData(MemoryOriginType::New, s.size() + 1);
       _data.managedSliceMeta.pointer = new uint8_t[s.size() + 1];
@@ -1295,8 +1303,8 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
     // create a big enough uint8_t buffer
     size_t byteSize = s.size() + 9;
     if (rm != nullptr) {  // if this should be supervised
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                        MemoryOriginType::New);
+      setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New,
+                        static_cast<velocypack::ValueLength>(byteSize));
       uint8_t* base = allocateSupervised(*rm, byteSize, MemoryOriginType::New);
       // Write the VelocyPack type marker for a "long string" slice.
       // 0xbf means "string, long form". This is the first byte.
@@ -1309,6 +1317,9 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
       // [ rm* ][ 0xbf ][ 8-byte length ][ string bytes ... ]
       std::memcpy(base + kPrefix + 9, s.data(), s.size());
       _data.supervisedSliceMeta.pointer = base;
+      TRI_ASSERT(
+          _data.supervisedSliceMeta.getLength() ==
+          VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
     } else {
       setManagedSliceData(MemoryOriginType::New, byteSize);
       _data.managedSliceMeta.pointer = new uint8_t[byteSize];
@@ -1338,15 +1349,15 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
   if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
-    setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                      MemoryOriginType::Malloc);
+    setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::Malloc,
+                      static_cast<velocypack::ValueLength>(size));
     uint8_t* p = allocateSupervised(*rm, size, MemoryOriginType::Malloc);
     memcpy(p + kPrefix, slice.begin(), size);
     _data.supervisedSliceMeta.pointer = p;
-    buffer.clear();
     TRI_ASSERT(
         _data.supervisedSliceMeta.getLength() ==
         VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
+    buffer.clear();
   } else if (size < sizeof(AqlValue)) {
     // Use inline value
     initFromSlice(slice, size);
@@ -1463,7 +1474,8 @@ size_t AqlValue::memoryUsage() const noexcept {
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
     case VPACK_SUPERVISED_SLICE: {
-      return _data.supervisedSliceMeta.getLength() + kPrefix;
+      return static_cast<size_t>(_data.supervisedSliceMeta.getLength()) +
+             kPrefix;
     }
     case RANGE:
       return sizeof(Range);
@@ -1480,13 +1492,14 @@ void AqlValue::initFromSlice(VPackSlice slice, VPackValueLength length,
   }
   if (length > sizeof(_data.inlineSliceMeta.slice)) {
     if (rm != nullptr) {
-      setType(AqlValueType::VPACK_SUPERVISED_SLICE);
-      setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                        MemoryOriginType::New);
+      setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New, length);
       auto base = allocateSupervised(
           *rm, length, MemoryOriginType::New);             // points to prefix
       std::memcpy(base + kPrefix, slice.begin(), length);  // copy into payload
       _data.supervisedSliceMeta.pointer = base;
+      TRI_ASSERT(
+          _data.supervisedSliceMeta.getLength() ==
+          VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
       return;
     }
     // Use managed slice
@@ -1557,18 +1570,23 @@ void const* AqlValue::data() const noexcept {
   }
 }
 
-void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
+void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot,
+                                 velocypack::ValueLength length) {
   TRI_ASSERT(at == VPACK_SUPERVISED_SLICE);
+  uint64_t len = static_cast<uint64_t>(length);
+  TRI_ASSERT(len <= 0x0000ffffffffffffULL);
 
   uint64_t lo = 0;
   //   little: [ len:6 ][ origin:1 ][ type:1 ]
   //   big:    [ type:1 ][ origin:1 ][ len:6 ]
   if constexpr (basics::isLittleEndian()) {
+    lo |= (len << 16);
     lo |= (static_cast<uint64_t>(mot) << 8);
     lo |= static_cast<uint64_t>(at);
   } else {
     lo |= (static_cast<uint64_t>(mot) << 48);
     lo |= (static_cast<uint64_t>(at) << 56);
+    lo |= (len & 0x0000ffffffffffffULL);
   }
   // [ 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 ]
   setType(at);

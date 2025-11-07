@@ -547,7 +547,8 @@ struct AqlValue final {
 
   // helpers for supervised values
   // @brief set the first 2 bytes for SupervisedSlice and SupervisedString
-  void setSupervisedData(AqlValueType at, MemoryOriginType mot);
+  void setSupervisedData(AqlValueType, MemoryOriginType,
+                         velocypack::ValueLength);
 
   inline void swap(AqlValue& other) noexcept;
 
