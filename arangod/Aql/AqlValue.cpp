@@ -738,7 +738,7 @@ int64_t AqlValue::toInt64() const {
       if (s.isString()) {
         try {
           auto v = s.copyString();
-          return static_cast<int64_t>(std::stoll(s.copyString()));
+          return static_cast<int64_t>(std::stoll(v));
         } catch (...) {
         }
       } else if (s.isArray()) {
@@ -1173,16 +1173,6 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
     return;
   }
 
-  if (rm != nullptr) {
-    setSupervisedData(AqlValueType::VPACK_SUPERVISED_SLICE,
-                      MemoryOriginType::New);
-    uint8_t* base = allocateSupervised(*rm, static_cast<uint64_t>(size),
-                                       MemoryOriginType::New);
-    std::memcpy(base + kPrefix, bytes, static_cast<std::size_t>(size));
-    _data.supervisedSliceMeta.pointer = base;
-    data.reset();
-    return;
-  }
   setType(AqlValueType::VPACK_MANAGED_STRING);
   _data.managedStringMeta.pointer = data.release();
 }
@@ -1659,6 +1649,7 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
     }
     return false;
   }
+
   // different types: allow supervised vs managed content-equality
   auto isSup = [](T t) { return t == T::VPACK_SUPERVISED_SLICE; };
   auto isMan = [](T t) {

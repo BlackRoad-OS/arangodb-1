@@ -389,7 +389,6 @@ struct AqlValue final {
   /// explicit calls to destroy()
   AqlValue(AqlValue const&) = default;
   AqlValue& operator=(AqlValue const&) = default;
-  void copyFrom(AqlValue const& other, ResourceMonitor* rm = nullptr);
   AqlValue(AqlValue const&, arangodb::ResourceMonitor&);
   AqlValue(AqlValue&&) noexcept = default;
   AqlValue& operator=(AqlValue&&) noexcept = default;
@@ -549,9 +548,6 @@ struct AqlValue final {
   // @brief set the first 2 bytes for SupervisedSlice and SupervisedString
   void setSupervisedData(AqlValueType at, MemoryOriginType mot);
 
-  static inline bool isSupervised_(AqlValueType t) noexcept;
-  inline void initFromSupervised(AqlValue const& src,
-                                 arangodb::ResourceMonitor* rm);
   inline void swap(AqlValue& other) noexcept;
 
   static inline uint8_t* allocateSupervised(
@@ -578,8 +574,6 @@ struct AqlValue final {
     rm.increaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
     return reinterpret_cast<uint8_t*>(base);
   }
-
-  void copyFrom(AqlValue const&);
 
   static inline void deallocateSupervised(
       uint8_t* base, std::uint64_t len,
@@ -609,6 +603,9 @@ static_assert(std::is_trivially_destructible_v<AqlValue>);
 static_assert(std::is_standard_layout_v<AqlValue>);
 static_assert(sizeof(AqlValue) == 16);
 
+bool operator==(AqlValue const& a, AqlValue const& b) noexcept;
+bool operator!=(AqlValue const& a, AqlValue const& b) noexcept;
+
 class AqlValueGuard {
  public:
   AqlValueGuard() = delete;
@@ -635,3 +632,10 @@ class AqlValueGuard {
 
 }  // namespace aql
 }  // namespace arangodb
+
+namespace std {
+template<>
+struct equal_to<arangodb::aql::AqlValue>;
+template<>
+struct hash<arangodb::aql::AqlValue>;
+}  // namespace std
