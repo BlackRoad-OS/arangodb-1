@@ -1459,8 +1459,7 @@ size_t AqlValue::memoryUsage() const noexcept {
       return _data.managedStringMeta.getLength();
     case VPACK_SUPERVISED_SLICE: {
       auto const len = static_cast<size_t>(
-          velocypack::Slice(_data.supervisedSliceMeta.getPayloadPtr())
-              .byteSize());  // change to getLength
+          velocypack::Slice(static_cast<size_t>(_data.supervisedSliceMeta.getLength()));  // change to getLength
       return len + kPrefix;
     }
     case RANGE:
