@@ -2,7 +2,6 @@
 
 import time
 import platform
-import sys
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from typing import Dict, List, Optional, Any
@@ -190,9 +189,9 @@ class ResultCollector:
         try:
             if info_type == "python_version":
                 return platform.python_version()
-            elif info_type == "platform":
+            if info_type == "platform":
                 return platform.platform()
-            elif info_type == "hostname":
+            if info_type == "hostname":
                 return platform.node()
             return "unknown"
         except Exception:

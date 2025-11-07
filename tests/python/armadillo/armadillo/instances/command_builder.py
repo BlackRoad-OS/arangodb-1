@@ -118,11 +118,11 @@ class ServerCommandBuilder:
         """Get configuration file path for the server role."""
         if role == ServerRole.SINGLE:
             return "etc/testing/arangod-single.conf"
-        elif role == ServerRole.AGENT:
+        if role == ServerRole.AGENT:
             return "etc/testing/arangod-agent.conf"
-        elif role == ServerRole.COORDINATOR:
+        if role == ServerRole.COORDINATOR:
             return "etc/testing/arangod-coordinator.conf"
-        elif role == ServerRole.DBSERVER:
+        if role == ServerRole.DBSERVER:
             return "etc/testing/arangod-dbserver.conf"
-        else:
-            return "etc/testing/arangod.conf"
+
+        return "etc/testing/arangod.conf"

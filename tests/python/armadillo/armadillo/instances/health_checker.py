@@ -103,12 +103,12 @@ class ServerHealthChecker:
                             response_time=response_time,
                             details=details,
                         )
-                    else:
-                        return HealthStatus(
-                            is_healthy=False,
-                            response_time=response_time,
-                            error_message=f"HTTP {response.status}: {response.reason}",
-                        )
+
+                    return HealthStatus(
+                        is_healthy=False,
+                        response_time=response_time,
+                        error_message=f"HTTP {response.status}: {response.reason}",
+                    )
         except asyncio.TimeoutError:
             response_time = time.time() - start_time
             return HealthStatus(

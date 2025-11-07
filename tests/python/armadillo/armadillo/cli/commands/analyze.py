@@ -40,7 +40,12 @@ def summary(
         else:
             console.print(f"[red]Unknown format: {output_format}[/red]")
             raise typer.Exit(1)
-    except (ResultProcessingError, DeserializationError, FileNotFoundError, OSError) as e:
+    except (
+        ResultProcessingError,
+        DeserializationError,
+        FileNotFoundError,
+        OSError,
+    ) as e:
         # Expected errors - clean message
         logger.error("Analysis failed: %s", e)
         raise typer.Exit(1)

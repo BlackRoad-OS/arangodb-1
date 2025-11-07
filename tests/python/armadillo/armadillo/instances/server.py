@@ -13,11 +13,9 @@ from ..core.types import (
     ServerConfig,
     HealthStatus,
     ServerStats,
-    TimeoutConfig,
     ArmadilloConfig,
 )
 from ..core.errors import ServerStartupError, ServerShutdownError
-from ..core.config import get_config, ConfigProvider
 from ..core.context import ApplicationContext
 from ..core.value_objects import ServerId, ServerContext
 from ..core.process import (
@@ -30,8 +28,6 @@ from ..core.process import (
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import FilesystemService
-from ..utils.ports import PortAllocator, PortManager
-from ..utils.auth import get_auth_provider, AuthProvider
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
 from .command_builder import ServerCommandParams
@@ -77,16 +73,16 @@ class ServerPaths:
                 ),
                 config=config,
             )
-        else:
-            # Default directory structure
-            base_dir = filesystem.server_dir(str(server_id))
-            return cls(
-                base_dir=base_dir,
-                data_dir=base_dir / "data",
-                app_dir=base_dir / "apps",
-                log_file=base_dir / "arangodb.log",
-                config=config,
-            )
+
+        # Default directory structure
+        base_dir = filesystem.server_dir(str(server_id))
+        return cls(
+            base_dir=base_dir,
+            data_dir=base_dir / "data",
+            app_dir=base_dir / "apps",
+            log_file=base_dir / "arangodb.log",
+            config=config,
+        )
 
 
 @dataclass

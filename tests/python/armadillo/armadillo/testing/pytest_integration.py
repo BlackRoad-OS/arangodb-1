@@ -1,7 +1,8 @@
 """Pytest integration for Armadillo test isolation."""
 
-import pytest
 from typing import Generator
+
+import pytest
 
 from .test_context import (
     IsolatedTestContext,

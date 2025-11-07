@@ -79,7 +79,7 @@ class TimeoutManager:
             if requested_timeout is None:
                 return remaining
             return min(requested_timeout, remaining)
-        elif self._global_deadline:
+        if self._global_deadline:
             global_remaining = max(0.0, self._global_deadline - time.time())
             if requested_timeout is None:
                 return global_remaining

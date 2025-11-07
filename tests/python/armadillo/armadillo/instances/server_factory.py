@@ -1,19 +1,11 @@
 """Server instance factory for creating ArangoDB servers from deployment plans."""
 
-from typing import Dict, Optional, Protocol
-from dataclasses import dataclass
-from pathlib import Path
+from typing import Dict, Protocol
 from ..core.types import ServerRole, ServerConfig
-from ..core.config import ConfigProvider
 from ..core.context import ApplicationContext
-from ..core.log import Logger
 from ..core.errors import ServerError
 from ..core.value_objects import ServerId
-from ..utils.ports import PortAllocator
-from ..utils.auth import get_auth_provider
-from .server import ArangoServer, ServerPaths
-from .command_builder import ServerCommandBuilder
-from .health_checker import ServerHealthChecker
+from .server import ArangoServer
 
 
 class ServerFactory(Protocol):
@@ -71,12 +63,12 @@ class StandardServerFactory:
         """Generate server ID based on role and index."""
         if role == ServerRole.AGENT:
             return ServerId(f"agent_{index}")
-        elif role == ServerRole.DBSERVER:
+        if role == ServerRole.DBSERVER:
             return ServerId(f"dbserver_{index}")
-        elif role == ServerRole.COORDINATOR:
+        if role == ServerRole.COORDINATOR:
             return ServerId(f"coordinator_{index}")
-        else:
-            return ServerId(f"server_{index}")
+
+        return ServerId(f"server_{index}")
 
     def _create_single_server(
         self, server_id: ServerId, server_config: ServerConfig

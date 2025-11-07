@@ -1,10 +1,12 @@
 """Cluster bootstrap and initialization logic for ArangoDB clusters."""
 
-from typing import Dict, List, Tuple, Optional, Any
 import time
-import requests
 from concurrent.futures import ThreadPoolExecutor
-from ..core.types import ServerRole, TimeoutConfig, InfrastructureConfig
+from typing import Dict, List, Tuple, Optional, Any
+
+import requests
+
+from ..core.types import ServerRole, TimeoutConfig
 from ..core.config import get_config
 from ..core.log import Logger
 from ..core.value_objects import ServerId

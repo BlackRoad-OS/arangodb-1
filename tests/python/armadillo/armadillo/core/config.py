@@ -1,9 +1,10 @@
 """Configuration management with environment variable integration and validation."""
 
 import os
-import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, TypeVar, Protocol
+
+import yaml
 
 from .types import ArmadilloConfig, ClusterConfig, TimeoutConfig, InfrastructureConfig
 from .errors import ConfigurationError
@@ -56,7 +57,7 @@ def _convert_env_value(value: str) -> Any:
     # Handle boolean values (after numeric conversion)
     if value.lower() in ("true", "yes", "on"):
         return True
-    elif value.lower() in ("false", "no", "off"):
+    if value.lower() in ("false", "no", "off"):
         return False
 
     # Handle lists (comma-separated)
@@ -157,10 +158,10 @@ class ConfigManager:
             with open(config_file, "r", encoding="utf-8") as f:
                 if config_file.suffix.lower() in (".yml", ".yaml"):
                     return yaml.safe_load(f) or {}
-                else:
-                    raise ConfigurationError(
-                        f"Unsupported config file format: {config_file.suffix}"
-                    )
+
+                raise ConfigurationError(
+                    f"Unsupported config file format: {config_file.suffix}"
+                )
         except (FileNotFoundError, PermissionError, OSError) as e:
             raise ConfigurationError(
                 f"Failed to load config file {config_file}: {e}"

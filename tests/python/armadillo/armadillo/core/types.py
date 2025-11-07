@@ -47,7 +47,7 @@ def _get_exit_code_context(exit_code: int) -> str:
     """Get human-readable context for an exit code."""
     if exit_code == 134:
         return " (SIGABRT - likely ASAN/sanitizer failure)"
-    elif exit_code < 0:
+    if exit_code < 0:
         return f" (signal {-exit_code})"
     return ""
 
@@ -73,14 +73,17 @@ class ServerHealthInfo(BaseModel):
         issues = []
 
         # Report crashes
-        for server_id, crash_info in self.crashes.items():
+        for server_id, crash_info in self.crashes.items():  # pylint: disable=no-member
             msg = f"Server {server_id} crashed with exit code {crash_info.exit_code}"
             if crash_info.signal:
                 msg += f" (signal {crash_info.signal})"
             issues.append(msg)
 
         # Report non-zero exit codes
-        for server_id, exit_code in self.exit_codes.items():
+        for (
+            server_id,
+            exit_code,
+        ) in self.exit_codes.items():  # pylint: disable=no-member
             if exit_code != 0:
                 msg = f"Server {server_id} exited with code {exit_code}"
                 msg += _get_exit_code_context(exit_code)
@@ -103,11 +106,16 @@ class ServerHealthInfo(BaseModel):
 
         # Format exit code issues
         non_zero_exits = {
-            sid: code for sid, code in self.exit_codes.items() if code != 0
+            sid: code
+            for sid, code in self.exit_codes.items()  # pylint: disable=no-member
+            if code != 0
         }
         if non_zero_exits:
             lines.append("\nNon-zero exit codes:")
-            for server_id, exit_code in non_zero_exits.items():
+            for (
+                server_id,
+                exit_code,
+            ) in non_zero_exits.items():  # pylint: disable=no-member
                 context = _get_exit_code_context(exit_code)
                 lines.append(f"  {server_id}: {exit_code}{context}")
                 error_count += 1
@@ -115,7 +123,7 @@ class ServerHealthInfo(BaseModel):
         # Format crash issues
         if self.crashes:
             lines.append("\nCrashes:")
-            for server_id, crash in self.crashes.items():
+            for server_id, crash in self.crashes.items():  # pylint: disable=no-member
                 lines.append(f"  {server_id}: exit_code={crash.exit_code}")
                 if crash.stderr:
                     lines.append(f"    stderr: {crash.stderr[:200]}")

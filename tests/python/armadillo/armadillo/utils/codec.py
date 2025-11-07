@@ -33,9 +33,9 @@ def _json_serializer(obj: Any) -> Any:
     """Custom JSON serializer for special types."""
     if isinstance(obj, datetime):
         return obj.isoformat()
-    elif isinstance(obj, Path):
+    if isinstance(obj, Path):
         return str(obj)
-    elif hasattr(obj, "model_dump"):
+    if hasattr(obj, "model_dump"):
         # Pydantic v2 BaseModel
         return obj.model_dump()
     elif hasattr(obj, "_asdict"):

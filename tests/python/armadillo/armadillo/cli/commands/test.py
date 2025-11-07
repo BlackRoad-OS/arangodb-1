@@ -5,7 +5,6 @@ import sys
 import signal
 import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Optional, List
 import typer
@@ -48,13 +47,17 @@ class TestRunOptions(BaseModel):
     cluster: bool = Field(False, description=_HELP["cluster"])
     timeout: Optional[float] = Field(None, description=_HELP["timeout"])
     global_timeout: Optional[float] = Field(None, description=_HELP["global_timeout"])
-    output_idle_timeout: Optional[float] = Field(None, description=_HELP["output_idle_timeout"])
+    output_idle_timeout: Optional[float] = Field(
+        None, description=_HELP["output_idle_timeout"]
+    )
     output_dir: Path = Field(Path("./test-results"), description=_HELP["output_dir"])
     formats: List[str] = Field(
         default_factory=lambda: ["junit", "json"], description=_HELP["formats"]
     )
     build_dir: Optional[Path] = Field(None, description=_HELP["build_dir"])
-    keep_instances_on_failure: bool = Field(False, description=_HELP["keep_instances_on_failure"])
+    keep_instances_on_failure: bool = Field(
+        False, description=_HELP["keep_instances_on_failure"]
+    )
     keep_temp_dir: bool = Field(False, description=_HELP["keep_temp_dir"])
     parallel: bool = Field(False, description=_HELP["parallel"])
     max_workers: Optional[int] = Field(None, description=_HELP["max_workers"])
@@ -114,17 +117,37 @@ def run(
     test_paths: List[str] = typer.Argument(help="Test paths to execute"),
     cluster: bool = typer.Option(False, "--cluster", help=_HELP["cluster"]),
     timeout: Optional[float] = typer.Option(None, "--timeout", help=_HELP["timeout"]),
-    global_timeout: Optional[float] = typer.Option(None, "--global-timeout", help=_HELP["global_timeout"]),
-    output_idle_timeout: Optional[float] = typer.Option(None, "--output-idle-timeout", help=_HELP["output_idle_timeout"]),
-    output_dir: Path = typer.Option(Path("./test-results"), "--output-dir", "-o", help=_HELP["output_dir"]),
-    formats: List[str] = typer.Option(["junit", "json"], "--format", help=_HELP["formats"]),
-    build_dir: Optional[Path] = typer.Option(None, "--build-dir", "-b", help=_HELP["build_dir"]),
-    keep_instances_on_failure: bool = typer.Option(False, "--keep-instances-on-failure", help=_HELP["keep_instances_on_failure"]),
-    keep_temp_dir: bool = typer.Option(False, "--keep-temp-dir", help=_HELP["keep_temp_dir"]),
+    global_timeout: Optional[float] = typer.Option(
+        None, "--global-timeout", help=_HELP["global_timeout"]
+    ),
+    output_idle_timeout: Optional[float] = typer.Option(
+        None, "--output-idle-timeout", help=_HELP["output_idle_timeout"]
+    ),
+    output_dir: Path = typer.Option(
+        Path("./test-results"), "--output-dir", "-o", help=_HELP["output_dir"]
+    ),
+    formats: List[str] = typer.Option(
+        ["junit", "json"], "--format", help=_HELP["formats"]
+    ),
+    build_dir: Optional[Path] = typer.Option(
+        None, "--build-dir", "-b", help=_HELP["build_dir"]
+    ),
+    keep_instances_on_failure: bool = typer.Option(
+        False, "--keep-instances-on-failure", help=_HELP["keep_instances_on_failure"]
+    ),
+    keep_temp_dir: bool = typer.Option(
+        False, "--keep-temp-dir", help=_HELP["keep_temp_dir"]
+    ),
     parallel: bool = typer.Option(False, "--parallel", help=_HELP["parallel"]),
-    max_workers: Optional[int] = typer.Option(None, "--max-workers", help=_HELP["max_workers"]),
-    extra_args: Optional[List[str]] = typer.Option(None, "--pytest-arg", help=_HELP["extra_args"]),
-    show_server_logs: bool = typer.Option(False, "--show-server-logs", help=_HELP["show_server_logs"]),
+    max_workers: Optional[int] = typer.Option(
+        None, "--max-workers", help=_HELP["max_workers"]
+    ),
+    extra_args: Optional[List[str]] = typer.Option(
+        None, "--pytest-arg", help=_HELP["extra_args"]
+    ),
+    show_server_logs: bool = typer.Option(
+        False, "--show-server-logs", help=_HELP["show_server_logs"]
+    ),
     compact: bool = typer.Option(False, "--compact", "-c", help=_HELP["compact"]),
 ):
     """Run tests with ArangoDB instances."""
@@ -283,7 +306,9 @@ def _execute_test_run(options: TestRunOptions) -> None:
     console.print(f"[cyan]Running tests with command:[/cyan] {' '.join(pytest_args)}")
 
     # Determine effective global timeout (use explicit value or default from config)
-    effective_global_timeout = options.global_timeout if options.global_timeout else config.test_timeout
+    effective_global_timeout = (
+        options.global_timeout if options.global_timeout else config.test_timeout
+    )
     console.print(f"[cyan]Global timeout: {effective_global_timeout}s[/cyan]")
 
     # Start pytest subprocess (with or without output monitoring)
@@ -329,6 +354,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
     # If output idle monitoring is enabled, stream output and update timestamp
     if options.output_idle_timeout:
+
         def output_reader():
             """Read and forward output line-by-line, updating timeout handler."""
             try:
@@ -395,9 +421,13 @@ def _execute_test_run(options: TestRunOptions) -> None:
     if timeout_handler.was_timeout_triggered():
         timeout_type = timeout_handler.get_timeout_type()
         if timeout_type == TimeoutType.GLOBAL:
-            console.print(f"[red]❌ Tests killed due to global timeout ({effective_global_timeout}s)[/red]")
+            console.print(
+                f"[red]❌ Tests killed due to global timeout ({effective_global_timeout}s)[/red]"
+            )
         elif timeout_type == TimeoutType.OUTPUT_IDLE:
-            console.print(f"[red]❌ Tests killed due to output idle timeout ({options.output_idle_timeout}s)[/red]")
+            console.print(
+                f"[red]❌ Tests killed due to output idle timeout ({options.output_idle_timeout}s)[/red]"
+            )
         sys.exit(124)  # timeout exit code
 
     if returncode == 0:

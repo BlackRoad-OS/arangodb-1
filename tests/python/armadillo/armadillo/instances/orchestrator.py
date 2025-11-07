@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import aiohttp
-from ..core.types import ServerRole, TimeoutConfig
+from ..core.types import ServerRole
 from ..core.value_objects import DeploymentId
 from ..core.errors import (
     ClusterError,
@@ -19,8 +19,6 @@ from ..core.errors import (
 )
 from ..core.log import get_logger
 from ..core.time import timeout_scope, clamp_timeout
-from ..core.config import get_config
-from ..utils.auth import get_auth_provider
 from ..utils.crypto import random_id
 from .manager import get_instance_manager
 from .server import ArangoServer

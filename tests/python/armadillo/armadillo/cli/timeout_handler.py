@@ -200,4 +200,3 @@ class TimeoutHandler:
             hook: Callable that takes (timeout_type)
         """
         self.post_terminate_hook = hook
-

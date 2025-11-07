@@ -3,13 +3,12 @@
 import atexit
 import logging
 import signal
-import sys
-import pytest
-import pytest_timeout
 import time
 import traceback
 from pathlib import Path
-from typing import Generator, Optional, Dict, Any, List
+from typing import Optional, Dict, Any
+
+import pytest
 from ..core.config import get_config
 from ..core.config_initializer import initialize_config
 from ..core.context import ApplicationContext
@@ -32,18 +31,17 @@ from ..core.types import (
 )
 from ..core.value_objects import DeploymentId
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
-from ..core.errors import ServerStartupError, ArmadilloError, ResultProcessingError
-from ..instances.server import ArangoServer
-from ..instances.manager import InstanceManager, get_instance_manager
+from ..core.errors import ResultProcessingError
+from ..instances.manager import InstanceManager
 from .reporter import get_armadillo_reporter
 from ..utils.crypto import random_id
 
 logger = get_logger(__name__)
 
 # Global flags to track if we should abort remaining tests
-_abort_remaining_tests = False
-_crash_detected_during_test = None  # Store nodeid of test where crash was detected
-_timeout_detected_during_test = None  # Store nodeid of test where timeout was detected
+_ABORT_REMAINING_TESTS = False
+_CRASH_DETECTED_DURING_TEST = None  # Store nodeid of test where crash was detected
+_TIMEOUT_DETECTED_DURING_TEST = None  # Store nodeid of test where timeout was detected
 
 
 class ArmadilloPlugin:
@@ -161,7 +159,7 @@ class ArmadilloPlugin:
 
     def pytest_sessionstart(self, _session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
-        global _abort_remaining_tests, _crash_detected_during_test, _timeout_detected_during_test
+        global _ABORT_REMAINING_TESTS, _CRASH_DETECTED_DURING_TEST, _TIMEOUT_DETECTED_DURING_TEST
         logger.debug("ArmadilloPlugin: Session start")
         # Config already loaded by CLI and pytest_configure
         # Don't call load_config() again to avoid duplicate build detection
@@ -169,9 +167,9 @@ class ArmadilloPlugin:
         # Note: Session-level directory isolation not currently enabled
         # (would require ApplicationContext integration in pytest fixtures)
         # Clear any crash/timeout state from previous runs
-        _abort_remaining_tests = False
-        _crash_detected_during_test = None
-        _timeout_detected_during_test = None
+        _ABORT_REMAINING_TESTS = False
+        _CRASH_DETECTED_DURING_TEST = None
+        _TIMEOUT_DETECTED_DURING_TEST = None
         clear_crash_state()
 
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
@@ -226,7 +224,6 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 def pytest_fixture_setup(fixturedef, request):
     """Automatic fixture setup based on markers."""
     # Reserved for future automatic fixture setup based on markers
-    pass
 
 
 def pytest_collection_modifyitems(config, items):
@@ -318,7 +315,7 @@ def pytest_sessionstart(session):
         signal_name = (
             signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
         )
-        logger.warning(f"Received {signal_name}, performing emergency cleanup...")
+        logger.warning("Received %s, performing emergency cleanup...", signal_name)
 
         # Perform cleanup and wait for it to complete
         _emergency_cleanup()
@@ -352,7 +349,6 @@ def pytest_sessionstart(session):
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
     from ..core.config import get_config as get_framework_config
-    from ..core.types import DeploymentMode as DepMode
     from ..core.context import ApplicationContext
 
     framework_config = get_framework_config()
@@ -510,7 +506,6 @@ def pytest_sessionfinish(session, exitstatus):
 
         # Export test results
         try:
-            from pathlib import Path
             from ..core.config import get_config
 
             config = get_config()
@@ -557,23 +552,23 @@ def pytest_runtest_setup(item):
     # If a timeout was detected in a previous test, skip all remaining tests
     # (timeout means system is in unknown state, similar to crash)
     if (
-        _abort_remaining_tests
-        and _timeout_detected_during_test
-        and _timeout_detected_during_test != item.nodeid
+        _ABORT_REMAINING_TESTS
+        and _TIMEOUT_DETECTED_DURING_TEST
+        and _TIMEOUT_DETECTED_DURING_TEST != item.nodeid
     ):
         pytest.skip(
-            f"Skipping test due to timeout in previous test: {_timeout_detected_during_test}\n"
+            f"Skipping test due to timeout in previous test: {_TIMEOUT_DETECTED_DURING_TEST}\n"
             f"System may be in unknown state after timeout."
         )
 
     # If a crash was detected in a previous test, skip all remaining tests
     if (
-        _abort_remaining_tests
-        and _crash_detected_during_test
-        and _crash_detected_during_test != item.nodeid
+        _ABORT_REMAINING_TESTS
+        and _CRASH_DETECTED_DURING_TEST
+        and _CRASH_DETECTED_DURING_TEST != item.nodeid
     ):
         pytest.skip(
-            f"Skipping test due to server crash in previous test: {_crash_detected_during_test}"
+            f"Skipping test due to server crash in previous test: {_CRASH_DETECTED_DURING_TEST}"
         )
 
     # Handle reporter setup
@@ -622,8 +617,8 @@ def pytest_runtest_makereport(item, call):
         )
 
         if is_timeout:
-            _timeout_detected_during_test = item.nodeid
-            _abort_remaining_tests = True
+            _TIMEOUT_DETECTED_DURING_TEST = item.nodeid
+            _ABORT_REMAINING_TESTS = True
 
             timeout_message = (
                 f"Test timed out and was terminated.\n\n"
@@ -660,8 +655,8 @@ def pytest_runtest_makereport(item, call):
 
         # Mark this test as failed due to crash
         report.outcome = "failed"
-        _crash_detected_during_test = item.nodeid
-        _abort_remaining_tests = True
+        _CRASH_DETECTED_DURING_TEST = item.nodeid
+        _ABORT_REMAINING_TESTS = True
 
         # Build comprehensive crash message
         crash_messages = []
@@ -729,9 +724,9 @@ def pytest_report_teststatus(report, config):
         if report.when == "call":
             if report.passed:
                 return ("passed", "", "")
-            elif report.failed:
+            if report.failed:
                 return ("failed", "", "")
-            elif report.skipped:
+            if report.skipped:
                 return ("skipped", "", "")
         return ("", "", "")
     return None

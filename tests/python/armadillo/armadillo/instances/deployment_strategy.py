@@ -4,7 +4,6 @@ from typing import Protocol, Dict, List
 from ..core.log import Logger
 from ..core.errors import ServerError, ClusterError
 from .server import ArangoServer
-from .server_registry import ServerRegistry
 from .deployment_plan import (
     DeploymentPlan,
     SingleServerDeploymentPlan,

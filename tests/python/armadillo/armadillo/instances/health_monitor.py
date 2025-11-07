@@ -133,18 +133,18 @@ class HealthMonitor:
                 is_healthy=True,
                 response_time=elapsed_time,
             )
-        else:
-            error_msg = (
-                f"{len(unhealthy_servers)}/{len(servers)} servers unhealthy: "
-                f"{', '.join(unhealthy_servers)}"
-            )
-            if health_errors:
-                error_msg += f". Errors: {'; '.join(health_errors[:3])}"
-            return HealthStatus(
-                is_healthy=False,
-                error_message=error_msg,
-                response_time=elapsed_time,
-            )
+
+        error_msg = (
+            f"{len(unhealthy_servers)}/{len(servers)} servers unhealthy: "
+            f"{', '.join(unhealthy_servers)}"
+        )
+        if health_errors:
+            error_msg += f". Errors: {'; '.join(health_errors[:3])}"
+        return HealthStatus(
+            is_healthy=False,
+            error_message=error_msg,
+            response_time=elapsed_time,
+        )
 
     def collect_server_stats(self, server: ArangoServer) -> Optional[ServerStats]:
         """Collect statistics from a single server.
@@ -217,7 +217,7 @@ class HealthMonitor:
 
             if response.status_code == 200:
                 return True, None
-            elif self._is_service_api_disabled_error(response):
+            if self._is_service_api_disabled_error(response):
                 # Service API disabled but server is running - consider it ready
                 self._logger.debug(
                     "Server %s has service API disabled, checking health instead",
@@ -225,8 +225,8 @@ class HealthMonitor:
                 )
                 health = self.check_server_health(server, timeout=actual_timeout)
                 return health.is_healthy, health.error_message
-            else:
-                return False, f"Unexpected status code: {response.status_code}"
+
+            return False, f"Unexpected status code: {response.status_code}"
 
         except requests.RequestException as e:
             return False, f"Request failed: {e}"
@@ -249,12 +249,12 @@ class HealthMonitor:
         if server.role in (ServerRole.COORDINATOR, ServerRole.SINGLE):
             # Coordinators and single servers: check version endpoint
             return endpoint, "/_api/version"
-        elif server.role == ServerRole.AGENT:
+        if server.role == ServerRole.AGENT:
             # Agents: check agency store
             return endpoint, "/_api/agency/read"
-        else:
-            # DBServers: check admin status
-            return endpoint, "/_admin/status"
+
+        # DBServers: check admin status
+        return endpoint, "/_admin/status"
 
     def _is_service_api_disabled_error(self, response: requests.Response) -> bool:
         """Check if response indicates service API is disabled.

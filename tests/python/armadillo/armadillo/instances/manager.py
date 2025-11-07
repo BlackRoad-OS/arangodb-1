@@ -7,7 +7,6 @@ import threading
 from dataclasses import dataclass, field
 
 from ..core.types import (
-    DeploymentMode,
     ServerRole,
     ClusterConfig,
     HealthStatus,
@@ -26,15 +25,10 @@ from ..core.errors import (
     ProcessTimeoutError,
     ArmadilloTimeoutError,
 )
-from ..core.log import get_logger, Logger, log_server_event
+from ..core.log import get_logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.process import stop_supervised_process
 from .server import ArangoServer
-from .deployment_planner import DeploymentPlanner
-from .server_factory import ServerFactory, StandardServerFactory
-from ..core.config import get_config, ConfigProvider
-from ..utils.ports import get_port_manager, PortAllocator
-from ..utils.auth import get_auth_provider, AuthProvider
 from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
 from .server_registry import ServerRegistry
 from .health_monitor import HealthMonitor
@@ -665,10 +659,7 @@ class InstanceManager:
         }
 
         if self.state.deployment_plan:
-            from .deployment_plan import (
-                SingleServerDeploymentPlan,
-                ClusterDeploymentPlan,
-            )
+            from .deployment_plan import SingleServerDeploymentPlan
 
             # Determine deployment mode from plan type
             deployment_mode = (

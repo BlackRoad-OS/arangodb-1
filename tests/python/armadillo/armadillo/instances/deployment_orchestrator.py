@@ -70,14 +70,14 @@ class DeploymentOrchestrator:
         """Create deployment strategy based on plan type."""
         if isinstance(plan, SingleServerDeploymentPlan):
             return SingleServerStrategy(self._logger)
-        elif isinstance(plan, ClusterDeploymentPlan):
+        if isinstance(plan, ClusterDeploymentPlan):
             if not self._cluster_bootstrapper:
                 raise ServerError(
                     "ClusterBootstrapper required for cluster deployments"
                 )
             return ClusterStrategy(self._logger, self._cluster_bootstrapper)
-        else:
-            raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
+
+        raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
 
     def execute_deployment(
         self, plan: DeploymentPlan, timeout: Optional[float] = None

@@ -12,7 +12,7 @@ from _pytest.reports import TestReport
 
 from ..core.log import get_logger
 from ..core.types import ExecutionOutcome
-from ..core.process import has_any_crash, get_crash_state
+from ..core.process import has_any_crash
 from ..results.collector import ResultCollector
 from ..utils.output import write_stdout
 
@@ -99,8 +99,7 @@ class ArmadilloReporter:
             # Create descriptive suite name
             if "statistics" in file_name:
                 return "calculating_statisticsSuite"
-            else:
-                return f"{file_name}Suite"
+            return f"{file_name}Suite"
         return "unknownSuite"
 
     def _get_test_name(self, nodeid: str) -> str:
@@ -119,7 +118,9 @@ class ArmadilloReporter:
 
     def _print_file_header(self, file_path: str):
         """Print a colored header when starting a new test file."""
-        header_msg = f"\n🚀 {self._colorize('Running', Colors.CYAN)} {self._colorize(file_path, Colors.BOLD)}\n"
+        running_text = self._colorize("Running", Colors.CYAN)
+        file_text = self._colorize(file_path, Colors.BOLD)
+        header_msg = f"\n🚀 {running_text} {file_text}\n"
         underline = "─" * min(
             len(f"🚀 Running {file_path}"), 80
         )  # Limit width to 80 chars
@@ -139,7 +140,13 @@ class ArmadilloReporter:
         file_duration_ms = int((current_time - file_start_time) * 1000)
 
         # Print file summary
-        summary_msg = f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {test_count} tests from {self._colorize(file_path, Colors.BOLD)} ran ({file_duration_ms}ms total)\n"
+        timestamp = self._get_timestamp()
+        separator = self._colorize("[------------]", Colors.CYAN)
+        file_text = self._colorize(file_path, Colors.BOLD)
+        summary_msg = (
+            f"{timestamp} {separator} {test_count} tests from {file_text} "
+            f"ran ({file_duration_ms}ms total)\n"
+        )
 
         self._write_to_terminal(summary_msg)
 

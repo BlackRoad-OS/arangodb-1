@@ -3,7 +3,6 @@
 import os
 import tempfile
 import shutil
-import uuid
 from pathlib import Path
 from typing import Union, Optional
 from contextlib import contextmanager
@@ -97,11 +96,11 @@ def safe_remove(path: Path) -> bool:
         if path.is_file():
             path.unlink()
             return True
-        elif path.is_dir():
+        if path.is_dir():
             shutil.rmtree(path)
             return True
-        else:
-            return False
+
+        return False
     except OSError as e:
         logger.warning("Failed to remove %s: %s", path, e)
         return False
@@ -146,8 +145,8 @@ def list_files(
             raise PathError(f"Directory not found: {directory}")
         if recursive:
             return list(directory.rglob(pattern))
-        else:
-            return list(directory.glob(pattern))
+
+        return list(directory.glob(pattern))
     except OSError as e:
         raise FilesystemError(f"Error listing files in {directory}: {e}") from e
 
