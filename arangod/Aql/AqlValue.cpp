@@ -1344,7 +1344,9 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
     memcpy(p + kPrefix, slice.begin(), size);
     _data.supervisedSliceMeta.pointer = p;
     buffer.clear();
-    TRI_ASSERT(_data.supervisedSliceMeta.getLength() == VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
+    TRI_ASSERT(
+        _data.supervisedSliceMeta.getLength() ==
+        VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
   } else if (size < sizeof(AqlValue)) {
     // Use inline value
     initFromSlice(slice, size);
@@ -1369,7 +1371,8 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
         _data.managedSliceMeta.pointer = buffer.steal();
       }
     }
-    TRI_ASSERT(_data.managedSliceMeta.getLength() == VPackSlice(_data.managedSliceMeta.pointer).byteSize());
+    TRI_ASSERT(_data.managedSliceMeta.getLength() ==
+               VPackSlice(_data.managedSliceMeta.pointer).byteSize());
   }
 }
 
@@ -1460,9 +1463,7 @@ size_t AqlValue::memoryUsage() const noexcept {
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
     case VPACK_SUPERVISED_SLICE: {
-      auto const len = static_cast<size_t>(
-          velocypack::Slice(static_cast<size_t>(_data.supervisedSliceMeta.getLength()));  // change to getLength
-      return len + kPrefix;
+      return _data.supervisedSliceMeta.getLength() + kPrefix;
     }
     case RANGE:
       return sizeof(Range);
@@ -1474,8 +1475,9 @@ size_t AqlValue::memoryUsage() const noexcept {
 void AqlValue::initFromSlice(VPackSlice slice, VPackValueLength length,
                              ResourceMonitor* rm) {
   TRI_ASSERT(!slice.isExternal());
-  TRI_ASSERT(length > 0);
-  TRI_ASSERT(slice.byteSize() == length);
+  if (length > 0) {
+    TRI_ASSERT(slice.byteSize() == length);
+  }
   if (length > sizeof(_data.inlineSliceMeta.slice)) {
     if (rm != nullptr) {
       setType(AqlValueType::VPACK_SUPERVISED_SLICE);
