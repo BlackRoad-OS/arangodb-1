@@ -1,6 +1,8 @@
 v3.11.14.2 (XXXX-XX-XX)
 -----------------------
 
+* Updated arangosync to v2.19.19-preview-1.
+
 * Rebuilt included rclone v1.62.2 with go1.24.9 and non-vulnerable
   dependencies.
 
@@ -9,8 +11,6 @@ v3.11.14.2 (XXXX-XX-XX)
 * Update tzdata as of 05.11.2025.
 
 * Upgraded OpenSSL to 3.5.4 and OpenLDAP to 2.6.10.
-
-* Updated arangosync to v2.19.18
 
 * Fix BTS-2139: GeoJSON coordinate validation now properly accepts both 2D and 3D
   coordinates for Point geometries.
