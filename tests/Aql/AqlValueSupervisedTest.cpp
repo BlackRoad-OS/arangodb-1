@@ -567,7 +567,7 @@ TEST(AqlValueSupervisedTest, DefaultDesructorNotDestroy) {
   {
     AqlValue copied = original;
     EXPECT_EQ(copied.memoryUsage(), base);
-  } // Calls default destructor of copied
+  }  // Calls default destructor of copied
 
   EXPECT_EQ(rm.current(), base);
   original.destroy();
@@ -1085,7 +1085,7 @@ TEST(AqlValueSupervisedTest, FuncGetKeyAttributeWithDoCopyTrueReturnsCopy) {
   b.close();
   Slice s = b.slice();
 
-  AqlValue v(s, 0, &rm); // SupervisedSlice
+  AqlValue v(s, 0, &rm);  // SupervisedSlice
   EXPECT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   EXPECT_TRUE(v.slice().isObject());
   size_t base = rm.current();
@@ -1095,21 +1095,24 @@ TEST(AqlValueSupervisedTest, FuncGetKeyAttributeWithDoCopyTrueReturnsCopy) {
   {
     bool mustDestroy = true;
     bool doCopy = false;
-    AqlValue out = v.getKeyAttribute(mustDestroy, doCopy); // Returns SlicePointer
+    AqlValue out =
+        v.getKeyAttribute(mustDestroy, doCopy);  // Returns SlicePointer
     EXPECT_EQ(out.type(), AqlValue::VPACK_SLICE_POINTER);
     EXPECT_FALSE(mustDestroy);
     EXPECT_TRUE(out.slice().isString());
     EXPECT_EQ(out.slice().getStringLength(), s.get("_key").getStringLength());
     EXPECT_TRUE(out.slice().binaryEquals(s.get("_key")));
-    out.destroy(); // Does nothing
-    EXPECT_EQ(rm.current(), base); // No increase memory since out == SlicePointer
+    out.destroy();  // Does nothing
+    EXPECT_EQ(rm.current(),
+              base);  // No increase memory since out == SlicePointer
   }
 
   // ---- doCopy = true: returns a supervised copy; caller must destroy it
   {
     bool mustDestroy = false;
     bool doCopy = true;
-    AqlValue out = v.getKeyAttribute(mustDestroy, doCopy); // Returns SupervisedSlice
+    AqlValue out =
+        v.getKeyAttribute(mustDestroy, doCopy);  // Returns SupervisedSlice
     EXPECT_EQ(out.type(), AqlValue::VPACK_SUPERVISED_SLICE);
     EXPECT_TRUE(mustDestroy);
     EXPECT_TRUE(out.slice().isString());
@@ -1132,13 +1135,13 @@ TEST(AqlValueSupervisedTest, FuncGetKeyAttributeWithDoCopyTrueReturnsCopy) {
   b2.openObject();
   {
     std::string bigVal(12000, 'x');
-    b2.add("x", Value(bigVal)); // no _key
+    b2.add("x", Value(bigVal));  // no _key
   }
   b2.close();
 
   Slice s2 = b2.slice();
   ASSERT_TRUE(s2.isObject());
-  ASSERT_TRUE(s2.get("_key").isNone()); // no _key
+  ASSERT_TRUE(s2.get("_key").isNone());  // no _key
 
   AqlValue v2(s2, 0, &rm);
   EXPECT_TRUE(v2.slice().isObject());
@@ -1153,7 +1156,7 @@ TEST(AqlValueSupervisedTest, FuncGetKeyAttributeWithDoCopyTrueReturnsCopy) {
     EXPECT_FALSE(mustDestroy);
     EXPECT_TRUE(out.slice().isNull());
     EXPECT_EQ(rm.current(), base);
-    out.destroy(); // no operation
+    out.destroy();  // no operation
     EXPECT_EQ(rm.current(), base);
   }
 
@@ -1165,7 +1168,7 @@ TEST(AqlValueSupervisedTest, FuncGetKeyAttributeWithDoCopyTrueReturnsCopy) {
     EXPECT_FALSE(mustDestroy);
     EXPECT_TRUE(out.slice().isNull());
     EXPECT_EQ(rm.current(), base);
-    out.destroy(); // no-op
+    out.destroy();  // no-op
     EXPECT_EQ(rm.current(), base);
   }
 
@@ -1193,7 +1196,7 @@ TEST(AqlValueSupervisedTest, FuncGetIdAttributeWithDoCopyTrueReturnsCopy) {
   b1.close();
   Slice s1 = b1.slice();
 
-  AqlValue v1(s1, 0, &rm); // SupervisedSlice
+  AqlValue v1(s1, 0, &rm);  // SupervisedSlice
   EXPECT_EQ(v1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   size_t base1 = rm.current();
   EXPECT_EQ(base1, v1.memoryUsage());
@@ -1208,9 +1211,9 @@ TEST(AqlValueSupervisedTest, FuncGetIdAttributeWithDoCopyTrueReturnsCopy) {
     EXPECT_TRUE(out.slice().isString());
     EXPECT_TRUE(out.slice().binaryEquals(s1.get("_id")));
 
-    EXPECT_EQ(rm.current(), base1); // No increase memory
-    out.destroy(); // no-op
-    EXPECT_EQ(rm.current(), base1); // No change
+    EXPECT_EQ(rm.current(), base1);  // No increase memory
+    out.destroy();                   // no-op
+    EXPECT_EQ(rm.current(), base1);  // No change
   }
 
   // --- doCopy = true: should produce a copy (supervised)
@@ -1223,8 +1226,9 @@ TEST(AqlValueSupervisedTest, FuncGetIdAttributeWithDoCopyTrueReturnsCopy) {
     EXPECT_TRUE(out.slice().isString());
     EXPECT_TRUE(out.slice().binaryEquals(s1.get("_id")));
 
-    EXPECT_EQ(rm.current(), base1 + out.memoryUsage()); // additional supervised allocation
-    out.destroy(); // releases the supervised copy
+    EXPECT_EQ(rm.current(),
+              base1 + out.memoryUsage());  // additional supervised allocation
+    out.destroy();                         // releases the supervised copy
     EXPECT_EQ(rm.current(), base1);
   }
 
@@ -1241,9 +1245,10 @@ TEST(AqlValueSupervisedTest, FuncGetIdAttributeWithDoCopyTrueReturnsCopy) {
   AqlValue v2(s2, 0, &rm);
   EXPECT_EQ(v2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   size_t base2 = rm.current();
-  EXPECT_EQ(base2, base1 + v2.memoryUsage()); // v1 + v2 accounted
+  EXPECT_EQ(base2, base1 + v2.memoryUsage());  // v1 + v2 accounted
 
-  // --- doCopy = false: no _id -> returns Null, no destruction, no memory change
+  // --- doCopy = false: no _id -> returns Null, no destruction, no memory
+  // change
   {
     bool mustDestroy = true;
     bool doCopy = false;
@@ -1251,9 +1256,9 @@ TEST(AqlValueSupervisedTest, FuncGetIdAttributeWithDoCopyTrueReturnsCopy) {
     EXPECT_FALSE(mustDestroy);
     EXPECT_TRUE(out.slice().isNull());
 
-    EXPECT_EQ(rm.current(), base2); // no increase memory
-    out.destroy(); // no-op
-    EXPECT_EQ(rm.current(), base2); // unchanged
+    EXPECT_EQ(rm.current(), base2);  // no increase memory
+    out.destroy();                   // no-op
+    EXPECT_EQ(rm.current(), base2);  // unchanged
   }
 
   // --- doCopy = true: still no _id -> Null, no destruction, no memory change
@@ -1265,9 +1270,9 @@ TEST(AqlValueSupervisedTest, FuncGetIdAttributeWithDoCopyTrueReturnsCopy) {
     EXPECT_FALSE(mustDestroy);
     EXPECT_TRUE(out.slice().isNull());
 
-    EXPECT_EQ(rm.current(), base2); // no increase memory
-    out.destroy(); // no-op
-    EXPECT_EQ(rm.current(), before); // unchanged
+    EXPECT_EQ(rm.current(), base2);   // no increase memory
+    out.destroy();                    // no-op
+    EXPECT_EQ(rm.current(), before);  // unchanged
   }
 
   v2.destroy();
@@ -1414,10 +1419,10 @@ TEST(AqlValueSupervisedTest, FuncGetWithDoCopyTrueReturnsCopy) {
   b.add("profile", Value(velocypack::ValueType::Object));
   b.add("name", Value(bigName));
   b.add("age", Value(7));
-  b.close(); // profile
+  b.close();  // profile
   b.add("id", Value("plain-string-id"));
-  b.close(); // user
-  b.close(); // root
+  b.close();  // user
+  b.close();  // root
 
   auto s = b.slice();
 
@@ -1438,9 +1443,9 @@ TEST(AqlValueSupervisedTest, FuncGetWithDoCopyTrueReturnsCopy) {
     ASSERT_FALSE(got.isNone());
     ASSERT_TRUE(got.slice().isString());
 
-    EXPECT_EQ(rm.current(), baseMem); // No increase memory
-    got.destroy();  // no-op
-    EXPECT_EQ(rm.current(), baseMem); // No change
+    EXPECT_EQ(rm.current(), baseMem);  // No increase memory
+    got.destroy();                     // no-op
+    EXPECT_EQ(rm.current(), baseMem);  // No change
   }
 
   // ---------------------------
@@ -1510,7 +1515,7 @@ TEST(AqlValueSupervisedTest, FuncGetWithDoCopyTrueReturnsCopy) {
     EXPECT_TRUE(got.slice().isNull());
     // No extra memory charged
     EXPECT_EQ(rm.current(), baseMem);
-    got.destroy(); // safe
+    got.destroy();  // safe
     EXPECT_EQ(rm.current(), baseMem);
   }
 
@@ -1610,7 +1615,8 @@ TEST(AqlValueSupervisedTest, FuncToInt64ReturnsCorrectValue) {
     EXPECT_EQ(rm.current(), 0U);
   }
 
-  // 2) SupervisedSlice for ARRAY (single element numeric-as-string) -> element toInt64
+  // 2) SupervisedSlice for ARRAY (single element numeric-as-string) -> element
+  // toInt64
   {
     auto& global = GlobalResourceMonitor::instance();
     ResourceMonitor rm(global);
@@ -1641,12 +1647,11 @@ TEST(AqlValueSupervisedTest, FuncToInt64ReturnsCorrectValue) {
   // --- 3) INLINE UINT64 that overflows int64_t -> must throw VPackException
   {
     // Create an inline-uint64 value > INT64_MAX
-    uint64_t over = static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1ULL;
+    uint64_t over =
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1ULL;
     AqlValue v(AqlValueHintUInt{over});  // produces VPACK_INLINE_UINT64
 
-    EXPECT_THROW({
-      (void)v.toInt64();
-    }, VPackException);
+    EXPECT_THROW({ (void)v.toInt64(); }, VPackException);
     // No destroy() required for inline values.
   }
 }
@@ -1893,7 +1898,7 @@ TEST(AqlValueSupervisedTest, FuncMemoryUsageReturnsCorrectMemoryUsage) {
   EXPECT_EQ(mem1, static_cast<size_t>(s1.byteSize()) + ptrOverhead());
 
   // Now construct a second, larger supervised slice to check scaling
-  std::string big2(16384, 'Y'); // larger payload
+  std::string big2(16384, 'Y');  // larger payload
   Builder b2;
   b2.openObject();
   b2.add("k", Value(big2));
@@ -1910,7 +1915,7 @@ TEST(AqlValueSupervisedTest, FuncMemoryUsageReturnsCorrectMemoryUsage) {
 
   size_t diffPayload = static_cast<size_t>(s2.byteSize() - s1.byteSize());
   size_t diffMem = mem2 - mem1;
-  EXPECT_EQ(diffMem, diffPayload); // Difference should be the same
+  EXPECT_EQ(diffMem, diffPayload);  // Difference should be the same
 
   v2.destroy();
   EXPECT_EQ(rm.current(), mem1);

@@ -278,14 +278,22 @@ struct AqlValue final {
                   "VPACK_INLINE_INT64 layout is not 16 bytes!");
 
     // VPACK_SUPERVISED_SLICE
-    // SupervisedSlice's pointer points to [ ResourceMonitor* | Actual Data]
-    // So, the pointer itself points to the pointer of ResourceMonitor
-    // Actual data starts at 9th byte!
+    // [Caution 1]
+    //  SupervisedSlice's pointer points to [ ResourceMonitor* | Actual Data ]
+    //  So, the pointer itself points to the pointer of ResourceMonitor
+    //  Actual data starts at 9th byte!
+    // [Caution 2]
+    //  getLength() (this is from the 3rd to 8th byte) returns the size of the
+    //  actual data, whereas memoryUsage() returns the size of the actual data
+    //  PLUS sizeof(ResourceMonitor*)
     struct {
       velocypack::Slice toSlice() const noexcept {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(
             pointer + sizeof(arangodb::ResourceMonitor*)));
       }
+
+      // Only returns the size of the actual data
+      // Doesn't include sizeof(ResourceMonitor*)
       uint64_t getLength() const noexcept {
         if constexpr (basics::isLittleEndian()) {
           return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
@@ -302,14 +310,15 @@ struct AqlValue final {
         }
       }
 
+      // PD points to [ ResourceMonitor* | Actual Data ]
+      // So 'pointer' itself is a pointer to a pointer
       arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
-        // PD points to [ RM* | payload ... ]
-        // So 'pointer' itself is a pointer to a pointer
         return *reinterpret_cast<arangodb::ResourceMonitor* const*>(pointer);
       }
 
+      // Actual data starts at the 9th byte!!!
+      // pointer's first 8 bytes are the pointer of ResourceMonitor
       uint8_t* getPayloadPtr() const noexcept {
-        // payload starts at the 9th byte!!!
         return pointer + sizeof(arangodb::ResourceMonitor*);
       }
       uint64_t lengthOrigin;  // The first 8 bytes looks like

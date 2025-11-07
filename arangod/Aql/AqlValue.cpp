@@ -1473,6 +1473,8 @@ size_t AqlValue::memoryUsage() const noexcept {
       // It should be length, because in case of clone
       // VPACK_MANAGED_SLICE will be created
       return _data.managedStringMeta.getLength();
+    // For SupervisedSlice, memoryUsage() should be the SUM of actual data size
+    // PLUS sizeof(ResourceMonitor*)
     case VPACK_SUPERVISED_SLICE: {
       return static_cast<size_t>(_data.supervisedSliceMeta.getLength()) +
              kPrefix;
