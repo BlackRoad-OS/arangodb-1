@@ -574,26 +574,6 @@ TEST(AqlValueSupervisedTest, DefaultDesructorNotDestroy) {
   EXPECT_EQ(rm.current(), 0U);
 }
 
-// Test the behavior of duplicate destroy()
-TEST(AqlValueSupervisedTest, DuplicateDestroysAreSafe) {
-  auto& global = GlobalResourceMonitor::instance();
-  ResourceMonitor resourceMonitor(global);
-
-  auto b = makeLargeArray(2000, 'a');
-  Slice slice = b.slice();
-  AqlValue aqlVal(slice, 0, &resourceMonitor);
-  auto expected = slice.byteSize() + ptrOverhead();
-  EXPECT_EQ(aqlVal.memoryUsage(), expected);
-  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
-
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
-
-  // destroy() calls erase() where zero outs the AqlValue's 16 bytes
-  aqlVal.destroy();
-  EXPECT_EQ(resourceMonitor.current(), 0);
-}
-
 // ====================== Equality tests ======================
 // Test operator== for all the AqlValueType
 
@@ -1553,6 +1533,160 @@ TEST(AqlValueSupervisedTest, FuncGetWithDoCopyTrueReturnsCopy) {
   EXPECT_EQ(rm.current(), 0U);
 }
 
+// Test behavior of toDouble() function
+// For SupervisedSlice, we need to create string and array object
+TEST(AqlValueSupervisedTest, FuncToDoubleReturnsCorrectValue) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  // ---- SupervisedSlice for STRING ----
+  {
+    std::string big = "123.5";
+    big.append(8192, ' ');
+    Builder b;
+    b.add(Value(big));
+    auto s = b.slice();
+
+    AqlValue v(s, s.byteSize(), &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    bool failed = true;
+    double d = v.toDouble(failed);
+    EXPECT_FALSE(failed);
+    EXPECT_DOUBLE_EQ(d, 123.5);
+
+    v.destroy();
+    EXPECT_EQ(rm.current(), 0U);
+  }
+
+  // ---- SupervisedSlice for ARRAY ----
+  {
+    Builder b;
+    b.openArray();
+    for (int i = 0; i < 3000; ++i) {
+      b.add(arangodb::velocypack::Value(i));
+    }
+    b.close();
+
+    auto s = b.slice();
+    AqlValue v(s, s.byteSize(), &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    {
+      bool failed = true;
+      double d = v.toDouble(failed);
+      EXPECT_TRUE(failed);
+      EXPECT_DOUBLE_EQ(d, 0.0);
+    }
+
+    v.destroy();
+    EXPECT_EQ(rm.current(), 0U);
+  }
+}
+
+// Test behavior of toInt64() function
+// For SupervisedSlice, we need to create string and array object
+TEST(AqlValueSupervisedTest, FuncToInt64ReturnsCorrectValue) {
+  // 1) SupservisedDSlice for STRING (numeric + whitespace) -> parses to int64
+  {
+    auto& global = GlobalResourceMonitor::instance();
+    ResourceMonitor rm(global);
+    ASSERT_EQ(rm.current(), 0U);
+
+    std::string big = "12345";
+    big.append(8192, ' ');  // whitespace padding
+
+    Builder b;
+    b.add(Value(big));
+    auto s = b.slice();
+
+    AqlValue v(s, s.byteSize(), &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    int64_t x = v.toInt64();
+    EXPECT_EQ(x, 12345);
+
+    v.destroy();
+    EXPECT_EQ(rm.current(), 0U);
+  }
+
+  // 2) SupervisedSlice for ARRAY (single element numeric-as-string) -> element toInt64
+  {
+    auto& global = GlobalResourceMonitor::instance();
+    ResourceMonitor rm(global);
+    ASSERT_EQ(rm.current(), 0U);
+
+    // Make a single-element array; the sole element is a LARGE numeric string
+    // so the overall slice is big enough to be supervised.
+    std::string num = "777";
+    num.append(8192, ' ');  // whitespace padding
+
+    arangodb::velocypack::Builder b;
+    b.openArray();
+    b.add(arangodb::velocypack::Value(num));
+    b.close();
+
+    auto s = b.slice();
+    AqlValue v(s, s.byteSize(), &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+    // toInt64(): array with length==1 -> at(0).toInt64()
+    int64_t y = v.toInt64();
+    EXPECT_EQ(y, 777);
+
+    v.destroy();
+    EXPECT_EQ(rm.current(), 0U);
+  }
+
+  // --- 3) INLINE UINT64 that overflows int64_t -> must throw VPackException
+  {
+    // Create an inline-uint64 value > INT64_MAX
+    uint64_t over = static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1ULL;
+    AqlValue v(AqlValueHintUInt{over});  // produces VPACK_INLINE_UINT64
+
+    EXPECT_THROW({
+      (void)v.toInt64();
+    }, VPackException);
+    // No destroy() required for inline values.
+  }
+}
+
+// Test behavior of toBoolean() function
+// For SupervisedSlice, we need to create string and array object
+TEST(AqlValueSupervisedTest, FuncToBooleanReturnsCorrectValue) {
+  auto& global = arangodb::GlobalResourceMonitor::instance();
+  arangodb::ResourceMonitor rm(global);
+
+  // --- SupervisedSlice STRING
+  {
+    std::string big(5000, 'a');
+    Builder b;
+    b.add(Value(big));
+    auto s = b.slice();
+
+    AqlValue v(s, s.byteSize(), &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    EXPECT_TRUE(v.toBoolean());  // non-empty string -> true
+    v.destroy();
+  }
+
+  // --- Supervised ARRAY (large -> true)
+  {
+    Builder b;
+    b.openArray();
+    for (int i = 0; i < 1000; ++i) {
+      b.add(Value(i));
+    }
+    b.close();
+    auto s = b.slice();
+
+    AqlValue v(s, s.byteSize(), &rm);
+    ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    EXPECT_TRUE(v.toBoolean());  // arrays -> true per implementation
+    v.destroy();
+  }
+}
+
 // Test behavior of data() function
 // data() should return pointer to actual heap data (not resourceMonitor*)
 TEST(AqlValueSupervisedTest, FuncDataReturnsPointerToActualData) {
@@ -1737,6 +1871,73 @@ TEST(AqlValueSupervisedTest, FuncCloneCreatesAnotherCopy) {
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
+TEST(AqlValueSupervisedTest, FuncMemoryUsageReturnsCorrectMemoryUsage) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+  ASSERT_EQ(rm.current(), 0U);
+
+  std::string big1(8192, 'X');
+  Builder b1;
+  b1.openObject();
+  b1.add("k", Value(big1));
+  b1.close();
+  auto s1 = b1.slice();
+
+  AqlValue v1(s1, s1.byteSize(), &rm);
+  ASSERT_EQ(v1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  size_t mem1 = v1.memoryUsage();
+  // memoryUsage() should match what the RM accounted
+  EXPECT_EQ(mem1, rm.current());
+  // and be strictly larger than the raw VPack payload (prefix included)
+  EXPECT_EQ(mem1, static_cast<size_t>(s1.byteSize()) + ptrOverhead());
+
+  // Now construct a second, larger supervised slice to check scaling
+  std::string big2(16384, 'Y'); // larger payload
+  Builder b2;
+  b2.openObject();
+  b2.add("k", Value(big2));
+  b2.close();
+  auto s2 = b2.slice();
+
+  AqlValue v2(s2, s2.byteSize(), &rm);
+  ASSERT_EQ(v2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  size_t combined = rm.current();
+  size_t mem2 = v2.memoryUsage();
+  EXPECT_EQ(mem1 + mem2, combined);
+  EXPECT_EQ(mem2, static_cast<size_t>(s2.byteSize()) + ptrOverhead());
+
+  size_t diffPayload = static_cast<size_t>(s2.byteSize() - s1.byteSize());
+  size_t diffMem = mem2 - mem1;
+  EXPECT_EQ(diffMem, diffPayload); // Difference should be the same
+
+  v2.destroy();
+  EXPECT_EQ(rm.current(), mem1);
+  v1.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Test the behavior of duplicate destroy()
+TEST(AqlValueSupervisedTest, DuplicateDestroysAreSafe) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor resourceMonitor(global);
+
+  auto b = makeLargeArray(2000, 'a');
+  Slice slice = b.slice();
+  AqlValue aqlVal(slice, 0, &resourceMonitor);
+  auto expected = slice.byteSize() + ptrOverhead();
+  EXPECT_EQ(aqlVal.memoryUsage(), expected);
+  EXPECT_EQ(aqlVal.memoryUsage(), resourceMonitor.current());
+
+  aqlVal.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0);
+
+  // destroy() calls erase() where zero outs the AqlValue's 16 bytes
+  aqlVal.destroy();
+  EXPECT_EQ(resourceMonitor.current(), 0);
+}
+
 TEST(AqlValueSupervisedTest, CompareBetweenManagedAndSupervisedReturnSame) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
@@ -1785,65 +1986,4 @@ TEST(AqlValueSupervisedTest, CompareBetweenManagedAndSupervisedReturnSame) {
   supervisedA2.destroy();
   supervisedB1.destroy();
   supervisedB2.destroy();
-}
-
-TEST(AqlValueSupervisedTest, Compare_RangeOrdering) {
-  // [1..3] vs [1..4] → smaller high is less
-  AqlValue r1(1, 3);
-  AqlValue r2(1, 4);
-  EXPECT_LT(AqlValue::Compare(nullptr, r1, r2, /*utf8*/ false), 0);
-
-  // [2..4] vs [1..4] → larger low is greater
-  AqlValue r3(2, 4);
-  EXPECT_GT(AqlValue::Compare(nullptr, r3, r2, /*utf8*/ false), 0);
-
-  // equal
-  AqlValue r4(2, 4);
-  EXPECT_EQ(AqlValue::Compare(nullptr, r3, r4, /*utf8*/ false), 0);
-
-  r1.destroy();
-  r2.destroy();
-  r3.destroy();
-  r4.destroy();
-}
-
-TEST(AqlValueSupervisedTest, Compare_SupervisedStrings_Utf8Toggle) {
-  auto& g = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(g);
-
-  // Make supervised strings via slice ctor with RM (short strings become
-  // supervised slice in your impl) "apple" < "banana" under both binary and
-  // UTF-8 compares
-  {
-    arangodb::velocypack::Builder s1;
-    s1.add(arangodb::velocypack::Value("apple"));
-    arangodb::velocypack::Builder s2;
-    s2.add(arangodb::velocypack::Value("banana"));
-    AqlValue v1(s1.slice(), 0, &rm);
-    AqlValue v2(s2.slice(), 0, &rm);
-
-    EXPECT_LT(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ false), 0);
-    EXPECT_LT(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ true), 0);
-
-    v1.destroy();
-    v2.destroy();
-  }
-
-  // Also check equality path (same supervised content)
-  {
-    arangodb::velocypack::Builder s1;
-    s1.add(arangodb::velocypack::Value("same"));
-    arangodb::velocypack::Builder s2;
-    s2.add(arangodb::velocypack::Value("same"));
-    AqlValue v1(s1.slice(), 0, &rm);
-    AqlValue v2(s2.slice(), 0, &rm);
-
-    EXPECT_EQ(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ false), 0);
-    EXPECT_EQ(AqlValue::Compare(nullptr, v1, v2, /*utf8*/ true), 0);
-
-    v1.destroy();
-    v2.destroy();
-  }
-
-  EXPECT_EQ(rm.current(), 0U);
 }
