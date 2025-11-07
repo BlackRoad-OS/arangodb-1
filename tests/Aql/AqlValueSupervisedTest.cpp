@@ -18,7 +18,6 @@ using namespace arangodb::velocypack;
 
 namespace {
 using DocumentData = std::unique_ptr<std::string>;
-
 inline size_t ptrOverhead() { return sizeof(ResourceMonitor*); }
 
 inline Builder makeObj(
@@ -60,6 +59,21 @@ inline DocumentData makeDocDataFromSlice(Slice s) {
   auto const* p = reinterpret_cast<char const*>(s.start());
   return std::make_unique<std::string>(p, p + s.byteSize());
 }
+
+inline void expectEqualBothWays(AqlValue const& a, AqlValue const& b) {
+  std::equal_to<AqlValue> eq;
+  EXPECT_TRUE(eq(a, b));
+  EXPECT_TRUE(a == b);
+  EXPECT_FALSE(a != b);
+}
+
+inline void expectNotEqualBothWays(AqlValue const& a, AqlValue const& b) {
+  std::equal_to<AqlValue> eq;
+  EXPECT_FALSE(eq(a, b));
+  EXPECT_FALSE(a == b);
+  EXPECT_TRUE(a != b);
+}
+
 }  // namespace
 
 // Test for AqlValue(string_view, ResourceMonitor* nullptr) <- short str
@@ -372,32 +386,30 @@ TEST(AqlValueSupervisedTest, CopyCtorAccountsCorrectSize) {
     Builder obj = makeObj({{"k", Value(std::string(300, 'a'))}});
     VPackSlice src = obj.slice();
 
-    std::uint64_t base = rm.current();
-
     AqlValue v(src, /*length*/ 0, &rm);  // Original supervised slice
     ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
     auto* pv = v.slice().start();
-    std::uint64_t afterV = rm.current();
-    EXPECT_EQ(afterV, v.memoryUsage());
+    std::uint64_t base = rm.current();
+    EXPECT_EQ(v.memoryUsage(), base);
 
     // Copy-ctor -> deep copy
     AqlValue cpy = v;
     ASSERT_EQ(cpy.type(), AqlValue::VPACK_SUPERVISED_SLICE);
     auto* pc = cpy.slice().start();
 
-    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));  // Same contents
-    EXPECT_NE(pc, pv) << "Deep copy must have pointers";
-    EXPECT_EQ(rm.current(), afterV * 2) << "Two independent buffers";
+    EXPECT_TRUE(cpy.slice().binaryEquals(v.slice()));  // Same content
+    EXPECT_EQ(pc, pv);  // Shallow copy should return the same pointer
+    EXPECT_EQ(rm.current(),
+              base);  // Shallow copy doesn't create a new copy of the obj
 
-    // Destroy the copy; original is still alive
+    // Destroy the copy -> original AqlValue's heap data is also destroyed
     cpy.destroy();
-    EXPECT_EQ(rm.current(), afterV);
-    EXPECT_TRUE(v.slice().binaryEquals(src));  // The original is alive
-    EXPECT_EQ(v.slice().start(), pv);
+    EXPECT_EQ(rm.current(), 0U);
 
-    // Destroy the original; RM returns to base
-    v.destroy();
-    EXPECT_EQ(rm.current(), base);
+    // We cannot call v.destroy() here because v's pointer is dangling!
+    // Instead call v.erase() to zero out the v's 16 bytes
+    v.erase();
+    EXPECT_EQ(rm.current(), 0U);
   }
 }
 
@@ -422,20 +434,17 @@ TEST(AqlValueSupervisedTest, MoveCtorAccountsCorrectSize) {
   EXPECT_TRUE(b.isString());
   EXPECT_EQ(b.slice().copyString(), sVal);
 
-  // a.destroy(); // This is safe to call
-  // EXPECT_EQ(rm.current(), base); // Should not change
-
   // Chain move constructor
   AqlValue c(std::move(b));
   EXPECT_EQ(rm.current(), base);
   EXPECT_TRUE(c.isString());
   EXPECT_EQ(c.slice().copyString(), sVal);
 
-  // b.destroy(); // This is safe to call
-  // EXPECT_EQ(rm.current(), base); // Should not change
-
   // Destroy the owner; accounting returns to previous level (0 here)
   c.destroy();
+  // Cannot call a.destroy() or b.destroy() because their pointers are dangling
+  a.erase();
+  b.erase();
   EXPECT_EQ(rm.current(), 0U);
 }
 
@@ -539,6 +548,29 @@ TEST(AqlValueSupervisedTest, PointerCtorForSupervisedBufferNotAccount) {
   EXPECT_EQ(resourceMonitor.current(), before);
 }
 
+TEST(AqlValueSupervisedTest, DefaultDesructorNotDestroy) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+
+  auto b = makeLargeArray(2000, 'a');
+  Slice slice = b.slice();
+  AqlValue original(slice, 0, &rm);
+  EXPECT_EQ(original.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  auto expected = slice.byteSize() + ptrOverhead();
+  auto base = rm.current();
+  EXPECT_EQ(original.memoryUsage(), expected);
+  EXPECT_EQ(original.memoryUsage(), base);
+
+  {
+    AqlValue copied = original;
+    EXPECT_EQ(copied.memoryUsage(), base);
+  } // Calls default destructor of copied
+
+  EXPECT_EQ(rm.current(), base);
+  original.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
 // Test the behavior of duplicate destroy()
 TEST(AqlValueSupervisedTest, DuplicateDestroysAreSafe) {
   auto& global = GlobalResourceMonitor::instance();
@@ -559,8 +591,230 @@ TEST(AqlValueSupervisedTest, DuplicateDestroysAreSafe) {
   EXPECT_EQ(resourceMonitor.current(), 0);
 }
 
-// Test the behavior of operator==; ManagedSlice should be equal to
-// SupervisedSlice as long as the heap data are the same
+// ====================== Equality tests ======================
+// Test operator== for all the AqlValueType
+
+// Inline numbers & strings (VPACK_INLINE_* and short strings)
+TEST(AqlValueSupervisedTest, InlineNumbersAndStrings) {
+  {  // int64
+    arangodb::velocypack::Builder b;
+    b.add(Value(42));
+    AqlValue a(b.slice());
+    AqlValue b2(b.slice());
+    expectEqualBothWays(a, b2);
+
+    arangodb::velocypack::Builder c;
+    c.add(Value(43));
+    AqlValue d(c.slice());
+    expectNotEqualBothWays(a, d);
+
+    a.destroy();
+    b2.destroy();
+    d.destroy();
+  }
+
+  {  // uint64 (>= 2^63 to ensure it becomes UINT64 inline)
+    uint64_t u = (1ULL << 63);
+    Builder b;
+    b.add(Value(u));
+    AqlValue a(b.slice());
+    Builder c;
+    c.add(Value(u));
+    AqlValue a2(c.slice());
+    expectEqualBothWays(a, a2);
+
+    Builder d;
+    d.add(Value(u + 1));
+    AqlValue a3(d.slice());
+    expectNotEqualBothWays(a, a3);
+
+    a.destroy();
+    a2.destroy();
+    a3.destroy();
+  }
+
+  {  // double
+    Builder b;
+    b.add(Value(3.25));
+    AqlValue a(b.slice());
+    Builder c;
+    c.add(Value(3.25));
+    AqlValue a2(c.slice());
+    expectEqualBothWays(a, a2);
+
+    Builder d;
+    d.add(Value(4.0));
+    AqlValue a3(d.slice());
+    expectNotEqualBothWays(a, a3);
+
+    a.destroy();
+    a2.destroy();
+    a3.destroy();
+  }
+
+  {  // short string (inline slice)
+    Builder b;
+    b.add(Value("hello"));  // short => inline
+    AqlValue a(b.slice());
+    Builder c;
+    c.add(Value("hello"));
+    AqlValue a2(c.slice());
+    expectEqualBothWays(a, a2);
+
+    Builder d;
+    d.add(Value("world"));
+    AqlValue a3(d.slice());
+    expectNotEqualBothWays(a, a3);
+
+    a.destroy();
+    a2.destroy();
+    a3.destroy();
+  }
+}
+
+// Slice pointer equality: same address == equal; identical bytes at different
+// addresses != (by design)
+TEST(AqlValueSupervisedTest, SlicePointerAddressSemantics) {
+  Builder b;
+  b.openArray();
+  b.add(Value(1));
+  b.close();
+  VPackSlice s = b.slice();
+
+  AqlValue p1(s.begin());  // VPACK_SLICE_POINTER
+  AqlValue p2(s.begin());  // same pointer
+  expectEqualBothWays(p1, p2);
+
+  // Same content, different address -> not equal
+  Builder b2;
+  b2.openArray();
+  b2.add(Value(1));
+  b2.close();
+  VPackSlice s2 = b2.slice();
+  AqlValue p3(s2.begin());
+  expectNotEqualBothWays(p1, p3);
+
+  p1.destroy();
+  p2.destroy();
+  p3.destroy();
+}
+
+// Managed slice vs supervised slice with same bytes => equal
+TEST(AqlValueSupervisedTest, ManagedSliceEqualsSupervisedSliceSameContent) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder b = makeString(300, 'a');  // large => not inline
+  Slice s = b.slice();
+
+  AqlValue managed(s);             // VPACK_MANAGED_SLICE
+  AqlValue supervised(s, 0, &rm);  // VPACK_SUPERVISED_SLICE
+
+  expectEqualBothWays(managed, supervised);
+
+  // Different content => not equal
+  Builder bdiff = makeString(300, 'b');
+  AqlValue supervisedDiff(bdiff.slice(), 0, &rm);
+  expectNotEqualBothWays(managed, supervisedDiff);
+
+  managed.destroy();
+  supervised.destroy();
+  supervisedDiff.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Managed string (DocumentData) vs supervised slice with same bytes => equal
+TEST(AqlValueSupervisedTest, ManagedStringEqualsSupervisedSliceSameContent) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // Build a large string slice, then turn it into DocumentData
+  Builder bs = makeString(300, 'x');
+  Slice ss = bs.slice();
+  auto doc = makeDocDataFromSlice(ss);  // creates std::string with VPack bytes
+
+  AqlValue managedString(doc);      // VPACK_MANAGED_STRING
+  AqlValue supervised(ss, 0, &rm);  // VPACK_SUPERVISED_SLICE
+
+  expectEqualBothWays(managedString, supervised);
+
+  // Change supervised content -> inequality
+  Builder by = makeString(300, 'y');
+  AqlValue supervisedY(by.slice(), 0, &rm);
+  expectNotEqualBothWays(managedString, supervisedY);
+
+  managedString.destroy();
+  supervised.destroy();
+  supervisedY.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Supervised slice self-clone should remain equal (bytewise equal)
+TEST(AqlValueSupervisedTest, SupervisedSliceCloneEquality) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder b = makeLargeArray(512, 'q');  // large array
+  AqlValue a(b.slice(), 0, &rm);         // supervised
+  AqlValue c = a.clone();  // new supervised buffer with same bytes
+
+  expectEqualBothWays(a, c);
+
+  a.destroy();
+  c.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Range semantics: equality uses pointer identity (not low/high values)
+TEST(AqlValueSupervisedTest, RangePointerIdentity) {
+  AqlValue r1(1, 3);
+  AqlValue r2(1, 3);  // same bounds but distinct object -> NOT equal
+  expectNotEqualBothWays(r1, r2);
+
+  // Self equality
+  std::equal_to<AqlValue> eq;
+  EXPECT_TRUE(eq(r1, r1));
+  EXPECT_TRUE(r1 == r1);
+  EXPECT_FALSE(r1 != r1);
+
+  r1.destroy();
+  r2.destroy();
+}
+
+// Managed slice shallow copy (copy-ctor) should compare equal (same pointer)
+TEST(AqlValueSupervisedTest, ManagedSliceShallowCopyEquality) {
+  Builder b = makeString(300, 'm');
+  AqlValue v(b.slice());  // managed
+  AqlValue cpy = v;       // shallow copy points to same heap block
+
+  // Same pointer -> equal
+  expectEqualBothWays(v, cpy);
+
+  // NOTE: destroying either invalidates both; don't access v after destroying
+  // cpy.
+  cpy.destroy();
+}
+
+// Supervised slice deep copy (copy-ctor) should compare equal (bytewise)
+TEST(AqlValueSupervisedTest, SupervisedSliceShallowCopyEquality) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder b = makeString(300, 's');
+  AqlValue v(b.slice(), 0, &rm);  // SupervisedSlice
+  ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  AqlValue cpy = v;  // shallow copy
+
+  expectEqualBothWays(v, cpy);
+
+  cpy.destroy();
+  // original AqlValue v's pointer is dangling; we can't call v.destroy()
+  v.erase();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Comprehensive test for behavior of operator==; ManagedSlice should be equal
+// to SupervisedSlice as long as the heap data are the same
 TEST(AqlValueSupervisedTest, ManagedSliceIsEqualToSupervisedSlice) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
@@ -1047,7 +1301,8 @@ TEST(AqlValueSupervisedTest, FuncToVelocyPackReturnsCorrectBuilder) {
 }
 
 // Test the behavior of materialize() function's default case
-TEST(AqlValueSupervisedTest, FuncMaterializeForSupervisedAqlValueReturnsCopy) {
+TEST(AqlValueSupervisedTest,
+     FuncMaterializeForSupervisedAqlValueReturnsShallowCopy) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
 
@@ -1065,20 +1320,22 @@ TEST(AqlValueSupervisedTest, FuncMaterializeForSupervisedAqlValueReturnsCopy) {
   bool copied1 = true;
   AqlValue mat1 = v1.materialize(nullptr, copied1);
   // materialize()'s default case calls copy ctor of SupervisedSlice
-  // Copy ctor of SupervisedSlice creates a new copy of AqlValue => clone
+  // Copy ctor of SupervisedSlice is defaulted i.e. shallow copy (no new copy of
+  // heap data)
   EXPECT_FALSE(copied1);  // This should be true
 
   EXPECT_TRUE(v1.slice().binaryEquals(obj.slice()));
   EXPECT_TRUE(mat1.slice().binaryEquals(obj.slice()));
 
-  // Because there are two copies of SupervisedSlice AqlValues
-  EXPECT_EQ(rm.current(), 2 * base);
-
-  mat1.destroy();
+  // Because this is shallow copy, no increase memory
   EXPECT_EQ(rm.current(), base);
 
-  v1.destroy();
-  EXPECT_EQ(rm.current(), 0);
+  mat1.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+
+  // We can't call v1.destroy() because v1's dataPointer is dangling
+  v1.erase();
+  EXPECT_EQ(rm.current(), 0U);
 }
 
 // Test if slice() returns slice of actual data
@@ -1237,243 +1494,5 @@ TEST(AqlValueSupervisedTest, Compare_SupervisedStrings_Utf8Toggle) {
     v2.destroy();
   }
 
-  EXPECT_EQ(rm.current(), 0U);
-}
-
-// ====================== Equality tests ======================
-
-namespace {
-inline void expectEqualBothWays(AqlValue const& a, AqlValue const& b) {
-  std::equal_to<AqlValue> eq;
-  EXPECT_TRUE(eq(a, b));
-  EXPECT_TRUE(a == b);
-  EXPECT_FALSE(a != b);
-}
-inline void expectNotEqualBothWays(AqlValue const& a, AqlValue const& b) {
-  std::equal_to<AqlValue> eq;
-  EXPECT_FALSE(eq(a, b));
-  EXPECT_FALSE(a == b);
-  EXPECT_TRUE(a != b);
-}
-}  // namespace
-
-// Inline numbers & strings (VPACK_INLINE_* and short strings)
-TEST(AqlValueSupervisedTest, InlineNumbersAndStrings) {
-  // int64
-  {
-    arangodb::velocypack::Builder b;
-    b.add(Value(42));
-    AqlValue a(b.slice());
-    AqlValue b2(b.slice());
-    expectEqualBothWays(a, b2);
-
-    arangodb::velocypack::Builder c;
-    c.add(Value(43));
-    AqlValue d(c.slice());
-    expectNotEqualBothWays(a, d);
-
-    a.destroy();
-    b2.destroy();
-    d.destroy();
-  }
-
-  // uint64 (>= 2^63 to ensure it becomes UINT64 inline)
-  {
-    uint64_t u = (1ULL << 63);
-    Builder b;
-    b.add(Value(u));
-    AqlValue a(b.slice());
-    Builder c;
-    c.add(Value(u));
-    AqlValue a2(c.slice());
-    expectEqualBothWays(a, a2);
-
-    Builder d;
-    d.add(Value(u + 1));
-    AqlValue a3(d.slice());
-    expectNotEqualBothWays(a, a3);
-
-    a.destroy();
-    a2.destroy();
-    a3.destroy();
-  }
-
-  // double
-  {
-    Builder b;
-    b.add(Value(3.25));
-    AqlValue a(b.slice());
-    Builder c;
-    c.add(Value(3.25));
-    AqlValue a2(c.slice());
-    expectEqualBothWays(a, a2);
-
-    Builder d;
-    d.add(Value(4.0));
-    AqlValue a3(d.slice());
-    expectNotEqualBothWays(a, a3);
-
-    a.destroy();
-    a2.destroy();
-    a3.destroy();
-  }
-
-  // short string (inline slice)
-  {
-    Builder b;
-    b.add(Value("hello"));  // short => inline
-    AqlValue a(b.slice());
-    Builder c;
-    c.add(Value("hello"));
-    AqlValue a2(c.slice());
-    expectEqualBothWays(a, a2);
-
-    Builder d;
-    d.add(Value("world"));
-    AqlValue a3(d.slice());
-    expectNotEqualBothWays(a, a3);
-
-    a.destroy();
-    a2.destroy();
-    a3.destroy();
-  }
-}
-
-// Slice pointer equality: same address == equal; identical bytes at different
-// addresses != (by design)
-TEST(AqlValueSupervisedTest, SlicePointerAddressSemantics) {
-  Builder b;
-  b.openArray();
-  b.add(Value(1));
-  b.close();
-  VPackSlice s = b.slice();
-
-  AqlValue p1(s.begin());  // VPACK_SLICE_POINTER
-  AqlValue p2(s.begin());  // same pointer
-  expectEqualBothWays(p1, p2);
-
-  // Same content, different address -> not equal
-  Builder b2;
-  b2.openArray();
-  b2.add(Value(1));
-  b2.close();
-  VPackSlice s2 = b2.slice();
-  AqlValue p3(s2.begin());
-  expectNotEqualBothWays(p1, p3);
-
-  p1.destroy();
-  p2.destroy();
-  p3.destroy();
-}
-
-// Managed slice vs supervised slice with same bytes => equal
-TEST(AqlValueSupervisedTest, ManagedSliceEqualsSupervisedSliceSameContent) {
-  auto& g = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(g);
-
-  Builder b = makeString(300, 'a');  // large => not inline
-  Slice s = b.slice();
-
-  AqlValue managed(s);             // VPACK_MANAGED_SLICE
-  AqlValue supervised(s, 0, &rm);  // VPACK_SUPERVISED_SLICE
-
-  expectEqualBothWays(managed, supervised);
-
-  // Different content => not equal
-  Builder bdiff = makeString(300, 'b');
-  AqlValue supervisedDiff(bdiff.slice(), 0, &rm);
-  expectNotEqualBothWays(managed, supervisedDiff);
-
-  managed.destroy();
-  supervised.destroy();
-  supervisedDiff.destroy();
-  EXPECT_EQ(rm.current(), 0U);
-}
-
-// Managed string (DocumentData) vs supervised slice with same bytes => equal
-TEST(AqlValueSupervisedTest, ManagedStringEqualsSupervisedSliceSameContent) {
-  auto& g = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(g);
-
-  // Build a large string slice, then turn it into DocumentData
-  Builder bs = makeString(300, 'x');
-  Slice ss = bs.slice();
-  auto doc = makeDocDataFromSlice(ss);  // creates std::string with VPack bytes
-
-  AqlValue managedString(doc);      // VPACK_MANAGED_STRING
-  AqlValue supervised(ss, 0, &rm);  // VPACK_SUPERVISED_SLICE
-
-  expectEqualBothWays(managedString, supervised);
-
-  // Change supervised content -> inequality
-  Builder by = makeString(300, 'y');
-  AqlValue supervisedY(by.slice(), 0, &rm);
-  expectNotEqualBothWays(managedString, supervisedY);
-
-  managedString.destroy();
-  supervised.destroy();
-  supervisedY.destroy();
-  EXPECT_EQ(rm.current(), 0U);
-}
-
-// Supervised slice self-clone should remain equal (bytewise equal)
-TEST(AqlValueSupervisedTest, SupervisedSliceCloneEquality) {
-  auto& g = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(g);
-
-  Builder b = makeLargeArray(512, 'q');  // large array
-  AqlValue a(b.slice(), 0, &rm);         // supervised
-  AqlValue c = a.clone();  // new supervised buffer with same bytes
-
-  expectEqualBothWays(a, c);
-
-  a.destroy();
-  c.destroy();
-  EXPECT_EQ(rm.current(), 0U);
-}
-
-// Range semantics: equality uses pointer identity (not low/high values)
-TEST(AqlValueSupervisedTest, RangePointerIdentity) {
-  AqlValue r1(1, 3);
-  AqlValue r2(1, 3);  // same bounds but distinct object -> NOT equal
-  expectNotEqualBothWays(r1, r2);
-
-  // Self equality
-  std::equal_to<AqlValue> eq;
-  EXPECT_TRUE(eq(r1, r1));
-  EXPECT_TRUE(r1 == r1);
-  EXPECT_FALSE(r1 != r1);
-
-  r1.destroy();
-  r2.destroy();
-}
-
-// Managed slice shallow copy (copy-ctor) should compare equal (same pointer)
-TEST(AqlValueSupervisedTest, ManagedSliceShallowCopyEquality) {
-  Builder b = makeString(300, 'm');
-  AqlValue v(b.slice());  // managed
-  AqlValue cpy = v;       // shallow copy points to same heap block
-
-  // Same pointer -> equal
-  expectEqualBothWays(v, cpy);
-
-  // NOTE: destroying either invalidates both; don't access v after destroying
-  // cpy.
-  cpy.destroy();
-}
-
-// Supervised slice deep copy (copy-ctor) should compare equal (bytewise)
-TEST(AqlValueSupervisedTest, SupervisedSliceDeepCopyEquality) {
-  auto& g = GlobalResourceMonitor::instance();
-  ResourceMonitor rm(g);
-
-  Builder b = makeString(300, 's');
-  AqlValue v(b.slice(), 0, &rm);  // supervised
-  AqlValue cpy = v;               // deep copy -> different buffer, same bytes
-
-  expectEqualBothWays(v, cpy);
-
-  cpy.destroy();
-  v.destroy();
   EXPECT_EQ(rm.current(), 0U);
 }
