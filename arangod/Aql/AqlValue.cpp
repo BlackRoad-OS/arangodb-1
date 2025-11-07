@@ -1344,6 +1344,7 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
     memcpy(p + kPrefix, slice.begin(), size);
     _data.supervisedSliceMeta.pointer = p;
     buffer.clear();
+    TRI_ASSERT(_data.supervisedSliceMeta.getLength() == VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
   } else if (size < sizeof(AqlValue)) {
     // Use inline value
     initFromSlice(slice, size);
@@ -1368,6 +1369,7 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
         _data.managedSliceMeta.pointer = buffer.steal();
       }
     }
+    TRI_ASSERT(_data.managedSliceMeta.getLength() == VPackSlice(_data.managedSliceMeta.pointer).byteSize());
   }
 }
 
@@ -1567,7 +1569,7 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot) {
     lo |= (static_cast<uint64_t>(mot) << 48);
     lo |= (static_cast<uint64_t>(at) << 56);
   }
-
+  // [ 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 ]
   setType(at);
 
   TRI_ASSERT(type() == VPACK_SUPERVISED_SLICE);
