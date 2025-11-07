@@ -1,10 +1,9 @@
 3.12.6.1 (2025-XX-XX)
 ---------------------
 
-* Rebuilt included rclone v1.65.2 with go1.24.9 and non-vulnerable
-  dependencies.
+* Updated ArangoDB Starter to v0.19.14.
 
-* Updated ArangoDB Starter to v0.19.14-preview-1.
+* Rebuilt included rclone v1.65.2 with go1.24.9 and non-vulnerable dependencies.
 
 * Update tzdata as of 05.11.2025.
 
