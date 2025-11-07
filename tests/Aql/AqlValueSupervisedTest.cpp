@@ -4,6 +4,9 @@
 #include "Basics/GlobalResourceMonitor.h"
 #include "Basics/ResourceUsage.h"
 #include "Basics/SupervisedBuffer.h"
+#include "Mocks/Servers.h"
+#include "Transaction/OperationOrigin.h"
+#include "Transaction/StandaloneContext.h"
 
 #include <velocypack/Builder.h>
 #include <velocypack/Value.h>
@@ -73,8 +76,13 @@ inline void expectNotEqualBothWays(AqlValue const& a, AqlValue const& b) {
   EXPECT_FALSE(a == b);
   EXPECT_TRUE(a != b);
 }
-
 }  // namespace
+
+struct SupervisedAqlValueTest : ::testing::Test {
+  tests::mocks::MockAqlServer server;
+  TRI_vocbase_t& vocbase;
+  SupervisedAqlValueTest() : server(), vocbase(server.getSystemDatabase()) {}
+};
 
 // Test for AqlValue(string_view, ResourceMonitor* nullptr) <- short str
 TEST(AqlValueSupervisedTest, ShortStringViewCtorAccountsCorrectSize) {
@@ -1082,6 +1090,111 @@ TEST(AqlValueSupervisedTest, FuncAtWithDoCopyTrueReturnsCopy) {
 
   a.destroy();
   EXPECT_EQ(rm.current(), 0);
+}
+
+TEST(AqlValueSupervisedTest, FuncGetKeyAttributeWithDoCopyTrueReturnsCopy) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  // =====================================
+  // Case 1: Supervised slice WITH a _key
+  // =====================================
+  Builder b;
+  b.openObject();
+  {
+    std::string bigKey(10000, 'k');
+    b.add("_key", Value(bigKey));
+  }
+  b.close();
+  Slice s = b.slice();
+
+  AqlValue v(s, 0, &rm); // SupervisedSlice
+  EXPECT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_TRUE(v.slice().isObject());
+  size_t base = rm.current();
+  EXPECT_EQ(v.memoryUsage(), base);
+
+  // ---- doCopy = false: returns a reference (slice-pointer)
+  {
+    bool mustDestroy = true;
+    bool doCopy = false;
+    AqlValue out = v.getKeyAttribute(mustDestroy, doCopy); // Returns SlicePointer
+    EXPECT_EQ(out.type(), AqlValue::VPACK_SLICE_POINTER);
+    EXPECT_FALSE(mustDestroy);
+    EXPECT_TRUE(out.slice().isString());
+    EXPECT_EQ(out.slice().getStringLength(), s.get("_key").getStringLength());
+    EXPECT_TRUE(out.slice().binaryEquals(s.get("_key")));
+    out.destroy(); // Does nothing
+    EXPECT_EQ(rm.current(), base); // No increase memory since out == SlicePointer
+  }
+
+  // ---- doCopy = true: returns a supervised copy; caller must destroy it
+  {
+    bool mustDestroy = false;
+    bool doCopy = true;
+    AqlValue out = v.getKeyAttribute(mustDestroy, doCopy); // Returns SupervisedSlice
+    EXPECT_EQ(out.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    EXPECT_TRUE(mustDestroy);
+    EXPECT_TRUE(out.slice().isString());
+    EXPECT_EQ(out.slice().getStringLength(), s.get("_key").getStringLength());
+    EXPECT_TRUE(out.slice().binaryEquals(s.get("_key")));
+
+    // Increase memory since we create a new copy of heap obj
+    EXPECT_EQ(rm.current(), base + out.memoryUsage());
+    out.destroy();
+    EXPECT_EQ(rm.current(), base);
+  }
+
+  v.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+
+
+  // ======================================
+  // Case 2: Supervised slice WITHOUT _key
+  // ======================================
+  Builder b2;
+  b2.openObject();
+  {
+    std::string bigVal(12000, 'x');
+    b2.add("x", Value(bigVal)); // no _key
+  }
+  b2.close();
+
+  Slice s2 = b2.slice();
+  ASSERT_TRUE(s2.isObject());
+  ASSERT_TRUE(s2.get("_key").isNone()); // no _key
+
+  AqlValue v2(s2, 0, &rm);
+  EXPECT_TRUE(v2.slice().isObject());
+  base = rm.current();
+  EXPECT_EQ(v2.memoryUsage(), base);
+
+  // ---- doCopy = false: should return Null (no key)
+  {
+    bool mustDestroy = true;
+    bool doCopy = false;
+    AqlValue out = v2.getKeyAttribute(mustDestroy, doCopy);
+    EXPECT_FALSE(mustDestroy);
+    EXPECT_TRUE(out.slice().isNull());
+    EXPECT_EQ(rm.current(), base);
+    out.destroy(); // no operation
+    EXPECT_EQ(rm.current(), base);
+  }
+
+  // ---- doCopy = true: still no key -> Null
+  {
+    bool mustDestroy = true;
+    bool doCopy = true;
+    AqlValue out = v2.getKeyAttribute(mustDestroy, doCopy);
+    EXPECT_FALSE(mustDestroy);
+    EXPECT_TRUE(out.slice().isNull());
+    EXPECT_EQ(rm.current(), base);
+    out.destroy(); // no-op
+    EXPECT_EQ(rm.current(), base);
+  }
+
+  v2.destroy();
+  EXPECT_EQ(rm.current(), 0U);
 }
 
 TEST(AqlValueSupervisedTest, FuncGetFromAndToAttributesReturnCopy) {

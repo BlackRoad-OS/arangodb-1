@@ -185,6 +185,7 @@ struct AqlValue final {
   /// | AT | XX | XX | XX | XX | XX | XX | XX | PD | PD | PD | PD | PD | PD | PD | PD | VPACK_SLICE_POINTER
   /// | AT | MO | ML | ML | ML | ML | ML | ML | PD | PD | PD | PD | PD | PD | PD | PD | VPACK_MANAGED_SLICE
   /// | AT | XX | XX | XX | XX | XX | XX | XX | PD | PD | PD | PD | PD | PD | PD | PD | VPACK_MANAGED_STRING
+  /// | AT | MO | ML | ML | ML | ML | ML | ML | PD | PD | PD | PD | PD | PD | PD | PD | VPACK_SUPERVISED_SLICE
   /// | AT | XX | XX | XX | XX | XX | XX | XX | PD | PD | PD | PD | PD | PD | PD | PD | RANGE
   /// | AT | ST | SD | SD | SD | SD | SD | SD | SD | SD | SD | SD | SD | SD | SD | SD | VPACK_INLINE
   /// | AT | XX | XX | XX | XX | XX | XX | ST | SD | SD | SD | SD | SD | SD | SD | SD | VPACK_64BIT_INLINE_(INT/UINT/DOUBLE)
@@ -277,6 +278,9 @@ struct AqlValue final {
                   "VPACK_INLINE_INT64 layout is not 16 bytes!");
 
     // VPACK_SUPERVISED_SLICE
+    // SupervisedSlice's pointer points to [ ResourceMonitor* | Actual Data]
+    // So, the pointer itself points to the pointer of ResourceMonitor
+    // Actual data starts at 9th byte!
     struct {
       velocypack::Slice toSlice() const noexcept {
         return velocypack::Slice(reinterpret_cast<uint8_t const*>(
@@ -305,12 +309,11 @@ struct AqlValue final {
       }
 
       uint8_t* getPayloadPtr() const noexcept {
-        // payload starts at the 9th byte
+        // payload starts at the 9th byte!!!
         return pointer + sizeof(arangodb::ResourceMonitor*);
       }
-      uint64_t lengthOrigin;  // First byte: AqlValueType
-                              // Second byte: Memory Origin
-                              // The following 6 bytes: padding
+      uint64_t lengthOrigin;  // The first 8 bytes looks like
+                              // [ AT | MO | ML | ML | ML | ML | ML ]
       uint8_t* pointer;
     } supervisedSliceMeta;
     static_assert(sizeof(supervisedSliceMeta) == 16,
