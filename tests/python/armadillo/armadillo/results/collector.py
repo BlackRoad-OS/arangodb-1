@@ -207,8 +207,8 @@ class ResultCollector:
         total_duration = end_time - self.start_time
 
         # Finalize each suite's timing and summary
-        for file_path, suite in self.test_suites.items():
-            self._finalize_suite(suite, file_path)
+        for suite in self.test_suites.values():
+            self._finalize_suite(suite)
 
         # Calculate overall summary
         summary = self._calculate_global_summary()
@@ -264,7 +264,7 @@ class ResultCollector:
         )
         return results
 
-    def _finalize_suite(self, suite: TestSuite, file_path: str) -> None:
+    def _finalize_suite(self, suite: TestSuite) -> None:
         """Finalize a suite's timing and summary statistics."""
         # Calculate suite summary
         suite.summary = {

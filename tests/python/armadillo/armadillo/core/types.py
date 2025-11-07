@@ -66,7 +66,9 @@ class ServerHealthInfo(BaseModel):
 
     def has_issues(self) -> bool:
         """Check if there are any server health issues."""
-        return bool(self.crashes) or any(code != 0 for code in self.exit_codes.values())
+        return bool(self.crashes) or any(
+            code != 0 for code in self.exit_codes.values()  # pylint: disable=no-member
+        )
 
     def get_failure_summary(self) -> List[str]:
         """Get human-readable summary of server health issues."""

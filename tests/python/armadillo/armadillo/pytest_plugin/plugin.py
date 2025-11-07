@@ -221,12 +221,12 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     _plugin.pytest_unconfigure(config)
 
 
-def pytest_fixture_setup(fixturedef, request):
+def pytest_fixture_setup(_fixturedef, _request):
     """Automatic fixture setup based on markers."""
     # Reserved for future automatic fixture setup based on markers
 
 
-def pytest_collection_modifyitems(config, items):
+def pytest_collection_modifyitems(_session, _config, items):
     """Modify test collection based on markers and configuration."""
     # Validate package structure - all tests must be in a package (directory with conftest.py)
     for item in items:
@@ -310,7 +310,7 @@ def pytest_sessionstart(session):
     atexit.register(_emergency_cleanup)
 
     # Install signal handlers for Ctrl+C and SIGTERM to ensure cleanup
-    def _signal_handler(signum, frame):
+    def _signal_handler(signum, _frame):
         """Handle interrupt signals by performing emergency cleanup."""
         signal_name = (
             signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
@@ -395,7 +395,7 @@ def _is_compact_mode_enabled():
     return framework_config.compact_mode
 
 
-def _cleanup_temp_dir_if_needed(session, exitstatus):
+def _cleanup_temp_dir_if_needed(_session, exitstatus):
     """Clean up session work directory based on test results and configuration.
 
     Cleanup logic:
@@ -541,8 +541,6 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_runtest_setup(item):
     """Handle test setup - check if we should skip due to previous crash, timeout, or deployment failure."""
-    global _abort_remaining_tests, _crash_detected_during_test, _timeout_detected_during_test
-
     # If deployment failed, skip all tests
     if _plugin._deployment_failed:
         pytest.skip(
@@ -584,7 +582,7 @@ def pytest_runtest_call(item):
         reporter.pytest_runtest_call(item)
 
 
-def pytest_runtest_teardown(item, nextitem):
+def pytest_runtest_teardown(item, _nextitem):
     """Handle test teardown start."""
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
@@ -594,7 +592,7 @@ def pytest_runtest_teardown(item, nextitem):
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_runtest_makereport(item, call):
     """Hook to modify test reports and detect crashes/timeouts."""
-    global _abort_remaining_tests, _crash_detected_during_test, _timeout_detected_during_test
+    global _ABORT_REMAINING_TESTS, _CRASH_DETECTED_DURING_TEST, _TIMEOUT_DETECTED_DURING_TEST
 
     # Let pytest create the report first
     outcome = yield
@@ -718,7 +716,7 @@ def pytest_runtest_logstart(nodeid, location):
     return None
 
 
-def pytest_report_teststatus(report, config):
+def pytest_report_teststatus(report, _config):
     """Override test status reporting to suppress pytest's progress dots and status."""
     if not _is_compact_mode_enabled():
         if report.when == "call":
@@ -732,7 +730,7 @@ def pytest_report_teststatus(report, config):
     return None
 
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
+def pytest_terminal_summary(_terminalreporter, _exitstatus, _config):
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()

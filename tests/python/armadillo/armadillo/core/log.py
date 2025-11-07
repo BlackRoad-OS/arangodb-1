@@ -148,8 +148,6 @@ def add_file_logging(log_file: Path, level: Union[int, str] = logging.DEBUG) -> 
         log_file: Path to the log file
         level: Logging level for the file handler (default: DEBUG for detailed logs)
     """
-    from .log_formatters import StructuredFormatter
-
     # Ensure parent directory exists
     log_file = Path(log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)

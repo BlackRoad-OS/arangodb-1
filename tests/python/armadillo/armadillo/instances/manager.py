@@ -29,7 +29,7 @@ from ..core.log import get_logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.process import stop_supervised_process
 from .server import ArangoServer
-from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
+from .deployment_plan import DeploymentPlan
 from .server_registry import ServerRegistry
 from .health_monitor import HealthMonitor
 from .cluster_bootstrapper import ClusterBootstrapper

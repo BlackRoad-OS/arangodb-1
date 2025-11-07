@@ -139,6 +139,8 @@ class ApplicationContext:
             process_supervisor = ProcessSupervisorImpl()
 
         # Import server-related dependencies here to avoid circular imports
+        # (core.context -> instances.server_factory -> instances.server -> core.context)
+        # This lazy import pattern breaks the cycle at runtime.
         from ..instances.server_factory import StandardServerFactory
         from ..instances.deployment_planner import DeploymentPlanner
 
@@ -166,8 +168,8 @@ class ApplicationContext:
             deployment_planner=deployment_planner,
         )
 
-        # Set circular reference
-        server_factory._app_context = ctx
+        # Set circular reference using public method
+        server_factory.set_app_context(ctx)
 
         return ctx
 
@@ -202,7 +204,7 @@ class ApplicationContext:
             >>> test_config = ArmadilloConfig(temp_dir=tmp_path)
             >>> ctx = ApplicationContext.for_testing(config=test_config)
         """
-        from .types import ArmadilloConfig, DeploymentMode
+        from .types import DeploymentMode
 
         # Create minimal test configuration if not provided
         if config is None:

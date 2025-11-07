@@ -161,9 +161,12 @@ def create_test_environment(test_name: str, **kwargs) -> IsolatedTestContext:
     return create_test_context(test_name, **kwargs)
 
 
-def cleanup_test_environment(test_name: str) -> None:
-    """Clean up a specific test environment."""
-    # Individual context cleanup is handled by the context itself
+def cleanup_test_environment() -> None:
+    """Clean up the test environment.
+
+    Note: Individual context cleanup is handled by the context itself.
+    This function just resets the global test environment state.
+    """
     reset_test_environment()
 
 

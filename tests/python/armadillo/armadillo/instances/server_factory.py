@@ -32,6 +32,14 @@ class StandardServerFactory:
         """
         self._app_context = app_context
 
+    def set_app_context(self, app_context: ApplicationContext) -> None:
+        """Set the application context (used for circular dependency resolution).
+
+        Args:
+            app_context: Application context containing all dependencies
+        """
+        self._app_context = app_context
+
     def create_server_instances(
         self, servers_config: list[ServerConfig]
     ) -> Dict[ServerId, ArangoServer]:
