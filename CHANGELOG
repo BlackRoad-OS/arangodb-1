@@ -1,6 +1,8 @@
 devel
 -----
 
+* Fix Swagger UI missing generated data.
+
 * Updated ArangoDB Starter to v0.19.14.
 
 * Ignore flag --cluster.upgrade on DBservers, since it only concerns coordinators.
