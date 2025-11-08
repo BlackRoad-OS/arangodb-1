@@ -24,27 +24,6 @@ namespace {
 using DocumentData = std::unique_ptr<std::string>;
 inline size_t ptrOverhead() { return sizeof(ResourceMonitor*); }
 
-inline Builder makeObj(
-    std::initializer_list<std::pair<std::string, Value>> fields) {
-  Builder b;
-  b.openObject();
-  for (auto const& [k, v] : fields) {
-    b.add(k, v);
-  }
-  b.close();
-  return b;
-}
-
-inline Builder makeArray(std::initializer_list<Value> vals) {
-  Builder b;
-  b.openArray();
-  for (auto const& v : vals) {
-    b.add(v);
-  }
-  b.close();
-  return b;
-}
-
 inline Builder makeLargeArray(size_t n = 2048, char bytesToFill = 'a') {
   Builder b;
   b.openArray();
@@ -381,13 +360,16 @@ TEST(AqlValueSupervisedTest, CopyCtorAccountsCorrectSize) {
     cpy.destroy();
   }
 
-  // 6) SupervisedSlice: copy ctor deep copy
+  // 6) SupervisedSlice: copy ctor shallow copy
   {
     auto& g = GlobalResourceMonitor::instance();
     ResourceMonitor rm(g);
 
-    Builder obj = makeObj({{"k", Value(std::string(300, 'a'))}});
-    VPackSlice src = obj.slice();
+    Builder b;
+    b.openObject();
+    b.add("k", Value(std::string(300, 'a')));
+    b.close();
+    VPackSlice src = b.slice();
 
     AqlValue v(src, /*length*/ 0, &rm);  // Original supervised slice
     ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
@@ -1031,11 +1013,12 @@ TEST(AqlValueSupervisedTest, FuncAtWithDoCopyTrueReturnsCopy) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
 
-  Builder arr = makeArray({
-      Value(std::string(2048, 'a')),
-      Value(std::string(2048, 'b')),
-      Value(std::string(2048, 'c')),
-  });
+  Builder arr;
+  arr.openArray();
+  arr.add(Value(std::string(2048, 'a')));
+  arr.add(Value(std::string(2048, 'b')));
+  arr.add(Value(std::string(2048, 'c')));
+  arr.close();
 
   AqlValue a(arr.slice(), 0, &rm);
   auto originalSize = arr.slice().byteSize() + ptrOverhead();
