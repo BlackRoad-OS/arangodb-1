@@ -221,12 +221,14 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     _plugin.pytest_unconfigure(config)
 
 
-def pytest_fixture_setup(_fixturedef, _request):
+def pytest_fixture_setup(fixturedef, request):  # pylint: disable=unused-argument
     """Automatic fixture setup based on markers."""
     # Reserved for future automatic fixture setup based on markers
 
 
-def pytest_collection_modifyitems(_session, _config, items):
+def pytest_collection_modifyitems(
+    session, config, items
+):  # pylint: disable=unused-argument
     """Modify test collection based on markers and configuration."""
     # Validate package structure - all tests must be in a package (directory with conftest.py)
     for item in items:
@@ -581,7 +583,7 @@ def pytest_runtest_call(item):
         reporter.pytest_runtest_call(item)
 
 
-def pytest_runtest_teardown(item, _nextitem):
+def pytest_runtest_teardown(item, nextitem):  # pylint: disable=unused-argument
     """Handle test teardown start."""
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
@@ -715,7 +717,7 @@ def pytest_runtest_logstart(nodeid, location):
     return None
 
 
-def pytest_report_teststatus(report, _config):
+def pytest_report_teststatus(report, config):  # pylint: disable=unused-argument
     """Override test status reporting to suppress pytest's progress dots and status."""
     if not _is_compact_mode_enabled():
         if report.when == "call":
@@ -729,7 +731,9 @@ def pytest_report_teststatus(report, _config):
     return None
 
 
-def pytest_terminal_summary(_terminalreporter, _exitstatus, _config):
+def pytest_terminal_summary(
+    terminalreporter, exitstatus, config
+):  # pylint: disable=unused-argument
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
     if not _is_compact_mode_enabled():
         reporter = get_armadillo_reporter()
