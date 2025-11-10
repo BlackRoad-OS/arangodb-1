@@ -488,24 +488,3 @@ class ArmadilloReporter:
 
         self._print_session_summary()
         self.summary_printed = True
-
-
-# Global reporter instance
-_reporter: Optional[ArmadilloReporter] = None
-
-
-def get_armadillo_reporter(
-    result_collector: Optional[ResultCollector] = None,
-) -> ArmadilloReporter:
-    """Get or create the global Armadillo reporter.
-
-    Args:
-        result_collector: Optional ResultCollector to use (only used on first call)
-
-    Returns:
-        Global ArmadilloReporter instance
-    """
-    global _reporter
-    if _reporter is None:
-        _reporter = ArmadilloReporter(result_collector=result_collector)
-    return _reporter

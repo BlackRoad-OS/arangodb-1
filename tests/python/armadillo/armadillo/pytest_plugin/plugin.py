@@ -33,7 +33,7 @@ from ..core.value_objects import DeploymentId
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
 from ..core.errors import ResultProcessingError
 from ..instances.manager import InstanceManager
-from .reporter import get_armadillo_reporter
+from .reporter import ArmadilloReporter
 from ..utils.crypto import random_id
 
 logger = get_logger(__name__)
@@ -58,6 +58,7 @@ class ArmadilloPlugin:
         self._session_app_context: Optional[ApplicationContext] = (
             None  # Shared context for all package deployments
         )
+        self.reporter: Optional["ArmadilloReporter"] = None  # Created in sessionstart
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
@@ -383,13 +384,13 @@ def pytest_sessionstart(session):
     logger.info("Framework debug logging enabled: %s", framework_log_file)
 
     if not framework_config.compact_mode:
-        # Pass result collector from context to reporter
-        reporter = get_armadillo_reporter(
+        # Create reporter with result collector from context
+        _plugin.reporter = ArmadilloReporter(
             result_collector=_plugin._session_app_context.result_collector
         )
-        reporter.pytest_sessionstart(session)
+        _plugin.reporter.pytest_sessionstart(session)
         # Set the actual test start time AFTER server deployment is complete
-        reporter.session_start_time = time.time()
+        _plugin.reporter.session_start_time = time.time()
 
 
 def _is_compact_mode_enabled():
@@ -500,14 +501,13 @@ def pytest_sessionfinish(session, exitstatus):
         session.exitstatus = 1
 
     # Capture the test end time BEFORE server shutdown begins
-    if not _is_compact_mode_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.session_finish_time = time.time()
+    if not _is_compact_mode_enabled() and _plugin.reporter:
+        _plugin.reporter.session_finish_time = time.time()
         # Set deployment failed flag on reporter so it shows FAILED status
-        reporter.deployment_failed = _plugin._deployment_failed
+        _plugin.reporter.deployment_failed = _plugin._deployment_failed
         # Print the final summary immediately, before any server cleanup
-        reporter.print_final_summary()
-        reporter.pytest_sessionfinish(session, exitstatus)
+        _plugin.reporter.print_final_summary()
+        _plugin.reporter.pytest_sessionfinish(session, exitstatus)
 
         # Export test results
         try:
@@ -516,7 +516,7 @@ def pytest_sessionfinish(session, exitstatus):
 
             # Export results (JSON by default, JUnit is handled by pytest's --junitxml)
             # Include server health info for post-test validation reporting
-            reporter.export_results(
+            _plugin.reporter.export_results(
                 output_dir, formats=["json"], server_health=_plugin._server_health
             )
         except (ResultProcessingError, OSError, IOError) as e:
@@ -571,23 +571,20 @@ def pytest_runtest_setup(item):
         )
 
     # Handle reporter setup
-    if not _is_compact_mode_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_setup(item)
+    if not _is_compact_mode_enabled() and _plugin.reporter:
+        _plugin.reporter.pytest_runtest_setup(item)
 
 
 def pytest_runtest_call(item):
     """Handle test call start."""
-    if not _is_compact_mode_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_call(item)
+    if not _is_compact_mode_enabled() and _plugin.reporter:
+        _plugin.reporter.pytest_runtest_call(item)
 
 
 def pytest_runtest_teardown(item, nextitem):  # pylint: disable=unused-argument
     """Handle test teardown start."""
-    if not _is_compact_mode_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_teardown(item)
+    if not _is_compact_mode_enabled() and _plugin.reporter:
+        _plugin.reporter.pytest_runtest_teardown(item)
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
@@ -638,9 +635,8 @@ def pytest_runtest_makereport(item, call):
             )
 
             # Record as timeout in the result collector
-            if not _is_compact_mode_enabled():
-                reporter = get_armadillo_reporter()
-                reporter.result_collector.record_test_result(
+            if not _is_compact_mode_enabled() and _plugin.reporter:
+                _plugin.reporter.result_collector.record_test_result(
                     nodeid=item.nodeid,
                     outcome=ExecutionOutcome.TIMEOUT,
                     duration=getattr(report, "duration", 0.0),
@@ -687,10 +683,9 @@ def pytest_runtest_makereport(item, call):
         )
 
         # Record the crash in the result collector
-        if not _is_compact_mode_enabled():
-            reporter = get_armadillo_reporter()
+        if not _is_compact_mode_enabled() and _plugin.reporter:
             # Force record this as a crashed test
-            reporter.result_collector.record_test_result(
+            _plugin.reporter.result_collector.record_test_result(
                 nodeid=item.nodeid,
                 outcome=ExecutionOutcome.CRASHED,
                 duration=getattr(report, "duration", 0.0),
@@ -701,17 +696,15 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_runtest_logreport(report):
     """Handle test report."""
-    if not _is_compact_mode_enabled():
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_logreport(report)
+    if not _is_compact_mode_enabled() and _plugin.reporter:
+        _plugin.reporter.pytest_runtest_logreport(report)
 
 
 def pytest_runtest_logstart(nodeid, location):
     """Override pytest's default test file output to suppress filename printing."""
-    if not _is_compact_mode_enabled():
+    if not _is_compact_mode_enabled() and _plugin.reporter:
         # Call our reporter but suppress pytest's default filename output
-        reporter = get_armadillo_reporter()
-        reporter.pytest_runtest_logstart(nodeid, location)
+        _plugin.reporter.pytest_runtest_logstart(nodeid, location)
         # Return empty string to suppress pytest's default output
         return ""
     return None
@@ -735,11 +728,10 @@ def pytest_terminal_summary(
     terminalreporter, exitstatus, config
 ):  # pylint: disable=unused-argument
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
-    if not _is_compact_mode_enabled():
-        reporter = get_armadillo_reporter()
-        if not reporter.summary_printed:
-            reporter.print_final_summary()
-            reporter.summary_printed = True
+    if not _is_compact_mode_enabled() and _plugin.reporter:
+        if not _plugin.reporter.summary_printed:
+            _plugin.reporter.print_final_summary()
+            _plugin.reporter.summary_printed = True
 
 
 def _cleanup_all_deployments(emergency=True):
