@@ -1490,7 +1490,9 @@ AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function TO_ARRAY
 AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
                             VPackFunctionParametersView parameters) {
-  LOG_DEVEL << "ToArray: " << typeid(*ctx).name();
+  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(ctx);
+  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+
   AqlValue const& value =
       aql::functions::extractFunctionParameterValue(parameters, 0);
 
@@ -1522,7 +1524,7 @@ AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
     }
   }
   builder->close();
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 }  // namespace arangodb::aql
