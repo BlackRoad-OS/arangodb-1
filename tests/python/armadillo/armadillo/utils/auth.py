@@ -48,16 +48,3 @@ class AuthProvider:
         except Exception as e:
             # Defensive: JWT library could fail in various ways, wrap all errors
             raise JWTError(f"Failed to issue JWT token: {e}") from e
-
-
-_auth_provider: Optional[AuthProvider] = None
-
-
-def get_auth_provider(
-    secret: Optional[str] = None, algorithm: str = "HS256"
-) -> AuthProvider:
-    """Get or create global JWT auth provider."""
-    global _auth_provider
-    if _auth_provider is None:
-        _auth_provider = AuthProvider(secret, algorithm)
-    return _auth_provider

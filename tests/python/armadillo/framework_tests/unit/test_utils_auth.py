@@ -1,9 +1,10 @@
 """Tests for authentication utilities."""
 
-import pytest
 from unittest.mock import patch
 
-from armadillo.utils.auth import AuthProvider, get_auth_provider
+import pytest
+
+from armadillo.utils.auth import AuthProvider
 from armadillo.core.errors import JWTError
 
 
@@ -93,34 +94,3 @@ class TestAuthProvider:
 
         with pytest.raises(JWTError, match="Failed to issue JWT token"):
             provider.get_auth_headers()
-
-
-class TestGlobalAuthProvider:
-    """Test global auth provider functions."""
-
-    def test_get_auth_provider_singleton(self):
-        """Test that get_auth_provider returns singleton instance."""
-        provider1 = get_auth_provider()
-        provider2 = get_auth_provider()
-
-        assert provider1 is provider2
-
-    def test_get_auth_provider_with_custom_params(self):
-        """Test get_auth_provider with custom parameters."""
-        # Reset global provider
-        import armadillo.utils.auth
-
-        armadillo.utils.auth._auth_provider = None
-
-        provider = get_auth_provider(secret="test-secret", algorithm="HS512")
-
-        assert provider.secret == "test-secret"
-        assert provider.algorithm == "HS512"
-
-    def test_get_auth_provider_functional_usage(self):
-        """Test get_auth_provider in functional context."""
-        provider = get_auth_provider()
-        headers = provider.get_auth_headers()
-
-        assert "Authorization" in headers
-        assert headers["Authorization"].startswith("Bearer ")
