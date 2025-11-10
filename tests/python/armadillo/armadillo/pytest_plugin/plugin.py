@@ -1046,15 +1046,15 @@ def create_package_deployment(package_name: str):
     Yields:
         ServerInstance: The deployment's server/coordinator instance
     """
-    from ..instances.manager import get_instance_manager
-
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
 
     if deployment_mode == DeploymentMode.CLUSTER:
         # Create cluster deployment for this package
         deployment_id = DeploymentId(f"cluster_{package_name}_{random_id(6)}")
-        manager = get_instance_manager(deployment_id, _plugin._session_app_context)
+        manager = InstanceManager(
+            deployment_id, app_context=_plugin._session_app_context
+        )
         try:
             logger.info(
                 "Starting package cluster deployment %s for %s",
@@ -1086,7 +1086,9 @@ def create_package_deployment(package_name: str):
     else:
         # Single server mode
         deployment_id = DeploymentId(f"single_{package_name}_{random_id(6)}")
-        manager = get_instance_manager(deployment_id, _plugin._session_app_context)
+        manager = InstanceManager(
+            deployment_id, app_context=_plugin._session_app_context
+        )
         try:
             logger.info("Starting package single server for %s", package_name)
             plan = manager.create_single_server_plan()
