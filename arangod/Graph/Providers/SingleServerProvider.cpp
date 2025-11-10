@@ -238,9 +238,8 @@ auto SingleServerProvider<Step>::addExpansionIterator(
   // new cache for each vertex (what we do here)
   // 2. cache results currently in a resource manager crash when used with this
   // stack
-  auto cursor = SingleServerNeighbourProvider<Step>{
-      _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize,
-      false};
+  auto cursor = SingleServerNeighbourProvider<Step>{_opts, _trx.get(), _monitor,
+                                                    2, false};
   cursor.rearm(step, _stats);
   if (_ast != nullptr) {
     cursor.prepareIndexExpressions(_ast);

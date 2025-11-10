@@ -343,7 +343,7 @@ Result ClusterProvider<StepImpl>::fetchEdgesFromEngines(Step* step) {
   /* Needed for TRAVERSALS only - End */
 
   leased->add("keys", VPackValue(step->getVertex().getID().toString()));
-  leased->add("batchSize", VPackValue(aql::ExecutionBlock::DefaultBatchSize));
+  leased->add("batchSize", VPackValue(2));
   leased->close();
 
   auto* pool =
@@ -617,7 +617,7 @@ auto ClusterProvider<StepImpl>::addExpansionIterator(
     leased->close();
   }
   leased->add("keys", VPackValue(from.getVertex().getID().toString()));
-  leased->add("batchSize", VPackValue(aql::ExecutionBlock::DefaultBatchSize));
+  leased->add("batchSize", VPackValue(2));
   leased->close();
 
   auto* pool =
