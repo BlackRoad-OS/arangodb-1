@@ -36,6 +36,8 @@
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
 
+#include "Logger/LogMacros.h"
+
 #include <velocypack/Builder.h>
 #include <velocypack/Iterator.h>
 #include <velocypack/Slice.h>
@@ -44,6 +46,7 @@
 #include <set>
 #include <unordered_map>
 #include <vector>
+#include <Aql/FixedVarExpressionContext.h>
 
 using namespace arangodb;
 
@@ -112,6 +115,10 @@ bool listContainsElement(VPackOptions const* options, VPackSlice const& list,
 /// @brief function PUSH
 AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
                          VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
+  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+
   // cppcheck-suppress variableScope
   static char const* AFN = "PUSH";
 
@@ -157,12 +164,13 @@ AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
     builder->add(p);
   }
   builder->close();
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function POP
 AqlValue functions::Pop(ExpressionContext* expressionContext, AstNode const&,
                         VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "POP";
 
@@ -198,6 +206,7 @@ AqlValue functions::Pop(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function APPEND
 AqlValue functions::Append(ExpressionContext* expressionContext, AstNode const&,
                            VPackFunctionParametersView parameters) {
+  // ExecutorExpressionContex
   // cppcheck-suppress variableScope
   static char const* AFN = "APPEND";
 
@@ -275,6 +284,7 @@ AqlValue functions::Append(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::Unshift(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "UNSHIFT";
 
@@ -325,6 +335,7 @@ AqlValue functions::Unshift(ExpressionContext* expressionContext,
 /// @brief function SHIFT
 AqlValue functions::Shift(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "SHIFT";
 
@@ -365,6 +376,7 @@ AqlValue functions::Shift(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::RemoveValue(ExpressionContext* expressionContext,
                                 AstNode const&,
                                 VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "REMOVE_VALUE";
 
@@ -426,6 +438,7 @@ AqlValue functions::RemoveValue(ExpressionContext* expressionContext,
 AqlValue functions::RemoveValues(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "REMOVE_VALUES";
 
@@ -470,6 +483,7 @@ AqlValue functions::RemoveValues(ExpressionContext* expressionContext,
 AqlValue functions::RemoveNth(ExpressionContext* expressionContext,
                               AstNode const&,
                               VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "REMOVE_NTH";
 
@@ -521,6 +535,7 @@ AqlValue functions::RemoveNth(ExpressionContext* expressionContext,
 AqlValue functions::ReplaceNth(ExpressionContext* expressionContext,
                                AstNode const&,
                                VPackFunctionParametersView parameters) {
+  // ExecutorExpressionContex
   // cppcheck-suppress variableScope
   static char const* AFN = "REPLACE_NTH";
 
@@ -598,6 +613,7 @@ AqlValue functions::ReplaceNth(ExpressionContext* expressionContext,
 AqlValue functions::Position(ExpressionContext* expressionContext,
                              AstNode const&,
                              VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "POSITION";
 
@@ -647,6 +663,7 @@ AqlValue functions::Position(ExpressionContext* expressionContext,
 AqlValue functions::Interleave(aql::ExpressionContext* expressionContext,
                                AstNode const&,
                                VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "INTERLEAVE";
 
@@ -700,6 +717,7 @@ AqlValue functions::Interleave(aql::ExpressionContext* expressionContext,
 /// @brief function RANGE
 AqlValue functions::Range(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "RANGE";
 
@@ -757,6 +775,7 @@ AqlValue functions::Range(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::CountDistinct(ExpressionContext* expressionContext,
                                   AstNode const&,
                                   VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "COUNT_DISTINCT";
 
@@ -792,6 +811,7 @@ AqlValue functions::CountDistinct(ExpressionContext* expressionContext,
 /// @brief function UNIQUE
 AqlValue functions::Unique(ExpressionContext* expressionContext, AstNode const&,
                            VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "UNIQUE";
 
@@ -838,6 +858,7 @@ AqlValue functions::Unique(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::SortedUnique(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "SORTED_UNIQUE";
 
@@ -876,6 +897,7 @@ AqlValue functions::SortedUnique(ExpressionContext* expressionContext,
 /// @brief function SORTED
 AqlValue functions::Sorted(ExpressionContext* expressionContext, AstNode const&,
                            VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "SORTED";
 
@@ -920,6 +942,7 @@ AqlValue functions::Sorted(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function UNION
 AqlValue functions::Union(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   static char const* AFN = "UNION";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -964,6 +987,7 @@ AqlValue functions::Union(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::UnionDistinct(ExpressionContext* expressionContext,
                                   AstNode const&,
                                   VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   static char const* AFN = "UNION_DISTINCT";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -1024,6 +1048,7 @@ AqlValue functions::UnionDistinct(ExpressionContext* expressionContext,
 AqlValue functions::Intersection(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
+  // ExecutorExpressionContext
   static char const* AFN = "INTERSECTION";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -1096,6 +1121,7 @@ AqlValue functions::Intersection(ExpressionContext* expressionContext,
 AqlValue functions::Outersection(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
+  // ExecutorExpressionContext
   static char const* AFN = "OUTERSECTION";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -1155,6 +1181,7 @@ AqlValue functions::Outersection(ExpressionContext* expressionContext,
 AqlValue functions::Flatten(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
   // cppcheck-suppress variableScope
@@ -1193,6 +1220,7 @@ AqlValue functions::Flatten(ExpressionContext* expressionContext,
 /// @brief function FIRST
 AqlValue functions::First(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "FIRST";
 
@@ -1217,6 +1245,7 @@ AqlValue functions::First(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function LAST
 AqlValue functions::Last(ExpressionContext* expressionContext, AstNode const&,
                          VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "LAST";
 
@@ -1243,6 +1272,7 @@ AqlValue functions::Last(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function NTH
 AqlValue functions::Nth(ExpressionContext* expressionContext, AstNode const&,
                         VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "NTH";
 
@@ -1277,6 +1307,7 @@ AqlValue functions::Nth(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function Minus
 AqlValue functions::Minus(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   static char const* AFN = "MINUS";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -1342,6 +1373,7 @@ AqlValue functions::Minus(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function Slice
 AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  // FixedVarExpressionContext
   // cppcheck-suppress variableScope
   static char const* AFN = "SLICE";
 
@@ -1413,6 +1445,7 @@ AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function TO_ARRAY
 AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
                             VPackFunctionParametersView parameters) {
+  LOG_DEVEL << "ToArray: " << typeid(*ctx).name();
   AqlValue const& value =
       aql::functions::extractFunctionParameterValue(parameters, 0);
 
