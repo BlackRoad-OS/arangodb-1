@@ -58,7 +58,7 @@ inline void expectNotEqualBothWays(AqlValue const& a, AqlValue const& b) {
 }
 }  // namespace
 
-// Test for AqlValue(string_view, ResourceMonitor* nullptr) <- short str
+// Test for AqlValue(string_view, ResourceMonitor*) <- short str
 TEST(AqlValueSupervisedTest, ShortStringViewCtorAccountsCorrectSize) {
   auto& global = GlobalResourceMonitor::instance();
   arangodb::ResourceMonitor rm(global);
@@ -533,7 +533,7 @@ TEST(AqlValueSupervisedTest, PointerCtorForSupervisedBufferNotAccount) {
   EXPECT_EQ(resourceMonitor.current(), before);
 }
 
-TEST(AqlValueSupervisedTest, DefaultDesructorNotDestroy) {
+TEST(AqlValueSupervisedTest, DefaultDestructorNotDestroy) {
   auto& global = GlobalResourceMonitor::instance();
   ResourceMonitor rm(global);
 
@@ -1397,14 +1397,24 @@ TEST(AqlValueSupervisedTest, FuncGetWithDoCopyTrueReturnsCopy) {
 
   Builder b;
   b.openObject();
-  b.add("payload", Value(bigPayload));
-  b.add("user", Value(velocypack::ValueType::Object));
-  b.add("profile", Value(velocypack::ValueType::Object));
-  b.add("name", Value(bigName));
-  b.add("age", Value(7));
-  b.close();  // profile
-  b.add("id", Value("plain-string-id"));
-  b.close();  // user
+  {
+    b.add("payload", Value(bigPayload));
+
+    b.add(VPackValue("user"));
+    b.openObject();
+    {
+      b.add("id", Value("plain-string-id"));
+
+      b.add(VPackValue("profile"));
+      b.openObject();
+      {
+        b.add("name", Value(bigName));
+        b.add("age", Value(7));
+      }
+      b.close();  // profile
+    }
+    b.close();  // user
+  }
   b.close();  // root
 
   auto s = b.slice();
