@@ -346,7 +346,7 @@ class TestArmadilloPytestHooks:
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
-        
+
         # Set up stash mock
         mock_stash = Mock()
         mock_stash.get = Mock(return_value=mock_plugin)
@@ -367,7 +367,7 @@ class TestArmadilloPytestHooks:
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
         mock_plugin._deployment_failed = False
-        
+
         mock_item = Mock()
         mock_config = Mock()
         mock_stash = Mock()
@@ -386,7 +386,7 @@ class TestArmadilloPytestHooks:
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
-        
+
         mock_item = Mock()
         mock_config = Mock()
         mock_stash = Mock()
@@ -405,7 +405,7 @@ class TestArmadilloPytestHooks:
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
-        
+
         mock_item = Mock()
         mock_config = Mock()
         mock_stash = Mock()
@@ -425,7 +425,7 @@ class TestArmadilloPytestHooks:
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
-        
+
         # Set up stash mock
         mock_stash = Mock()
         mock_stash.get = Mock(return_value=mock_plugin)
@@ -444,7 +444,7 @@ class TestArmadilloPytestHooks:
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
         mock_plugin._deployment_failed = False
-        
+
         mock_item = Mock()
         mock_config = Mock()
         mock_stash = Mock()
@@ -504,7 +504,7 @@ class TestArmadilloReporterRegressionTests:
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
         mock_plugin._deployment_failed = False
-        
+
         # Set up stash mock
         mock_stash = Mock()
         mock_stash.get = Mock(return_value=mock_plugin)
@@ -522,7 +522,7 @@ class TestArmadilloReporterRegressionTests:
         mock_item_stash.__getitem__ = Mock(return_value=mock_plugin)
         mock_item_config.stash = mock_item_stash
         mock_item.config = mock_item_config
-        
+
         pytest_runtest_setup(mock_item)
         mock_reporter.pytest_runtest_setup.assert_called_once_with(mock_item)
 

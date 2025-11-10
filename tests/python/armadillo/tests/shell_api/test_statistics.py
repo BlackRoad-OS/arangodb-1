@@ -107,7 +107,8 @@ class TestStatisticsAPI:
         ), f"Sync request should return 200, got {response.status_code}"
 
         # Wait a bit
-        time.sleep(10)
+        time.sleep(2)
+        # time.sleep(10)
 
         # Get final stats
         response = requests.get(f"{base_url}/_admin/statistics")

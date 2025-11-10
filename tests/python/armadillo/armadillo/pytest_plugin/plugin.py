@@ -237,7 +237,7 @@ def pytest_unconfigure(config: pytest.Config) -> None:
 
 def _get_plugin(obj) -> ArmadilloPlugin:
     """Get plugin from pytest object (config, session, or item).
-    
+
     Helper to retrieve plugin from stash regardless of hook object type.
     """
     if hasattr(obj, "config"):
@@ -622,7 +622,7 @@ def pytest_runtest_makereport(item, call):
     global _ABORT_REMAINING_TESTS, _CRASH_DETECTED_DURING_TEST, _TIMEOUT_DETECTED_DURING_TEST
 
     plugin = _get_plugin(item)
-    
+
     # Let pytest create the report first
     outcome = yield
     report = outcome.get_result()
@@ -733,7 +733,7 @@ def pytest_runtest_logreport(report):
     if not _is_compact_mode_enabled():
         global _current_session_config
         if _current_session_config:
-            plugin = _current_session_config.stash.get(plugin_key)
+            plugin = _current_session_config.stash.get(plugin_key, None)
             if plugin and plugin.reporter:
                 plugin.reporter.pytest_runtest_logreport(report)
 
@@ -743,7 +743,7 @@ def pytest_runtest_logstart(nodeid, location):
     if not _is_compact_mode_enabled():
         global _current_session_config
         if _current_session_config:
-            plugin = _current_session_config.stash.get(plugin_key)
+            plugin = _current_session_config.stash.get(plugin_key, None)
             if plugin and plugin.reporter:
                 # Call our reporter but suppress pytest's default filename output
                 plugin.reporter.pytest_runtest_logstart(nodeid, location)
@@ -783,7 +783,7 @@ def _cleanup_all_deployments(emergency=True):
     if not _current_session_config:
         logger.debug("No session config - cannot cleanup deployments")
         return
-    plugin = _current_session_config.stash.get(plugin_key)
+    plugin = _current_session_config.stash.get(plugin_key, None)
     if not plugin:
         logger.debug("No plugin instance - cannot cleanup deployments")
         return
@@ -1006,7 +1006,7 @@ def _emergency_cleanup():
     global _current_session_config
     if not _current_session_config:
         return
-    plugin = _current_session_config.stash.get(plugin_key)
+    plugin = _current_session_config.stash.get(plugin_key, None)
     if not plugin:
         return
     has_deployments = bool(plugin._package_deployments)
@@ -1066,7 +1066,7 @@ def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> 
     global _current_session_config
     if not _current_session_config:
         return
-    plugin = _current_session_config.stash.get(plugin_key)
+    plugin = _current_session_config.stash.get(plugin_key, None)
     if not plugin:
         return
     health = manager.get_server_health()
@@ -1107,10 +1107,10 @@ def create_package_deployment(package_name: str):
     global _current_session_config
     if not _current_session_config:
         raise RuntimeError("Cannot create deployment: no session config available")
-    plugin = _current_session_config.stash.get(plugin_key)
+    plugin = _current_session_config.stash.get(plugin_key, None)
     if not plugin:
         raise RuntimeError("Cannot create deployment: no plugin instance available")
-        
+
     if deployment_mode == DeploymentMode.CLUSTER:
         # Create cluster deployment for this package
         deployment_id = DeploymentId(f"cluster_{package_name}_{random_id(6)}")
