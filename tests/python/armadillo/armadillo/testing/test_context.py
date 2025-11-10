@@ -195,9 +195,3 @@ def reset_test_environment() -> None:
         reset_logging()
     except (ImportError, AttributeError):
         pass
-    try:
-        from ..utils.ports import reset_port_manager
-
-        reset_port_manager()
-    except (ImportError, AttributeError):
-        pass

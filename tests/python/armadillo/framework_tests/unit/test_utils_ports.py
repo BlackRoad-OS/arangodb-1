@@ -1,7 +1,7 @@
 """Tests for simplified port management."""
 
 import pytest
-from armadillo.utils.ports import PortManager, get_port_manager, reset_port_manager
+from armadillo.utils.ports import PortManager
 from armadillo.core.errors import NetworkError
 
 
@@ -86,21 +86,3 @@ class TestPortManager:
         # Should be able to allocate again
         new_port = pm.allocate_port()
         assert new_port is not None
-
-
-class TestGlobalPortManager:
-    """Test global port manager functions."""
-
-    def test_get_port_manager_singleton(self):
-        """Test that get_port_manager returns same instance."""
-        reset_port_manager()
-        pm1 = get_port_manager()
-        pm2 = get_port_manager()
-        assert pm1 is pm2
-
-    def test_reset_port_manager(self):
-        """Test resetting the global port manager."""
-        pm1 = get_port_manager()
-        reset_port_manager()
-        pm2 = get_port_manager()
-        assert pm1 is not pm2

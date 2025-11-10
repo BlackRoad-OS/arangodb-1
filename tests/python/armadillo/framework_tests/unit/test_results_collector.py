@@ -8,10 +8,6 @@ from armadillo.results.collector import (
     ResultCollector,
     TestResultParams,
     TestTiming,
-    get_result_collector,
-    record_test_result,
-    finalize_results,
-    export_results,
 )
 from armadillo.core.types import ExecutionOutcome
 from armadillo.core.errors import ResultProcessingError
@@ -318,68 +314,6 @@ class TestResultCollector:
         assert exported_files["junit"].exists()
 
 
-class TestGlobalResultFunctions:
-    """Test global result collection functions."""
-
-    def test_get_result_collector_singleton(self):
-        """Test get_result_collector returns singleton."""
-        collector1 = get_result_collector()
-        collector2 = get_result_collector()
-
-        assert collector1 is collector2
-
-    def test_record_test_result_function(self):
-        """Test global record_test_result function."""
-        # Reset global collector
-        import armadillo.results.collector
-
-        armadillo.results.collector._result_collector = None
-
-        record_test_result(
-            "tests/test_example.py::test_global",
-            ExecutionOutcome.PASSED,
-            1.0,
-            setup_duration=0.1,
-        )
-
-        collector = get_result_collector()
-        assert len(collector.test_suites) == 1
-        suite = collector.test_suites["tests/test_example.py"]
-        assert "test_global" in suite.tests
-        test = suite.tests["test_global"]
-        assert test.outcome == "passed"
-        assert test.setup_duration_seconds == 0.1
-
-    def test_finalize_results_function(self):
-        """Test global finalize_results function."""
-        # Reset and populate global collector
-        import armadillo.results.collector
-
-        armadillo.results.collector._result_collector = ResultCollector()
-
-        record_test_result("tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0)
-        record_test_result("tests/test_example.py::test2", ExecutionOutcome.FAILED, 2.0)
-
-        results = finalize_results()
-
-        assert isinstance(results, dict)
-        assert results["summary"]["total"] == 2
-
-    def test_export_results_function(self, temp_dir):
-        """Test global export_results function."""
-        # Reset and populate global collector
-        import armadillo.results.collector
-
-        armadillo.results.collector._result_collector = ResultCollector()
-
-        record_test_result("tests/test_example.py::test1", ExecutionOutcome.PASSED, 1.0)
-
-        exported_files = export_results(["json"], temp_dir)
-
-        assert "json" in exported_files
-        assert exported_files["json"].exists()
-
-
 class TestResultCollectorEdgeCases:
     """Test edge cases and error conditions."""
 
@@ -423,6 +357,7 @@ class TestResultCollectorEdgeCases:
         """Test test result with crash information."""
         from armadillo.core.types import CrashInfo
         from armadillo.core.value_objects import ServerId
+
         collector = ResultCollector()
 
         crash_info = {

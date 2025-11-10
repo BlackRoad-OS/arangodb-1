@@ -42,7 +42,7 @@ class Colors:
 class ArmadilloReporter:
     """Custom test reporter that provides detailed verbose output with timing and phases."""
 
-    def __init__(self):
+    def __init__(self, result_collector: Optional[ResultCollector] = None):
         self.test_times: Dict[str, Dict[str, float]] = {}
         self.test_reports: Dict[str, TestReport] = (
             {}
@@ -65,7 +65,7 @@ class ArmadilloReporter:
         self.file_test_counts: Dict[str, int] = {}  # Track test count per file
         self.file_expected_counts: Dict[str, int] = {}  # Expected test count per file
         self.files_completed: set = set()  # Track which files have been completed
-        self.result_collector = ResultCollector()  # Collect structured results
+        self.result_collector = result_collector or ResultCollector()
 
     def _colorize(self, text: str, color: str) -> str:
         """Apply color to text if colors are supported."""
@@ -491,12 +491,21 @@ class ArmadilloReporter:
 
 
 # Global reporter instance
-_reporter = None
+_reporter: Optional[ArmadilloReporter] = None
 
 
-def get_armadillo_reporter() -> ArmadilloReporter:
-    """Get or create the global Armadillo reporter."""
+def get_armadillo_reporter(
+    result_collector: Optional[ResultCollector] = None,
+) -> ArmadilloReporter:
+    """Get or create the global Armadillo reporter.
+
+    Args:
+        result_collector: Optional ResultCollector to use (only used on first call)
+
+    Returns:
+        Global ArmadilloReporter instance
+    """
     global _reporter
     if _reporter is None:
-        _reporter = ArmadilloReporter()
+        _reporter = ArmadilloReporter(result_collector=result_collector)
     return _reporter

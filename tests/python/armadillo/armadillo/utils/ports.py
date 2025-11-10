@@ -6,7 +6,6 @@ import threading
 from typing import Optional, Protocol
 from ..core.errors import NetworkError
 from ..core.log import get_logger
-from ..core.config import get_config
 
 logger = get_logger(__name__)
 
@@ -104,38 +103,3 @@ class PortManager:
                 return True
         except OSError:
             return False
-
-
-# Global port manager instance
-_global_port_manager: Optional[PortManager] = None
-_manager_lock = threading.Lock()
-
-
-def get_port_manager(
-    base_port: Optional[int] = None, max_ports: Optional[int] = None
-) -> PortManager:
-    """Get or create the global port manager.
-
-    Args:
-        base_port: Starting port for allocation range
-        max_ports: Size of port range
-
-    Returns:
-        Global PortManager instance
-    """
-    global _global_port_manager
-    with _manager_lock:
-        if _global_port_manager is None:
-            config = get_config()
-            actual_base_port = base_port or config.infrastructure.default_base_port
-            actual_max_ports = max_ports or config.infrastructure.max_port_range
-            _global_port_manager = PortManager(actual_base_port, actual_max_ports)
-        return _global_port_manager
-
-
-def reset_port_manager() -> None:
-    """Reset the global port manager (useful for testing)."""
-    global _global_port_manager
-    with _manager_lock:
-        _global_port_manager = None
-        logger.debug("Reset global port manager")

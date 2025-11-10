@@ -381,7 +381,10 @@ def pytest_sessionstart(session):
     logger.info("Framework debug logging enabled: %s", framework_log_file)
 
     if not framework_config.compact_mode:
-        reporter = get_armadillo_reporter()
+        # Pass result collector from context to reporter
+        reporter = get_armadillo_reporter(
+            result_collector=_plugin._session_app_context.result_collector
+        )
         reporter.pytest_sessionstart(session)
         # Set the actual test start time AFTER server deployment is complete
         reporter.session_start_time = time.time()

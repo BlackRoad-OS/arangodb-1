@@ -32,6 +32,7 @@ from ..utils.ports import PortAllocator
 from ..utils.auth import AuthProvider
 from ..utils.filesystem import FilesystemService
 from .process import ProcessSupervisor
+from ..results.collector import ResultCollector
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ class ApplicationContext:
     auth_provider: AuthProvider
     filesystem: FilesystemService
     process_supervisor: ProcessSupervisor
+    result_collector: ResultCollector
     server_factory: "ServerFactory"
     deployment_planner: "DeploymentPlanner"
 
@@ -74,6 +76,7 @@ class ApplicationContext:
         auth_provider: Optional[AuthProvider] = None,
         filesystem: Optional[FilesystemService] = None,
         process_supervisor: Optional[ProcessSupervisor] = None,
+        result_collector: Optional[ResultCollector] = None,
     ) -> "ApplicationContext":
         """Create application context with default implementations.
 
@@ -87,6 +90,7 @@ class ApplicationContext:
             auth_provider: Optional custom auth provider
             filesystem: Optional custom filesystem service
             process_supervisor: Optional custom process supervisor
+            result_collector: Optional custom result collector
 
         Returns:
             Immutable ApplicationContext with all dependencies initialized
@@ -138,6 +142,10 @@ class ApplicationContext:
         if process_supervisor is None:
             process_supervisor = ProcessSupervisorImpl()
 
+        # Create result collector if not provided
+        if result_collector is None:
+            result_collector = ResultCollector()
+
         # Import server-related dependencies here to avoid circular imports
         # (core.context -> instances.server_factory -> instances.server -> core.context)
         # This lazy import pattern breaks the cycle at runtime.
@@ -164,6 +172,7 @@ class ApplicationContext:
             auth_provider=auth_provider,
             filesystem=filesystem,
             process_supervisor=process_supervisor,
+            result_collector=result_collector,
             server_factory=server_factory,
             deployment_planner=deployment_planner,
         )
