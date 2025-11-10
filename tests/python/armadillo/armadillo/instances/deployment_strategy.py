@@ -22,12 +22,7 @@ class DeploymentStrategy(Protocol):
         startup_order: List[str],
         timeout: float,
     ) -> None:
-        """Start servers according to deployment plan."""
-
-    def verify_readiness(
-        self, servers: Dict[str, ArangoServer], timeout: float
-    ) -> None:
-        """Verify all servers are ready and healthy."""
+        """Start servers and verify they are ready."""
 
 
 class SingleServerStrategy:
@@ -43,7 +38,7 @@ class SingleServerStrategy:
         startup_order: List[str],
         timeout: float,
     ) -> None:
-        """Start single server deployment."""
+        """Start single server deployment and verify it's ready."""
         if not isinstance(plan, SingleServerDeploymentPlan):
             raise ServerError(
                 f"SingleServerStrategy requires SingleServerDeploymentPlan, got {type(plan)}"
@@ -60,13 +55,8 @@ class SingleServerStrategy:
 
         self._logger.info("Single server %s started successfully", server_id)
 
-    def verify_readiness(
-        self, servers: Dict[str, ArangoServer], timeout: float
-    ) -> None:
-        """Verify single server is ready and healthy."""
-        server = next(iter(servers.values()))
+        # Verify server is ready and healthy
         self._logger.debug("Verifying single server readiness")
-
         health = server.health_check_sync(timeout=timeout)
         if not health.is_healthy:
             raise ServerError(
@@ -90,7 +80,10 @@ class ClusterStrategy:
         startup_order: List[str],
         timeout: float,
     ) -> None:
-        """Start cluster deployment with agents, dbservers, and coordinators."""
+        """Start cluster deployment with agents, dbservers, and coordinators.
+
+        Bootstrapper handles server startup and verification internally.
+        """
         if not isinstance(plan, ClusterDeploymentPlan):
             raise ClusterError(
                 f"ClusterStrategy requires ClusterDeploymentPlan, got {type(plan)}"
@@ -109,11 +102,5 @@ class ClusterStrategy:
             f"Starting cluster with {agents} agents, {dbservers} dbservers, {coordinators} coordinators"
         )
 
+        # Bootstrap cluster (includes startup and verification)
         self._bootstrapper.bootstrap_cluster(servers, startup_order, timeout=timeout)
-
-    def verify_readiness(
-        self, servers: Dict[str, ArangoServer], timeout: float
-    ) -> None:
-        """Verify cluster is ready (already done by bootstrapper)."""
-        # Bootstrapper already verified cluster readiness
-        self._logger.debug("Cluster readiness already verified by bootstrapper")

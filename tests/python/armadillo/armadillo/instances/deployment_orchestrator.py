@@ -116,13 +116,10 @@ class DeploymentOrchestrator:
 
             elapsed = time.time() - start_time
             remaining = max(60.0, timeout - elapsed)
+            # Strategy handles both startup and verification
             strategy.start_servers(
                 servers, plan, self._startup_order, timeout=remaining
             )
-
-            elapsed = time.time() - start_time
-            remaining = max(30.0, timeout - elapsed)
-            strategy.verify_readiness(servers, timeout=remaining)
 
             if self._health_monitor:
                 elapsed = time.time() - start_time
