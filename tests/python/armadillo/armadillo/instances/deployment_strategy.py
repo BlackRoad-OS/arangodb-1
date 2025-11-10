@@ -21,11 +21,13 @@ class DeploymentStrategy(Protocol):
         plan: DeploymentPlan,
         startup_order: List[str],
         timeout: float,
-    ) -> None: ...
+    ) -> None:
+        """Start servers according to deployment plan."""
 
     def verify_readiness(
         self, servers: Dict[str, ArangoServer], timeout: float
-    ) -> None: ...
+    ) -> None:
+        """Verify all servers are ready and healthy."""
 
 
 class SingleServerStrategy:
@@ -41,6 +43,7 @@ class SingleServerStrategy:
         startup_order: List[str],
         timeout: float,
     ) -> None:
+        """Start single server deployment."""
         if not isinstance(plan, SingleServerDeploymentPlan):
             raise ServerError(
                 f"SingleServerStrategy requires SingleServerDeploymentPlan, got {type(plan)}"
@@ -60,6 +63,7 @@ class SingleServerStrategy:
     def verify_readiness(
         self, servers: Dict[str, ArangoServer], timeout: float
     ) -> None:
+        """Verify single server is ready and healthy."""
         server = next(iter(servers.values()))
         self._logger.debug("Verifying single server readiness")
 
@@ -86,6 +90,7 @@ class ClusterStrategy:
         startup_order: List[str],
         timeout: float,
     ) -> None:
+        """Start cluster deployment with agents, dbservers, and coordinators."""
         if not isinstance(plan, ClusterDeploymentPlan):
             raise ClusterError(
                 f"ClusterStrategy requires ClusterDeploymentPlan, got {type(plan)}"
@@ -109,5 +114,6 @@ class ClusterStrategy:
     def verify_readiness(
         self, servers: Dict[str, ArangoServer], timeout: float
     ) -> None:
+        """Verify cluster is ready (already done by bootstrapper)."""
         # Bootstrapper already verified cluster readiness
         self._logger.debug("Cluster readiness already verified by bootstrapper")

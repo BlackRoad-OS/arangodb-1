@@ -87,7 +87,7 @@ class TimeoutHandler:
             try:
                 self.pre_terminate_hook(timeout_type, elapsed)
             except Exception as e:
-                logger.error(f"Error in pre-termination hook: {e}")
+                logger.error("Error in pre-termination hook: %s", e)
 
         # Escalating termination: SIGTERM -> 5s wait -> SIGKILL
         try:
@@ -109,7 +109,7 @@ class TimeoutHandler:
             try:
                 self.post_terminate_hook(timeout_type)
             except Exception as e:
-                logger.error(f"Error in post-termination hook: {e}")
+                logger.error("Error in post-termination hook: %s", e)
 
     def _global_timeout_monitor(self) -> None:
         """Monitor for global session timeout."""
@@ -119,8 +119,9 @@ class TimeoutHandler:
 
             if self.global_timeout and elapsed > self.global_timeout:
                 logger.warning(
-                    f"Global timeout ({self.global_timeout}s) exceeded. "
-                    f"Elapsed: {elapsed:.1f}s. Terminating pytest..."
+                    "Global timeout (%ss) exceeded. Elapsed: %.1fs. Terminating pytest...",
+                    self.global_timeout,
+                    elapsed,
                 )
                 self.console.print(
                     f"\n[red]⏱️  Global timeout: test session exceeded {self.global_timeout}s "
@@ -139,8 +140,9 @@ class TimeoutHandler:
 
             if self.output_idle_timeout and idle_duration > self.output_idle_timeout:
                 logger.warning(
-                    f"Output idle timeout ({self.output_idle_timeout}s) exceeded. "
-                    f"No output for {idle_duration:.1f}s. Terminating pytest..."
+                    "Output idle timeout (%ss) exceeded. No output for %.1fs. Terminating pytest...",
+                    self.output_idle_timeout,
+                    idle_duration,
                 )
                 self.console.print(
                     f"\n[red]⏱️  Output idle timeout: no output for {idle_duration:.1f}s "

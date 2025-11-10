@@ -337,17 +337,8 @@ def _execute_test_run(options: TestRunOptions) -> None:
         output_idle_timeout=options.output_idle_timeout,
     )
 
-    # TODO: Future extension point for diagnostic collection
-    # Example:
-    # def collect_diagnostics(timeout_type: TimeoutType, elapsed: float):
-    #     """Collect logs, coredumps, process states before termination."""
-    #     logger.info(f"Collecting diagnostics for {timeout_type.value} timeout...")
-    #     # - Collect server logs from temp_dir
-    #     # - Request coredumps from running processes
-    #     # - Capture process states (ps, lsof, etc.)
-    #     # - Save test artifacts
-    #
-    # timeout_handler.set_pre_terminate_hook(collect_diagnostics)
+    # Future extension point: diagnostic collection hook can be set here
+    # See timeout_handler.set_pre_terminate_hook() for details
 
     # Start timeout monitoring
     timeout_handler.start_monitoring()
@@ -363,7 +354,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
                     sys.stdout.flush()
                     timeout_handler.update_output_timestamp()
             except Exception as e:
-                logger.error(f"Error reading process output: {e}")
+                logger.error("Error reading process output: %s", e)
 
         reader_thread = threading.Thread(target=output_reader, daemon=True)
         reader_thread.start()
@@ -371,7 +362,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Track signal handling state
     signal_count = 0
 
-    def signal_handler(signum, frame):
+    def signal_handler(signum, _frame):
         """Two-stage signal handling: graceful first, force kill on second signal."""
         nonlocal signal_count
         signal_count += 1

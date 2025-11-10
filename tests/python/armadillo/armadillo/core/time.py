@@ -84,8 +84,7 @@ class TimeoutManager:
             if requested_timeout is None:
                 return global_remaining
             return min(requested_timeout, global_remaining)
-        else:
-            return requested_timeout or 30.0
+        return requested_timeout or 30.0
 
     @contextmanager
     def timeout_scope(

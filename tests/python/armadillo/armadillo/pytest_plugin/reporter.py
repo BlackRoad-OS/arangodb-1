@@ -21,6 +21,8 @@ logger = get_logger(__name__)
 
 # ANSI color codes for output formatting
 class Colors:
+    """ANSI color codes for terminal output formatting."""
+
     GREEN = "\033[32m"
     RED = "\033[31m"
     BLUE = "\033[34m"
@@ -163,11 +165,17 @@ class ArmadilloReporter:
         summary_color = Colors.RED if is_failure else Colors.GREEN
         status_text = "FAILED" if is_failure else "PASSED"
         write_stdout(
-            f"{self._get_timestamp()} {self._colorize(f'[   {status_text:>7} ]', summary_color)} {self.passed_tests} tests.\n"
+            f"{self._get_timestamp()} "
+            f"{self._colorize(f'[   {status_text:>7} ]', summary_color)} "
+            f"{self.passed_tests} tests.\n"
         )
+        passed_colored = self._colorize(f"{self.passed_tests} passed", Colors.GREEN)
+        failed_color = Colors.RED if self.failed_tests > 0 else Colors.GREEN
+        failed_colored = self._colorize(f"{self.failed_tests} failed", failed_color)
         write_stdout(
-            f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} Ran: {self.total_tests} tests "
-            f"({self._colorize(f'{self.passed_tests} passed', Colors.GREEN)}, {self._colorize(f'{self.failed_tests} failed', Colors.RED if self.failed_tests > 0 else Colors.GREEN)}) ({total_time}ms total)\n"
+            f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} "
+            f"Ran: {self.total_tests} tests "
+            f"({passed_colored}, {failed_colored}) ({total_time}ms total)\n"
         )
 
     def pytest_sessionstart(self, _session):
@@ -371,10 +379,13 @@ class ArmadilloReporter:
         for file_path, file_items in files.items():
             suite_name = self._get_suite_name(file_items[0].nodeid)
             write_stdout(
-                f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} {self._colorize('armadillo:', Colors.BOLD)} Trying {file_path} ... 1\n"
+                f"{self._get_timestamp()} {self._colorize('[============]', Colors.CYAN)} "
+                f"{self._colorize('armadillo:', Colors.BOLD)} Trying {file_path} ... 1\n"
             )
             write_stdout(
-                f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} {len(file_items)} tests from {self._colorize(suite_name, Colors.BOLD)} (setUpAll: 0ms)\n"
+                f"{self._get_timestamp()} {self._colorize('[------------]', Colors.CYAN)} "
+                f"{len(file_items)} tests from {self._colorize(suite_name, Colors.BOLD)} "
+                f"(setUpAll: 0ms)\n"
             )
 
     def pytest_sessionfinish(self, _session, exitstatus):

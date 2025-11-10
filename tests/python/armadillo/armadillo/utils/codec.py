@@ -38,8 +38,8 @@ def _json_serializer(obj: Any) -> Any:
     if hasattr(obj, "model_dump"):
         # Pydantic v2 BaseModel
         return obj.model_dump()
-    elif hasattr(obj, "_asdict"):
+    if hasattr(obj, "_asdict"):
         return obj._asdict()
-    elif hasattr(obj, "__dict__"):
+    if hasattr(obj, "__dict__"):
         return obj.__dict__
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")

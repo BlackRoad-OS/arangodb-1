@@ -6,7 +6,7 @@ import signal
 import time
 import traceback
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 import pytest
 from ..core.config import get_config
@@ -506,10 +506,6 @@ def pytest_sessionfinish(session, exitstatus):
 
         # Export test results
         try:
-            from ..core.config import get_config
-
-            config = get_config()
-
             # Determine output directory (default to test-results if not set)
             output_dir = Path("./test-results")
 
@@ -1091,6 +1087,8 @@ def create_package_deployment(package_name: str):
             _plugin._package_deployments[deployment_id] = manager
 
             servers = manager.get_all_servers()
+            if not servers:
+                raise RuntimeError(f"No servers deployed for package {package_name}")
             server = next(iter(servers.values()))
             logger.info(
                 "Package single server ready at %s (package: %s)",
