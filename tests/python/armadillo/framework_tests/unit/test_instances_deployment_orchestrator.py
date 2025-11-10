@@ -19,13 +19,16 @@ class TestDeploymentOrchestratorRefactored:
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
+        mock_executor = Mock()
 
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
+        orchestrator = DeploymentOrchestrator(
+            mock_logger, mock_factory, mock_registry, mock_executor
+        )
 
         assert orchestrator._logger == mock_logger
         assert orchestrator._server_factory == mock_factory
         assert orchestrator._server_registry == mock_registry
-        assert orchestrator._cluster_bootstrapper is None
+        assert orchestrator._executor == mock_executor
         assert orchestrator._health_monitor is None
 
     def test_create_strategy_single_server(self):
@@ -33,8 +36,11 @@ class TestDeploymentOrchestratorRefactored:
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
+        mock_executor = Mock()
 
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
+        orchestrator = DeploymentOrchestrator(
+            mock_logger, mock_factory, mock_registry, mock_executor
+        )
 
         # Create single server plan
         plan = SingleServerDeploymentPlan(server=Mock())
@@ -45,32 +51,18 @@ class TestDeploymentOrchestratorRefactored:
 
         assert isinstance(strategy, SingleServerStrategy)
 
-    def test_create_strategy_cluster_without_bootstrapper(self):
-        """Test creating cluster strategy without bootstrapper fails."""
+    def test_create_strategy_cluster(self):
+        """Test creating cluster strategy (creates bootstrapper internally)."""
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
-
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
-
-        # Create cluster plan
-        plan = ClusterDeploymentPlan()
-
-        with pytest.raises(ServerError, match="ClusterBootstrapper required"):
-            orchestrator._create_strategy(plan)
-
-    def test_create_strategy_cluster_with_bootstrapper(self):
-        """Test creating cluster strategy with bootstrapper."""
-        mock_logger = Mock()
-        mock_factory = Mock()
-        mock_registry = Mock()
-        mock_bootstrapper = Mock()
+        mock_executor = Mock()
 
         orchestrator = DeploymentOrchestrator(
             mock_logger,
             mock_factory,
             mock_registry,
-            cluster_bootstrapper=mock_bootstrapper,
+            mock_executor,
         )
 
         # Create cluster plan
@@ -87,8 +79,11 @@ class TestDeploymentOrchestratorRefactored:
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
+        mock_executor = Mock()
 
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
+        orchestrator = DeploymentOrchestrator(
+            mock_logger, mock_factory, mock_registry, mock_executor
+        )
 
         # Use a mock plan that's not a recognized type
         plan = Mock()
@@ -101,8 +96,11 @@ class TestDeploymentOrchestratorRefactored:
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
+        mock_executor = Mock()
 
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
+        orchestrator = DeploymentOrchestrator(
+            mock_logger, mock_factory, mock_registry, mock_executor
+        )
 
         # Create single server plan
         server_config = Mock()
@@ -124,8 +122,11 @@ class TestDeploymentOrchestratorRefactored:
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
+        mock_executor = Mock()
 
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
+        orchestrator = DeploymentOrchestrator(
+            mock_logger, mock_factory, mock_registry, mock_executor
+        )
 
         # Create cluster plan
         server_configs = [Mock(), Mock(), Mock()]
@@ -148,8 +149,11 @@ class TestDeploymentOrchestratorRefactored:
         mock_logger = Mock()
         mock_factory = Mock()
         mock_registry = Mock()
+        mock_executor = Mock()
 
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_registry)
+        orchestrator = DeploymentOrchestrator(
+            mock_logger, mock_factory, mock_registry, mock_executor
+        )
         orchestrator._startup_order = ["server1", "server2"]
 
         # Mock servers

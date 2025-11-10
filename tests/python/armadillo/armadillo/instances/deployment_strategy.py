@@ -1,7 +1,9 @@
 """Deployment strategies for different ArangoDB deployment modes."""
 
 from typing import Protocol, Dict, List
+from concurrent.futures import ThreadPoolExecutor
 from ..core.log import Logger
+from ..core.types import TimeoutConfig
 from ..core.errors import ServerError, ClusterError
 from .server import ArangoServer
 from .deployment_plan import (
@@ -69,9 +71,14 @@ class SingleServerStrategy:
 class ClusterStrategy:
     """Strategy for cluster deployments with agents, dbservers, and coordinators."""
 
-    def __init__(self, logger: Logger, bootstrapper: ClusterBootstrapper) -> None:
+    def __init__(
+        self,
+        logger: Logger,
+        executor: ThreadPoolExecutor,
+        timeout_config: TimeoutConfig,
+    ) -> None:
         self._logger = logger
-        self._bootstrapper = bootstrapper
+        self._bootstrapper = ClusterBootstrapper(logger, executor, timeout_config)
 
     def start_servers(
         self,

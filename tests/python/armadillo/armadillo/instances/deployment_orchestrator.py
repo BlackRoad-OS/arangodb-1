@@ -2,6 +2,7 @@
 
 from typing import Optional
 import time
+from concurrent.futures import ThreadPoolExecutor
 from ..core.types import ServerRole, TimeoutConfig
 from ..core.log import Logger
 from ..core.value_objects import ServerId
@@ -20,7 +21,6 @@ from .deployment_plan import (
 )
 from .server_registry import ServerRegistry
 from .server_factory import ServerFactory
-from .cluster_bootstrapper import ClusterBootstrapper
 from .health_monitor import HealthMonitor
 from .deployment_strategy import (
     DeploymentStrategy,
@@ -44,7 +44,7 @@ class DeploymentOrchestrator:
         logger: Logger,
         server_factory: ServerFactory,
         server_registry: ServerRegistry,
-        cluster_bootstrapper: Optional[ClusterBootstrapper] = None,
+        executor: ThreadPoolExecutor,
         health_monitor: Optional[HealthMonitor] = None,
         timeout_config: Optional[TimeoutConfig] = None,
     ) -> None:
@@ -54,14 +54,14 @@ class DeploymentOrchestrator:
             logger: Logger instance
             server_factory: Factory for creating servers
             server_registry: Registry for server storage/lookup
-            cluster_bootstrapper: Optional bootstrapper for cluster deployments
+            executor: Thread pool executor for parallel operations
             health_monitor: Optional health monitor for verification
             timeout_config: Optional timeout configuration (uses defaults if not provided)
         """
         self._logger = logger
         self._server_factory = server_factory
         self._server_registry = server_registry
-        self._cluster_bootstrapper = cluster_bootstrapper
+        self._executor = executor
         self._health_monitor = health_monitor
         self._timeouts = timeout_config or TimeoutConfig()
         self._startup_order: list[ServerId] = []
@@ -71,11 +71,7 @@ class DeploymentOrchestrator:
         if isinstance(plan, SingleServerDeploymentPlan):
             return SingleServerStrategy(self._logger)
         if isinstance(plan, ClusterDeploymentPlan):
-            if not self._cluster_bootstrapper:
-                raise ServerError(
-                    "ClusterBootstrapper required for cluster deployments"
-                )
-            return ClusterStrategy(self._logger, self._cluster_bootstrapper)
+            return ClusterStrategy(self._logger, self._executor, self._timeouts)
 
         raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
 

@@ -29,10 +29,9 @@ from ..core.log import get_logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
 from ..core.process import stop_supervised_process
 from .server import ArangoServer
-from .deployment_plan import DeploymentPlan
+from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
 from .server_registry import ServerRegistry
 from .health_monitor import HealthMonitor
-from .cluster_bootstrapper import ClusterBootstrapper
 from .deployment_orchestrator import DeploymentOrchestrator
 
 logger = get_logger(__name__)
@@ -117,16 +116,11 @@ class InstanceManager:
         self._health_monitor = HealthMonitor(
             self._app_context.logger, self._app_context.config.timeouts
         )
-        self._cluster_bootstrapper = ClusterBootstrapper(
-            self._app_context.logger,
-            self._threading.executor,
-            self._app_context.config.timeouts,
-        )
         self._deployment_orchestrator = DeploymentOrchestrator(
             logger=self._app_context.logger,
             server_factory=self._app_context.server_factory,
             server_registry=self._server_registry,
-            cluster_bootstrapper=self._cluster_bootstrapper,
+            executor=self._threading.executor,
             health_monitor=self._health_monitor,
             timeout_config=self._app_context.config.timeouts,
         )
