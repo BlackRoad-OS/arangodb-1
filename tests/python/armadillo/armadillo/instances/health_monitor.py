@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple, Optional
 import time
 import requests
 from ..core.types import HealthStatus, ServerStats, ServerRole, TimeoutConfig
+from ..core.value_objects import ServerId
 from ..core.log import Logger
 from ..core.errors import HealthCheckError, NetworkError
 from .server import ArangoServer
@@ -72,12 +73,12 @@ class HealthMonitor:
             )
 
     def check_deployment_health(
-        self, servers: Dict[str, ArangoServer], timeout: Optional[float] = None
+        self, servers: Dict[ServerId, ArangoServer], timeout: Optional[float] = None
     ) -> HealthStatus:
         """Check health of entire deployment.
 
         Args:
-            servers: Dictionary of server_id to ArangoServer instances
+            servers: Dictionary of ServerId to ArangoServer instances
             timeout: Total timeout for all health checks (uses config default if None)
 
         Returns:
@@ -174,17 +175,17 @@ class HealthMonitor:
             return None
 
     def collect_deployment_stats(
-        self, servers: Dict[str, ArangoServer]
-    ) -> Dict[str, ServerStats]:
+        self, servers: Dict[ServerId, ArangoServer]
+    ) -> Dict[ServerId, ServerStats]:
         """Collect statistics from all servers in deployment.
 
         Args:
-            servers: Dictionary of server_id to ArangoServer instances
+            servers: Dictionary of ServerId to ArangoServer instances
 
         Returns:
-            Dictionary mapping server IDs to their stats
+            Dictionary mapping ServerId to their stats
         """
-        stats: Dict[str, ServerStats] = {}
+        stats: Dict[ServerId, ServerStats] = {}
         for server_id, server in servers.items():
             server_stats = self.collect_server_stats(server)
             if server_stats:
@@ -278,12 +279,12 @@ class HealthMonitor:
             return False
 
     def verify_deployment_ready(
-        self, servers: Dict[str, ArangoServer], timeout: Optional[float] = None
+        self, servers: Dict[ServerId, ArangoServer], timeout: Optional[float] = None
     ) -> None:
         """Verify all servers in deployment are ready.
 
         Args:
-            servers: Dictionary of server_id to ArangoServer instances
+            servers: Dictionary of ServerId to ArangoServer instances
             timeout: Total timeout for verification (uses config default if None)
 
         Raises:
