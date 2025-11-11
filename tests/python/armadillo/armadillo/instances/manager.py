@@ -30,7 +30,6 @@ from ..core.time import timeout_scope, clamp_timeout
 from ..core.process import stop_supervised_process
 from .server import ArangoServer
 from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
-from .server_registry import ServerRegistry
 from .health_monitor import HealthMonitor
 from .deployment_orchestrator import DeploymentOrchestrator
 
@@ -111,19 +110,16 @@ class InstanceManager:
         self.state = DeploymentState()
         self._threading = ThreadingResources.create_for_deployment(deployment_id)
 
-        # Initialize new architectural components (transitional: registry still passed to orchestrator)
-        self._server_registry = ServerRegistry()
+        # Initialize architectural components
         self._health_monitor = HealthMonitor(
             self._app_context.logger, self._app_context.config.timeouts
         )
         self._deployment_orchestrator = DeploymentOrchestrator(
             logger=self._app_context.logger,
             server_factory=self._app_context.server_factory,
-            server_registry=self._server_registry,
             executor=self._threading.executor,
             health_monitor=self._health_monitor,
             timeout_config=self._app_context.config.timeouts,
-            use_lifecycle_strategies=True,
         )
 
     def __enter__(self):

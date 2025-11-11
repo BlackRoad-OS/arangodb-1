@@ -1,9 +1,7 @@
 """High-level deployment orchestration and lifecycle management.
 
-Transitional refactor (armadillo-49):
-Adds optional lifecycle-owning strategy path (use_lifecycle_strategies flag)
-that bypasses ServerRegistry and stores servers in-memory inside orchestrator.
-Legacy path remains until full removal of ServerRegistry in later steps.
+Refactored (armadillo-49): Deployment strategies now own full server lifecycle
+(create + start + verify). Servers stored in-memory dict; ServerRegistry removed.
 """
 
 from typing import Optional, Dict
@@ -25,15 +23,10 @@ from .deployment_plan import (
     SingleServerDeploymentPlan,
     ClusterDeploymentPlan,
 )
-from .server_registry import ServerRegistry
 from .server import ArangoServer
 from .server_factory import ServerFactory
 from .health_monitor import HealthMonitor
 from .deployment_strategy import (
-    DeploymentStrategy,
-    SingleServerStrategy,
-    ClusterStrategy,
-    # New lifecycle-owning strategies (transitional)
     SingleServerDeploymentStrategy,
     ClusterDeploymentStrategy,
 )
@@ -53,46 +46,29 @@ class DeploymentOrchestrator:
         self,
         logger: Logger,
         server_factory: ServerFactory,
-        server_registry: ServerRegistry,
         executor: ThreadPoolExecutor,
         health_monitor: Optional[HealthMonitor] = None,
         timeout_config: Optional[TimeoutConfig] = None,
-        *,
-        use_lifecycle_strategies: bool = False,
     ) -> None:
         """Initialize deployment orchestrator.
 
         Args:
             logger: Logger instance
             server_factory: Factory for creating servers
-            server_registry: Registry for server storage/lookup
             executor: Thread pool executor for parallel operations
             health_monitor: Optional health monitor for verification
             timeout_config: Optional timeout configuration (uses defaults if not provided)
-            use_lifecycle_strategies: Enable new lifecycle-owning strategies (transitional)
         """
         self._logger = logger
         self._server_factory = server_factory
-        self._server_registry = server_registry
         self._executor = executor
         self._health_monitor = health_monitor
         self._timeouts = timeout_config or TimeoutConfig()
         self._startup_order: list[ServerId] = []
-        # New internal storage (only used when lifecycle strategies enabled)
         self._servers: Dict[ServerId, ArangoServer] = {}
-        self._use_lifecycle = use_lifecycle_strategies
 
-    def _create_strategy(self, plan: DeploymentPlan) -> DeploymentStrategy:
-        """Create legacy deployment strategy based on plan type."""
-        if isinstance(plan, SingleServerDeploymentPlan):
-            return SingleServerStrategy(self._logger)
-        if isinstance(plan, ClusterDeploymentPlan):
-            return ClusterStrategy(self._logger, self._executor, self._timeouts)
-        raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
-
-    # Transitional: new lifecycle-owning strategies
-    def _create_lifecycle_strategy(self, plan: DeploymentPlan):
-        """Create lifecycle-owning deployment strategy (new path)."""
+    def _create_strategy(self, plan: DeploymentPlan):
+        """Create lifecycle-owning deployment strategy based on plan type."""
         if isinstance(plan, SingleServerDeploymentPlan):
             return SingleServerDeploymentStrategy(
                 self._logger, self._server_factory, self._timeouts
@@ -135,22 +111,12 @@ class DeploymentOrchestrator:
         try:
             # Reset state
             self._startup_order.clear()
-            if self._use_lifecycle:
-                # New path: strategy owns full lifecycle (create + start + verify)
-                lifecycle_strategy = self._create_lifecycle_strategy(plan)
-                self._servers = lifecycle_strategy.deploy(plan, timeout=timeout)
-                self._startup_order.extend(lifecycle_strategy.startup_order)
-                servers = self._servers
-            else:
-                # Legacy path (will be removed after transitional phase)
-                strategy = self._create_strategy(plan)
-                self._create_servers_from_plan(plan)
-                servers = self._server_registry.get_all_servers()
-                elapsed = time.time() - start_time
-                remaining = max(60.0, timeout - elapsed)
-                strategy.start_servers(
-                    servers, plan, self._startup_order, timeout=remaining
-                )
+
+            # Strategy owns full lifecycle (create + start + verify)
+            strategy = self._create_strategy(plan)
+            self._servers = strategy.deploy(plan, timeout=timeout)
+            self._startup_order.extend(strategy.startup_order)
+            servers = self._servers
 
             if self._health_monitor:
                 elapsed = time.time() - start_time
@@ -186,8 +152,7 @@ class DeploymentOrchestrator:
         Raises:
             ServerError: If shutdown fails critically
         """
-        # Prefer internal dict if lifecycle strategies enabled
-        servers = self._servers if self._use_lifecycle else self._server_registry.get_all_servers()
+        servers = self._servers
 
         if timeout is None:
             # Calculate timeout based on number of servers
@@ -249,10 +214,7 @@ class DeploymentOrchestrator:
                 failed_shutdowns.append(server.server_id)
 
         # Clear storage after shutdown
-        if self._use_lifecycle:
-            self._servers.clear()
-        else:
-            self._server_registry.clear()
+        self._servers.clear()
         self._startup_order.clear()
 
         if failed_shutdowns:
@@ -281,35 +243,13 @@ class DeploymentOrchestrator:
             "Use InstanceManager.restart_deployment() instead."
         )
 
-    def _create_servers_from_plan(self, plan: DeploymentPlan) -> None:
-        """Create and register server instances from plan."""
-        if isinstance(plan, SingleServerDeploymentPlan):
-            server_configs = [plan.server]
-            num_servers = 1
-        else:
-            server_configs = plan.servers
-            num_servers = len(server_configs)
-
-        self._logger.info("Creating %d server instance(s) from plan", num_servers)
-
-        servers = self._server_factory.create_server_instances(server_configs)
-
-        for server_id, server in servers.items():
-            self._logger.debug(
-                "Registering server: %s (role: %s)", server_id, server.role.value
-            )
-            self._server_registry.register_server(server_id, server)
-
-        self._logger.info("All server instances created and registered")
-
     def get_startup_order(self) -> list[ServerId]:
         """Get the order in which servers were started."""
         return list(self._startup_order)
 
-    # Transitional accessors for new internal dict
     def get_servers(self) -> Dict[ServerId, ArangoServer]:
-        """Get current servers (internal dict if lifecycle path enabled, else registry snapshot)."""
-        return self._servers if self._use_lifecycle else self._server_registry.get_all_servers()
+        """Get current servers dict."""
+        return self._servers
 
     def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
         """Get a single server by ID."""
