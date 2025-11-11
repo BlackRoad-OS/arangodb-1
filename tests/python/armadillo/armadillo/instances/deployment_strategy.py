@@ -114,7 +114,7 @@ class ClusterStrategy:
 
 
 # ---------------------------------------------------------------------------
-# New lifecycle-owning deployment strategy classes (transitional addition)
+# Lifecycle-owning deployment strategy classes (armadillo-49)
 # ---------------------------------------------------------------------------
 from ..core.value_objects import ServerId
 from .server_factory import ServerFactory
@@ -128,8 +128,8 @@ class SingleServerDeploymentStrategy:
     - Record startup order
     - Return authoritative Dict[ServerId, ArangoServer]
 
-    Transitional: Coexists with legacy SingleServerStrategy until orchestrator
-    switches to new deploy() path under armadillo-49 refactor.
+    Note: Legacy SingleServerStrategy is kept for reference but no longer used
+    after armadillo-49 refactor completion.
     """
 
     def __init__(
@@ -200,8 +200,8 @@ class ClusterDeploymentStrategy:
     - Record startup order
     - Return authoritative Dict[ServerId, ArangoServer]
 
-    Transitional: Coexists with legacy ClusterStrategy until orchestrator
-    switches to new deploy() path under armadillo-49 refactor.
+    Note: Legacy ClusterStrategy is kept for reference but no longer used
+    after armadillo-49 refactor completion.
     """
 
     def __init__(

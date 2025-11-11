@@ -3,7 +3,6 @@
 from typing import Dict, List, Optional, Any
 import time
 from concurrent.futures import ThreadPoolExecutor
-import threading
 from dataclasses import dataclass, field
 
 from ..core.types import (
@@ -69,7 +68,6 @@ class ThreadingResources:
     """Threading resources for parallel operations."""
 
     executor: ThreadPoolExecutor
-    lock: threading.RLock
 
     @classmethod
     def create_for_deployment(cls, deployment_id: DeploymentId) -> "ThreadingResources":
@@ -80,7 +78,6 @@ class ThreadingResources:
                 max_workers=config.infrastructure.manager_max_workers,
                 thread_name_prefix=f"InstanceMgr-{deployment_id}",
             ),
-            lock=threading.RLock(),
         )
 
     def cleanup(self) -> None:
