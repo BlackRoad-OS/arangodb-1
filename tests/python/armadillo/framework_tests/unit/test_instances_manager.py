@@ -224,3 +224,157 @@ class TestInstanceManagerMockIntegration:
         except Exception:
             # Some error handling is acceptable
             pass
+
+
+class TestInstanceManagerLifecycleDeployment:
+    """Tests for lifecycle strategy path (use_lifecycle_strategies=True) state sync."""
+
+    class FakeServer:
+        """Minimal fake server used to populate orchestrator internal dict without real processes."""
+
+        def __init__(self, server_id, role):
+            self.server_id = server_id
+            self.role = role
+            self.endpoint = f"http://localhost:0/{server_id}"
+            self._running = True
+
+        def is_running(self):
+            return self._running
+
+        def get_pid(self):
+            return 12345
+
+        def stop(self, timeout=None):
+            self._running = False
+
+    def setup_method(self):
+        self.app_context = ApplicationContext.for_testing()
+        # InstanceManager sets use_lifecycle_strategies=True when constructing orchestrator
+        self.manager = InstanceManager("lifecycle_test", app_context=self.app_context)
+
+    def _inject_fake_execution(self, plan):
+        """Patch orchestrator.execute_deployment to populate internal _servers/_startup_order dicts."""
+        orch = self.manager._deployment_orchestrator
+
+        def fake_execute_deployment(p, timeout=None):
+            from armadillo.instances.deployment_plan import (
+                SingleServerDeploymentPlan,
+                ClusterDeploymentPlan,
+            )
+            from armadillo.core.value_objects import ServerId
+            from armadillo.core.types import ServerRole
+
+            orch._startup_order.clear()
+            if isinstance(p, SingleServerDeploymentPlan):
+                sid = ServerId("server_0")
+                server = self.FakeServer(sid, ServerRole.SINGLE)
+                orch._servers = {sid: server}
+                orch._startup_order.append(sid)
+            elif isinstance(p, ClusterDeploymentPlan):
+                sids_roles = [
+                    ("agent_0", ServerRole.AGENT),
+                    ("dbserver_0", ServerRole.DBSERVER),
+                    ("coordinator_0", ServerRole.COORDINATOR),
+                ]
+                servers = {}
+                for sid_str, role in sids_roles:
+                    sid = ServerId(sid_str)
+                    servers[sid] = self.FakeServer(sid, role)
+                # Simulate correct bootstrap ordering: agent -> dbserver -> coordinator
+                orch._servers = servers
+                orch._startup_order.extend(list(servers.keys()))
+            else:
+                raise AssertionError(f"Unexpected plan type: {type(p)}")
+
+        orch.execute_deployment = fake_execute_deployment  # type: ignore
+
+    def test_lifecycle_single_server_deployment_syncs_state(self):
+        """Verify single server deployment populates InstanceManager.state from orchestrator internal dict."""
+        from armadillo.core.types import ServerConfig, ServerRole
+        from armadillo.instances.deployment_plan import SingleServerDeploymentPlan
+        from pathlib import Path
+
+        plan = SingleServerDeploymentPlan(
+            server=ServerConfig(
+                role=ServerRole.SINGLE,
+                port=8529,
+                data_dir=Path("/tmp/single_lifecycle"),
+                log_file=Path("/tmp/single_lifecycle.log"),
+            )
+        )
+        self._inject_fake_execution(plan)
+
+        self.manager.deploy_servers(plan, timeout=5.0)
+
+        # State assertions
+        assert self.manager.is_deployed() is True
+        assert self.manager.is_healthy() is True
+        assert len(self.manager.state.servers) == 1
+        orch_servers = self.manager._deployment_orchestrator.get_servers()
+        assert self.manager.state.servers is orch_servers  # should reference orchestrator internal dict
+        # Startup order propagated
+        assert len(self.manager.state.startup_order) == 1
+        sid = next(iter(self.manager.state.servers.keys()))
+        assert sid in self.manager.state.startup_order
+        # get_server returns the same instance
+        assert self.manager.get_server(sid) is self.manager.state.servers[sid]
+
+    def test_lifecycle_cluster_deployment_syncs_state(self):
+        """Verify cluster deployment populates InstanceManager.state with all servers and ordering preserved."""
+        from armadillo.core.types import ServerConfig, ServerRole
+        from armadillo.instances.deployment_plan import ClusterDeploymentPlan
+        from pathlib import Path
+
+        servers = [
+            ServerConfig(
+                role=ServerRole.AGENT,
+                port=8531,
+                data_dir=Path("/tmp/agent_lifecycle"),
+                log_file=Path("/tmp/agent_lifecycle.log"),
+            ),
+            ServerConfig(
+                role=ServerRole.DBSERVER,
+                port=8530,
+                data_dir=Path("/tmp/dbserver_lifecycle"),
+                log_file=Path("/tmp/dbserver_lifecycle.log"),
+            ),
+            ServerConfig(
+                role=ServerRole.COORDINATOR,
+                port=8529,
+                data_dir=Path("/tmp/coord_lifecycle"),
+                log_file=Path("/tmp/coord_lifecycle.log"),
+            ),
+        ]
+        plan = ClusterDeploymentPlan(servers=servers)
+        self._inject_fake_execution(plan)
+
+        self.manager.deploy_servers(plan, timeout=5.0)
+
+        assert self.manager.is_deployed() is True
+        assert self.manager.is_healthy() is True
+
+        # All three servers present
+        assert len(self.manager.state.servers) == 3
+        orch_servers = self.manager._deployment_orchestrator.get_servers()
+        assert self.manager.state.servers is orch_servers
+
+        # Startup order matches injected sequence (agent -> dbserver -> coordinator)
+        startup_roles = [
+            self.manager.state.servers[sid].role for sid in self.manager.state.startup_order
+        ]
+        assert startup_roles == [
+            ServerRole.AGENT,
+            ServerRole.DBSERVER,
+            ServerRole.COORDINATOR,
+        ]
+
+        # Role-based retrieval works
+        agents = self.manager.get_servers_by_role(ServerRole.AGENT)
+        dbservers = self.manager.get_servers_by_role(ServerRole.DBSERVER)
+        coordinators = self.manager.get_servers_by_role(ServerRole.COORDINATOR)
+        assert len(agents) == 1 and len(dbservers) == 1 and len(coordinators) == 1
+
+        # Shutdown path should clear state without errors using fake server stop()
+        self.manager.shutdown_deployment(timeout=5.0)
+        assert self.manager.is_deployed() is False
+        assert len(self.manager.state.servers) == 0
