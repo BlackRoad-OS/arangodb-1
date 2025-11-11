@@ -111,7 +111,7 @@ class InstanceManager:
         self.state = DeploymentState()
         self._threading = ThreadingResources.create_for_deployment(deployment_id)
 
-        # Initialize new architectural components
+        # Initialize new architectural components (transitional: registry still passed to orchestrator)
         self._server_registry = ServerRegistry()
         self._health_monitor = HealthMonitor(
             self._app_context.logger, self._app_context.config.timeouts
@@ -123,6 +123,7 @@ class InstanceManager:
             executor=self._threading.executor,
             health_monitor=self._health_monitor,
             timeout_config=self._app_context.config.timeouts,
+            use_lifecycle_strategies=True,
         )
 
     def __enter__(self):
@@ -202,8 +203,8 @@ class InstanceManager:
                 # Delegate to DeploymentOrchestrator for the actual deployment
                 self._deployment_orchestrator.execute_deployment(plan, timeout=timeout)
 
-                # Sync state from registry for facade pattern
-                self._sync_state_from_registry()
+                # Sync state from orchestrator internal dict (new lifecycle path)
+                self._sync_state_from_orchestrator()
 
                 # Mark deployment as active
                 self.state.status.is_deployed = True
@@ -230,16 +231,12 @@ class InstanceManager:
                     pass
                 raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
-    def _sync_state_from_registry(self) -> None:
-        """Synchronize state from ServerRegistry for facade pattern.
+    def _sync_state_from_orchestrator(self) -> None:
+        """Synchronize state from DeploymentOrchestrator internal storage (lifecycle strategies).
 
-        This allows the InstanceManager facade to provide access to servers and startup order
-        while the actual deployment is managed by specialized components.
+        The orchestrator now owns the authoritative servers dict; we mirror it for facade access.
         """
-        # Sync servers from registry
-        self.state.servers = self._server_registry.get_all_servers()
-
-        # Sync startup order from orchestrator
+        self.state.servers = self._deployment_orchestrator.get_servers()
         self.state.startup_order = self._deployment_orchestrator.get_startup_order()
 
     def shutdown_deployment(self, timeout: Optional[float] = None) -> None:
@@ -518,30 +515,12 @@ class InstanceManager:
         self.deploy_servers(timeout / 2)
 
     def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
-        """Get server instance by ID.
-
-        Args:
-            server_id: Server identifier
-
-        Returns:
-            Server instance or None if not found
-        """
-        # Delegate to ServerRegistry for better performance and consistency
-        return self._server_registry.get_server(server_id) or self.state.servers.get(
-            server_id
-        )
+        """Get server instance by ID."""
+        return self.state.servers.get(server_id)
 
     def get_servers_by_role(self, role: ServerRole) -> List[ArangoServer]:
-        """Get all servers with the specified role.
-
-        Args:
-            role: Server role to filter by
-
-        Returns:
-            List of servers with the specified role
-        """
-        # Delegate to ServerRegistry for better performance
-        return self._server_registry.get_servers_by_role(role)
+        """Get all servers with the specified role."""
+        return [s for s in self.state.servers.values() if s.role == role]
 
     def get_all_servers(self) -> Dict[ServerId, ArangoServer]:
         """Get all servers as a dictionary.
@@ -598,10 +577,8 @@ class InstanceManager:
                 error_message="No deployment active",
             )
 
-        # Delegate to HealthMonitor for health checking
-        servers = self._server_registry.get_all_servers()
-        if not servers:
-            servers = self.state.servers  # Fallback to state if registry empty
+        # Delegate to HealthMonitor for health checking (authoritative orchestrator dict)
+        servers = self._deployment_orchestrator.get_servers()
 
         health_status = self._health_monitor.check_deployment_health(
             servers, timeout=timeout
@@ -618,10 +595,8 @@ class InstanceManager:
         Returns:
             Dictionary mapping server IDs to their stats
         """
-        # Delegate to HealthMonitor for stats collection
-        servers = self._server_registry.get_all_servers()
-        if not servers:
-            servers = self.state.servers  # Fallback to state if registry empty
+        # Delegate to HealthMonitor for stats collection (authoritative orchestrator dict)
+        servers = self._deployment_orchestrator.get_servers()
 
         return self._health_monitor.collect_deployment_stats(servers)
 

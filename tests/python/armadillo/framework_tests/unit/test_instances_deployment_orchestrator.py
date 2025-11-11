@@ -173,3 +173,182 @@ class TestDeploymentOrchestratorRefactored:
         # Verify servers were stopped in reverse order (timeout divided by number of servers)
         mock_server2.stop.assert_called_once_with(timeout=30.0)  # 60.0 / 2 servers
         mock_server1.stop.assert_called_once_with(timeout=30.0)
+
+    # ------------------------------------------------------------------
+    # New lifecycle strategy path tests (armadillo-49 transitional)
+    # ------------------------------------------------------------------
+
+    def test_init_lifecycle_flag(self):
+        mock_logger = Mock()
+        mock_factory = Mock()
+        mock_registry = Mock()
+        mock_executor = Mock()
+
+        orchestrator = DeploymentOrchestrator(
+            mock_logger,
+            mock_factory,
+            mock_registry,
+            mock_executor,
+            use_lifecycle_strategies=True,
+        )
+
+        assert orchestrator._use_lifecycle is True
+        assert isinstance(orchestrator._servers, dict)
+        assert orchestrator.get_servers() == {}
+
+    def test_create_lifecycle_strategy_single(self):
+        mock_logger = Mock()
+        mock_factory = Mock()
+        mock_registry = Mock()
+        mock_executor = Mock()
+
+        orchestrator = DeploymentOrchestrator(
+            mock_logger,
+            mock_factory,
+            mock_registry,
+            mock_executor,
+            use_lifecycle_strategies=True,
+        )
+
+        plan = SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE))
+        lifecycle_strategy = orchestrator._create_lifecycle_strategy(plan)
+
+        from armadillo.instances.deployment_strategy import SingleServerDeploymentStrategy
+        assert isinstance(lifecycle_strategy, SingleServerDeploymentStrategy)
+
+    def test_create_lifecycle_strategy_cluster(self):
+        mock_logger = Mock()
+        mock_factory = Mock()
+        mock_registry = Mock()
+        mock_executor = Mock()
+
+        orchestrator = DeploymentOrchestrator(
+            mock_logger,
+            mock_factory,
+            mock_registry,
+            mock_executor,
+            use_lifecycle_strategies=True,
+        )
+
+        plan = ClusterDeploymentPlan()
+        lifecycle_strategy = orchestrator._create_lifecycle_strategy(plan)
+
+        from armadillo.instances.deployment_strategy import ClusterDeploymentStrategy
+        assert isinstance(lifecycle_strategy, ClusterDeploymentStrategy)
+
+    def test_execute_deployment_lifecycle_single(self):
+        mock_logger = Mock()
+        mock_registry = Mock()
+        mock_executor = Mock()
+
+        # Build mock factory that returns a single healthy mock server
+        mock_server = Mock()
+        mock_server.start = Mock()
+        mock_server.health_check_sync = Mock(return_value=Mock(is_healthy=True, error_message=None))
+        mock_server.role = ServerRole.SINGLE
+
+        class MockFactory:
+            def create_server_instances(self, servers_config):
+                # Return dict with a deterministic ServerId-like key
+                return {"server_0": mock_server}
+
+        orchestrator = DeploymentOrchestrator(
+            mock_logger,
+            MockFactory(),
+            mock_registry,
+            mock_executor,
+            use_lifecycle_strategies=True,
+        )
+
+        plan = SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE))
+        orchestrator.execute_deployment(plan, timeout=5.0)
+
+        # Internal servers dict should be populated
+        servers = orchestrator.get_servers()
+        assert len(servers) == 1
+        assert "server_0" in servers
+        mock_server.start.assert_called_once()
+        mock_server.health_check_sync.assert_called_once()
+        assert orchestrator.get_startup_order() == ["server_0"]
+
+    def test_execute_deployment_lifecycle_cluster(self, monkeypatch):
+        mock_logger = Mock()
+        mock_registry = Mock()
+        mock_executor = Mock()
+
+        # Prepare mock servers with roles
+        agent1 = Mock(role=ServerRole.AGENT)
+        agent2 = Mock(role=ServerRole.AGENT)
+        db1 = Mock(role=ServerRole.DBSERVER)
+        coord1 = Mock(role=ServerRole.COORDINATOR)
+
+        class MockFactory:
+            def create_server_instances(self, servers_config):
+                return {
+                    "agent_0": agent1,
+                    "agent_1": agent2,
+                    "dbserver_0": db1,
+                    "coordinator_0": coord1,
+                }
+
+        # Fake bootstrap to append startup order deterministically
+        def fake_bootstrap(self, servers, startup_order, timeout=0):
+            for sid, srv in servers.items():
+                if srv.role == ServerRole.AGENT:
+                    startup_order.append(sid)
+            for sid, srv in servers.items():
+                if srv.role == ServerRole.DBSERVER:
+                    startup_order.append(sid)
+            for sid, srv in servers.items():
+                if srv.role == ServerRole.COORDINATOR:
+                    startup_order.append(sid)
+
+        from armadillo.instances.cluster_bootstrapper import ClusterBootstrapper
+        monkeypatch.setattr(ClusterBootstrapper, "bootstrap_cluster", fake_bootstrap)
+
+        orchestrator = DeploymentOrchestrator(
+            mock_logger,
+            MockFactory(),
+            mock_registry,
+            mock_executor,
+            use_lifecycle_strategies=True,
+        )
+
+        plan = ClusterDeploymentPlan(servers=[Mock(role=ServerRole.AGENT),
+                                              Mock(role=ServerRole.AGENT),
+                                              Mock(role=ServerRole.DBSERVER),
+                                              Mock(role=ServerRole.COORDINATOR)])
+        orchestrator.execute_deployment(plan, timeout=10.0)
+
+        servers = orchestrator.get_servers()
+        assert set(servers.keys()) == {"agent_0", "agent_1", "dbserver_0", "coordinator_0"}
+        order = orchestrator.get_startup_order()
+        assert order[:2] == ["agent_0", "agent_1"]
+        assert "dbserver_0" in order[2:3]
+        assert order[-1] == "coordinator_0"
+
+    def test_shutdown_deployment_lifecycle(self):
+        mock_logger = Mock()
+        mock_registry = Mock()
+        mock_executor = Mock()
+
+        mock_server1 = Mock()
+        mock_server1.server_id = "server_0"
+        mock_server1.role = ServerRole.SINGLE
+        mock_server1.stop = Mock()
+
+        orchestrator = DeploymentOrchestrator(
+            mock_logger,
+            Mock(),  # factory unused for shutdown test
+            mock_registry,
+            mock_executor,
+            use_lifecycle_strategies=True,
+        )
+        orchestrator._servers = {"server_0": mock_server1}
+        orchestrator._startup_order = ["server_0"]
+
+        orchestrator.shutdown_deployment(timeout=10.0)
+
+        mock_server1.stop.assert_called_once()
+        assert orchestrator.get_servers() == {}
+        assert orchestrator.get_startup_order() == []
