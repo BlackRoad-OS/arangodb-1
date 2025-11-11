@@ -288,14 +288,13 @@ struct AqlValue final {
     //  PLUS sizeof(ResourceMonitor*)
     struct {
       velocypack::Slice toSlice() const noexcept {
-        return velocypack::Slice(reinterpret_cast<uint8_t const*>(
-            pointer + sizeof(arangodb::ResourceMonitor*)));
+        return velocypack::Slice(getPayloadPtr());
       }
 
       // Only returns the size of the actual data
       // Doesn't include sizeof(ResourceMonitor*)
       uint64_t getLength() const noexcept {
-        if constexpr (basics::isLittleEndian()) {
+        if constexpr (basics::isLittleEndia n()) {
           return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
         } else {
           return (lengthOrigin & 0x0000ffffffffffffULL);
@@ -399,8 +398,8 @@ struct AqlValue final {
   /// @brief AqlValues can be copied and moved as required
   /// memory management is not performed via AqlValue destructor but via
   /// explicit calls to destroy()
-  AqlValue(AqlValue const&) = default;
-  AqlValue& operator=(AqlValue const&) = default;
+  AqlValue(AqlValue const&) noexcept = default;
+  AqlValue& operator=(AqlValue const&) noexcept = default;
   AqlValue(AqlValue const&, arangodb::ResourceMonitor&);
   AqlValue(AqlValue&&) noexcept = default;
   AqlValue& operator=(AqlValue&&) noexcept = default;
@@ -582,10 +581,7 @@ struct AqlValue final {
     }
 
     *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-    if (len) {
-      rm.increaseMemoryUsage(len);
-    }
-    rm.increaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
+    rm.increaseMemoryUsage(total);
     return reinterpret_cast<uint8_t*>(base);
   }
 
@@ -596,10 +592,7 @@ struct AqlValue final {
       return;
     }
     auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
-    if (len) {
-      rm->decreaseMemoryUsage(len);
-    }
-    rm->decreaseMemoryUsage(static_cast<std::uint64_t>(kPrefix));
+    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
 
     if (mot == MemoryOriginType::Malloc) {
       std::free(base);

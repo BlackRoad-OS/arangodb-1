@@ -983,9 +983,7 @@ void AqlValue::destroy() noexcept {
       delete _data.rangeMeta.range;
       break;
     case VPACK_SUPERVISED_SLICE: {
-      auto len = static_cast<std::uint64_t>(
-          velocypack::Slice(_data.supervisedSliceMeta.getPayloadPtr())
-              .byteSize());
+      auto len = _data.supervisedSliceMeta.getLength();
       deallocateSupervised(
           _data.supervisedSliceMeta.pointer, len,
           static_cast<MemoryOriginType>(_data.supervisedSliceMeta.getOrigin()));
