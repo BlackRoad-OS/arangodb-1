@@ -1,8 +1,4 @@
-"""High-level deployment orchestration and lifecycle management.
-
-Refactored (armadillo-49): Deployment strategies now own full server lifecycle
-(create + start + verify). Servers stored in-memory dict; ServerRegistry removed.
-"""
+"""High-level deployment orchestration and lifecycle management."""
 
 from typing import Optional, Dict
 import time

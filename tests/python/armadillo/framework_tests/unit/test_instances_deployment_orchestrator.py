@@ -1,4 +1,4 @@
-"""Unit tests for DeploymentOrchestrator (refactored version)."""
+"""Unit tests for DeploymentOrchestrator."""
 
 import pytest
 from unittest.mock import Mock, patch
@@ -10,8 +10,8 @@ from armadillo.instances.deployment_plan import (
 from armadillo.core.types import ServerRole
 from armadillo.core.errors import ServerError
 
-class TestDeploymentOrchestratorRefactored:
-    """Test the refactored DeploymentOrchestrator with lifecycle strategies."""
+class TestDeploymentOrchestrator:
+    """Test DeploymentOrchestrator with lifecycle strategies."""
 
     def test_init(self):
         """Test orchestrator initialization."""
