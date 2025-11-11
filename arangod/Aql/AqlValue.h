@@ -294,7 +294,7 @@ struct AqlValue final {
       // Only returns the size of the actual data
       // Doesn't include sizeof(ResourceMonitor*)
       uint64_t getLength() const noexcept {
-        if constexpr (basics::isLittleEndia n()) {
+        if constexpr (basics::isLittleEndian()) {
           return (lengthOrigin & 0xffffffffffff0000ULL) >> 16;
         } else {
           return (lengthOrigin & 0x0000ffffffffffffULL);
