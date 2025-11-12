@@ -26,6 +26,7 @@
 #include "Aql/AstNode.h"
 #include "Aql/ExpressionContext.h"
 #include "Aql/ExecutorExpressionContext.h"
+#include "Aql/FixedVarExpressionContext.h"
 #include "Aql/Function.h"
 #include "Aql/Functions.h"
 #include "Basics/Exceptions.h"
@@ -48,7 +49,6 @@
 
 #include <optional>
 #include <vector>
-#include <Aql/ExecutorExpressionContext.h>
 
 using namespace arangodb;
 
@@ -216,7 +216,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
       }
     }
 
-    return AqlValue{builder->slice(), builder->size()};
+    return AqlValue{builder->slice(), builder->size(), resourceMonitor};
   }
 
   if (!initial.isObject()) {
@@ -259,7 +259,7 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
     builder->add(initialSlice);
   }
 
-  return AqlValue{builder->slice(), builder->size()};
+  return AqlValue{builder->slice(), builder->size(), resourceMonitor};
 }
 
 }  // namespace
@@ -267,6 +267,9 @@ AqlValue mergeParameters(ExpressionContext* expressionContext,
 /// @brief function UNSET
 AqlValue functions::Unset(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "UNSET";
 
   AqlValue const& value =
@@ -286,13 +289,16 @@ AqlValue functions::Unset(ExpressionContext* expressionContext, AstNode const&,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, true, false, *builder.get());
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function UNSET_RECURSIVE
 AqlValue functions::UnsetRecursive(ExpressionContext* expressionContext,
                                    AstNode const&,
                                    VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "UNSET_RECURSIVE";
 
   AqlValue const& value =
@@ -313,12 +319,15 @@ AqlValue functions::UnsetRecursive(ExpressionContext* expressionContext,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, true, true, *builder.get());
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function KEEP
 AqlValue functions::Keep(ExpressionContext* expressionContext, AstNode const&,
                          VPackFunctionParametersView parameters) {
+  auto* execCtx = dynamic_cast<ExecutorExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "KEEP";
 
   AqlValue const& value =
@@ -339,13 +348,16 @@ AqlValue functions::Keep(ExpressionContext* expressionContext, AstNode const&,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, false, false, *builder.get());
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function KEEP_RECURSIVE
 AqlValue functions::KeepRecursive(ExpressionContext* expressionContext,
                                   AstNode const&,
                                   VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "KEEP_RECURSIVE";
 
   AqlValue const& value =
@@ -366,13 +378,16 @@ AqlValue functions::KeepRecursive(ExpressionContext* expressionContext,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, false, true, *builder.get());
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function TRANSLATE
 AqlValue functions::Translate(ExpressionContext* expressionContext,
                               AstNode const&,
                               VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   // cppcheck-suppress variableScope
   static char const* AFN = "TRANSLATE";
 
@@ -403,7 +418,7 @@ AqlValue functions::Translate(ExpressionContext* expressionContext,
   }
 
   if (!result.isNone()) {
-    return AqlValue(result);
+    return AqlValue(result, result.byteSize(), rm);
   }
 
   // attribute not found, now return the default value
@@ -464,6 +479,9 @@ AqlValue functions::Has(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::Attributes(ExpressionContext* expressionContext,
                                AstNode const&,
                                VPackFunctionParametersView parameters) {
+  auto* execCtx = dynamic_cast<ExecutorExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+
   size_t const n = parameters.size();
 
   if (n < 1) {
@@ -511,7 +529,7 @@ AqlValue functions::Attributes(ExpressionContext* expressionContext,
     }
     builder->close();
 
-    return AqlValue(builder->slice(), builder->size());
+    return AqlValue(builder->slice(), builder->size(), rm);
   }
 
   std::unordered_set<std::string_view> keys;
@@ -526,12 +544,15 @@ AqlValue functions::Attributes(ExpressionContext* expressionContext,
     builder->add(VPackValue(it));
   }
   builder->close();
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function VALUES
 AqlValue functions::Values(ExpressionContext* expressionContext, AstNode const&,
                            VPackFunctionParametersView parameters) {
+  auto* execCtx = dynamic_cast<ExecutorExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+
   size_t const n = parameters.size();
 
   if (n < 1) {
@@ -583,12 +604,15 @@ AqlValue functions::Values(ExpressionContext* expressionContext, AstNode const&,
   }
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 AqlValue functions::Value(ExpressionContext* expressionContext,
                           AstNode const& node,
                           VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   size_t const n = parameters.size();
 
   if (n < 2) {
@@ -662,7 +686,7 @@ AqlValue functions::Value(ExpressionContext* expressionContext,
     return AqlValue{trx.extractIdString(root)};
   }
 
-  return AqlValue{slice};
+  return AqlValue{slice, slice.byteSize(), rm};
 }
 
 /// @brief function MATCHES
@@ -758,6 +782,9 @@ AqlValue functions::Matches(ExpressionContext* expressionContext,
 /// @brief function ZIP
 AqlValue functions::Zip(ExpressionContext* expressionContext, AstNode const&,
                         VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   // cppcheck-suppress variableScope
   static char const* AFN = "ZIP";
 
@@ -813,12 +840,15 @@ AqlValue functions::Zip(ExpressionContext* expressionContext, AstNode const&,
 
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 AqlValue functions::Entries(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   // cppcheck-suppress variableScope
   static char const* AFN = "ENTRIES";
 
@@ -855,7 +885,7 @@ AqlValue functions::Entries(ExpressionContext* expressionContext,
 
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 }  // namespace arangodb::aql
