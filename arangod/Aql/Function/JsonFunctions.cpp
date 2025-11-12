@@ -25,6 +25,7 @@
 #include "Aql/AqlValueMaterializer.h"
 #include "Aql/AstNode.h"
 #include "Aql/ExpressionContext.h"
+#include "Aql/FixedVarExpressionContext.h"
 #include "Aql/Function.h"
 #include "Aql/Functions.h"
 #include "Transaction/Context.h"
@@ -48,6 +49,9 @@ namespace arangodb::aql {
 /// @brief function JSON_STRINGIFY
 AqlValue functions::JsonStringify(ExpressionContext* exprCtx, AstNode const&,
                                   VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(exprCtx);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &exprCtx->trx();
   auto* vopts = &trx->vpackOptions();
   AqlValue const& value =
@@ -61,13 +65,16 @@ AqlValue functions::JsonStringify(ExpressionContext* exprCtx, AstNode const&,
   VPackDumper dumper(&adapter, trx->transactionContextPtr()->getVPackOptions());
   dumper.dump(slice);
 
-  return AqlValue(std::string_view{buffer->data(), buffer->length()});
+  return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
 }
 
 /// @brief function JSON_PARSE
 AqlValue functions::JsonParse(ExpressionContext* expressionContext,
                               AstNode const&,
                               VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "JSON_PARSE";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -88,7 +95,7 @@ AqlValue functions::JsonParse(ExpressionContext* expressionContext,
 
   try {
     std::shared_ptr<VPackBuilder> builder = velocypack::Parser::fromJson(p, l);
-    return AqlValue(builder->slice(), builder->size());
+    return AqlValue(builder->slice(), builder->size(), rm);
   } catch (...) {
     registerWarning(expressionContext, AFN,
                     TRI_ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
