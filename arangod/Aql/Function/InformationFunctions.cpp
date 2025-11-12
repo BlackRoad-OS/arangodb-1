@@ -25,6 +25,7 @@
 #include "Aql/AqlValueMaterializer.h"
 #include "Aql/AstNode.h"
 #include "Aql/ExpressionContext.h"
+#include "Aql/FixedVarExpressionContext.h"
 #include "Aql/Function.h"
 #include "Aql/Functions.h"
 #include "Basics/Exceptions.h"
@@ -43,27 +44,34 @@ using namespace arangodb;
 namespace arangodb::aql {
 
 /// @brief function CURRENT_USER
-AqlValue functions::CurrentUser(ExpressionContext*, AstNode const&,
+AqlValue functions::CurrentUser(ExpressionContext* expressionContext, AstNode const&,
                                 VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   std::string const& username = ExecContext::current().user();
   if (username.empty()) {
     return AqlValue(AqlValueHintNull());
   }
-  return AqlValue(username);
+  return AqlValue(username, rm);
 }
 
 /// @brief function CURRENT_DATABASE
 AqlValue functions::CurrentDatabase(ExpressionContext* expressionContext,
                                     AstNode const&,
                                     VPackFunctionParametersView parameters) {
-  return AqlValue(expressionContext->vocbase().name());
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+  return AqlValue(expressionContext->vocbase().name(), rm);
 }
 
 /// @brief function VERSION
 AqlValue functions::Version(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
-  return AqlValue(rest::Version::getServerVersion());
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+  return AqlValue(rest::Version::getServerVersion(), rm);
 }
 
 }  // namespace arangodb::aql

@@ -25,6 +25,7 @@
 #include "Aql/AqlValueMaterializer.h"
 #include "Aql/AstNode.h"
 #include "Aql/ExpressionContext.h"
+#include "Aql/FixedVarExpressionContext.h"
 #include "Aql/Function.h"
 #include "Aql/Functions.h"
 #include "Basics/StringUtils.h"
@@ -45,6 +46,9 @@ namespace arangodb::aql {
 AqlValue functions::IpV4FromNumber(ExpressionContext* expressionContext,
                                    AstNode const&,
                                    VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "IPV4_FROM_NUMBER";
 
   AqlValue const& value =
@@ -85,7 +89,7 @@ AqlValue functions::IpV4FromNumber(ExpressionContext* expressionContext,
   digit = (number & 0x0000ffULL);
   p += basics::StringUtils::itoa(digit, p);
 
-  return AqlValue(std::string_view{&result[0], p});
+  return AqlValue(std::string_view{&result[0], p}, rm);
 }
 
 /// @brief function IPV4_TO_NUMBER
