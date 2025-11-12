@@ -1,11 +1,10 @@
-"""Integration tests for DeploymentOrchestrator startup/shutdown order correctness.
+"""Integration tests for DeploymentOrchestrator lifecycle correctness.
 
 These tests verify that the orchestrator correctly:
 1. Executes deployments and populates internal server dict
-2. Maintains correct startup order for clusters (agents → dbservers → coordinators)
-3. Shuts down servers in correct order (coordinators/dbservers → agents)
-4. Handles edge cases: duplicate deployment, shutdown with no servers, partial failures
-5. Properly cleans up after failures
+2. Shuts down servers in correct order (non-agents → agents)
+3. Handles edge cases: duplicate deployment, shutdown with no servers, partial failures
+4. Properly cleans up after failures
 """
 
 import pytest
@@ -62,13 +61,12 @@ def timeout_config():
 
 
 @pytest.fixture
-def orchestrator(logger, server_factory, executor, health_monitor, timeout_config):
+def orchestrator(logger, server_factory, executor, timeout_config):
     """Create orchestrator instance."""
     return DeploymentOrchestrator(
         logger=logger,
         server_factory=server_factory,
         executor=executor,
-        health_monitor=health_monitor,
         timeout_config=timeout_config,
     )
 
@@ -118,10 +116,6 @@ class TestSingleServerDeployment:
         assert ServerId("SNGL-1") in servers
         assert servers[ServerId("SNGL-1")] == mock_server
 
-        # Verify startup order
-        startup_order = orchestrator.get_startup_order()
-        assert startup_order == [ServerId("SNGL-1")]
-
     def test_shutdown_clears_servers_dict(
         self, orchestrator, server_factory, health_monitor
     ):
@@ -150,7 +144,6 @@ class TestSingleServerDeployment:
 
         # Verify
         assert len(orchestrator.get_servers()) == 0
-        assert orchestrator.get_startup_order() == []
         mock_server.stop.assert_called_once()
 
     def test_shutdown_with_no_servers(self, orchestrator):
@@ -168,10 +161,10 @@ class TestSingleServerDeployment:
 class TestClusterDeployment:
     """Test cluster deployment lifecycle and ordering."""
 
-    def test_cluster_startup_order_correct(
+    def test_cluster_deployment_success(
         self, orchestrator, server_factory, executor, health_monitor
     ):
-        """Verify cluster starts in correct order: agents → dbservers → coordinators."""
+        """Verify cluster deployment succeeds and all servers are present."""
         # Setup cluster plan
         plan = ClusterDeploymentPlan(
             servers=[
@@ -249,24 +242,15 @@ class TestClusterDeployment:
         servers = orchestrator.get_servers()
         assert len(servers) == 6
 
-        # Verify startup order: agents first, then dbservers, then coordinators
-        startup_order = orchestrator.get_startup_order()
-        assert len(startup_order) == 6
+        # Verify all servers are present
+        assert sum(1 for s in servers.values() if s.role == ServerRole.AGENT) == 3
+        assert sum(1 for s in servers.values() if s.role == ServerRole.DBSERVER) == 2
+        assert sum(1 for s in servers.values() if s.role == ServerRole.COORDINATOR) == 1
 
-        # Extract roles in startup order
-        roles_in_order = [servers[sid].role for sid in startup_order]
-
-        # First 3 should be agents
-        assert all(role == ServerRole.AGENT for role in roles_in_order[:3])
-        # Next 2 should be dbservers
-        assert all(role == ServerRole.DBSERVER for role in roles_in_order[3:5])
-        # Last should be coordinator
-        assert roles_in_order[5] == ServerRole.COORDINATOR
-
-    def test_cluster_shutdown_order_correct(
+    def test_cluster_shutdown_role_based_order(
         self, orchestrator, server_factory, executor, health_monitor
     ):
-        """Verify cluster shuts down in reverse: coordinators/dbservers → agents."""
+        """Verify cluster shuts down in role-based order: non-agents → agents."""
         # Setup and deploy cluster
         plan = ClusterDeploymentPlan(
             servers=[
@@ -466,7 +450,6 @@ class TestEdgeCases:
 
         # No servers should be stored
         assert len(orchestrator.get_servers()) == 0
-        assert len(orchestrator.get_startup_order()) == 0
 
     def test_get_server_returns_none_for_missing(self, orchestrator):
         """Verify get_server returns None for non-existent server ID."""

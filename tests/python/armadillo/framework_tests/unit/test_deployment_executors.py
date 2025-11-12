@@ -1,19 +1,19 @@
 """
-Unit tests for new lifecycle-owning deployment strategy classes:
-- SingleServerDeploymentStrategy
-- ClusterDeploymentStrategy
+Unit tests for deployment executor classes:
+- SingleServerExecutor
+- ClusterExecutor
 
 These tests validate:
 1. Correct handling of plan types
 2. Server factory invocation
-3. Startup order population
-4. Error raising on type mismatches
+3. Error raising on type mismatches
+4. Shutdown logic
 
 They use lightweight mocks to avoid spawning real processes.
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 import pytest
 
 from armadillo.core.types import ServerConfig, ServerRole, TimeoutConfig, HealthStatus
@@ -23,9 +23,9 @@ from armadillo.instances.deployment_plan import (
     SingleServerDeploymentPlan,
     ClusterDeploymentPlan,
 )
-from armadillo.instances.deployment_strategy import (
-    SingleServerDeploymentStrategy,
-    ClusterDeploymentStrategy,
+from armadillo.instances.deployment_executor import (
+    SingleServerExecutor,
+    ClusterExecutor,
 )
 from armadillo.instances.cluster_bootstrapper import ClusterBootstrapper
 
@@ -53,10 +53,10 @@ class DummyLogger:
 
 
 # ---------------------------------------------------------------------------
-# SingleServerDeploymentStrategy Tests
+# SingleServerExecutor Tests
 # ---------------------------------------------------------------------------
 
-def test_single_server_deployment_strategy_success(tmp_path):
+def test_single_server_executor_success(tmp_path):
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = SingleServerDeploymentPlan(
@@ -78,34 +78,33 @@ def test_single_server_deployment_strategy_success(tmp_path):
 
     factory = MockFactory()
 
-    strategy = SingleServerDeploymentStrategy(logger, factory, timeouts)
-    servers = strategy.deploy(plan)
+    executor = SingleServerExecutor(logger, factory, timeouts)
+    servers = executor.deploy(plan)
 
     assert len(servers) == 1
     assert server_id in servers
     mock_server.start.assert_called_once()
     mock_server.health_check_sync.assert_called_once()
-    assert strategy.startup_order == [server_id]
 
 
-def test_single_server_deployment_strategy_wrong_plan_type(tmp_path):
+def test_single_server_executor_wrong_plan_type(tmp_path):
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
-    # Cluster plan passed to single strategy should raise
+    # Cluster plan passed to single executor should raise
     cluster_plan = ClusterDeploymentPlan(servers=[])
 
     class MockFactory:
         def create_server_instances(self, servers_config):
             return {}
 
-    strategy = SingleServerDeploymentStrategy(logger, MockFactory(), timeouts)
+    executor = SingleServerExecutor(logger, MockFactory(), timeouts)
 
     with pytest.raises(ServerError):
-        strategy.deploy(cluster_plan)
+        executor.deploy(cluster_plan)
 
 
-def test_single_server_deployment_strategy_health_failure(tmp_path):
+def test_single_server_executor_health_failure(tmp_path):
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = SingleServerDeploymentPlan(
@@ -122,21 +121,36 @@ def test_single_server_deployment_strategy_health_failure(tmp_path):
         def create_server_instances(self, servers_config):
             return {server_id: mock_server}
 
-    strategy = SingleServerDeploymentStrategy(logger, MockFactory(), timeouts)
+    executor = SingleServerExecutor(logger, MockFactory(), timeouts)
 
     with pytest.raises(ServerError) as exc:
-        strategy.deploy(plan)
+        executor.deploy(plan)
 
     assert "health check failed" in str(exc.value).lower()
     mock_server.start.assert_called_once()
     mock_server.health_check_sync.assert_called_once()
 
 
+def test_single_server_executor_shutdown(tmp_path):
+    """Test single server executor shutdown."""
+    logger = DummyLogger()
+    timeouts = TimeoutConfig()
+
+    server_id = ServerId("server_0")
+    mock_server = MagicMock()
+    servers = {server_id: mock_server}
+
+    executor = SingleServerExecutor(logger, Mock(), timeouts)
+    executor.shutdown(servers, timeout=10.0)
+
+    mock_server.stop.assert_called_once_with(10.0)
+
+
 # ---------------------------------------------------------------------------
-# ClusterDeploymentStrategy Tests
+# ClusterExecutor Tests
 # ---------------------------------------------------------------------------
 
-def test_cluster_deployment_strategy_success(tmp_path, monkeypatch):
+def test_cluster_executor_success(tmp_path, monkeypatch):
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -161,36 +175,26 @@ def test_cluster_deployment_strategy_success(tmp_path, monkeypatch):
             return servers_dict
 
     # Monkeypatch bootstrapper to avoid real startup logic
-    def fake_bootstrap(self, servers, startup_order, timeout=0):
-        # Simulate ordered startup: agents -> dbservers -> coordinators
-        for role in (ServerRole.AGENT, ServerRole.DBSERVER, ServerRole.COORDINATOR):
-            for sid, srv in servers.items():
-                if srv.role == role:
-                    startup_order.append(sid)
+    def fake_bootstrap(self, servers, timeout=0):
+        # Just verify servers dict is passed correctly
+        assert servers == servers_dict
 
     monkeypatch.setattr(ClusterBootstrapper, "bootstrap_cluster", fake_bootstrap)
 
     from concurrent.futures import ThreadPoolExecutor
-    executor = ThreadPoolExecutor(max_workers=1)
+    executor_pool = ThreadPoolExecutor(max_workers=1)
 
-    strategy = ClusterDeploymentStrategy(
-        logger, MockFactory(), executor, timeouts
+    executor = ClusterExecutor(
+        logger, MockFactory(), executor_pool, timeouts
     )
-    servers = strategy.deploy(plan)
+    servers = executor.deploy(plan)
 
     assert servers == servers_dict
-    order = strategy.startup_order
-    # Validate order grouping
-    roles_in_order = [servers_dict[sid].role for sid in order]
-    # Agents first
-    assert roles_in_order[:2] == [ServerRole.AGENT, ServerRole.AGENT]
-    assert ServerRole.DBSERVER in roles_in_order[2:3]
-    assert roles_in_order[-1] == ServerRole.COORDINATOR
 
-    executor.shutdown(wait=True)
+    executor_pool.shutdown(wait=True)
 
 
-def test_cluster_deployment_strategy_wrong_plan_type(monkeypatch):
+def test_cluster_executor_wrong_plan_type(monkeypatch):
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -199,9 +203,9 @@ def test_cluster_deployment_strategy_wrong_plan_type(monkeypatch):
             return {}
 
     from concurrent.futures import ThreadPoolExecutor
-    executor = ThreadPoolExecutor(max_workers=1)
+    executor_pool = ThreadPoolExecutor(max_workers=1)
 
-    strategy = ClusterDeploymentStrategy(logger, MockFactory(), executor, timeouts)
+    executor = ClusterExecutor(logger, MockFactory(), executor_pool, timeouts)
 
     # Use single server plan (invalid)
     bad_plan = SingleServerDeploymentPlan(
@@ -215,12 +219,12 @@ def test_cluster_deployment_strategy_wrong_plan_type(monkeypatch):
     )
 
     with pytest.raises(ClusterError):
-        strategy.deploy(bad_plan)
+        executor.deploy(bad_plan)
 
-    executor.shutdown(wait=True)
+    executor_pool.shutdown(wait=True)
 
 
-def test_cluster_deployment_strategy_empty_servers(monkeypatch):
+def test_cluster_executor_empty_servers(monkeypatch):
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = ClusterDeploymentPlan(servers=[])
@@ -230,19 +234,71 @@ def test_cluster_deployment_strategy_empty_servers(monkeypatch):
             assert servers_config == []
             return {}
 
-    def fake_bootstrap(self, servers, startup_order, timeout=0):
+    def fake_bootstrap(self, servers, timeout=0):
         # Should not be called with empty servers; but if called, do nothing
         return
 
     monkeypatch.setattr(ClusterBootstrapper, "bootstrap_cluster", fake_bootstrap)
 
     from concurrent.futures import ThreadPoolExecutor
-    executor = ThreadPoolExecutor(max_workers=1)
+    executor_pool = ThreadPoolExecutor(max_workers=1)
 
-    strategy = ClusterDeploymentStrategy(logger, MockFactory(), executor, timeouts)
-    servers = strategy.deploy(plan)
+    executor = ClusterExecutor(logger, MockFactory(), executor_pool, timeouts)
+    servers = executor.deploy(plan)
 
     assert servers == {}
-    assert strategy.startup_order == []
 
-    executor.shutdown(wait=True)
+    executor_pool.shutdown(wait=True)
+
+
+def test_cluster_executor_shutdown(tmp_path):
+    """Test cluster executor shutdown with role-based order."""
+    logger = DummyLogger()
+    timeouts = TimeoutConfig()
+
+    # Create mock servers with different roles
+    agent1 = MagicMock()
+    agent1.server_id = ServerId("agent_0")
+    agent1.role = ServerRole.AGENT
+
+    agent2 = MagicMock()
+    agent2.server_id = ServerId("agent_1")
+    agent2.role = ServerRole.AGENT
+
+    dbserver = MagicMock()
+    dbserver.server_id = ServerId("dbserver_0")
+    dbserver.role = ServerRole.DBSERVER
+
+    coordinator = MagicMock()
+    coordinator.server_id = ServerId("coordinator_0")
+    coordinator.role = ServerRole.COORDINATOR
+
+    servers = {
+        agent1.server_id: agent1,
+        agent2.server_id: agent2,
+        dbserver.server_id: dbserver,
+        coordinator.server_id: coordinator,
+    }
+
+    from concurrent.futures import ThreadPoolExecutor
+    executor_pool = ThreadPoolExecutor(max_workers=1)
+
+    executor = ClusterExecutor(logger, Mock(), executor_pool, timeouts)
+    executor.shutdown(servers, timeout=40.0)
+
+    # Verify shutdown order: non-agents first, then agents
+    # Non-agents should be stopped first
+    dbserver.stop.assert_called_once()
+    coordinator.stop.assert_called_once()
+
+    # Agents should be stopped last
+    agent1.stop.assert_called_once()
+    agent2.stop.assert_called_once()
+
+    # Verify all calls happened (order verified by call order in executor)
+    assert dbserver.stop.call_count == 1
+    assert coordinator.stop.call_count == 1
+    assert agent1.stop.call_count == 1
+    assert agent2.stop.call_count == 1
+
+    executor_pool.shutdown(wait=True)

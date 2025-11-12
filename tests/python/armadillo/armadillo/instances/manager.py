@@ -26,7 +26,6 @@ from ..core.errors import (
 )
 from ..core.log import get_logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
-from ..core.process import stop_supervised_process
 from .server import ArangoServer
 from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
 from .health_monitor import HealthMonitor
@@ -57,8 +56,6 @@ class DeploymentState:
 
     servers: Dict[ServerId, ArangoServer] = field(default_factory=dict)
     deployment_plan: Optional[DeploymentPlan] = None
-    startup_order: List[ServerId] = field(default_factory=list)
-    shutdown_order: List[ServerId] = field(default_factory=list)
     status: DeploymentStatus = field(default_factory=DeploymentStatus)
     timing: DeploymentTiming = field(default_factory=DeploymentTiming)
 
@@ -115,7 +112,6 @@ class InstanceManager:
             logger=self._app_context.logger,
             server_factory=self._app_context.server_factory,
             executor=self._threading.executor,
-            health_monitor=self._health_monitor,
             timeout_config=self._app_context.config.timeouts,
         )
 
@@ -225,12 +221,11 @@ class InstanceManager:
                 raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
     def _sync_state_from_orchestrator(self) -> None:
-        """Synchronize state from DeploymentOrchestrator internal storage (lifecycle strategies).
+        """Synchronize state from DeploymentOrchestrator internal storage.
 
         The orchestrator now owns the authoritative servers dict; we mirror it for facade access.
         """
         self.state.servers = self._deployment_orchestrator.get_servers()
-        self.state.startup_order = self._deployment_orchestrator.get_startup_order()
 
     def shutdown_deployment(self, timeout: Optional[float] = None) -> None:
         """Shutdown all deployed servers in correct order.
@@ -263,31 +258,19 @@ class InstanceManager:
         )
 
         with timeout_scope(timeout, f"shutdown_deployment_{self.deployment_id}"):
-            try:
-                # Delegate to DeploymentOrchestrator for shutdown
-                shutdown_order = list(reversed(self.state.startup_order))
-                logger.debug(
-                    "Calling DeploymentOrchestrator.shutdown_deployment with order: %s",
-                    shutdown_order,
-                )
-                self._deployment_orchestrator.shutdown_deployment(
-                    shutdown_order=shutdown_order, timeout=timeout
-                )
-                logger.debug(
-                    "DeploymentOrchestrator.shutdown_deployment completed successfully"
-                )
-            except (ServerShutdownError, ProcessError, OSError, RuntimeError) as e:
-                logger.error("Shutdown via orchestrator failed: %s", e)
-                # Fallback to direct shutdown if orchestrator fails
-                self._direct_shutdown_deployment()
+            # Delegate to DeploymentOrchestrator for shutdown
+            # Executor determines shutdown order internally
+            logger.debug("Calling DeploymentOrchestrator.shutdown_deployment")
+            self._deployment_orchestrator.shutdown_deployment(timeout=timeout)
+            logger.debug(
+                "DeploymentOrchestrator.shutdown_deployment completed successfully"
+            )
 
             # Release allocated ports
             self._release_ports()
 
             # Clear state
             self.state.servers.clear()
-            self.state.startup_order.clear()
-            self.state.shutdown_order.clear()
             self.state.status.is_deployed = False
             self.state.status.is_healthy = False
 
@@ -332,159 +315,6 @@ class InstanceManager:
             crashes={str(k): v for k, v in relevant_crashes.items()},
             exit_codes={str(k): v for k, v in relevant_exit_codes.items()},
         )
-
-    def _direct_shutdown_deployment(self) -> None:
-        """Direct shutdown implementation as fallback when orchestrator fails.
-
-        Uses fixed timeouts from configuration based on server roles.
-        """
-        logger.info("Using direct shutdown for %d servers", len(self.state.servers))
-
-        # Shutdown in reverse startup order, but agents go LAST
-        shutdown_order = list(reversed(self.state.startup_order))
-
-        # Separate agents from non-agents
-        agents = []
-        non_agents = []
-        for server_id in shutdown_order:
-            if server_id in self.state.servers:
-                server = self.state.servers[server_id]
-                if server.role == ServerRole.AGENT:
-                    agents.append(server)
-                else:
-                    non_agents.append(server)
-
-        # Log shutdown order
-        if non_agents or agents:
-            order_names = [s.server_id for s in non_agents] + [
-                s.server_id for s in agents
-            ]
-            logger.info("Shutdown order: %s", " -> ".join(order_names))
-
-        failed_shutdowns = []
-
-        # Phase 1: Shutdown non-agent servers (coordinators, dbservers, single servers)
-        if non_agents:
-            logger.debug("Phase 1: Shutting down %d non-agent servers", len(non_agents))
-            for server in non_agents:
-                try:
-                    timeout = self._app_context.config.timeouts.server_shutdown
-                    self._shutdown_server(server, timeout=timeout)
-                except (OSError, ServerShutdownError) as e:
-                    logger.error(
-                        "Failed to shutdown server %s: %s", server.server_id, e
-                    )
-                    failed_shutdowns.append(server.server_id)
-
-        # Phase 2: Shutdown agents AFTER all non-agents are down
-        if agents:
-            logger.debug("Phase 2: Shutting down %d agent servers", len(agents))
-            for server in agents:
-                try:
-                    # Agents get extra timeout
-                    timeout = self._app_context.config.timeouts.server_shutdown_agent
-                    self._shutdown_server(server, timeout=timeout)
-                except (OSError, ServerShutdownError) as e:
-                    logger.error("Failed to shutdown agent %s: %s", server.server_id, e)
-                    failed_shutdowns.append(server.server_id)
-
-        if failed_shutdowns:
-            logger.warning(
-                "Some servers failed to shutdown cleanly: %s", failed_shutdowns
-            )
-
-    def _shutdown_server(
-        self, server: "ArangoServer", timeout: Optional[float] = None
-    ) -> None:
-        """Shutdown a single server with bulletproof termination and polling.
-
-        Combines graceful shutdown with emergency force kill fallback and
-        polling to ensure the server actually stops before continuing.
-
-        Args:
-            server: The server instance to shutdown
-            timeout: Maximum time to wait for shutdown (uses config default if None)
-        """
-        if timeout is None:
-            timeout = self._app_context.config.timeouts.server_shutdown
-
-        if not server.is_running():
-            logger.debug("Server %s already stopped", server.server_id)
-            return
-
-        logger.info(
-            "Shutting down server: %s (role: %s)", server.server_id, server.role.value
-        )
-        start_time = time.time()
-
-        try:
-            log_server_event(
-                logger, "stopping", server_id=server.server_id, timeout=timeout
-            )
-
-            # Try to stop the server gracefully first
-            if hasattr(server, "stop") and callable(server.stop):
-                server.stop(timeout=timeout)
-            else:
-                # Fallback: stop via process supervisor
-                if server.is_running():
-                    stop_supervised_process(
-                        server.server_id, graceful=True, timeout=timeout
-                    )
-
-            # Poll to ensure server actually stops
-            poll_interval = (
-                self._app_context.config.infrastructure.server_shutdown_poll_interval
-            )
-            while server.is_running():
-                elapsed = time.time() - start_time
-                if elapsed > timeout:
-                    raise ServerShutdownError(
-                        f"Server {server.server_id} failed to stop within {timeout}s"
-                    )
-                logger.debug(
-                    "Waiting for server %s to stop (%.1fs elapsed)...",
-                    server.server_id,
-                    elapsed,
-                )
-                time.sleep(poll_interval)
-
-            shutdown_time = time.time() - start_time
-            log_server_event(logger, "stopped", server_id=server.server_id)
-            logger.info(
-                "Server %s stopped successfully (%.2fs)",
-                server.server_id,
-                shutdown_time,
-            )
-
-        except (ServerShutdownError, ProcessError, OSError) as e:
-            log_server_event(
-                logger, "stop_failed", server_id=server.server_id, error=str(e)
-            )
-            logger.error("Failed to shutdown server %s: %s", server.server_id, e)
-
-            # Try emergency force kill if graceful shutdown failed
-            try:
-                logger.warning(
-                    "Attempting emergency force kill of server %s", server.server_id
-                )
-                if server.is_running():
-                    timeout = self._app_context.config.timeouts.process_force_kill
-                    stop_supervised_process(
-                        server.server_id, graceful=False, timeout=timeout
-                    )
-                    logger.info(
-                        "Emergency force kill of server %s succeeded", server.server_id
-                    )
-            except (OSError, PermissionError, ProcessError) as force_e:
-                logger.error(
-                    "CRITICAL: Emergency force kill failed for server %s: %s",
-                    server.server_id,
-                    force_e,
-                )
-
-            # Re-raise the original error for the caller to handle
-            raise
 
     def restart_deployment(self, timeout: Optional[float] = None) -> None:
         """Restart the entire deployment.

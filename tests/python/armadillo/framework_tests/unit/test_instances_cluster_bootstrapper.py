@@ -168,18 +168,11 @@ class TestClusterBootstrapper:
             "coord1": coord1,
         }
 
-        startup_order = []
-
         bootstrapper._start_servers_by_role(
-            servers, ServerRole.AGENT, startup_order, timeout=60.0
+            servers, ServerRole.AGENT, timeout=60.0
         )
 
-        # Verify agents were started
-        assert len(startup_order) == 2
-        assert "agent1" in startup_order
-        assert "agent2" in startup_order
-
-        # Verify executor was called twice
+        # Verify executor was called twice (for both agents)
         assert mock_executor.submit.call_count == 2
 
     def test_start_servers_by_role_failure(self):
@@ -198,11 +191,10 @@ class TestClusterBootstrapper:
         agent1.role = ServerRole.AGENT
 
         servers = {"agent1": agent1}
-        startup_order = []
 
         with pytest.raises(ServerStartupError, match="Startup failed"):
             bootstrapper._start_servers_by_role(
-                servers, ServerRole.AGENT, startup_order, timeout=60.0
+                servers, ServerRole.AGENT, timeout=60.0
             )
 
     def test_wait_for_agency_ready_no_agents(self):
@@ -305,17 +297,11 @@ class TestClusterBootstrapperIntegration:
             "coord1": coord1,
         }
 
-        startup_order = []
-
         # Mock agency and cluster ready checks
         with patch.object(bootstrapper, "wait_for_agency_ready"):
             with patch.object(bootstrapper, "wait_for_cluster_ready"):
-                bootstrapper.bootstrap_cluster(servers, startup_order, timeout=300.0)
+                bootstrapper.bootstrap_cluster(servers, timeout=300.0)
 
-        # Verify all servers were started in order
-        assert len(startup_order) == 3
-        # Agent should be first
-        assert startup_order[0] == "agent1"
-        # DB and coord order may vary due to parallel start
-        assert "db1" in startup_order
-        assert "coord1" in startup_order
+        # Verify all servers were started (startup order is no longer tracked)
+        # Check that executor was called for each server
+        assert mock_executor.submit.call_count == 3

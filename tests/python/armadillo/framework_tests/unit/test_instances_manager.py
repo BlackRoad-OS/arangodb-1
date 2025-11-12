@@ -253,7 +253,7 @@ class TestInstanceManagerLifecycleDeployment:
         self.manager = InstanceManager("lifecycle_test", app_context=self.app_context)
 
     def _inject_fake_execution(self, plan):
-        """Patch orchestrator.execute_deployment to populate internal _servers/_startup_order dicts."""
+        """Patch orchestrator.execute_deployment to populate internal _servers dict."""
         orch = self.manager._deployment_orchestrator
 
         def fake_execute_deployment(p, timeout=None):
@@ -264,12 +264,10 @@ class TestInstanceManagerLifecycleDeployment:
             from armadillo.core.value_objects import ServerId
             from armadillo.core.types import ServerRole
 
-            orch._startup_order.clear()
             if isinstance(p, SingleServerDeploymentPlan):
                 sid = ServerId("server_0")
                 server = self.FakeServer(sid, ServerRole.SINGLE)
                 orch._servers = {sid: server}
-                orch._startup_order.append(sid)
             elif isinstance(p, ClusterDeploymentPlan):
                 sids_roles = [
                     ("agent_0", ServerRole.AGENT),
@@ -280,9 +278,7 @@ class TestInstanceManagerLifecycleDeployment:
                 for sid_str, role in sids_roles:
                     sid = ServerId(sid_str)
                     servers[sid] = self.FakeServer(sid, role)
-                # Simulate correct bootstrap ordering: agent -> dbserver -> coordinator
                 orch._servers = servers
-                orch._startup_order.extend(list(servers.keys()))
             else:
                 raise AssertionError(f"Unexpected plan type: {type(p)}")
 
@@ -312,15 +308,12 @@ class TestInstanceManagerLifecycleDeployment:
         assert len(self.manager.state.servers) == 1
         orch_servers = self.manager._deployment_orchestrator.get_servers()
         assert self.manager.state.servers is orch_servers  # should reference orchestrator internal dict
-        # Startup order propagated
-        assert len(self.manager.state.startup_order) == 1
-        sid = next(iter(self.manager.state.servers.keys()))
-        assert sid in self.manager.state.startup_order
         # get_server returns the same instance
+        sid = next(iter(self.manager.state.servers.keys()))
         assert self.manager.get_server(sid) is self.manager.state.servers[sid]
 
     def test_lifecycle_cluster_deployment_syncs_state(self):
-        """Verify cluster deployment populates InstanceManager.state with all servers and ordering preserved."""
+        """Verify cluster deployment populates InstanceManager.state with all servers."""
         from armadillo.core.types import ServerConfig, ServerRole
         from armadillo.instances.deployment_plan import ClusterDeploymentPlan
         from pathlib import Path
@@ -358,15 +351,11 @@ class TestInstanceManagerLifecycleDeployment:
         orch_servers = self.manager._deployment_orchestrator.get_servers()
         assert self.manager.state.servers is orch_servers
 
-        # Startup order matches injected sequence (agent -> dbserver -> coordinator)
-        startup_roles = [
-            self.manager.state.servers[sid].role for sid in self.manager.state.startup_order
-        ]
-        assert startup_roles == [
-            ServerRole.AGENT,
-            ServerRole.DBSERVER,
-            ServerRole.COORDINATOR,
-        ]
+        # Verify all servers are present (startup order is no longer tracked)
+        roles = [s.role for s in self.manager.state.servers.values()]
+        assert ServerRole.AGENT in roles
+        assert ServerRole.DBSERVER in roles
+        assert ServerRole.COORDINATOR in roles
 
         # Role-based retrieval works
         agents = self.manager.get_servers_by_role(ServerRole.AGENT)

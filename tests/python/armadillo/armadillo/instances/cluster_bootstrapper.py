@@ -2,7 +2,7 @@
 
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, Tuple, Optional, Any
 
 import requests
 
@@ -44,7 +44,6 @@ class ClusterBootstrapper:
     def bootstrap_cluster(
         self,
         servers: Dict[ServerId, ArangoServer],
-        startup_order: List[ServerId],
         timeout: float = 300.0,
     ) -> None:
         """Bootstrap a cluster deployment in proper sequence.
@@ -58,7 +57,6 @@ class ClusterBootstrapper:
 
         Args:
             servers: Dictionary of server_id to ArangoServer instances
-            startup_order: List to append server IDs in startup order
             timeout: Total timeout for bootstrap
 
         Raises:
@@ -70,7 +68,7 @@ class ClusterBootstrapper:
         start_time = time.time()
 
         # 1. Start agents first
-        self._start_servers_by_role(servers, ServerRole.AGENT, startup_order)
+        self._start_servers_by_role(servers, ServerRole.AGENT, timeout)
 
         # 2. Wait for agency to become ready
         elapsed = time.time() - start_time
@@ -83,14 +81,14 @@ class ClusterBootstrapper:
         elapsed = time.time() - start_time
         remaining = max(60.0, timeout - elapsed)
         self._start_servers_by_role(
-            servers, ServerRole.DBSERVER, startup_order, timeout=remaining
+            servers, ServerRole.DBSERVER, timeout=remaining
         )
 
         # 4. Start coordinators
         elapsed = time.time() - start_time
         remaining = max(60.0, timeout - elapsed)
         self._start_servers_by_role(
-            servers, ServerRole.COORDINATOR, startup_order, timeout=remaining
+            servers, ServerRole.COORDINATOR, timeout=remaining
         )
 
         self._logger.info("All cluster servers started successfully")
@@ -106,7 +104,6 @@ class ClusterBootstrapper:
         self,
         servers: Dict[ServerId, ArangoServer],
         role: ServerRole,
-        startup_order: List[ServerId],
         timeout: float = 60.0,
     ) -> None:
         """Start all servers of a specific role in parallel.
@@ -114,7 +111,6 @@ class ClusterBootstrapper:
         Args:
             servers: Dictionary of all servers
             role: Server role to start
-            startup_order: List to append server IDs as they start
             timeout: Timeout for each server startup
 
         Raises:
@@ -146,7 +142,6 @@ class ClusterBootstrapper:
         for server_id, future in futures:
             try:
                 future.result(timeout=timeout)
-                startup_order.append(server_id)
                 self._logger.info(
                     "%s %s started successfully", role_name.title(), str(server_id)
                 )
