@@ -25,6 +25,7 @@
 #include "Aql/AqlValueMaterializer.h"
 #include "Aql/AstNode.h"
 #include "Aql/ExpressionContext.h"
+#include "Aql/FixedVarExpressionContext.h"
 #include "Aql/Function.h"
 #include "Aql/Functions.h"
 #include "Basics/Result.h"
@@ -646,6 +647,9 @@ AqlValue functions::IsInPolygon(ExpressionContext* expressionContext,
 AqlValue functions::GeoPoint(ExpressionContext* expressionContext,
                              AstNode const&,
                              VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &expressionContext->trx();
   size_t const n = parameters.size();
 
@@ -701,13 +705,16 @@ AqlValue functions::GeoPoint(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function GEO_MULTIPOINT
 AqlValue functions::GeoMultiPoint(ExpressionContext* expressionContext,
                                   AstNode const&,
                                   VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
   size_t const n = parameters.size();
@@ -753,13 +760,16 @@ AqlValue functions::GeoMultiPoint(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function GEO_POLYGON
 AqlValue functions::GeoPolygon(ExpressionContext* expressionContext,
                                AstNode const&,
                                VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
   size_t const n = parameters.size();
@@ -803,13 +813,16 @@ AqlValue functions::GeoPolygon(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function GEO_MULTIPOLYGON
 AqlValue functions::GeoMultiPolygon(ExpressionContext* expressionContext,
                                     AstNode const&,
                                     VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
   size_t const n = parameters.size();
@@ -887,13 +900,16 @@ AqlValue functions::GeoMultiPolygon(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function GEO_LINESTRING
 AqlValue functions::GeoLinestring(ExpressionContext* expressionContext,
                                   AstNode const&,
                                   VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
   size_t const n = parameters.size();
@@ -939,13 +955,16 @@ AqlValue functions::GeoLinestring(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 /// @brief function GEO_MULTILINESTRING
 AqlValue functions::GeoMultiLinestring(ExpressionContext* expressionContext,
                                        AstNode const&,
                                        VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
   size_t const n = parameters.size();
@@ -1010,7 +1029,7 @@ AqlValue functions::GeoMultiLinestring(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 }  // namespace arangodb::aql
