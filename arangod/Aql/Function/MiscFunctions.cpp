@@ -33,6 +33,7 @@
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
 
+#include <Aql/FixedVarExpressionContext.h>
 #include <velocypack/Builder.h>
 #include <velocypack/Iterator.h>
 #include <velocypack/Sink.h>
@@ -164,6 +165,9 @@ AqlValue functions::Length(ExpressionContext*, AstNode const&,
 AqlValue functions::Reverse(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   static char const* AFN = "REVERSE";
 
   transaction::Methods* trx = &expressionContext->trx();
@@ -187,7 +191,7 @@ AqlValue functions::Reverse(ExpressionContext* expressionContext,
       builder->add(it);
     }
     builder->close();
-    return AqlValue(builder->slice(), builder->size());
+    return AqlValue(builder->slice(), builder->size(), rm);
   } else if (value.isString()) {
     std::string utf8;
     transaction::StringLeaser buf1(trx);
@@ -207,7 +211,7 @@ AqlValue functions::Reverse(ExpressionContext* expressionContext,
     }
     result.toUTF8String(utf8);
 
-    return AqlValue(utf8);
+    return AqlValue(utf8, rm);
   } else {
     // neither array nor string...
     aql::functions::registerWarning(expressionContext, AFN,
