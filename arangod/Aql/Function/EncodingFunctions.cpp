@@ -39,6 +39,7 @@
 #include <absl/strings/escaping.h>
 
 #include <string_view>
+#include <Aql/FixedVarExpressionContext.h>
 
 using namespace arangodb;
 
@@ -47,6 +48,9 @@ namespace arangodb::aql {
 /// @brief function TO_BASE64
 AqlValue functions::ToBase64(ExpressionContext* expr, AstNode const&,
                              VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expr);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   auto& trx = expr->trx();
   AqlValue const& value = extractFunctionParameterValue(parameters, 0);
 
@@ -57,12 +61,15 @@ AqlValue functions::ToBase64(ExpressionContext* expr, AstNode const&,
 
   std::string encoded = absl::Base64Escape({buffer->data(), buffer->length()});
 
-  return AqlValue(std::move(encoded));
+  return AqlValue(std::move(encoded), rm);
 }
 
 /// @brief function TO_HEX
 AqlValue functions::ToHex(ExpressionContext* expr, AstNode const&,
                           VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expr);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   auto& trx = expr->trx();
   AqlValue const& value = extractFunctionParameterValue(parameters, 0);
 
@@ -74,12 +81,15 @@ AqlValue functions::ToHex(ExpressionContext* expr, AstNode const&,
   std::string encoded =
       basics::StringUtils::encodeHex(buffer->data(), buffer->length());
 
-  return AqlValue(encoded);
+  return AqlValue(encoded, rm);
 }
 
 /// @brief function ENCODE_URI_COMPONENT
 AqlValue functions::EncodeURIComponent(ExpressionContext* expr, AstNode const&,
                                        VPackFunctionParametersView parameters) {
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expr);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
+
   auto& trx = expr->trx();
   AqlValue const& value = extractFunctionParameterValue(parameters, 0);
 
@@ -91,7 +101,7 @@ AqlValue functions::EncodeURIComponent(ExpressionContext* expr, AstNode const&,
   std::string encoded =
       basics::StringUtils::encodeURIComponent(buffer->data(), buffer->length());
 
-  return AqlValue(encoded);
+  return AqlValue(encoded, rm);
 }
 
 }  // namespace arangodb::aql
