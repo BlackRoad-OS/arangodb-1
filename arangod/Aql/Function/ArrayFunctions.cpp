@@ -116,8 +116,8 @@ bool listContainsElement(VPackOptions const* options, VPackSlice const& list,
 /// @brief function PUSH
 AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
                          VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "PUSH";
@@ -170,8 +170,8 @@ AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function POP
 AqlValue functions::Pop(ExpressionContext* expressionContext, AstNode const&,
                         VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "POP";
@@ -288,8 +288,8 @@ AqlValue functions::Append(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::Unshift(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "UNSHIFT";
@@ -341,8 +341,8 @@ AqlValue functions::Unshift(ExpressionContext* expressionContext,
 /// @brief function SHIFT
 AqlValue functions::Shift(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "SHIFT";
@@ -384,8 +384,8 @@ AqlValue functions::Shift(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::RemoveValue(ExpressionContext* expressionContext,
                                 AstNode const&,
                                 VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "REMOVE_VALUE";
@@ -448,8 +448,8 @@ AqlValue functions::RemoveValue(ExpressionContext* expressionContext,
 AqlValue functions::RemoveValues(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "REMOVE_VALUES";
@@ -495,8 +495,8 @@ AqlValue functions::RemoveValues(ExpressionContext* expressionContext,
 AqlValue functions::RemoveNth(ExpressionContext* expressionContext,
                               AstNode const&,
                               VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "REMOVE_NTH";
@@ -680,8 +680,8 @@ AqlValue functions::Position(ExpressionContext* expressionContext,
 AqlValue functions::Interleave(aql::ExpressionContext* expressionContext,
                                AstNode const&,
                                VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "INTERLEAVE";
@@ -736,8 +736,8 @@ AqlValue functions::Interleave(aql::ExpressionContext* expressionContext,
 /// @brief function RANGE
 AqlValue functions::Range(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "RANGE";
@@ -833,8 +833,8 @@ AqlValue functions::CountDistinct(ExpressionContext* expressionContext,
 /// @brief function UNIQUE
 AqlValue functions::Unique(ExpressionContext* expressionContext, AstNode const&,
                            VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "UNIQUE";
@@ -882,8 +882,8 @@ AqlValue functions::Unique(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::SortedUnique(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "SORTED_UNIQUE";
@@ -923,8 +923,8 @@ AqlValue functions::SortedUnique(ExpressionContext* expressionContext,
 /// @brief function SORTED
 AqlValue functions::Sorted(ExpressionContext* expressionContext, AstNode const&,
                            VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "SORTED";
@@ -970,8 +970,8 @@ AqlValue functions::Sorted(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function UNION
 AqlValue functions::Union(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   static char const* AFN = "UNION";
 
@@ -1017,8 +1017,8 @@ AqlValue functions::Union(ExpressionContext* expressionContext, AstNode const&,
 AqlValue functions::UnionDistinct(ExpressionContext* expressionContext,
                                   AstNode const&,
                                   VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   static char const* AFN = "UNION_DISTINCT";
 
@@ -1155,8 +1155,8 @@ AqlValue functions::Intersection(ExpressionContext* expressionContext,
 AqlValue functions::Outersection(ExpressionContext* expressionContext,
                                  AstNode const&,
                                  VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   static char const* AFN = "OUTERSECTION";
 
@@ -1217,8 +1217,8 @@ AqlValue functions::Outersection(ExpressionContext* expressionContext,
 AqlValue functions::Flatten(ExpressionContext* expressionContext,
                             AstNode const&,
                             VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
@@ -1348,8 +1348,8 @@ AqlValue functions::Nth(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function Minus
 AqlValue functions::Minus(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   static char const* AFN = "MINUS";
 
@@ -1416,8 +1416,8 @@ AqlValue functions::Minus(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function Slice
 AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
                           VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(expressionContext);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   // cppcheck-suppress variableScope
   static char const* AFN = "SLICE";
@@ -1490,8 +1490,8 @@ AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
 /// @brief function TO_ARRAY
 AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
                             VPackFunctionParametersView parameters) {
-  auto* execCtx = dynamic_cast<FixedVarExpressionContext*>(ctx);
-  ResourceMonitor* rm = execCtx ? &execCtx->resourceMonitor() : nullptr;
+  auto* fixedCtx = dynamic_cast<FixedVarExpressionContext*>(ctx);
+  ResourceMonitor* rm = fixedCtx ? &fixedCtx->resourceMonitor() : nullptr;
 
   AqlValue const& value =
       aql::functions::extractFunctionParameterValue(parameters, 0);
