@@ -150,12 +150,11 @@ class DeploymentOrchestrator:
         )
 
         # Print shutdown message with newline to separate from test output
-        if isinstance(deployment, SingleServerDeployment):
+        server_count = deployment.get_server_count()
+        if server_count == 1:
             print_status("\nShutting down server")
         else:
-            print_status(
-                f"\nShutting down cluster with {deployment.get_server_count()} servers"
-            )
+            print_status(f"\nShutting down cluster with {server_count} servers")
 
         # Create executor for shutdown (executors are stateless, can recreate)
         executor = self._executor_factory.create_executor(deployment.plan)

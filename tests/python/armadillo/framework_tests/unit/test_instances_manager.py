@@ -231,10 +231,11 @@ class TestInstanceManagerLifecycleDeployment:
     class FakeServer:
         """Minimal fake server used to populate orchestrator internal dict without real processes."""
 
-        def __init__(self, server_id, role):
+        def __init__(self, server_id, role, port=8529):
             self.server_id = server_id
             self.role = role
-            self.endpoint = f"http://localhost:0/{server_id}"
+            self.port = port
+            self.endpoint = f"http://localhost:{port}/{server_id}"
             self._running = True
 
         def is_running(self):
@@ -242,6 +243,26 @@ class TestInstanceManagerLifecycleDeployment:
 
         def get_pid(self):
             return 12345
+
+        def get_port(self):
+            return self.port
+
+        def get_role(self):
+            return self.role
+
+        def get_info(self):
+            from armadillo.instances.server import ArangoServerInfo
+            from pathlib import Path
+
+            return ArangoServerInfo(
+                server_id=self.server_id,
+                role=self.role,
+                port=self.port,
+                endpoint=self.endpoint,
+                data_dir=Path("/tmp"),
+                log_file=Path("/tmp/log"),
+                process_info=None,
+            )
 
         def stop(self, timeout=None):
             self._running = False

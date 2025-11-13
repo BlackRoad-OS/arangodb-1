@@ -42,12 +42,18 @@ class ThreadingResources:
     executor: ThreadPoolExecutor
 
     @classmethod
-    def create_for_deployment(cls, deployment_id: DeploymentId) -> "ThreadingResources":
-        """Create threading resources for a deployment."""
-        config = get_config()
+    def create_for_deployment(
+        cls, deployment_id: DeploymentId, max_workers: int
+    ) -> "ThreadingResources":
+        """Create threading resources for a deployment.
+
+        Args:
+            deployment_id: Deployment identifier for thread naming
+            max_workers: Maximum number of worker threads
+        """
         return cls(
             executor=ThreadPoolExecutor(
-                max_workers=config.infrastructure.manager_max_workers,
+                max_workers=max_workers,
                 thread_name_prefix=f"InstanceMgr-{deployment_id}",
             ),
         )
@@ -73,7 +79,10 @@ class InstanceManager:
 
         # Initialize deployment state and threading resources
         self._deployment: Optional[Deployment] = None
-        self._threading = ThreadingResources.create_for_deployment(deployment_id)
+        self._threading = ThreadingResources.create_for_deployment(
+            deployment_id,
+            max_workers=self._app_context.config.infrastructure.manager_max_workers,
+        )
 
         # Initialize architectural components
         self._health_monitor = HealthMonitor(
@@ -308,13 +317,9 @@ class InstanceManager:
         Returns:
             List of agency endpoints
         """
-        from .deployment import ClusterDeployment
-
         if not self._deployment:
             return []
-        if isinstance(self._deployment, ClusterDeployment):
-            return self._deployment.get_agency_endpoints()
-        return []
+        return self._deployment.get_agency_endpoints()
 
     def check_deployment_health(self, timeout: Optional[float] = None) -> HealthStatus:
         """Check health of the entire deployment.
@@ -392,30 +397,22 @@ class InstanceManager:
         }
 
         if self._deployment:
-            from .deployment import SingleServerDeployment
-
-            # Determine deployment mode from deployment type
-            deployment_mode = (
-                "single_server"
-                if isinstance(self._deployment, SingleServerDeployment)
-                else "cluster"
-            )
-
             info.update(
                 {
-                    "deployment_mode": deployment_mode,
+                    "deployment_mode": self._deployment.get_deployment_mode(),
                     "coordination_endpoints": self.get_coordination_endpoints(),
                     "agency_endpoints": self.get_agency_endpoints(),
                 }
             )
 
-        # Add server details
+        # Add server details using proper interface
         info["servers"] = {}
         servers = self._deployment.get_servers() if self._deployment else {}
         for server_id, server in servers.items():
+            server_info = server.get_info()
             info["servers"][str(server_id)] = {
-                "role": server.role.value,
-                "endpoint": server.endpoint,
+                "role": server_info.role.value,
+                "endpoint": server_info.endpoint,
                 "is_running": server.is_running(),
                 "pid": server.get_pid(),
             }
@@ -436,10 +433,8 @@ class InstanceManager:
             # Release ports for each server in this deployment
             servers = self._deployment.get_servers() if self._deployment else {}
             for server in servers.values():
-                if hasattr(server, "port"):
-                    self._app_context.port_allocator.release_port(server.port)
-                    logger.debug(
-                        "Released port %s for server %s", server.port, server.server_id
-                    )
+                port = server.get_port()
+                self._app_context.port_allocator.release_port(port)
+                logger.debug("Released port %s for server %s", port, server.server_id)
         except (OSError, RuntimeError, ValueError) as e:
             logger.warning("Error releasing ports: %s", e)

@@ -466,6 +466,22 @@ class ArangoServer:
         """
         return self.endpoint
 
+    def get_port(self) -> int:
+        """Get server port number.
+
+        Returns:
+            Port number
+        """
+        return self.port
+
+    def get_role(self) -> ServerRole:
+        """Get server role.
+
+        Returns:
+            ServerRole enum value
+        """
+        return self.role
+
     def get_info(self) -> ArangoServerInfo:
         """Get server information."""
         return ArangoServerInfo(

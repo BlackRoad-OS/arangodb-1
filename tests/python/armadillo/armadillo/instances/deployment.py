@@ -123,6 +123,24 @@ class Deployment(ABC):
         """
         return self.get_status().is_healthy
 
+    @abstractmethod
+    def get_deployment_mode(self) -> str:
+        """Get deployment mode identifier.
+
+        Returns:
+            Deployment mode string ("single_server" or "cluster")
+        """
+        pass
+
+    @abstractmethod
+    def get_agency_endpoints(self) -> List[str]:
+        """Get agency endpoints.
+
+        Returns:
+            List of agency endpoints (empty for single server deployments)
+        """
+        pass
+
 
 @dataclass
 class SingleServerDeployment(Deployment):
@@ -144,6 +162,14 @@ class SingleServerDeployment(Deployment):
     def get_coordination_endpoints(self) -> List[str]:
         """Get coordination endpoint (single server endpoint)."""
         return [self.server.endpoint]
+
+    def get_deployment_mode(self) -> str:
+        """Get deployment mode identifier."""
+        return "single_server"
+
+    def get_agency_endpoints(self) -> List[str]:
+        """Get agency endpoints (empty for single server)."""
+        return []
 
     def mark_deployed(self, startup_time: float) -> None:
         """Mark deployment as deployed with startup time."""
@@ -185,6 +211,10 @@ class ClusterDeployment(Deployment):
     def get_coordination_endpoints(self) -> List[str]:
         """Get coordinator endpoints."""
         return self.plan.coordination_endpoints
+
+    def get_deployment_mode(self) -> str:
+        """Get deployment mode identifier."""
+        return "cluster"
 
     def get_agency_endpoints(self) -> List[str]:
         """Get agency endpoints."""
