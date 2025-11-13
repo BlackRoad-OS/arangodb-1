@@ -284,9 +284,7 @@ class TestInstanceManagerLifecycleDeployment:
                 # Create a fake executor for shutdown
                 fake_executor = Mock()
                 fake_executor.shutdown = Mock(
-                    side_effect=lambda dep, timeout: setattr(
-                        dep.status, "is_deployed", False
-                    )
+                    side_effect=lambda dep, timeout: dep.mark_shutdown(time.time())
                 )
                 orch._current_executor = fake_executor
             elif isinstance(p, ClusterDeploymentPlan):
@@ -308,9 +306,7 @@ class TestInstanceManagerLifecycleDeployment:
                 # Create a fake executor for shutdown
                 fake_executor = Mock()
                 fake_executor.shutdown = Mock(
-                    side_effect=lambda dep, timeout: setattr(
-                        dep.status, "is_deployed", False
-                    )
+                    side_effect=lambda dep, timeout: dep.mark_shutdown(time.time())
                 )
                 orch._current_executor = fake_executor
             else:

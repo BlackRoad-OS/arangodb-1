@@ -33,6 +33,7 @@ from armadillo.instances.cluster_bootstrapper import ClusterBootstrapper
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_server_config(role: ServerRole, port: int, tmp_path):
     data_dir = tmp_path / f"{role.value}_data"
     log_file = tmp_path / f"{role.value}.log"
@@ -46,15 +47,23 @@ def make_server_config(role: ServerRole, port: int, tmp_path):
 
 
 class DummyLogger:
-    def info(self, *a, **kw): pass
-    def debug(self, *a, **kw): pass
-    def warning(self, *a, **kw): pass
-    def error(self, *a, **kw): pass
+    def info(self, *a, **kw):
+        pass
+
+    def debug(self, *a, **kw):
+        pass
+
+    def warning(self, *a, **kw):
+        pass
+
+    def error(self, *a, **kw):
+        pass
 
 
 # ---------------------------------------------------------------------------
 # SingleServerExecutor Tests
 # ---------------------------------------------------------------------------
+
 
 def test_single_server_executor_success(tmp_path):
     logger = DummyLogger()
@@ -87,7 +96,10 @@ def test_single_server_executor_success(tmp_path):
     assert len(servers_dict) == 1
     # Check that the server is in the dict (using the server's server_id)
     assert mock_server.server_id in servers_dict or server_id in servers_dict
-    assert servers_dict.get(mock_server.server_id) == mock_server or servers_dict.get(server_id) == mock_server
+    assert (
+        servers_dict.get(mock_server.server_id) == mock_server
+        or servers_dict.get(server_id) == mock_server
+    )
     mock_server.start.assert_called_once()
     mock_server.health_check_sync.assert_called_once()
 
@@ -166,12 +178,13 @@ def test_single_server_executor_shutdown(tmp_path):
     executor.shutdown(deployment, timeout=10.0)
 
     mock_server.stop.assert_called_once_with(timeout=10.0)
-    assert deployment.status.is_deployed is False
+    assert deployment.get_status().is_deployed is False
 
 
 # ---------------------------------------------------------------------------
 # ClusterExecutor Tests
 # ---------------------------------------------------------------------------
+
 
 def test_cluster_executor_success(tmp_path, monkeypatch):
     logger = DummyLogger()
@@ -205,11 +218,10 @@ def test_cluster_executor_success(tmp_path, monkeypatch):
     monkeypatch.setattr(ClusterBootstrapper, "bootstrap_cluster", fake_bootstrap)
 
     from concurrent.futures import ThreadPoolExecutor
+
     executor_pool = ThreadPoolExecutor(max_workers=1)
 
-    executor = ClusterExecutor(
-        logger, MockFactory(), executor_pool, timeouts
-    )
+    executor = ClusterExecutor(logger, MockFactory(), executor_pool, timeouts)
     deployment = executor.deploy(plan)
 
     assert deployment is not None
@@ -227,6 +239,7 @@ def test_cluster_executor_wrong_plan_type(monkeypatch):
             return {}
 
     from concurrent.futures import ThreadPoolExecutor
+
     executor_pool = ThreadPoolExecutor(max_workers=1)
 
     executor = ClusterExecutor(logger, MockFactory(), executor_pool, timeouts)
@@ -265,6 +278,7 @@ def test_cluster_executor_empty_servers(monkeypatch):
     monkeypatch.setattr(ClusterBootstrapper, "bootstrap_cluster", fake_bootstrap)
 
     from concurrent.futures import ThreadPoolExecutor
+
     executor_pool = ThreadPoolExecutor(max_workers=1)
 
     executor = ClusterExecutor(logger, MockFactory(), executor_pool, timeouts)
@@ -321,6 +335,7 @@ def test_cluster_executor_shutdown(tmp_path):
     )
 
     from concurrent.futures import ThreadPoolExecutor
+
     executor_pool = ThreadPoolExecutor(max_workers=1)
 
     executor = ClusterExecutor(logger, Mock(), executor_pool, timeouts)
@@ -340,6 +355,6 @@ def test_cluster_executor_shutdown(tmp_path):
     assert coordinator.stop.call_count == 1
     assert agent1.stop.call_count == 1
     assert agent2.stop.call_count == 1
-    assert deployment.status.is_deployed is False
+    assert deployment.get_status().is_deployed is False
 
     executor_pool.shutdown(wait=True)

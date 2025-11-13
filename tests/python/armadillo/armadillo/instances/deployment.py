@@ -62,6 +62,67 @@ class Deployment(ABC):
         """Check if deployment has no servers."""
         return self.get_server_count() == 0
 
+    @abstractmethod
+    def mark_deployed(self, startup_time: float) -> None:
+        """Mark deployment as deployed with startup time.
+
+        Args:
+            startup_time: Timestamp when deployment completed
+        """
+        pass
+
+    @abstractmethod
+    def mark_shutdown(self, shutdown_time: float) -> None:
+        """Mark deployment as shut down with shutdown time.
+
+        Args:
+            shutdown_time: Timestamp when shutdown completed
+        """
+        pass
+
+    @abstractmethod
+    def mark_healthy(self, is_healthy: bool) -> None:
+        """Update deployment health status.
+
+        Args:
+            is_healthy: Whether deployment is healthy
+        """
+        pass
+
+    @abstractmethod
+    def get_status(self) -> "DeploymentStatus":
+        """Get deployment status.
+
+        Returns:
+            DeploymentStatus object
+        """
+        pass
+
+    @abstractmethod
+    def get_timing(self) -> "DeploymentTiming":
+        """Get deployment timing information.
+
+        Returns:
+            DeploymentTiming object
+        """
+        pass
+
+    def is_deployed(self) -> bool:
+        """Check if deployment is currently deployed.
+
+        Returns:
+            True if deployment is active, False otherwise
+        """
+        return self.get_status().is_deployed
+
+    def is_healthy(self) -> bool:
+        """Check if deployment is healthy.
+
+        Returns:
+            True if deployment is healthy, False otherwise
+        """
+        return self.get_status().is_healthy
+
 
 @dataclass
 class SingleServerDeployment(Deployment):
@@ -83,6 +144,29 @@ class SingleServerDeployment(Deployment):
     def get_coordination_endpoints(self) -> List[str]:
         """Get coordination endpoint (single server endpoint)."""
         return [self.server.endpoint]
+
+    def mark_deployed(self, startup_time: float) -> None:
+        """Mark deployment as deployed with startup time."""
+        self.status.is_deployed = True
+        self.timing.startup_time = startup_time
+
+    def mark_shutdown(self, shutdown_time: float) -> None:
+        """Mark deployment as shut down with shutdown time."""
+        self.status.is_deployed = False
+        self.status.is_healthy = False
+        self.timing.shutdown_time = shutdown_time
+
+    def mark_healthy(self, is_healthy: bool) -> None:
+        """Update deployment health status."""
+        self.status.is_healthy = is_healthy
+
+    def get_status(self) -> "DeploymentStatus":
+        """Get deployment status."""
+        return self.status
+
+    def get_timing(self) -> "DeploymentTiming":
+        """Get deployment timing information."""
+        return self.timing
 
 
 @dataclass
@@ -106,3 +190,25 @@ class ClusterDeployment(Deployment):
         """Get agency endpoints."""
         return self.plan.agency_endpoints
 
+    def mark_deployed(self, startup_time: float) -> None:
+        """Mark deployment as deployed with startup time."""
+        self.status.is_deployed = True
+        self.timing.startup_time = startup_time
+
+    def mark_shutdown(self, shutdown_time: float) -> None:
+        """Mark deployment as shut down with shutdown time."""
+        self.status.is_deployed = False
+        self.status.is_healthy = False
+        self.timing.shutdown_time = shutdown_time
+
+    def mark_healthy(self, is_healthy: bool) -> None:
+        """Update deployment health status."""
+        self.status.is_healthy = is_healthy
+
+    def get_status(self) -> "DeploymentStatus":
+        """Get deployment status."""
+        return self.status
+
+    def get_timing(self) -> "DeploymentTiming":
+        """Get deployment timing information."""
+        return self.timing

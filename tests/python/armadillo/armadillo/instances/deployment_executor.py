@@ -68,7 +68,9 @@ class SingleServerExecutor:
         servers = self._factory.create_server_instances([plan.server])
 
         if len(servers) != 1:
-            raise ServerError(f"Factory created unexpected server count: {len(servers)}")
+            raise ServerError(
+                f"Factory created unexpected server count: {len(servers)}"
+            )
 
         server_id, server = next(iter(servers.items()))
         self._logger.info("Starting single server: %s", server_id)
@@ -108,7 +110,7 @@ class SingleServerExecutor:
         try:
             server.stop(timeout=timeout)
             self._logger.info("Server stopped successfully")
-            deployment.status.is_deployed = False
+            deployment.mark_shutdown(time.time())
         except (ServerShutdownError, ProcessError, OSError) as e:
             self._logger.error("Failed to stop server: %s", e)
             raise
@@ -234,5 +236,4 @@ class ClusterExecutor:
                 "Some servers failed to shutdown cleanly: %s", failed_shutdowns
             )
 
-        deployment.status.is_deployed = False
-
+        deployment.mark_shutdown(time.time())

@@ -458,6 +458,14 @@ class ArangoServer:
             logger.debug("Failed to get server stats: %s", e)
             return None
 
+    def get_endpoint(self) -> str:
+        """Get server endpoint URL.
+
+        Returns:
+            Server endpoint URL (e.g., "http://127.0.0.1:8529")
+        """
+        return self.endpoint
+
     def get_info(self) -> ArangoServerInfo:
         """Get server information."""
         return ArangoServerInfo(

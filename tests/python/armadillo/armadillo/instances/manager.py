@@ -97,7 +97,7 @@ class InstanceManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         try:
-            if self._deployment and self._deployment.status.is_deployed:
+            if self._deployment and self._deployment.is_deployed():
                 self.shutdown_deployment()
         finally:
             self._threading.executor.shutdown(wait=True)
@@ -146,7 +146,7 @@ class InstanceManager:
             ServerStartupError: If server deployment fails
             TimeoutError: If deployment times out
         """
-        if self._deployment and self._deployment.status.is_deployed:
+        if self._deployment and self._deployment.is_deployed():
             raise ServerError("Deployment already active")
 
         timeout = clamp_timeout(timeout, "deployment")
@@ -167,11 +167,10 @@ class InstanceManager:
                 # Get deployment from orchestrator and store it
                 self._deployment = self._deployment_orchestrator.get_deployment()
                 if self._deployment:
-                    self._deployment.timing.startup_time = time.time()
-                    self._deployment.status.is_deployed = True
-                    self._deployment.status.is_healthy = True
+                    startup_time = time.time()
+                    self._deployment.mark_deployed(startup_time)
 
-                    deployment_time = time.time() - self._deployment.timing.startup_time
+                    deployment_time = time.time() - startup_time
                     logger.info(
                         "Deployment completed successfully in %.2fs", deployment_time
                     )
@@ -200,7 +199,7 @@ class InstanceManager:
         Args:
             timeout: Maximum time to wait for shutdown (uses config default if None)
         """
-        if not self._deployment or not self._deployment.status.is_deployed:
+        if not self._deployment or not self._deployment.is_deployed():
             logger.debug("No deployment to shutdown")
             return
 
@@ -214,7 +213,7 @@ class InstanceManager:
             )
 
         timeout = clamp_timeout(timeout, "shutdown")
-        self._deployment.timing.shutdown_time = time.time()
+        shutdown_start_time = time.time()
 
         logger.debug(
             "InstanceManager.shutdown_deployment: deployment_id=%s, servers=%d",
@@ -234,12 +233,12 @@ class InstanceManager:
             # Release allocated ports
             self._release_ports()
 
-            # Clear state
-            self._deployment.status.is_deployed = False
-            self._deployment.status.is_healthy = False
+            # Mark deployment as shut down
+            shutdown_time = time.time()
+            self._deployment.mark_shutdown(shutdown_time)
 
-            shutdown_time = time.time() - self._deployment.timing.shutdown_time
-            logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
+            shutdown_duration = shutdown_time - shutdown_start_time
+            logger.info("Deployment shutdown completed in %.2fs", shutdown_duration)
 
     def get_server_health(self) -> ServerHealthInfo:
         """Collect server health information after deployment shutdown.
@@ -333,7 +332,7 @@ class InstanceManager:
         if timeout is None:
             timeout = self._app_context.config.timeouts.health_check_extended
 
-        if not self._deployment or not self._deployment.status.is_deployed:
+        if not self._deployment or not self._deployment.is_deployed():
             return HealthStatus(
                 is_healthy=False,
                 response_time=0.0,
@@ -348,7 +347,7 @@ class InstanceManager:
         )
 
         # Update state based on health status
-        self._deployment.status.is_healthy = health_status.is_healthy
+        self._deployment.mark_healthy(health_status.is_healthy)
 
         return health_status
 
@@ -365,11 +364,11 @@ class InstanceManager:
 
     def is_deployed(self) -> bool:
         """Check if deployment is active."""
-        return self._deployment is not None and self._deployment.status.is_deployed
+        return self._deployment is not None and self._deployment.is_deployed()
 
     def is_healthy(self) -> bool:
         """Check if deployment is healthy."""
-        return self._deployment is not None and self._deployment.status.is_healthy
+        return self._deployment is not None and self._deployment.is_healthy()
 
     def get_server_count(self) -> int:
         """Get total number of servers in deployment."""
@@ -381,23 +380,19 @@ class InstanceManager:
         Returns:
             Dictionary with deployment details
         """
+        timing = self._deployment.get_timing() if self._deployment else None
+
         info = {
             "deployment_id": self.deployment_id,
             "is_deployed": (
-                self._deployment.status.is_deployed if self._deployment else False
+                self._deployment.is_deployed() if self._deployment else False
             ),
-            "is_healthy": (
-                self._deployment.status.is_healthy if self._deployment else False
-            ),
+            "is_healthy": self._deployment.is_healthy() if self._deployment else False,
             "server_count": (
                 self._deployment.get_server_count() if self._deployment else 0
             ),
-            "startup_time": (
-                self._deployment.timing.startup_time if self._deployment else None
-            ),
-            "shutdown_time": (
-                self._deployment.timing.shutdown_time if self._deployment else None
-            ),
+            "startup_time": timing.startup_time if timing else None,
+            "shutdown_time": timing.shutdown_time if timing else None,
         }
 
         if self._deployment:
