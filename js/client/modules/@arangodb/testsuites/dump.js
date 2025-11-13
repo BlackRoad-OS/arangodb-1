@@ -26,7 +26,18 @@
 // / @author Wilfried Goesgens
 // / @author Copyright 2021, ArangoDB GmbH, Cologne, Germany
 // //////////////////////////////////////////////////////////////////////////////
+
+const tu = require('@arangodb/testutils/test-utils');
+const fs = require('fs');
+const _ = require('lodash');
 const { DumpRestoreHelper, getClusterStrings } = require('@arangodb/testutils/dump');
+
+// const BLUE = require('internal').COLORS.COLOR_BLUE;
+const CYAN = require('internal').COLORS.COLOR_CYAN;
+// const GREEN = require('internal').COLORS.COLOR_GREEN;
+const RED = require('internal').COLORS.COLOR_RED;
+const RESET = require('internal').COLORS.COLOR_RESET;
+// const YELLOW = require('internal').COLORS.COLOR_YELLOW;
 
 const functionsDocumentation = {
   'dump': 'dump tests',
@@ -63,24 +74,12 @@ const testPaths = {
 };
 
 
-const tu = require('@arangodb/testutils/test-utils');
-const fs = require('fs');
-const _ = require('lodash');
-
-// const BLUE = require('internal').COLORS.COLOR_BLUE;
-const CYAN = require('internal').COLORS.COLOR_CYAN;
-// const GREEN = require('internal').COLORS.COLOR_GREEN;
-const RED = require('internal').COLORS.COLOR_RED;
-const RESET = require('internal').COLORS.COLOR_RESET;
-// const YELLOW = require('internal').COLORS.COLOR_YELLOW;
-
 function dump_backend_two_instances (firstRunOptions, secondRunOptions,
                                      serverAuthInfo, clientAuth,
                                      dumpOptions, restoreOptions,
                                      which, tstFiles, afterServerStart,
                                      rtaArgs, restartServer) {
   print(CYAN + which + ' tests...' + RESET);
-
   const helper = new DumpRestoreHelper(firstRunOptions, secondRunOptions, serverAuthInfo, clientAuth, dumpOptions, restoreOptions, which, afterServerStart, rtaArgs, restartServer);
   if (!helper.startFirstInstance()) {
     helper.destructor(false);
@@ -176,6 +175,8 @@ function dump (options) {
   if (opts.cluster) {
     opts.dbServers = 3;
   }
+  opts.extraArgs['experimental-vector-index'] = true;
+
   let c = getClusterStrings(opts);
   let tstFiles = {
     dumpSetup: 'dump-setup' + c.cluster + '.js',
@@ -194,8 +195,10 @@ function dumpMixedClusterSingle (options) {
   let clusterOptions = _.clone(options);
   clusterOptions.cluster = true;
   clusterOptions.dbServers = 3;
+  clusterOptions.extraArgs['experimental-vector-index'] = true;
   let singleOptions = _.clone(options);
   singleOptions.cluster = false;
+  singleOptions.extraArgs['experimental-vector-index'] = true;
   let clusterStrings = getClusterStrings(clusterOptions);
   let singleStrings = getClusterStrings(singleOptions);
   let tstFiles = {
@@ -219,8 +222,10 @@ function dumpMixedSingleCluster (options) {
   let clusterOptions = _.clone(options);
   clusterOptions.cluster = true;
   clusterOptions.dbServers = 3;
+  clusterOptions.extraArgs['experimental-vector-index'] = true;
   let singleOptions = _.clone(options);
   singleOptions.cluster = false;
+  singleOptions.extraArgs['experimental-vector-index'] = true;
   let clusterStrings = getClusterStrings(clusterOptions);
   let singleStrings = getClusterStrings(singleOptions);
   let tstFiles = {
@@ -247,6 +252,7 @@ function dumpMultipleTwo (options) {
     deactivateCompression: true,
     parallelDump: true,
     splitFiles: true,
+    extraArgs: { 'experimental-vector-index': true },
   };
   _.defaults(dumpOptions, options);
   let c = getClusterStrings(dumpOptions);
@@ -270,6 +276,7 @@ function dumpMultipleSame (options) {
     deactivateCompression: true,
     parallelDump: true,
     splitFiles: true,
+    extraArgs: { 'experimental-vector-index': true },
   };
   _.defaults(dumpOptions, options);
   let c = getClusterStrings(dumpOptions);
@@ -297,6 +304,7 @@ function dumpWithCrashes (options) {
     threads: 1,
     useParallelDump: true,
     splitFiles: true,
+    extraArgs: { 'experimental-vector-index': true },
   };
   _.defaults(dumpOptions, options);
   let c = getClusterStrings(dumpOptions);
@@ -322,6 +330,7 @@ function dumpWithCrashesNonParallel (options) {
     threads: 1,
     useParallelDump: false,
     splitFiles: false,
+    extraArgs: { 'experimental-vector-index': true },
   };
   _.defaults(dumpOptions, options);
   let c = getClusterStrings(dumpOptions);
@@ -354,6 +363,7 @@ function dumpAuthentication (options) {
 
   _.defaults(dumpAuthOpts, options);
   _.defaults(restoreAuthOpts, options);
+  dumpAuthOpts.extraArgs['experimental-vector-index'] = true;
   dumpAuthOpts.dbServers = 3;
   dumpAuthOpts.useParallelDump = false;
   restoreAuthOpts.dbServers = 3;
@@ -394,6 +404,7 @@ function dumpJwt (options) {
   };
 
   let opts = Object.assign({}, options, tu.testServerAuthInfo, {
+    extraArgs: { 'experimental-vector-index': true },
     multipleDumps: true,
     dbServers: 3
   });
@@ -414,6 +425,7 @@ function dumpEncrypted (options) {
   };
 
   let dumpOptions = _.clone(options);
+  dumpAuthOpts.extraArgs['experimental-vector-index'] = true;
   dumpOptions.encrypted = true;
   dumpOptions.compressed = true; // Should be overruled by 'encrypted'
   dumpOptions.dbServers = 3;
@@ -438,6 +450,7 @@ function dumpNonParallel (options) {
   dumpOptions.useParallelDump = false;
   dumpOptions.splitFiles = false;
   dumpOptions.dbServers = 3;
+  dumpAuthOpts.extraArgs['experimental-vector-index'] = true;
 
   let tstFiles = {
     dumpSetup: 'dump-setup' + c.cluster + '.js',
@@ -462,6 +475,7 @@ function dumpMaskings (options) {
   };
 
   let dumpMaskingsOpts = {
+    extraArgs: { 'experimental-vector-index': true },
     maskings: 'maskings1.json',
     dbServers: 3
   };
