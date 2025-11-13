@@ -1,8 +1,10 @@
 """Pytest integration for Armadillo test isolation."""
 
-from typing import Generator
+from typing import Generator, Any, Optional, Type
 
 import pytest
+from _pytest.config import Config
+from _pytest.fixtures import FixtureRequest
 
 from .test_context import (
     IsolatedTestContext,
@@ -12,7 +14,9 @@ from .test_context import (
 
 
 @pytest.fixture
-def isolated_test_context(request) -> Generator[IsolatedTestContext, None, None]:
+def isolated_test_context(
+    request: FixtureRequest,
+) -> Generator[IsolatedTestContext, None, None]:
     """Pytest fixture providing an isolated test context.
 
     Creates a fully isolated test environment with:
@@ -47,7 +51,9 @@ def isolated_test_context(request) -> Generator[IsolatedTestContext, None, None]
 
 
 @pytest.fixture
-def test_environment(request) -> Generator[IsolatedTestContext, None, None]:
+def test_environment(
+    request: FixtureRequest,
+) -> Generator[IsolatedTestContext, None, None]:
     """Pytest fixture providing a test environment with persistence.
 
     Similar to isolated_test_context but enables persistence for debugging.
@@ -79,7 +85,7 @@ def test_environment(request) -> Generator[IsolatedTestContext, None, None]:
 
 
 @pytest.fixture(autouse=True, scope="function")
-def reset_test_state():
+def reset_test_state() -> Generator[None, None, None]:
     """Auto-use fixture that resets test state after each test.
 
     This fixture automatically runs after each test to ensure clean state.
@@ -96,7 +102,7 @@ def reset_test_state():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def cleanup_test_session():
+def cleanup_test_session() -> Generator[None, None, None]:
     """Session-scoped fixture that ensures cleanup at end of test session."""
     yield  # Let all tests run
 
@@ -111,7 +117,7 @@ def cleanup_test_session():
 class ContextTestManager:
     """Context manager for managing test isolation in non-pytest environments."""
 
-    def __init__(self, test_name: str, **kwargs):
+    def __init__(self, test_name: str, **kwargs: Any) -> None:
         """Initialize test context manager.
 
         Args:
@@ -120,7 +126,7 @@ class ContextTestManager:
         """
         self._test_name = test_name
         self._context_kwargs = kwargs
-        self._context = None
+        self._context: Optional[IsolatedTestContext] = None
 
     def __enter__(self) -> IsolatedTestContext:
         """Enter the test context."""
@@ -129,9 +135,15 @@ class ContextTestManager:
             cleanup_on_exit=False,  # We'll clean up manually
             **self._context_kwargs,
         )
+        assert self._context is not None  # Help mypy understand this is not None
         return self._context
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[Any],
+    ) -> None:
         """Exit the test context with cleanup."""
         if self._context:
             self._context.cleanup()
@@ -140,7 +152,7 @@ class ContextTestManager:
         reset_test_environment()
 
 
-def context_for_test(test_name: str, **kwargs) -> ContextTestManager:
+def context_for_test(test_name: str, **kwargs: Any) -> ContextTestManager:
     """Create a test context manager for non-pytest environments.
 
     Usage:
@@ -153,7 +165,7 @@ def context_for_test(test_name: str, **kwargs) -> ContextTestManager:
 
 
 # Utility functions for manual test management
-def create_test_environment(test_name: str, **kwargs) -> IsolatedTestContext:
+def create_test_environment(test_name: str, **kwargs: Any) -> IsolatedTestContext:
     """Create a test environment for manual management.
 
     Note: Remember to call cleanup() or use the context manager instead.
@@ -171,7 +183,7 @@ def cleanup_test_environment() -> None:
 
 
 # Pytest markers for test categorization
-def pytest_configure(config):
+def pytest_configure(config: Config) -> None:
     """Configure pytest markers for test isolation."""
     config.addinivalue_line(
         "markers", "isolated: mark test as requiring full isolation"

@@ -1,6 +1,7 @@
 """Instance Manager for multi-server orchestration and lifecycle management."""
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Type
+from types import TracebackType
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -95,11 +96,16 @@ class InstanceManager:
             timeout_config=self._app_context.config.timeouts,
         )
 
-    def __enter__(self):
+    def __enter__(self) -> "InstanceManager":
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """Context manager exit."""
         try:
             if self._deployment and self._deployment.is_deployed():
@@ -115,9 +121,10 @@ class InstanceManager:
         Returns:
             Single server deployment plan
         """
-        return self._app_context.deployment_planner.create_single_server_plan(
-            self.deployment_id
-        )
+        # Convert DeploymentId to ServerId for single server plan
+        # For single server deployments, deployment_id is used as server_id
+        server_id = ServerId(str(self.deployment_id))
+        return self._app_context.deployment_planner.create_single_server_plan(server_id)
 
     def create_deployment_plan(
         self, cluster_config: Optional[ClusterConfig] = None
@@ -406,16 +413,18 @@ class InstanceManager:
             )
 
         # Add server details using proper interface
-        info["servers"] = {}
+        servers_dict: Dict[str, Any] = {}
         servers = self._deployment.get_servers() if self._deployment else {}
         for server_id, server in servers.items():
             server_info = server.get_info()
-            info["servers"][str(server_id)] = {
+            server_context = server.get_context()
+            servers_dict[str(server_id)] = {
                 "role": server_info.role.value,
                 "endpoint": server_info.endpoint,
                 "is_running": server.is_running(),
-                "pid": server.get_pid(),
+                "pid": server_context.pid,
             }
+        info["servers"] = servers_dict
 
         return info
 

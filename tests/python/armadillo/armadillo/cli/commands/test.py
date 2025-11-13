@@ -6,7 +6,7 @@ import signal
 import subprocess
 import threading
 from pathlib import Path
-from typing import Optional, List
+from typing import Any, Optional, List, Union
 import typer
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from rich.console import Console
@@ -70,7 +70,7 @@ class TestRunOptions(BaseModel):
 
     @field_validator("formats")
     @classmethod
-    def validate_formats(cls, v):
+    def validate_formats(cls, v: List[str]) -> List[str]:
         """Validate that only supported formats are specified."""
         supported_formats = {"junit", "json", "yaml", "html"}
         for fmt in v:
@@ -82,7 +82,7 @@ class TestRunOptions(BaseModel):
 
     @field_validator("log_level")
     @classmethod
-    def validate_log_level(cls, v):
+    def validate_log_level(cls, v: str) -> str:
         """Validate log level is supported."""
         if v.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError(
@@ -92,7 +92,7 @@ class TestRunOptions(BaseModel):
 
     @field_validator("max_workers")
     @classmethod
-    def validate_max_workers(cls, v):
+    def validate_max_workers(cls, v: Optional[int]) -> Optional[int]:
         """Validate max_workers is reasonable."""
         if v is not None and (v < 1 or v > 64):
             raise ValueError("max_workers must be between 1 and 64")
@@ -149,7 +149,7 @@ def run(
         False, "--show-server-logs", help=_HELP["show_server_logs"]
     ),
     compact: bool = typer.Option(False, "--compact", "-c", help=_HELP["compact"]),
-):
+) -> None:
     """Run tests with ArangoDB instances."""
     try:
         # Get global log level from CLI context (already resolved from verbose if needed)
@@ -314,7 +314,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Start pytest subprocess (with or without output monitoring)
     if options.output_idle_timeout:
         # Enable output idle timeout monitoring - requires stdout/stderr capture
-        process = subprocess.Popen(
+        process: Union[subprocess.Popen[str], subprocess.Popen[bytes]] = subprocess.Popen(
             pytest_args,
             cwd=Path.cwd(),
             stdout=subprocess.PIPE,
@@ -327,6 +327,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
         process = subprocess.Popen(
             pytest_args,
             cwd=Path.cwd(),
+            universal_newlines=True,  # Use text mode for consistency
         )
 
     # Create centralized timeout handler
@@ -346,13 +347,17 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # If output idle monitoring is enabled, stream output and update timestamp
     if options.output_idle_timeout:
 
-        def output_reader():
+        def output_reader() -> None:
             """Read and forward output line-by-line, updating timeout handler."""
             try:
-                for line in process.stdout:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-                    timeout_handler.update_output_timestamp()
+                if process.stdout is not None:
+                    # With universal_newlines=True, stdout is text mode (str)
+                    stdout_text: Any = process.stdout
+                    for line in stdout_text:
+                        assert isinstance(line, str), "Expected text mode output"
+                        sys.stdout.write(line)
+                        sys.stdout.flush()
+                        timeout_handler.update_output_timestamp()
             except Exception as e:
                 logger.error("Error reading process output: %s", e)
 
@@ -362,7 +367,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Track signal handling state
     signal_count = 0
 
-    def signal_handler(signum, _frame):
+    def signal_handler(signum: int, _frame: Any) -> None:
         """Two-stage signal handling: graceful first, force kill on second signal."""
         nonlocal signal_count
         signal_count += 1
@@ -429,7 +434,7 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
 
 @test_app.command(name="list")
-def list_markers():
+def list_markers() -> None:
     """List available test markers and fixtures."""
     table = Table(title="Available Test Markers")
     table.add_column("Marker", style="cyan")

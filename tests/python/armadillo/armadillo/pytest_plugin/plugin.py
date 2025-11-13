@@ -6,10 +6,15 @@ import signal
 import time
 import traceback
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Any, Optional, Dict, Union
 
 import pytest
 from pytest import StashKey
+from _pytest.config import Config
+from _pytest.main import Session
+from _pytest.nodes import Item
+from _pytest.fixtures import FixtureDef
+from _pytest.fixtures import FixtureRequest
 from ..core.config import get_config
 from ..core.config_initializer import initialize_config
 from ..core.context import ApplicationContext
@@ -40,9 +45,13 @@ from ..utils.crypto import random_id
 logger = get_logger(__name__)
 
 # Global flags to track if we should abort remaining tests
-_ABORT_REMAINING_TESTS = False
-_CRASH_DETECTED_DURING_TEST = None  # Store nodeid of test where crash was detected
-_TIMEOUT_DETECTED_DURING_TEST = None  # Store nodeid of test where timeout was detected
+_ABORT_REMAINING_TESTS: bool = False
+_CRASH_DETECTED_DURING_TEST: Optional[str] = (
+    None  # Store nodeid of test where crash was detected
+)
+_TIMEOUT_DETECTED_DURING_TEST: Optional[str] = (
+    None  # Store nodeid of test where timeout was detected
+)
 
 # Session config reference for hooks that don't receive it
 _current_session_config: Optional[pytest.Config] = None
@@ -235,24 +244,28 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     _current_session_config = None
 
 
-def _get_plugin(obj) -> ArmadilloPlugin:
+def _get_plugin(obj: Union[Config, Session, Item]) -> ArmadilloPlugin:
     """Get plugin from pytest object (config, session, or item).
 
     Helper to retrieve plugin from stash regardless of hook object type.
     """
     if hasattr(obj, "config"):
-        return obj.config.stash[plugin_key]
-    return obj.stash[plugin_key]
+        plugin: ArmadilloPlugin = obj.config.stash[plugin_key]
+        return plugin
+    plugin = obj.stash[plugin_key]
+    return plugin
 
 
-def pytest_fixture_setup(fixturedef, request):  # pylint: disable=unused-argument
+def pytest_fixture_setup(
+    fixturedef: FixtureDef[Any], request: FixtureRequest
+) -> None:  # pylint: disable=unused-argument
     """Automatic fixture setup based on markers."""
     # Reserved for future automatic fixture setup based on markers
 
 
 def pytest_collection_modifyitems(
-    session, config, items
-):  # pylint: disable=unused-argument
+    session: Session, config: Config, items: list[Item]
+) -> None:  # pylint: disable=unused-argument
     """Modify test collection based on markers and configuration."""
     # Validate package structure - all tests must be in a package (directory with conftest.py)
     for item in items:
@@ -306,7 +319,7 @@ def pytest_collection_modifyitems(
             item.add_marker(pytest.mark.performance)
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: Any) -> None:
     """Add custom command line options."""
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
@@ -327,7 +340,7 @@ def pytest_addoption(parser):
 
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_sessionstart(session):
+def pytest_sessionstart(session: Session) -> None:
     """Set up test session and register cleanup handlers."""
     logger.debug("Starting pytest plugin setup")
     logger.info("Test session started")
@@ -336,7 +349,7 @@ def pytest_sessionstart(session):
     atexit.register(_emergency_cleanup)
 
     # Install signal handlers for Ctrl+C and SIGTERM to ensure cleanup
-    def _signal_handler(signum, _frame):
+    def _signal_handler(signum: int, _frame: Any) -> None:
         """Handle interrupt signals by performing emergency cleanup."""
         signal_name = (
             signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
@@ -417,7 +430,7 @@ def pytest_sessionstart(session):
         plugin.reporter.session_start_time = time.time()
 
 
-def _is_compact_mode_enabled():
+def _is_compact_mode_enabled() -> bool:
     """Check if compact test output mode is enabled."""
     from ..core.config import get_config as get_framework_config
 
@@ -425,7 +438,7 @@ def _is_compact_mode_enabled():
     return framework_config.compact_mode
 
 
-def _cleanup_temp_dir_if_needed(_session, exitstatus):
+def _cleanup_temp_dir_if_needed(_session: Session, exitstatus: int) -> None:
     """Clean up session work directory based on test results and configuration.
 
     Cleanup logic:
@@ -503,7 +516,7 @@ def _cleanup_temp_dir_if_needed(_session, exitstatus):
 
 
 @pytest.hookimpl(trylast=True)
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
     """Clean up all resources at the end of test session."""
     logger.debug("Starting pytest plugin cleanup")
 
@@ -566,7 +579,7 @@ def pytest_sessionfinish(session, exitstatus):
             logger.debug("Error stopping watchdog: %s", e)
 
 
-def pytest_runtest_setup(item):
+def pytest_runtest_setup(item: Item) -> None:
     """Handle test setup - check if we should skip due to previous crash, timeout, or deployment failure."""
     # If deployment failed, skip all tests
     plugin = _get_plugin(item)
@@ -577,39 +590,37 @@ def pytest_runtest_setup(item):
 
     # If a timeout was detected in a previous test, skip all remaining tests
     # (timeout means system is in unknown state, similar to crash)
-    if (
-        _ABORT_REMAINING_TESTS
-        and _TIMEOUT_DETECTED_DURING_TEST
-        and _TIMEOUT_DETECTED_DURING_TEST != item.nodeid
-    ):
-        pytest.skip(
-            f"Skipping test due to timeout in previous test: {_TIMEOUT_DETECTED_DURING_TEST}\n"
-            f"System may be in unknown state after timeout."
-        )
+    if _ABORT_REMAINING_TESTS:
+        if _TIMEOUT_DETECTED_DURING_TEST is not None:
+            if _TIMEOUT_DETECTED_DURING_TEST != item.nodeid:
+                pytest.skip(
+                    f"Skipping test due to timeout in previous test: {_TIMEOUT_DETECTED_DURING_TEST}\n"
+                    f"System may be in unknown state after timeout."
+                )
 
     # If a crash was detected in a previous test, skip all remaining tests
-    if (
-        _ABORT_REMAINING_TESTS
-        and _CRASH_DETECTED_DURING_TEST
-        and _CRASH_DETECTED_DURING_TEST != item.nodeid
-    ):
-        pytest.skip(
-            f"Skipping test due to server crash in previous test: {_CRASH_DETECTED_DURING_TEST}"
-        )
+    if _ABORT_REMAINING_TESTS:
+        if _CRASH_DETECTED_DURING_TEST is not None:
+            if _CRASH_DETECTED_DURING_TEST != item.nodeid:
+                pytest.skip(
+                    f"Skipping test due to server crash in previous test: {_CRASH_DETECTED_DURING_TEST}"
+                )
 
     # Handle reporter setup
     if not _is_compact_mode_enabled() and plugin.reporter:
         plugin.reporter.pytest_runtest_setup(item)
 
 
-def pytest_runtest_call(item):
+def pytest_runtest_call(item: Item) -> None:
     """Handle test call start."""
     plugin = _get_plugin(item)
     if not _is_compact_mode_enabled() and plugin.reporter:
         plugin.reporter.pytest_runtest_call(item)
 
 
-def pytest_runtest_teardown(item, nextitem):  # pylint: disable=unused-argument
+def pytest_runtest_teardown(
+    item: Item, nextitem: Optional[Item]
+) -> None:  # pylint: disable=unused-argument
     """Handle test teardown start."""
     plugin = _get_plugin(item)
     if not _is_compact_mode_enabled() and plugin.reporter:
@@ -617,7 +628,7 @@ def pytest_runtest_teardown(item, nextitem):  # pylint: disable=unused-argument
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
-def pytest_runtest_makereport(item, call):
+def pytest_runtest_makereport(item: Item, call: Any) -> Any:
     """Hook to modify test reports and detect crashes/timeouts."""
     global _ABORT_REMAINING_TESTS, _CRASH_DETECTED_DURING_TEST, _TIMEOUT_DETECTED_DURING_TEST
 
@@ -725,7 +736,7 @@ def pytest_runtest_makereport(item, call):
             )
 
 
-def pytest_runtest_logreport(report):
+def pytest_runtest_logreport(report: Any) -> None:
     """Handle test report."""
     # Note: report object has .config but only for session/terminal reports
     # For test reports, we need to use the session's config which we can't access here
@@ -738,7 +749,9 @@ def pytest_runtest_logreport(report):
                 plugin.reporter.pytest_runtest_logreport(report)
 
 
-def pytest_runtest_logstart(nodeid, location):
+def pytest_runtest_logstart(
+    nodeid: str, location: Optional[tuple[str, Optional[int], str]]
+) -> Optional[str]:
     """Override pytest's default test file output to suppress filename printing."""
     if not _is_compact_mode_enabled():
         global _current_session_config
@@ -752,7 +765,9 @@ def pytest_runtest_logstart(nodeid, location):
     return None
 
 
-def pytest_report_teststatus(report, config):  # pylint: disable=unused-argument
+def pytest_report_teststatus(
+    report: Any, config: Config
+) -> Optional[tuple[str, str, str]]:  # pylint: disable=unused-argument
     """Override test status reporting to suppress pytest's progress dots and status."""
     if not _is_compact_mode_enabled():
         if report.when == "call":
@@ -767,8 +782,8 @@ def pytest_report_teststatus(report, config):  # pylint: disable=unused-argument
 
 
 def pytest_terminal_summary(
-    terminalreporter, exitstatus, config
-):  # pylint: disable=unused-argument
+    terminalreporter: Any, exitstatus: int, config: Config
+) -> None:  # pylint: disable=unused-argument
     """Override terminal summary - print our summary AFTER all cleanup is complete."""
     plugin = _get_plugin(config)
     if not _is_compact_mode_enabled() and plugin.reporter:
@@ -777,7 +792,7 @@ def pytest_terminal_summary(
             plugin.reporter.summary_printed = True
 
 
-def _cleanup_all_deployments(emergency=True):
+def _cleanup_all_deployments(emergency: bool = True) -> None:
     """Cleanup all tracked deployments with bulletproof shutdown."""
     global _current_session_config
     if not _current_session_config:
@@ -803,7 +818,7 @@ def _cleanup_all_deployments(emergency=True):
                 manager.shutdown_deployment(timeout=15.0)
                 logger.debug("Deployment %s shutdown completed", deployment_id)
                 # Always capture health, even in emergency cleanup
-                _capture_deployment_health(manager, deployment_id)
+                _capture_deployment_health(manager, str(deployment_id))
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Failed emergency cleanup of deployment %s: %s",
@@ -812,7 +827,7 @@ def _cleanup_all_deployments(emergency=True):
                 )
                 # Even if shutdown failed, try to capture health
                 try:
-                    _capture_deployment_health(manager, deployment_id)
+                    _capture_deployment_health(manager, str(deployment_id))
                 except Exception as health_err:
                     logger.debug(
                         "Could not capture health for %s: %s", deployment_id, health_err
@@ -860,7 +875,7 @@ def _cleanup_all_deployments(emergency=True):
             logger.info("Emergency deployment cleanup completed")
 
 
-def _cleanup_all_processes(emergency=True):
+def _cleanup_all_processes(emergency: bool = True) -> None:
     """Cleanup all supervised processes with bulletproof termination."""
     try:
         logger.info("Starting _cleanup_all_processes")
@@ -1000,7 +1015,7 @@ def _cleanup_all_processes(emergency=True):
         logger.error("Stack trace: %s", traceback.format_exc())
 
 
-def _emergency_cleanup():
+def _emergency_cleanup() -> None:
     """Emergency cleanup function registered with atexit."""
     # Check if there's actually anything to clean up
     global _current_session_config
@@ -1080,7 +1095,7 @@ def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> 
         )
 
 
-def create_package_deployment(package_name: str):
+def create_package_deployment(package_name: str) -> Any:
     """Helper function to create a deployment for a test package.
 
     This is intended to be called from package conftest.py files to create
@@ -1114,6 +1129,10 @@ def create_package_deployment(package_name: str):
     if deployment_mode == DeploymentMode.CLUSTER:
         # Create cluster deployment for this package
         deployment_id = DeploymentId(f"cluster_{package_name}_{random_id(6)}")
+        if plugin._session_app_context is None:
+            raise RuntimeError(
+                "Cannot create deployment: no session app context available"
+            )
         manager = InstanceManager(
             deployment_id, app_context=plugin._session_app_context
         )
@@ -1148,6 +1167,10 @@ def create_package_deployment(package_name: str):
     else:
         # Single server mode
         deployment_id = DeploymentId(f"single_{package_name}_{random_id(6)}")
+        if plugin._session_app_context is None:
+            raise RuntimeError(
+                "Cannot create deployment: no session app context available"
+            )
         manager = InstanceManager(
             deployment_id, app_context=plugin._session_app_context
         )

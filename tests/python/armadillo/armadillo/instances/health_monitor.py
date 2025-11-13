@@ -95,7 +95,7 @@ class HealthMonitor:
             self._timeouts.health_check_extended * len(servers)
         )
         start_time = time.time()
-        unhealthy_servers: List[str] = []
+        unhealthy_servers: List[ServerId] = []
         health_errors: List[str] = []
         per_server_timeout = actual_timeout / len(servers)
 
@@ -137,7 +137,7 @@ class HealthMonitor:
 
         error_msg = (
             f"{len(unhealthy_servers)}/{len(servers)} servers unhealthy: "
-            f"{', '.join(unhealthy_servers)}"
+            f"{', '.join(str(sid) for sid in unhealthy_servers)}"
         )
         if health_errors:
             error_msg += f". Errors: {'; '.join(health_errors[:3])}"
@@ -157,7 +157,7 @@ class HealthMonitor:
             ServerStats or None if collection failed
         """
         try:
-            return server.get_stats()
+            return server.get_stats_sync()
         except (OSError, RuntimeError, ValueError) as e:
             # Stats collection should not crash monitoring - log and return None
             self._logger.warning(

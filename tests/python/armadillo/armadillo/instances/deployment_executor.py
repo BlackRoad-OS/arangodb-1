@@ -92,19 +92,23 @@ class SingleServerExecutor:
             timing=DeploymentTiming(startup_time=time.time()),
         )
 
-    def shutdown(self, deployment: SingleServerDeployment, timeout: float) -> None:
+    def shutdown(self, deployment: Deployment, timeout: float) -> None:
         """Shutdown single server.
 
         Trivial: only one server to stop.
 
         Args:
-            deployment: SingleServerDeployment to shutdown
+            deployment: Deployment to shutdown (must be SingleServerDeployment)
             timeout: Maximum time to wait for shutdown
 
         Raises:
             ServerShutdownError: If shutdown fails
         """
-        server = deployment.server  # Direct access, no dict iteration needed
+        assert isinstance(deployment, SingleServerDeployment), (
+            f"SingleServerExecutor.shutdown requires SingleServerDeployment, "
+            f"got {type(deployment).__name__}"
+        )
+        server = deployment.server
         self._logger.info("Shutting down single server: %s", server.server_id)
 
         try:
@@ -173,7 +177,7 @@ class ClusterExecutor:
             timing=DeploymentTiming(startup_time=time.time()),
         )
 
-    def shutdown(self, deployment: ClusterDeployment, timeout: float) -> None:
+    def shutdown(self, deployment: Deployment, timeout: float) -> None:
         """Shutdown cluster in role-based order.
 
         Shutdown order: Non-agents first, then agents
@@ -183,13 +187,17 @@ class ClusterExecutor:
         shutdown of coordinators and dbservers.
 
         Args:
-            deployment: ClusterDeployment to shutdown
+            deployment: Deployment to shutdown (must be ClusterDeployment)
             timeout: Maximum time to wait for shutdown
 
         Raises:
             ServerShutdownError: If shutdown fails critically
         """
-        servers = deployment.get_servers()
+        assert isinstance(deployment, ClusterDeployment), (
+            f"ClusterExecutor.shutdown requires ClusterDeployment, "
+            f"got {type(deployment).__name__}"
+        )
+        servers = deployment.servers
         if not servers:
             return
 

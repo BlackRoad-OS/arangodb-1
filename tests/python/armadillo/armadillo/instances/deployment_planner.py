@@ -1,6 +1,6 @@
 """Deployment planning for ArangoDB single server and cluster setups."""
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Union
 
 from ..core.types import ServerRole, ServerConfig, ClusterConfig
 from ..core.value_objects import ServerId, DeploymentId
@@ -116,7 +116,7 @@ class DeploymentPlanner:
             port = self._port_allocator.allocate_port()
 
             # Configure server arguments including logging
-            args = {
+            args: Dict[str, Union[str, List[str], int, float, bool]] = {
                 "agency.activate": "true",
                 "agency.size": str(cluster_config.agents),
                 "agency.supervision": "true",
@@ -152,7 +152,7 @@ class DeploymentPlanner:
             port = self._port_allocator.allocate_port()
 
             # Configure server arguments including logging
-            args = {
+            args: Dict[str, Union[str, List[str], int, float, bool]] = {
                 "cluster.my-role": "PRIMARY",
                 "cluster.my-address": f"tcp://127.0.0.1:{port}",
                 "cluster.agency-endpoint": agent_endpoints[0],
@@ -186,7 +186,7 @@ class DeploymentPlanner:
             port = self._port_allocator.allocate_port()
 
             # Configure server arguments including logging
-            args = {
+            args: Dict[str, Union[str, List[str], int, float, bool]] = {
                 "cluster.my-role": "COORDINATOR",
                 "cluster.my-address": f"tcp://127.0.0.1:{port}",
                 "cluster.agency-endpoint": agent_endpoints[0],

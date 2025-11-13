@@ -6,7 +6,11 @@ from typing import Dict, List, Optional
 from ..core.value_objects import ServerId
 from ..core.types import ServerRole
 from .server import ArangoServer
-from .deployment_plan import SingleServerDeploymentPlan, ClusterDeploymentPlan
+from .deployment_plan import (
+    DeploymentPlan,
+    SingleServerDeploymentPlan,
+    ClusterDeploymentPlan,
+)
 
 
 @dataclass
@@ -141,6 +145,24 @@ class Deployment(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_coordination_endpoints(self) -> List[str]:
+        """Get coordination endpoints (coordinators or single server).
+
+        Returns:
+            List of coordination endpoints
+        """
+        pass
+
+    @abstractmethod
+    def get_plan(self) -> DeploymentPlan:
+        """Get the deployment plan used to create this deployment.
+
+        Returns:
+            The deployment plan (SingleServerDeploymentPlan or ClusterDeploymentPlan)
+        """
+        pass
+
 
 @dataclass
 class SingleServerDeployment(Deployment):
@@ -170,6 +192,10 @@ class SingleServerDeployment(Deployment):
     def get_agency_endpoints(self) -> List[str]:
         """Get agency endpoints (empty for single server)."""
         return []
+
+    def get_plan(self) -> SingleServerDeploymentPlan:
+        """Get the deployment plan."""
+        return self.plan
 
     def mark_deployed(self, startup_time: float) -> None:
         """Mark deployment as deployed with startup time."""
@@ -219,6 +245,10 @@ class ClusterDeployment(Deployment):
     def get_agency_endpoints(self) -> List[str]:
         """Get agency endpoints."""
         return self.plan.agency_endpoints
+
+    def get_plan(self) -> ClusterDeploymentPlan:
+        """Get the deployment plan."""
+        return self.plan
 
     def mark_deployed(self, startup_time: float) -> None:
         """Mark deployment as deployed with startup time."""

@@ -6,7 +6,7 @@ import subprocess
 import threading
 import time
 import traceback
-from typing import Optional, Dict, List, Callable
+from typing import Optional, Dict, List, Callable, Any, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -486,7 +486,7 @@ class ProcessSupervisor:
         except psutil.NoSuchProcess:
             return None
 
-    def list_processes(self) -> List[str]:
+    def list_processes(self) -> List[ServerId]:
         """List all supervised process IDs."""
         return list(self._processes.keys())
 
@@ -685,19 +685,19 @@ _process_executor = ProcessExecutor()
 _process_supervisor = ProcessSupervisor()
 
 
-def execute_command(command: List[str], **kwargs) -> ProcessResult:
+def execute_command(command: List[str], **kwargs: Any) -> ProcessResult:
     """Execute a one-shot command."""
     return _process_executor.run(command, **kwargs)
 
 
 def start_supervised_process(
-    server_id: ServerId, command: List[str], **kwargs
+    server_id: ServerId, command: List[str], **kwargs: Any
 ) -> ProcessInfo:
     """Start a supervised process."""
     return _process_supervisor.start(server_id, command, **kwargs)
 
 
-def stop_supervised_process(server_id: ServerId, **kwargs) -> None:
+def stop_supervised_process(server_id: ServerId, **kwargs: Any) -> None:
     """Stop a supervised process."""
     _process_supervisor.stop(server_id, **kwargs)
 
@@ -732,7 +732,7 @@ def clear_crash_state() -> None:
     _process_supervisor.clear_crash_state()
 
 
-def stop_all_processes(**kwargs) -> None:
+def stop_all_processes(**kwargs: Any) -> None:
     """Stop all supervised processes."""
     _process_supervisor.stop_all(**kwargs)
 
@@ -876,8 +876,9 @@ def kill_all_supervised_processes() -> None:
                 len(processes),
             )
             logger.debug("Phase 1: Attempting SIGTERM on process trees")
-            failed_trees = []
+            failed_trees: List[Tuple[ServerId, Optional[int]]] = []
             for server_id, process in processes.items():
+                pid: Optional[int] = None
                 try:
                     pid = process.pid
                     logger.debug(
@@ -885,7 +886,7 @@ def kill_all_supervised_processes() -> None:
                         server_id,
                         pid,
                     )
-                    if not kill_process_tree(pid, signal.SIGTERM, timeout=2.0):
+                    if pid is not None and not kill_process_tree(pid, signal.SIGTERM, timeout=2.0):
                         failed_trees.append((server_id, pid))
                 except (
                     OSError,
@@ -896,7 +897,12 @@ def kill_all_supervised_processes() -> None:
                     logger.error(
                         "Error in SIGTERM phase for process %s: %s", server_id, e
                     )
-                    failed_trees.append((server_id, getattr(process, "pid", None)))
+                    if pid is None:
+                        try:
+                            pid = process.pid
+                        except (AttributeError, OSError):
+                            pass
+                    failed_trees.append((server_id, pid))
             if failed_trees:
                 logger.warning(
                     "Phase 2: Force killing %s stubborn process trees",

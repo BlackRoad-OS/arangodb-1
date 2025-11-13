@@ -80,16 +80,12 @@ class ClusterBootstrapper:
         # 3. Start database servers
         elapsed = time.time() - start_time
         remaining = max(60.0, timeout - elapsed)
-        self._start_servers_by_role(
-            servers, ServerRole.DBSERVER, timeout=remaining
-        )
+        self._start_servers_by_role(servers, ServerRole.DBSERVER, timeout=remaining)
 
         # 4. Start coordinators
         elapsed = time.time() - start_time
         remaining = max(60.0, timeout - elapsed)
-        self._start_servers_by_role(
-            servers, ServerRole.COORDINATOR, timeout=remaining
-        )
+        self._start_servers_by_role(servers, ServerRole.COORDINATOR, timeout=remaining)
 
         self._logger.info("All cluster servers started successfully")
 
@@ -305,7 +301,7 @@ class ClusterBootstrapper:
             self._logger.debug("Agent %s response: %s", server_id, response.status_code)
 
             if response.status_code == 200:
-                config = response.json()
+                config: Dict[str, Any] = response.json()
                 self._logger.debug(
                     "Agent %s config keys: %s", server_id, list(config.keys())
                 )
@@ -320,7 +316,7 @@ class ClusterBootstrapper:
             return None
 
     def _analyze_agency_status(
-        self, agents: List[Tuple[str, ArangoServer]]
+        self, agents: List[Tuple[ServerId, ArangoServer]]
     ) -> Tuple[int, int, bool]:
         """Analyze agency status across all agents.
 

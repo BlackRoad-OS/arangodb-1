@@ -3,12 +3,15 @@
 Provides detailed verbose output with timestamps, test phases, and comprehensive timing information.
 """
 
-import os
+import sys
 import time
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 from _pytest.reports import TestReport
+from _pytest.config import Config
+from _pytest.main import Session
+from _pytest.nodes import Item
 
 from ..core.log import get_logger
 from ..core.types import ExecutionOutcome, ServerHealthInfo
@@ -35,9 +38,9 @@ class Colors:
     RESET = "\033[0m"
 
     @staticmethod
-    def is_color_supported():
+    def is_color_supported() -> bool:
         """Check if terminal supports colors."""
-        return hasattr(os.sys.stdout, "isatty") and os.sys.stdout.isatty()
+        return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 
 class ArmadilloReporter:
@@ -60,12 +63,14 @@ class ArmadilloReporter:
         self.expected_total_tests = 0
         self.summary_printed = False
         self.use_colors = Colors.is_color_supported()
-        self.current_file = None  # Track current test file for header display
+        self.current_file: Optional[str] = (
+            None  # Track current test file for header display
+        )
         self.deployment_failed = False  # Flag set by plugin when deployment fails
         self.file_start_times: Dict[str, float] = {}  # Track start time per file
         self.file_test_counts: Dict[str, int] = {}  # Track test count per file
         self.file_expected_counts: Dict[str, int] = {}  # Expected test count per file
-        self.files_completed: set = set()  # Track which files have been completed
+        self.files_completed: set[str] = set()  # Track which files have been completed
         self.result_collector = result_collector or ResultCollector()
 
     def _colorize(self, text: str, color: str) -> str:
@@ -119,7 +124,7 @@ class ArmadilloReporter:
         """Extract file path from pytest node ID."""
         return nodeid.split("::")[0]
 
-    def _print_file_header(self, file_path: str):
+    def _print_file_header(self, file_path: str) -> None:
         """Print a colored header when starting a new test file."""
         running_text = self._colorize("Running", Colors.CYAN)
         file_text = self._colorize(file_path, Colors.BOLD)
@@ -131,7 +136,7 @@ class ArmadilloReporter:
 
         self._write_to_terminal(header_msg)
 
-    def _print_file_summary(self, file_path: str):
+    def _print_file_summary(self, file_path: str) -> None:
         """Print a summary for a completed test file."""
         test_count = self.file_test_counts.get(file_path, 0)
         if test_count == 0:
@@ -153,7 +158,7 @@ class ArmadilloReporter:
 
         self._write_to_terminal(summary_msg)
 
-    def _print_session_summary(self):
+    def _print_session_summary(self) -> None:
         """Print the session summary (total tests, timing, etc.)."""
         # Use captured session_finish_time if available, otherwise current time
         end_time = (
@@ -179,12 +184,14 @@ class ArmadilloReporter:
             f"({passed_colored}, {failed_colored}) ({total_time}ms total)\n"
         )
 
-    def pytest_sessionstart(self, _session):
+    def pytest_sessionstart(self, _session: Session) -> None:
         """Handle session start."""
         # session_start_time will be set by the plugin after server deployment
         # Don't print session start here - will be handled by file processing
 
-    def pytest_runtest_logstart(self, nodeid, _location):
+    def pytest_runtest_logstart(
+        self, nodeid: str, _location: Optional[tuple[str, Optional[int], str]]
+    ) -> None:
         """Handle test run start."""
         suite_name = self._get_suite_name(nodeid)
         test_name = self._get_test_name(nodeid)
@@ -212,13 +219,13 @@ class ArmadilloReporter:
                 "start": time.time(),
             }
 
-    def pytest_runtest_setup(self, item):
+    def pytest_runtest_setup(self, item: Item) -> None:
         """Handle test setup start."""
         test_name = self._get_test_name(item.nodeid)
         if test_name in self.test_times:
             self.test_times[test_name]["setup_start"] = time.time()
 
-    def pytest_runtest_call(self, item):
+    def pytest_runtest_call(self, item: Item) -> None:
         """Handle test call start - print [ RUN ] here after fixture setup."""
         test_name = self._get_test_name(item.nodeid)
 
@@ -235,13 +242,13 @@ class ArmadilloReporter:
                 ) * 1000  # Convert to milliseconds
             self.test_times[test_name]["call_start"] = time.time()
 
-    def pytest_runtest_teardown(self, item):
+    def pytest_runtest_teardown(self, item: Item) -> None:
         """Handle test teardown start."""
         test_name = self._get_test_name(item.nodeid)
         if test_name in self.test_times:
             self.test_times[test_name]["teardown_start"] = time.time()
 
-    def pytest_runtest_logreport(self, report: TestReport):
+    def pytest_runtest_logreport(self, report: TestReport) -> None:
         """Handle test report."""
         # Store all reports for later aggregation
         if report.when == "call":
@@ -355,7 +362,7 @@ class ArmadilloReporter:
             )
             self.total_tests += 1
 
-    def pytest_collection_modifyitems(self, items):
+    def pytest_collection_modifyitems(self, items: List[Item]) -> None:
         """Handle collection completion - print file and suite info."""
         if not items:
             return
@@ -364,7 +371,7 @@ class ArmadilloReporter:
         self.expected_total_tests = len(items)
 
         # Group tests by file for JS-framework-style output
-        files = {}
+        files: Dict[str, List[Item]] = {}
         for item in items:
             file_path = str(item.fspath)
             if file_path not in files:
@@ -389,7 +396,7 @@ class ArmadilloReporter:
                 f"(setUpAll: 0ms)\n"
             )
 
-    def pytest_sessionfinish(self, _session, exitstatus):
+    def pytest_sessionfinish(self, _session: Session, exitstatus: int) -> None:
         """Handle session finish - store data for later summary."""
         # session_finish_time is now set by the plugin before cleanup
         # Summary is printed immediately by the plugin before server shutdown
@@ -482,7 +489,7 @@ class ArmadilloReporter:
         except Exception as e:
             logger.error("Failed to export results: %s", e, exc_info=True)
 
-    def print_final_summary(self):
+    def print_final_summary(self) -> None:
         """Print the final test summary."""
         if self.summary_printed:
             return  # Already printed

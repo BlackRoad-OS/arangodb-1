@@ -17,15 +17,9 @@ from ..utils import print_status
 from .deployment_plan import (
     DeploymentPlan,
     SingleServerDeploymentPlan,
-    ClusterDeploymentPlan,
 )
-from .deployment import Deployment, SingleServerDeployment
-from .server import ArangoServer
+from .deployment import Deployment
 from .server_factory import ServerFactory
-from .deployment_executor import (
-    SingleServerExecutor,
-    ClusterExecutor,
-)
 from .deployment_executor_factory import DeploymentExecutorFactory
 
 
@@ -157,5 +151,6 @@ class DeploymentOrchestrator:
             print_status(f"\nShutting down cluster with {server_count} servers")
 
         # Create executor for shutdown (executors are stateless, can recreate)
-        executor = self._executor_factory.create_executor(deployment.plan)
+        plan = deployment.get_plan()
+        executor = self._executor_factory.create_executor(plan)
         executor.shutdown(deployment, timeout)
