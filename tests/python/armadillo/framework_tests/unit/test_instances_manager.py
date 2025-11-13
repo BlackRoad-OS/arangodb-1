@@ -20,7 +20,7 @@ from armadillo.core.context import ApplicationContext
 class TestInstanceManagerBasic:
     """Test InstanceManager basic functionality."""
 
-    def test_manager_can_be_created(self):
+    def test_manager_can_be_created(self) -> None:
         """Test InstanceManager can be instantiated."""
         app_context = ApplicationContext.for_testing()
         manager = InstanceManager("test_deployment", app_context=app_context)
@@ -28,7 +28,7 @@ class TestInstanceManagerBasic:
         assert manager is not None
         assert manager.deployment_id == "test_deployment"
 
-    def test_manager_has_expected_attributes(self):
+    def test_manager_has_expected_attributes(self) -> None:
         """Test manager has expected attributes."""
         app_context = ApplicationContext.for_testing()
         manager = InstanceManager("test", app_context=app_context)
@@ -41,7 +41,7 @@ class TestInstanceManagerBasic:
         assert hasattr(manager, "_deployment")
         assert hasattr(manager, "_threading")
 
-    def test_manager_has_expected_methods(self):
+    def test_manager_has_expected_methods(self) -> None:
         """Test manager has expected public methods."""
         app_context = ApplicationContext.for_testing()
         manager = InstanceManager("test", app_context=app_context)
@@ -56,7 +56,7 @@ class TestInstanceManagerBasic:
         assert callable(manager.shutdown_deployment)
         assert callable(manager.get_server)
 
-    def test_unique_deployment_ids(self):
+    def test_unique_deployment_ids(self) -> None:
         """Test deployment IDs are preserved correctly."""
         app_context = ApplicationContext.for_testing()
         manager1 = InstanceManager("deployment_one", app_context=app_context)
@@ -70,7 +70,7 @@ class TestInstanceManagerBasic:
 class TestDeploymentPlan:
     """Test DeploymentPlan dataclass functionality."""
 
-    def test_single_server_deployment_plan_can_be_created(self):
+    def test_single_server_deployment_plan_can_be_created(self) -> None:
         """Test SingleServerDeploymentPlan can be instantiated."""
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -84,7 +84,7 @@ class TestDeploymentPlan:
         assert plan.server == server_config
         assert plan.server.role == ServerRole.SINGLE
 
-    def test_deployment_plan_with_servers(self):
+    def test_deployment_plan_with_servers(self) -> None:
         """Test DeploymentPlan with server configurations."""
         # Create some mock server configs
         servers = [
@@ -106,7 +106,7 @@ class TestDeploymentPlan:
 
         assert len(plan.servers) == 2
 
-    def test_deployment_plan_server_filtering(self):
+    def test_deployment_plan_server_filtering(self) -> None:
         """Test DeploymentPlan server filtering methods."""
         servers = [
             ServerConfig(
@@ -151,7 +151,7 @@ class TestInstanceManagerDeployment:
         self.app_context = ApplicationContext.for_testing()
         self.manager = InstanceManager("test_deployment", app_context=self.app_context)
 
-    def test_get_server_no_servers(self):
+    def test_get_server_no_servers(self) -> None:
         """Test getting server when no servers exist."""
         try:
             server = self.manager.get_server("nonexistent")
@@ -161,7 +161,7 @@ class TestInstanceManagerDeployment:
             # If it throws an exception for no server, that's also acceptable behavior
             pass
 
-    def test_create_deployment_plan_single_basic(self):
+    def test_create_deployment_plan_single_basic(self) -> None:
         """Test creating single server deployment plan."""
         from armadillo.core.types import ClusterConfig
 
@@ -175,7 +175,7 @@ class TestInstanceManagerDeployment:
             # Creation might fail due to missing dependencies, that's ok for this test
             pass
 
-    def test_create_deployment_plan_cluster_basic(self):
+    def test_create_deployment_plan_cluster_basic(self) -> None:
         """Test creating cluster deployment plan."""
         from armadillo.core.types import ClusterConfig
 
@@ -194,7 +194,7 @@ class TestInstanceManagerDeployment:
 class TestInstanceManagerErrorHandling:
     """Test basic error handling."""
 
-    def test_manager_handles_invalid_deployment_id(self):
+    def test_manager_handles_invalid_deployment_id(self) -> None:
         """Test manager creation with edge case deployment IDs."""
         app_context = ApplicationContext.for_testing()
 
@@ -215,7 +215,7 @@ class TestInstanceManagerMockIntegration:
         self.app_context = ApplicationContext.for_testing()
         self.manager = InstanceManager("mock_test", app_context=self.app_context)
 
-    def test_shutdown_deployment_handles_no_deployment(self):
+    def test_shutdown_deployment_handles_no_deployment(self) -> None:
         """Test shutdown when no deployment exists."""
         try:
             self.manager.shutdown_deployment()
@@ -321,7 +321,7 @@ class TestInstanceManagerLifecycleDeployment:
 
         orch.execute_deployment = fake_execute_deployment  # type: ignore
 
-    def test_lifecycle_single_server_deployment_syncs_state(self):
+    def test_lifecycle_single_server_deployment_syncs_state(self) -> None:
         """Verify single server deployment populates InstanceManager._deployment from orchestrator."""
         from armadillo.core.types import ServerConfig, ServerRole
         from armadillo.instances.deployment_plan import SingleServerDeploymentPlan
@@ -351,7 +351,7 @@ class TestInstanceManagerLifecycleDeployment:
         sid = next(iter(deployment_servers.keys()))
         assert self.manager.get_server(sid) is deployment_servers[sid]
 
-    def test_lifecycle_cluster_deployment(self):
+    def test_lifecycle_cluster_deployment(self) -> None:
         """Verify cluster deployment succeeds and all servers are accessible."""
         from armadillo.core.types import ServerConfig, ServerRole
         from armadillo.instances.deployment_plan import ClusterDeploymentPlan

@@ -14,30 +14,30 @@ from armadillo.cli.main import app
 class TestCLIBasics:
     """Test basic CLI functionality."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.runner = CliRunner()
 
-    def test_app_exists(self):
+    def test_app_exists(self) -> None:
         """Test that the CLI app is properly defined."""
         assert app is not None
         assert hasattr(app, "callback")
 
-    def test_help_command(self):
+    def test_help_command(self) -> None:
         """Test CLI help command works."""
         result = self.runner.invoke(app, ["--help"])
 
         # Should either show help or exit cleanly
         assert result.exit_code in [0, 2]
 
-    def test_test_command_exists(self):
+    def test_test_command_exists(self) -> None:
         """Test that test command is available."""
         result = self.runner.invoke(app, ["test", "--help"])
 
         # Should either show help or indicate command exists
         assert result.exit_code in [0, 2]
 
-    def test_analyze_command_exists(self):
+    def test_analyze_command_exists(self) -> None:
         """Test that analyze command exists."""
         result = self.runner.invoke(app, ["analyze", "--help"])
 
@@ -48,18 +48,18 @@ class TestCLIBasics:
 class TestCLICommands:
     """Test CLI command execution with minimal complexity."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.runner = CliRunner()
 
-    def test_invalid_command(self):
+    def test_invalid_command(self) -> None:
         """Test behavior with invalid command."""
         result = self.runner.invoke(app, ["nonexistent-command"])
 
         # Should exit with error (but not crash)
         assert result.exit_code != 0
 
-    def test_test_run_basic(self):
+    def test_test_run_basic(self) -> None:
         """Test test run command basic functionality."""
         # Test that command accepts basic arguments (just help to avoid execution)
         result = self.runner.invoke(app, ["test", "run", "--help"])
@@ -67,7 +67,7 @@ class TestCLICommands:
         # Should work with help
         assert result.exit_code in [0, 2]
 
-    def test_analyze_results_help(self):
+    def test_analyze_results_help(self) -> None:
         """Test analyze results command help."""
         result = self.runner.invoke(app, ["analyze", "results", "--help"])
 
@@ -77,18 +77,18 @@ class TestCLICommands:
 class TestCLIErrorHandling:
     """Test CLI error handling."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.runner = CliRunner()
 
-    def test_empty_arguments(self):
+    def test_empty_arguments(self) -> None:
         """Test CLI behavior with empty arguments."""
         result = self.runner.invoke(app, [])
 
         # Should handle empty args gracefully
         assert result.exit_code in [0, 1, 2]
 
-    def test_very_long_arguments(self):
+    def test_very_long_arguments(self) -> None:
         """Test CLI behavior with very long arguments."""
         long_arg = "x" * 100  # Reasonable length to avoid issues
         result = self.runner.invoke(app, [long_arg])
@@ -97,7 +97,7 @@ class TestCLIErrorHandling:
         assert result.exit_code != -1  # Not a segfault
 
     @patch.dict("os.environ", {"ARMADILLO_BUILD_DIR": "/test/build"})
-    def test_environment_variable_support(self):
+    def test_environment_variable_support(self) -> None:
         """Test that CLI respects environment variables."""
         result = self.runner.invoke(app, ["--help"])
 
@@ -108,11 +108,11 @@ class TestCLIErrorHandling:
 class TestCLIPerformance:
     """Test CLI performance."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.runner = CliRunner()
 
-    def test_help_performance(self):
+    def test_help_performance(self) -> None:
         """Test help command is fast."""
         import time
 

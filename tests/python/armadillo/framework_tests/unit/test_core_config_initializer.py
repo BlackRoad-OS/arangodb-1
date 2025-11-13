@@ -17,7 +17,7 @@ from armadillo.core.errors import PathError
 class TestConfigValidationPurity:
     """Test that config validation has no side effects."""
 
-    def test_validation_does_not_create_directories(self, tmp_path):
+    def test_validation_does_not_create_directories(self, tmp_path) -> None:
         """Config validation should NOT create directories."""
         non_existent = tmp_path / "does_not_exist"
 
@@ -30,7 +30,7 @@ class TestConfigValidationPurity:
         # Directory should NOT be created by validation
         assert not non_existent.exists()
 
-    def test_validation_does_not_detect_build(self, tmp_path):
+    def test_validation_does_not_detect_build(self, tmp_path) -> None:
         """Config validation should NOT perform build detection."""
         # Create config without bin_dir
         config = ArmadilloConfig(
@@ -42,7 +42,7 @@ class TestConfigValidationPurity:
         # bin_dir should still be None after validation
         assert config.bin_dir is None
 
-    def test_validation_performs_logical_checks(self):
+    def test_validation_performs_logical_checks(self) -> None:
         """Config validation SHOULD perform logical validation."""
         # Invalid cluster config should raise during validation
         with pytest.raises(Exception):  # ConfigurationError
@@ -62,7 +62,7 @@ class TestConfigValidationPurity:
 class TestConfigInitialization:
     """Test config initialization with side effects."""
 
-    def test_initialization_creates_temp_directory(self, tmp_path):
+    def test_initialization_creates_temp_directory(self, tmp_path) -> None:
         """Config initialization SHOULD create temp directory."""
         temp_dir = tmp_path / "armadillo_temp"
 
@@ -82,7 +82,7 @@ class TestConfigInitialization:
         assert initialized.temp_dir.exists()
         assert initialized.temp_dir == temp_dir
 
-    def test_initialization_sets_default_temp_dir(self):
+    def test_initialization_sets_default_temp_dir(self) -> None:
         """Config initialization SHOULD set default temp_dir if None."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -96,7 +96,7 @@ class TestConfigInitialization:
         assert initialized.temp_dir is not None
         assert initialized.temp_dir == Path("/tmp/armadillo")
 
-    def test_initialization_creates_work_directory(self, tmp_path):
+    def test_initialization_creates_work_directory(self, tmp_path) -> None:
         """Config initialization SHOULD create work directory if specified."""
         work_dir = tmp_path / "work"
 
@@ -113,7 +113,7 @@ class TestConfigInitialization:
 
         assert initialized.work_dir.exists()
 
-    def test_initialization_skips_build_detection_in_test_mode(self, tmp_path):
+    def test_initialization_skips_build_detection_in_test_mode(self, tmp_path) -> None:
         """Config initialization SHOULD skip build detection in test mode."""
         config = ArmadilloConfig(
             temp_dir=tmp_path,
@@ -126,7 +126,7 @@ class TestConfigInitialization:
         # bin_dir should still be None in test mode
         assert initialized.bin_dir is None
 
-    def test_initialization_normalizes_provided_bin_dir(self, tmp_path):
+    def test_initialization_normalizes_provided_bin_dir(self, tmp_path) -> None:
         """Config initialization SHOULD normalize provided bin_dir."""
         # Create a fake build directory with arangod
         build_dir = tmp_path / "build"
@@ -148,7 +148,7 @@ class TestConfigInitialization:
         # Should normalize to actual bin directory
         assert initialized.bin_dir == bin_dir
 
-    def test_initialization_raises_on_invalid_bin_dir(self, tmp_path):
+    def test_initialization_raises_on_invalid_bin_dir(self, tmp_path) -> None:
         """Config initialization SHOULD raise if bin_dir has no arangod."""
         build_dir = tmp_path / "build"
         build_dir.mkdir()
@@ -170,7 +170,7 @@ class TestConfigInitialization:
 class TestConfigInitializationIdempotency:
     """Test that initialization can be called multiple times safely."""
 
-    def test_initialization_is_idempotent(self, tmp_path):
+    def test_initialization_is_idempotent(self, tmp_path) -> None:
         """Calling initialize_config multiple times should be safe."""
         config = ArmadilloConfig(
             temp_dir=tmp_path / "temp",
@@ -191,7 +191,7 @@ class TestConfigInitializationIdempotency:
 class TestConfigWorkflow:
     """Test the recommended workflow: validate then initialize."""
 
-    def test_recommended_workflow(self, tmp_path):
+    def test_recommended_workflow(self, tmp_path) -> None:
         """Test the validate -> initialize workflow."""
         # Step 1: Create config (validation happens automatically)
         config = ArmadilloConfig(

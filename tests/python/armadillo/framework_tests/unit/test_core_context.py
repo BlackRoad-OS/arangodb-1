@@ -23,7 +23,7 @@ from armadillo.core.process import ProcessSupervisor
 class TestApplicationContext:
     """Test ApplicationContext creation and immutability."""
 
-    def test_context_is_immutable(self):
+    def test_context_is_immutable(self) -> None:
         """ApplicationContext should be frozen/immutable."""
         ctx = ApplicationContext.for_testing()
 
@@ -34,7 +34,7 @@ class TestApplicationContext:
         with pytest.raises(Exception):
             ctx.logger = Mock()
 
-    def test_create_with_all_defaults(self):
+    def test_create_with_all_defaults(self) -> None:
         """Should create valid context with all default dependencies."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -51,7 +51,7 @@ class TestApplicationContext:
         assert ctx.filesystem is not None
         assert ctx.process_supervisor is not None
 
-    def test_create_with_custom_logger(self):
+    def test_create_with_custom_logger(self) -> None:
         """Should accept custom logger implementation."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -63,7 +63,7 @@ class TestApplicationContext:
 
         assert ctx.logger is mock_logger
 
-    def test_create_with_custom_port_allocator(self):
+    def test_create_with_custom_port_allocator(self) -> None:
         """Should accept custom port allocator implementation."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -75,7 +75,7 @@ class TestApplicationContext:
 
         assert ctx.port_allocator is mock_allocator
 
-    def test_create_with_custom_auth_provider(self):
+    def test_create_with_custom_auth_provider(self) -> None:
         """Should accept custom auth provider implementation."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -87,7 +87,7 @@ class TestApplicationContext:
 
         assert ctx.auth_provider is mock_auth
 
-    def test_create_with_custom_filesystem(self):
+    def test_create_with_custom_filesystem(self) -> None:
         """Should accept custom filesystem service implementation."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -99,7 +99,7 @@ class TestApplicationContext:
 
         assert ctx.filesystem is mock_fs
 
-    def test_create_with_custom_process_supervisor(self):
+    def test_create_with_custom_process_supervisor(self) -> None:
         """Should accept custom process supervisor implementation."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -111,7 +111,7 @@ class TestApplicationContext:
 
         assert ctx.process_supervisor is mock_supervisor
 
-    def test_create_with_multiple_custom_dependencies(self):
+    def test_create_with_multiple_custom_dependencies(self) -> None:
         """Should accept multiple custom dependencies simultaneously."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -139,7 +139,7 @@ class TestApplicationContext:
 class TestApplicationContextForTesting:
     """Test the testing-specific factory method."""
 
-    def test_for_testing_creates_minimal_config(self):
+    def test_for_testing_creates_minimal_config(self) -> None:
         """for_testing() should create minimal test configuration."""
         ctx = ApplicationContext.for_testing()
 
@@ -148,7 +148,7 @@ class TestApplicationContextForTesting:
         assert ctx.config.is_test_mode is True
         assert ctx.config.temp_dir == Path("/tmp/armadillo-test")
 
-    def test_for_testing_accepts_custom_config(self):
+    def test_for_testing_accepts_custom_config(self) -> None:
         """for_testing() should accept custom test configuration."""
         custom_config = ArmadilloConfig(
             deployment_mode=DeploymentMode.CLUSTER,
@@ -161,7 +161,7 @@ class TestApplicationContextForTesting:
         assert ctx.config is custom_config
         assert ctx.config.deployment_mode == DeploymentMode.CLUSTER
 
-    def test_for_testing_accepts_mock_dependencies(self):
+    def test_for_testing_accepts_mock_dependencies(self) -> None:
         """for_testing() should accept mock dependencies for testing."""
         mock_logger = Mock(spec=Logger)
         mock_allocator = Mock(spec=PortAllocator)
@@ -174,7 +174,7 @@ class TestApplicationContextForTesting:
         assert ctx.logger is mock_logger
         assert ctx.port_allocator is mock_allocator
 
-    def test_for_testing_all_dependencies_present(self):
+    def test_for_testing_all_dependencies_present(self) -> None:
         """for_testing() should create all required dependencies."""
         ctx = ApplicationContext.for_testing()
 
@@ -190,7 +190,7 @@ class TestApplicationContextForTesting:
 class TestApplicationContextIntegration:
     """Integration tests for ApplicationContext with real dependencies."""
 
-    def test_context_with_real_dependencies(self, tmp_path):
+    def test_context_with_real_dependencies(self, tmp_path) -> None:
         """Should work with real dependency implementations."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -218,7 +218,7 @@ class TestApplicationContextIntegration:
         test_dir = ctx.filesystem.work_dir()
         assert test_dir.exists()
 
-    def test_multiple_contexts_are_independent(self, tmp_path):
+    def test_multiple_contexts_are_independent(self, tmp_path) -> None:
         """Multiple contexts should not interfere with each other."""
         config1 = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,

@@ -15,11 +15,11 @@ from armadillo.core.errors import ProcessStartupError
 class TestProcessSupervisorMinimal:
     """Test ProcessSupervisor minimal functionality."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.supervisor = ProcessSupervisor()
 
-    def test_supervisor_can_be_created(self):
+    def test_supervisor_can_be_created(self) -> None:
         """Test ProcessSupervisor can be instantiated."""
         assert self.supervisor is not None
         assert hasattr(self.supervisor, "_processes")
@@ -27,7 +27,7 @@ class TestProcessSupervisorMinimal:
         assert isinstance(self.supervisor._processes, dict)
         assert isinstance(self.supervisor._process_info, dict)
 
-    def test_can_start_process_basic(self):
+    def test_can_start_process_basic(self) -> None:
         """Test basic process starting works."""
         # Just verify the supervisor exists and has the start method
         assert hasattr(self.supervisor, "start")
@@ -41,11 +41,11 @@ class TestProcessSupervisorMinimal:
         except Exception:
             pass  # Expected to fail, just ensure it doesn't crash badly
 
-    def test_is_running_nonexistent_process(self):
+    def test_is_running_nonexistent_process(self) -> None:
         """Test checking if nonexistent process is running."""
         assert self.supervisor.is_running("nonexistent") is False
 
-    def test_is_running_returns_boolean(self):
+    def test_is_running_returns_boolean(self) -> None:
         """Test is_running returns boolean values."""
         # Should return False for nonexistent process
         assert self.supervisor.is_running("nonexistent") is False
@@ -54,14 +54,14 @@ class TestProcessSupervisorMinimal:
         result = self.supervisor.is_running("any_process_id")
         assert isinstance(result, bool)
 
-    def test_list_processes_returns_list(self):
+    def test_list_processes_returns_list(self) -> None:
         """Test list_processes returns a list."""
         processes = self.supervisor.list_processes()
         assert isinstance(processes, list)
         # Initially should be empty
         assert len(processes) == 0
 
-    def test_stop_nonexistent_process_safe(self):
+    def test_stop_nonexistent_process_safe(self) -> None:
         """Test stopping nonexistent process doesn't crash."""
         # Should not raise error
         try:
@@ -69,7 +69,7 @@ class TestProcessSupervisorMinimal:
         except Exception:
             pytest.fail("stop() should handle nonexistent processes gracefully")
 
-    def test_supervisor_interface_methods(self):
+    def test_supervisor_interface_methods(self) -> None:
         """Test supervisor has expected interface methods."""
         # Should have all the expected methods
         expected_methods = [
@@ -87,11 +87,11 @@ class TestProcessSupervisorMinimal:
 class TestProcessSupervisorErrorHandling:
     """Test basic error handling."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.supervisor = ProcessSupervisor()
 
-    def test_error_handling_interface(self):
+    def test_error_handling_interface(self) -> None:
         """Test error handling doesn't crash supervisor."""
         supervisor = ProcessSupervisor()
 
@@ -108,7 +108,7 @@ class TestProcessSupervisorErrorHandling:
 class TestModuleLevelFunctions:
     """Test basic module-level functions."""
 
-    def test_start_supervised_process_exists(self):
+    def test_start_supervised_process_exists(self) -> None:
         """Test module-level start_supervised_process function exists."""
         from armadillo.core.process import start_supervised_process
 
@@ -120,7 +120,7 @@ class TestModuleLevelFunctions:
         except Exception:
             pass  # Expected to fail, just ensure function exists
 
-    def test_is_process_running_function_exists(self):
+    def test_is_process_running_function_exists(self) -> None:
         """Test module-level is_process_running function exists."""
         from armadillo.core.process import is_process_running
 
@@ -134,7 +134,7 @@ class TestModuleLevelFunctions:
 class TestUtilityFunctions:
     """Test utility functions with minimal mocking."""
 
-    def test_get_child_pids_function_exists(self):
+    def test_get_child_pids_function_exists(self) -> None:
         """Test get_child_pids function exists and works."""
         from armadillo.core.process import get_child_pids
 
@@ -144,7 +144,7 @@ class TestUtilityFunctions:
         result = get_child_pids(999999)  # Very unlikely to exist
         assert isinstance(result, list)
 
-    def test_process_utilities_exist(self):
+    def test_process_utilities_exist(self) -> None:
         """Test process utility functions exist."""
         from armadillo.core.process import (
             get_child_pids,
@@ -161,11 +161,11 @@ class TestUtilityFunctions:
 class TestBasicIntegration:
     """Test basic integration scenarios."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.supervisor = ProcessSupervisor()
 
-    def test_supervisor_workflow_methods_exist(self):
+    def test_supervisor_workflow_methods_exist(self) -> None:
         """Test basic supervisor workflow methods exist."""
         supervisor = ProcessSupervisor()
 

@@ -7,11 +7,12 @@ import pytest
 import logging
 import threading
 import time
+from typing import Any, Dict, Generator, Tuple
 from unittest.mock import patch
 
 
 @pytest.fixture(autouse=True)
-def cleanup_logging():
+def cleanup_logging() -> Generator[None, None, None]:
     """Clean up logging system after each test."""
     yield
 
@@ -20,7 +21,7 @@ def cleanup_logging():
 
 
 @pytest.fixture(autouse=True)
-def cleanup_global_state():
+def cleanup_global_state() -> Generator[None, None, None]:
     """Clean up global state after each test."""
     yield
 
@@ -29,7 +30,7 @@ def cleanup_global_state():
 
 
 @pytest.fixture(autouse=True)
-def cleanup_threads():
+def cleanup_threads() -> Generator[None, None, None]:
     """Clean up background threads after each test."""
     yield
 
@@ -38,21 +39,22 @@ def cleanup_threads():
 
 
 @pytest.fixture(autouse=True)
-def reset_filesystem_state():
+def reset_filesystem_state() -> Generator[None, None, None]:
     """Reset filesystem-related global state."""
     yield
 
     # Reset the global session ID to prevent test interference
     import armadillo.utils.filesystem as fs
 
-    fs._test_session_id = None
+    if hasattr(fs, "_test_session_id"):
+        fs._test_session_id = None
     # Also clear any cached filesystem service
     if hasattr(fs, "_filesystem_service"):
         fs._filesystem_service._work_dir = None
 
 
 @pytest.fixture(autouse=True)
-def patch_dangerous_operations():
+def patch_dangerous_operations() -> Generator[Dict[str, Any], None, None]:
     """Patch potentially dangerous operations during unit tests."""
 
     with (
@@ -81,7 +83,7 @@ def patch_dangerous_operations():
         # Configure socket mock
         mock_socket_instance = mock_socket.return_value.__enter__.return_value
 
-        def mock_bind(addr):
+        def mock_bind(addr: Tuple[str, int]) -> None:
             host, port = addr
             # Reject invalid ports
             if port < 1 or port > 65535:
@@ -123,7 +125,7 @@ def patch_dangerous_operations():
 
 
 @pytest.fixture
-def isolated_port_manager():
+def isolated_port_manager() -> Generator[Any, None, None]:
     """Provide an isolated PortManager for testing."""
     from armadillo.utils.ports import PortManager
 
@@ -132,12 +134,11 @@ def isolated_port_manager():
     )  # Use high ports to avoid conflicts
     yield manager
 
-    # Cleanup
-    manager.clear_reservations()
+    # Cleanup - PortManager doesn't have clear_reservations, just let it be garbage collected
 
 
 @pytest.fixture
-def isolated_log_manager():
+def isolated_log_manager() -> Generator[Any, None, None]:
     """Provide an isolated LogManager for testing."""
     from armadillo.core.log import LogManager
 
@@ -152,7 +153,7 @@ def isolated_log_manager():
 
 
 @pytest.fixture
-def isolated_process_supervisor():
+def isolated_process_supervisor() -> Generator[Any, None, None]:
     """Provide an isolated ProcessSupervisor for testing."""
     from armadillo.core.process import ProcessSupervisor
 
@@ -172,7 +173,7 @@ def isolated_process_supervisor():
 
 
 @pytest.fixture
-def no_actual_processes():
+def no_actual_processes() -> Generator[Any, None, None]:
     """Prevent actual process creation during tests."""
     with patch("subprocess.Popen") as mock_popen:
         # Create a mock process that behaves safely
@@ -188,7 +189,7 @@ def no_actual_processes():
 
 
 @pytest.fixture
-def no_actual_sockets():
+def no_actual_sockets() -> Generator[Any, None, None]:
     """Prevent actual socket operations during tests."""
     with patch("socket.socket") as mock_socket_class:
         mock_socket = mock_socket_class.return_value.__enter__.return_value
@@ -200,7 +201,7 @@ def no_actual_sockets():
 
 
 @pytest.fixture
-def no_actual_filesystem():
+def no_actual_filesystem() -> Generator[Dict[str, Any], None, None]:
     """Mock filesystem operations to prevent actual file I/O."""
     with (
         patch("pathlib.Path.mkdir") as mock_mkdir,
@@ -227,7 +228,7 @@ def no_actual_filesystem():
 
 # Session-level cleanup
 @pytest.fixture(scope="session", autouse=True)
-def session_cleanup():
+def session_cleanup() -> Generator[None, None, None]:
     """Perform session-wide cleanup."""
     yield
 
@@ -235,13 +236,13 @@ def session_cleanup():
     # Unit tests should not create persistent resources
 
 
-def pytest_runtest_setup(item):
+def pytest_runtest_setup(item: Any) -> None:
     """Setup for each test."""
     # Ensure clean start
     pass
 
 
-def pytest_runtest_teardown(item, nextitem):
+def pytest_runtest_teardown(item: Any, nextitem: Any) -> None:
     """Teardown after each test."""
     # Force garbage collection
     import gc
@@ -252,13 +253,13 @@ def pytest_runtest_teardown(item, nextitem):
     time.sleep(0.01)
 
 
-def pytest_sessionstart(session):
+def pytest_sessionstart(session: Any) -> None:
     """Called after the Session object has been created."""
     # Set up session-wide test isolation
     pass
 
 
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     """Called after whole test run finished."""
     # Final cleanup
     logging.shutdown()

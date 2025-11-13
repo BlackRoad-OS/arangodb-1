@@ -18,7 +18,7 @@ from armadillo.core.build_detection import (
 class TestBuildDetectorBasic:
     """Test BuildDetector basic functionality with no real operations."""
 
-    def test_detector_initialization(self):
+    def test_detector_initialization(self) -> None:
         """Test BuildDetector initializes correctly."""
         detector = BuildDetector()
 
@@ -49,7 +49,7 @@ class TestValidationFullyMocked:
         assert mock_access.called
 
     @patch("pathlib.Path.exists", return_value=False)
-    def test_validate_build_directory_failure(self, mock_exists):
+    def test_validate_build_directory_failure(self, mock_exists) -> None:
         """Test validation failure with mocking."""
         detector = BuildDetector()
 
@@ -63,7 +63,7 @@ class TestDetectionFullyMocked:
     """Test detection with complete mocking - no real operations."""
 
     @patch("shutil.which", return_value="/usr/bin/arangod")
-    def test_detect_from_path_success(self, mock_which):
+    def test_detect_from_path_success(self, mock_which) -> None:
         """Test successful detection from PATH with mocking."""
         detector = BuildDetector()
 
@@ -76,7 +76,7 @@ class TestDetectionFullyMocked:
             assert result == Path("/usr/bin")
 
     @patch("shutil.which", return_value=None)
-    def test_detect_not_found(self, mock_which):
+    def test_detect_not_found(self, mock_which) -> None:
         """Test when build directory cannot be found."""
         detector = BuildDetector()
 
@@ -90,7 +90,7 @@ class TestDetectionFullyMocked:
 class TestModuleFunctions:
     """Test module-level functions with complete mocking."""
 
-    def test_detect_build_directory_function(self):
+    def test_detect_build_directory_function(self) -> None:
         """Test module-level detect_build_directory function."""
         with patch("armadillo.core.build_detection._build_detector") as mock_detector:
             mock_detector.detect_build_directory.return_value = Path("/test/result")
@@ -102,7 +102,7 @@ class TestModuleFunctions:
                 Path("/test/input")
             )
 
-    def test_validate_build_directory_function(self):
+    def test_validate_build_directory_function(self) -> None:
         """Test module-level validate_build_directory function."""
         with patch("armadillo.core.build_detection._build_detector") as mock_detector:
             mock_detector.validate_build_directory.return_value = True
@@ -118,7 +118,7 @@ class TestModuleFunctions:
 class TestBuildDetectorPureLogic:
     """Test BuildDetector pure logic without filesystem dependencies."""
 
-    def test_simple_patterns_structure(self):
+    def test_simple_patterns_structure(self) -> None:
         """Test that simple patterns are structured correctly."""
         detector = BuildDetector()
 
@@ -128,7 +128,7 @@ class TestBuildDetectorPureLogic:
         assert all(isinstance(p, str) for p in patterns)
         assert all("bin" in p for p in patterns)
 
-    def test_path_construction(self):
+    def test_path_construction(self) -> None:
         """Test path construction logic without filesystem access."""
         # This tests Path object creation without any .exists() calls
         test_path = Path("/test/directory")
@@ -138,7 +138,7 @@ class TestBuildDetectorPureLogic:
         assert test_path.name == "directory"
         assert test_path.parent == Path("/test")
 
-    def test_detector_can_be_created_multiple_times(self):
+    def test_detector_can_be_created_multiple_times(self) -> None:
         """Test that multiple detectors can be created."""
         detector1 = BuildDetector()
         detector2 = BuildDetector()
@@ -151,13 +151,13 @@ class TestErrorHandling:
     """Test error handling scenarios with mocking."""
 
     @patch("shutil.which", side_effect=Exception("Mock error"))
-    def test_handles_which_error_gracefully(self, mock_which):
+    def test_handles_which_error_gracefully(self, mock_which) -> None:
         """Test that errors in which() don't crash the detector creation."""
         # Just test that we can create a detector even if which() fails
         detector = BuildDetector()
         assert detector is not None
 
-    def test_handles_none_path_input(self):
+    def test_handles_none_path_input(self) -> None:
         """Test handling of None path input."""
         detector = BuildDetector()
 
@@ -177,7 +177,7 @@ class TestMockingStrategies:
 
     @patch.object(BuildDetector, "validate_build_directory")
     @patch("shutil.which")
-    def test_complete_method_mocking(self, mock_which, mock_validate):
+    def test_complete_method_mocking(self, mock_which, mock_validate) -> None:
         """Test with complete method mocking."""
         mock_which.return_value = None
         mock_validate.return_value = False
@@ -190,7 +190,7 @@ class TestMockingStrategies:
         # Result depends on mock setup
         mock_validate.assert_called_once_with(Path("/test"))
 
-    def test_path_operations_without_filesystem(self):
+    def test_path_operations_without_filesystem(self) -> None:
         """Test Path operations that don't require filesystem."""
         # These operations should not trigger any filesystem calls
         paths = [

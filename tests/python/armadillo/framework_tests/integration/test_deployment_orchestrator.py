@@ -145,7 +145,7 @@ class TestSingleServerDeployment:
         # Verify
         mock_server.stop.assert_called_once()
 
-    def test_shutdown_with_no_servers(self, orchestrator):
+    def test_shutdown_with_no_servers(self, orchestrator) -> None:
         """Verify shutdown with empty deployment does not error."""
         # Create empty deployment
         from armadillo.instances.deployment import (
@@ -466,7 +466,7 @@ class TestEdgeCases:
 
         # Orchestrator is stateless - no state to check
 
-    def test_get_server_returns_none_for_missing(self, orchestrator):
+    def test_get_server_returns_none_for_missing(self, orchestrator) -> None:
         """Verify get_server is no longer available (orchestrator is stateless)."""
         # Orchestrator no longer stores deployment state
         # This test is no longer applicable - orchestrator is stateless

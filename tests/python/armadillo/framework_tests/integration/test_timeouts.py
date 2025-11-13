@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 
-def test_per_test_timeout_enforcement():
+def test_per_test_timeout_enforcement() -> None:
     """Verify per-test timeout kills individual slow tests."""
     # Create a temporary test file with a slow test
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -21,7 +21,7 @@ def test_per_test_timeout_enforcement():
             """
 import time
 
-def test_sleeps_too_long():
+def test_sleeps_too_long() -> None:
     '''Test that sleeps longer than timeout.'''
     time.sleep(10)  # Sleep for 10 seconds
 """
@@ -50,7 +50,7 @@ def test_sleeps_too_long():
         assert "timeout" in result.stdout.lower() or "timeout" in result.stderr.lower()
 
 
-def test_output_idle_timeout_enforcement():
+def test_output_idle_timeout_enforcement() -> None:
     """Verify output-idle timeout kills tests that hang without output."""
     # Create a temporary test file with a hanging test
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -60,7 +60,7 @@ def test_output_idle_timeout_enforcement():
 import time
 import sys
 
-def test_hangs_silently():
+def test_hangs_silently() -> None:
     '''Test that hangs without producing output.'''
     sys.stdout.write("Starting test...\\n")
     sys.stdout.flush()
@@ -95,18 +95,18 @@ def test_hangs_silently():
         ), f"Expected idle timeout message in output, got: {output}"
 
 
-def test_no_false_positives_on_fast_tests():
+def test_no_false_positives_on_fast_tests() -> None:
     """Verify timeouts don't kill tests that finish quickly."""
     # Create a temporary test file with fast tests
     with tempfile.TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "test_fast.py"
         test_file.write_text(
             """
-def test_fast_one():
+def test_fast_one() -> None:
     '''Quick test that finishes immediately.'''
     assert 1 + 1 == 2
 
-def test_fast_two():
+def test_fast_two() -> None:
     '''Another quick test.'''
     assert "hello".upper() == "HELLO"
 """
@@ -137,7 +137,7 @@ def test_fast_two():
         assert result.returncode == 0, f"Fast tests should pass, got: {result.stdout}"
 
 
-def test_output_idle_timeout_resets_on_activity():
+def test_output_idle_timeout_resets_on_activity() -> None:
     """Verify output-idle timeout resets when test produces output."""
     # Create a test that produces output periodically
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -147,7 +147,7 @@ def test_output_idle_timeout_resets_on_activity():
 import time
 import sys
 
-def test_with_periodic_output():
+def test_with_periodic_output() -> None:
     '''Test that produces output every 2 seconds.'''
     for i in range(3):
         sys.stdout.write(f"Progress {i}\\n")
@@ -179,7 +179,7 @@ def test_with_periodic_output():
         ), f"Test with periodic output should pass, got: {result.stdout}"
 
 
-def test_global_timeout_enforcement():
+def test_global_timeout_enforcement() -> None:
     """Verify global timeout kills entire test session when exceeded."""
     # Create tests that collectively take too long
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -188,15 +188,15 @@ def test_global_timeout_enforcement():
             """
 import time
 
-def test_slow_1():
+def test_slow_1() -> None:
     '''First slow test.'''
     time.sleep(3)
 
-def test_slow_2():
+def test_slow_2() -> None:
     '''Second slow test.'''
     time.sleep(3)
 
-def test_slow_3():
+def test_slow_3() -> None:
     '''Third slow test.'''
     time.sleep(3)
 """

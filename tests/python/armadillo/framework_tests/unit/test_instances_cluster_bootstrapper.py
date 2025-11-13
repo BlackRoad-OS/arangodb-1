@@ -11,7 +11,7 @@ from armadillo.core.errors import ServerStartupError, AgencyError, ClusterError
 class TestClusterBootstrapper:
     """Test ClusterBootstrapper basic functionality."""
 
-    def test_init(self):
+    def test_init(self) -> None:
         """Test ClusterBootstrapper initialization."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -21,7 +21,7 @@ class TestClusterBootstrapper:
         assert bootstrapper._logger == mock_logger
         assert bootstrapper._executor == mock_executor
 
-    def test_get_agents(self):
+    def test_get_agents(self) -> None:
         """Test getting agent servers from server dict."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -47,7 +47,7 @@ class TestClusterBootstrapper:
         assert ("agent2", agent2) in agents
 
     @patch("armadillo.instances.cluster_bootstrapper.requests.get")
-    def test_check_agent_config_success(self, mock_get):
+    def test_check_agent_config_success(self, mock_get) -> None:
         """Test checking agent configuration successfully."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -68,7 +68,7 @@ class TestClusterBootstrapper:
         assert config["lastAcked"] == 123
 
     @patch("armadillo.instances.cluster_bootstrapper.requests.get")
-    def test_check_agent_config_not_ready(self, mock_get):
+    def test_check_agent_config_not_ready(self, mock_get) -> None:
         """Test checking agent that's not ready."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -85,7 +85,7 @@ class TestClusterBootstrapper:
 
         assert config is None
 
-    def test_analyze_agency_status_ready(self):
+    def test_analyze_agency_status_ready(self) -> None:
         """Test analyzing agency status when ready."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -120,7 +120,7 @@ class TestClusterBootstrapper:
             assert have_config == 3
             assert consensus is True
 
-    def test_analyze_agency_status_no_consensus(self):
+    def test_analyze_agency_status_no_consensus(self) -> None:
         """Test analyzing agency status with disagreement."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -143,7 +143,7 @@ class TestClusterBootstrapper:
 
             assert consensus is False
 
-    def test_start_servers_by_role(self):
+    def test_start_servers_by_role(self) -> None:
         """Test starting servers by role."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -175,7 +175,7 @@ class TestClusterBootstrapper:
         # Verify executor was called twice (for both agents)
         assert mock_executor.submit.call_count == 2
 
-    def test_start_servers_by_role_failure(self):
+    def test_start_servers_by_role_failure(self) -> None:
         """Test handling server startup failure."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -197,7 +197,7 @@ class TestClusterBootstrapper:
                 servers, ServerRole.AGENT, timeout=60.0
             )
 
-    def test_wait_for_agency_ready_no_agents(self):
+    def test_wait_for_agency_ready_no_agents(self) -> None:
         """Test waiting for agency with no agents."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -208,7 +208,7 @@ class TestClusterBootstrapper:
         with pytest.raises(AgencyError, match="No agent servers"):
             bootstrapper.wait_for_agency_ready(servers, timeout=5.0)
 
-    def test_wait_for_agency_ready_success(self):
+    def test_wait_for_agency_ready_success(self) -> None:
         """Test successful agency readiness."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -234,7 +234,7 @@ class TestClusterBootstrapper:
             # Should not raise
             bootstrapper.wait_for_agency_ready(servers, timeout=5.0)
 
-    def test_wait_for_cluster_ready_no_coordinators(self):
+    def test_wait_for_cluster_ready_no_coordinators(self) -> None:
         """Test waiting for cluster with no coordinators."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -246,7 +246,7 @@ class TestClusterBootstrapper:
             bootstrapper.wait_for_cluster_ready(servers, timeout=5.0)
 
     @patch("armadillo.instances.cluster_bootstrapper.requests.get")
-    def test_wait_for_cluster_ready_success(self, mock_get):
+    def test_wait_for_cluster_ready_success(self, mock_get) -> None:
         """Test successful cluster readiness."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -270,7 +270,7 @@ class TestClusterBootstrapper:
 class TestClusterBootstrapperIntegration:
     """Test ClusterBootstrapper integration scenarios."""
 
-    def test_bootstrap_cluster_sequence(self):
+    def test_bootstrap_cluster_sequence(self) -> None:
         """Test complete bootstrap sequence."""
         mock_logger = Mock()
         mock_executor = Mock()

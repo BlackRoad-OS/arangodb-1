@@ -65,7 +65,7 @@ class DummyLogger:
 # ---------------------------------------------------------------------------
 
 
-def test_single_server_executor_success(tmp_path):
+def test_single_server_executor_success(tmp_path) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = SingleServerDeploymentPlan(
@@ -104,7 +104,7 @@ def test_single_server_executor_success(tmp_path):
     mock_server.health_check_sync.assert_called_once()
 
 
-def test_single_server_executor_wrong_plan_type(tmp_path):
+def test_single_server_executor_wrong_plan_type(tmp_path) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -121,7 +121,7 @@ def test_single_server_executor_wrong_plan_type(tmp_path):
         executor.deploy(cluster_plan)
 
 
-def test_single_server_executor_health_failure(tmp_path):
+def test_single_server_executor_health_failure(tmp_path) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = SingleServerDeploymentPlan(
@@ -148,7 +148,7 @@ def test_single_server_executor_health_failure(tmp_path):
     mock_server.health_check_sync.assert_called_once()
 
 
-def test_single_server_executor_shutdown(tmp_path):
+def test_single_server_executor_shutdown(tmp_path) -> None:
     """Test single server executor shutdown."""
     logger = DummyLogger()
     timeouts = TimeoutConfig()
@@ -186,7 +186,7 @@ def test_single_server_executor_shutdown(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_cluster_executor_success(tmp_path, monkeypatch):
+def test_cluster_executor_success(tmp_path, monkeypatch) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -230,7 +230,7 @@ def test_cluster_executor_success(tmp_path, monkeypatch):
     executor_pool.shutdown(wait=True)
 
 
-def test_cluster_executor_wrong_plan_type(monkeypatch):
+def test_cluster_executor_wrong_plan_type(monkeypatch) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -261,7 +261,7 @@ def test_cluster_executor_wrong_plan_type(monkeypatch):
     executor_pool.shutdown(wait=True)
 
 
-def test_cluster_executor_empty_servers(monkeypatch):
+def test_cluster_executor_empty_servers(monkeypatch) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = ClusterDeploymentPlan(servers=[])
@@ -290,7 +290,7 @@ def test_cluster_executor_empty_servers(monkeypatch):
     executor_pool.shutdown(wait=True)
 
 
-def test_cluster_executor_shutdown(tmp_path):
+def test_cluster_executor_shutdown(tmp_path) -> None:
     """Test cluster executor shutdown with role-based order."""
     logger = DummyLogger()
     timeouts = TimeoutConfig()

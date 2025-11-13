@@ -3,6 +3,7 @@
 import logging
 import tempfile
 from pathlib import Path
+from typing import Generator
 
 import pytest
 
@@ -15,7 +16,7 @@ from armadillo.core.log import (
 
 
 @pytest.fixture
-def clean_logging():
+def clean_logging() -> Generator[None, None, None]:
     """Reset logging before and after each test."""
     reset_logging()
     yield
@@ -23,7 +24,7 @@ def clean_logging():
 
 
 @pytest.fixture
-def temp_log_file():
+def temp_log_file() -> Generator[Path, None, None]:
     """Create a temporary log file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = Path(f.name)
@@ -33,7 +34,7 @@ def temp_log_file():
         log_path.unlink()
 
 
-def test_add_file_logging_after_initial_config(clean_logging, temp_log_file):
+def test_add_file_logging_after_initial_config(clean_logging: None, temp_log_file: Path) -> None:
     """Test that file logging can be added after initial configuration."""
     # Initial configuration (console only)
     configure_logging(enable_console=False, enable_json=False)
@@ -68,7 +69,7 @@ def test_add_file_logging_after_initial_config(clean_logging, temp_log_file):
     assert "Before file logging" not in log_content
 
 
-def test_add_file_logging_creates_parent_directory(clean_logging):
+def test_add_file_logging_creates_parent_directory(clean_logging: None) -> None:
     """Test that add_file_logging creates parent directories."""
     with tempfile.TemporaryDirectory() as tmpdir:
         log_file = Path(tmpdir) / "subdir" / "nested" / "test.log"
@@ -96,7 +97,7 @@ def test_add_file_logging_creates_parent_directory(clean_logging):
         assert "Test message" in log_file.read_text()
 
 
-def test_add_file_logging_respects_level(clean_logging, temp_log_file):
+def test_add_file_logging_respects_level(clean_logging: None, temp_log_file: Path) -> None:
     """Test that file handler respects the specified log level."""
     configure_logging(enable_console=False, enable_json=False)
 
@@ -120,7 +121,7 @@ def test_add_file_logging_respects_level(clean_logging, temp_log_file):
     assert "Warning message" in log_content
 
 
-def test_add_file_logging_with_context(clean_logging, temp_log_file):
+def test_add_file_logging_with_context(clean_logging: None, temp_log_file: Path) -> None:
     """Test that file logging includes context information."""
     from armadillo.core.log import set_log_context
 

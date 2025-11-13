@@ -8,28 +8,28 @@ from armadillo.core.errors import NetworkError
 class TestPortManager:
     """Test PortManager basic functionality."""
 
-    def test_allocate_port(self):
+    def test_allocate_port(self) -> None:
         """Test port allocation."""
         pm = PortManager()
         port = pm.allocate_port()
         assert 8529 <= port < 9529
         assert port in pm._allocated
 
-    def test_allocate_preferred_port(self):
+    def test_allocate_preferred_port(self) -> None:
         """Test preferred port allocation."""
         pm = PortManager()
         port = pm.allocate_port(preferred=9000)
         assert port == 9000
         assert port in pm._allocated
 
-    def test_release_port(self):
+    def test_release_port(self) -> None:
         """Test port release."""
         pm = PortManager()
         port = pm.allocate_port()
         pm.release_port(port)
         assert port not in pm._allocated
 
-    def test_randomization(self):
+    def test_randomization(self) -> None:
         """Test that port allocation is randomized."""
         pm = PortManager()
         ports = [pm.allocate_port() for _ in range(10)]
@@ -37,13 +37,13 @@ class TestPortManager:
         sequential = all(ports[i] == ports[i - 1] + 1 for i in range(1, len(ports)))
         assert not sequential, "Ports should be randomized, not sequential"
 
-    def test_no_duplicate_allocation(self):
+    def test_no_duplicate_allocation(self) -> None:
         """Test that allocated ports aren't reallocated."""
         pm = PortManager()
         ports = {pm.allocate_port() for _ in range(50)}
         assert len(ports) == 50, "All ports should be unique"
 
-    def test_thread_safety(self):
+    def test_thread_safety(self) -> None:
         """Test basic thread safety."""
         import threading
 
@@ -51,7 +51,7 @@ class TestPortManager:
         ports = []
         errors = []
 
-        def allocate():
+        def allocate() -> None:
             try:
                 ports.append(pm.allocate_port())
             except Exception as e:
@@ -66,7 +66,7 @@ class TestPortManager:
         assert not errors
         assert len(set(ports)) == len(ports), "No duplicate ports"
 
-    def test_exhaustion(self):
+    def test_exhaustion(self) -> None:
         """Test port exhaustion error."""
         pm = PortManager(base_port=8529, max_ports=5)
         # Allocate all ports
@@ -76,7 +76,7 @@ class TestPortManager:
         with pytest.raises(NetworkError):
             pm.allocate_port()
 
-    def test_release_and_reuse(self):
+    def test_release_and_reuse(self) -> None:
         """Test that released ports can be reused."""
         pm = PortManager(base_port=8529, max_ports=5)
         # Allocate all ports

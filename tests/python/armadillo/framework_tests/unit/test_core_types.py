@@ -22,19 +22,19 @@ from armadillo.core.types import (
 class TestEnums:
     """Test enum types."""
 
-    def test_deployment_mode_values(self):
+    def test_deployment_mode_values(self) -> None:
         """Test DeploymentMode enum values."""
         assert DeploymentMode.SINGLE_SERVER.value == "single_server"
         assert DeploymentMode.CLUSTER.value == "cluster"
 
-    def test_server_role_values(self):
+    def test_server_role_values(self) -> None:
         """Test ServerRole enum values."""
         assert ServerRole.SINGLE.value == "single"
         assert ServerRole.AGENT.value == "agent"
         assert ServerRole.DBSERVER.value == "dbserver"
         assert ServerRole.COORDINATOR.value == "coordinator"
 
-    def test_test_outcome_values(self):
+    def test_test_outcome_values(self) -> None:
         """Test ExecutionOutcome enum values."""
         assert ExecutionOutcome.PASSED.value == "passed"
         assert ExecutionOutcome.FAILED.value == "failed"
@@ -47,7 +47,7 @@ class TestEnums:
 class TestServerConfig:
     """Test ServerConfig dataclass."""
 
-    def test_server_config_creation(self):
+    def test_server_config_creation(self) -> None:
         """Test ServerConfig creation with required fields."""
         config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -64,7 +64,7 @@ class TestServerConfig:
         assert config.memory_limit_mb is None
         assert config.startup_timeout == 30.0
 
-    def test_server_config_with_optional_fields(self):
+    def test_server_config_with_optional_fields(self) -> None:
         """Test ServerConfig with optional fields."""
         config = ServerConfig(
             role=ServerRole.COORDINATOR,
@@ -84,7 +84,7 @@ class TestServerConfig:
 class TestClusterConfig:
     """Test ClusterConfig dataclass."""
 
-    def test_cluster_config_defaults(self):
+    def test_cluster_config_defaults(self) -> None:
         """Test ClusterConfig default values."""
         config = ClusterConfig()
 
@@ -93,7 +93,7 @@ class TestClusterConfig:
         assert config.coordinators == 1
         assert config.replication_factor == 2
 
-    def test_cluster_config_custom(self):
+    def test_cluster_config_custom(self) -> None:
         """Test ClusterConfig with custom values."""
         config = ClusterConfig(
             agents=5, dbservers=4, coordinators=2, replication_factor=3
@@ -108,7 +108,7 @@ class TestClusterConfig:
 class TestTimeoutConfig:
     """Test TimeoutConfig dataclass."""
 
-    def test_timeout_config_defaults(self):
+    def test_timeout_config_defaults(self) -> None:
         """Test TimeoutConfig default values."""
         config = TimeoutConfig()
 
@@ -135,7 +135,7 @@ class TestTimeoutConfig:
 class TestArmadilloConfig:
     """Test main ArmadilloConfig dataclass."""
 
-    def test_armadillo_config_creation(self):
+    def test_armadillo_config_creation(self) -> None:
         """Test ArmadilloConfig creation."""
         config = ArmadilloConfig(deployment_mode=DeploymentMode.SINGLE_SERVER)
 
@@ -155,7 +155,7 @@ class TestArmadilloConfig:
 class TestExecutionResult:
     """Test ExecutionResult dataclass."""
 
-    def test_test_result_creation(self):
+    def test_test_result_creation(self) -> None:
         """Test ExecutionResult creation."""
         result = ExecutionResult(
             name="test_example", outcome=ExecutionOutcome.PASSED, duration=1.5
@@ -170,7 +170,7 @@ class TestExecutionResult:
         assert result.failure_message is None
         assert result.crash_info is None
 
-    def test_test_result_with_failure(self):
+    def test_test_result_with_failure(self) -> None:
         """Test ExecutionResult with failure information."""
         result = ExecutionResult(
             name="test_failed",
@@ -190,7 +190,7 @@ class TestExecutionResult:
 class TestSuiteExecutionResults:
     """Test SuiteExecutionResults dataclass."""
 
-    def test_test_suite_results_creation(self):
+    def test_test_suite_results_creation(self) -> None:
         """Test SuiteExecutionResults creation."""
         test1 = ExecutionResult(
             name="test1", outcome=ExecutionOutcome.PASSED, duration=1.0
@@ -215,7 +215,7 @@ class TestSuiteExecutionResults:
 class TestHealthStatus:
     """Test HealthStatus dataclass."""
 
-    def test_healthy_status(self):
+    def test_healthy_status(self) -> None:
         """Test healthy status creation."""
         status = HealthStatus(is_healthy=True, response_time=0.5)
 
@@ -224,7 +224,7 @@ class TestHealthStatus:
         assert status.error_message is None
         assert status.details == {}
 
-    def test_unhealthy_status(self):
+    def test_unhealthy_status(self) -> None:
         """Test unhealthy status with error."""
         status = HealthStatus(
             is_healthy=False,
@@ -242,7 +242,7 @@ class TestHealthStatus:
 class TestServerStats:
     """Test ServerStats dataclass."""
 
-    def test_server_stats_creation(self):
+    def test_server_stats_creation(self) -> None:
         """Test ServerStats creation."""
         stats = ServerStats(
             pid=12345,
@@ -264,7 +264,7 @@ class TestServerStats:
 class TestProcessStats:
     """Test ProcessStats dataclass."""
 
-    def test_process_stats_creation(self):
+    def test_process_stats_creation(self) -> None:
         """Test ProcessStats creation."""
         stats = ProcessStats(
             pid=12345,

@@ -3,6 +3,7 @@
 import pytest
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from armadillo.utils.codec import to_json_string, from_json_string
 from armadillo.core.errors import SerializationError, DeserializationError
@@ -11,7 +12,7 @@ from armadillo.core.errors import SerializationError, DeserializationError
 class TestJsonUtils:
     """Test JSON utility functions."""
 
-    def test_to_json_string_simple_data(self):
+    def test_to_json_string_simple_data(self) -> None:
         """Test encoding simple data types."""
         data = {"name": "test", "value": 42, "active": True}
         result = to_json_string(data)
@@ -21,14 +22,14 @@ class TestJsonUtils:
         assert "42" in result
         assert "true" in result
 
-    def test_from_json_string_simple_data(self):
+    def test_from_json_string_simple_data(self) -> None:
         """Test decoding simple JSON data."""
         json_str = '{"name": "test", "value": 42, "active": true}'
         result = from_json_string(json_str)
 
         assert result == {"name": "test", "value": 42, "active": True}
 
-    def test_round_trip_maintains_data_integrity(self):
+    def test_round_trip_maintains_data_integrity(self) -> None:
         """Test encode/decode round trip maintains data integrity."""
         original_data = {
             "string": "hello world",
@@ -45,7 +46,7 @@ class TestJsonUtils:
 
         assert decoded_data == original_data
 
-    def test_custom_serialization_datetime(self):
+    def test_custom_serialization_datetime(self) -> None:
         """Test encoding special types like datetime and Path."""
         dt = datetime(2023, 1, 1, 12, 0, 0)
         path = Path("/tmp/test")
@@ -56,11 +57,11 @@ class TestJsonUtils:
         assert "2023-01-01T12:00:00" in result
         assert "/tmp/test" in result
 
-    def test_custom_serialization_object_with_dict(self):
+    def test_custom_serialization_object_with_dict(self) -> None:
         """Test encoding object with __dict__ attribute."""
 
         class TestData:
-            def __init__(self, name, value):
+            def __init__(self, name: str, value: int) -> None:
                 self.name = name
                 self.value = value
 
@@ -70,7 +71,7 @@ class TestJsonUtils:
         assert "test" in result
         assert "42" in result
 
-    def test_to_json_string_formatting(self):
+    def test_to_json_string_formatting(self) -> None:
         """Test JSON string formatting (indented, sorted)."""
         data = {"z": 1, "a": 2}
         result = to_json_string(data)
@@ -80,7 +81,7 @@ class TestJsonUtils:
         # Should be sorted (a comes before z)
         assert result.index('"a"') < result.index('"z"')
 
-    def test_serialization_error_handling(self):
+    def test_serialization_error_handling(self) -> None:
         """Test encoding invalid/unserializable type."""
         # Use a type that can't be serialized (like a set, which isn't JSON serializable)
         data = {"invalid": {1, 2, 3}}
@@ -88,22 +89,22 @@ class TestJsonUtils:
         with pytest.raises(SerializationError, match="Failed to encode object to JSON"):
             to_json_string(data)
 
-    def test_deserialization_error_handling(self):
+    def test_deserialization_error_handling(self) -> None:
         """Test decoding invalid JSON."""
         invalid_json = '{"invalid": json}'
 
         with pytest.raises(DeserializationError, match="Failed to decode JSON string"):
             from_json_string(invalid_json)
 
-    def test_empty_data_structures(self):
+    def test_empty_data_structures(self) -> None:
         """Test encoding empty data structures."""
-        empty_dict = {}
-        empty_list = []
+        empty_dict: dict[str, Any] = {}
+        empty_list: list[Any] = []
 
         assert from_json_string(to_json_string(empty_dict)) == {}
         assert from_json_string(to_json_string(empty_list)) == []
 
-    def test_unicode_handling(self):
+    def test_unicode_handling(self) -> None:
         """Test proper Unicode handling in codecs."""
         unicode_data = {"message": "Hello 世界", "emoji": "🚀"}
 
