@@ -16,7 +16,7 @@ from armadillo.core.errors import ResultProcessingError
 class TestResultCollector:
     """Test ResultCollector class with hierarchical structure."""
 
-    def test_result_collector_creation(self):
+    def test_result_collector_creation(self) -> None:
         """Test ResultCollector creation."""
         collector = ResultCollector()
 
@@ -25,7 +25,7 @@ class TestResultCollector:
         assert len(collector.metadata) == 0
         assert collector._finalized is False
 
-    def test_record_single_test_result(self):
+    def test_record_single_test_result(self) -> None:
         """Test recording a single test result."""
         collector = ResultCollector()
 
@@ -47,7 +47,7 @@ class TestResultCollector:
         assert test.outcome == "passed"
         assert test.duration_seconds == 1.5
 
-    def test_record_multiple_tests_same_file(self):
+    def test_record_multiple_tests_same_file(self) -> None:
         """Test recording multiple tests from the same file."""
         collector = ResultCollector()
 
@@ -68,7 +68,7 @@ class TestResultCollector:
         assert "test_one" in suite.tests
         assert "test_two" in suite.tests
 
-    def test_record_tests_different_files(self):
+    def test_record_tests_different_files(self) -> None:
         """Test recording tests from different files."""
         collector = ResultCollector()
 
@@ -87,7 +87,7 @@ class TestResultCollector:
         assert "tests/test_one.py" in collector.test_suites
         assert "tests/test_two.py" in collector.test_suites
 
-    def test_record_test_with_class(self):
+    def test_record_test_with_class(self) -> None:
         """Test recording test with class name in nodeid."""
         collector = ResultCollector()
 
@@ -100,7 +100,7 @@ class TestResultCollector:
         suite = collector.test_suites["tests/test_example.py"]
         assert "TestClass::test_method" in suite.tests
 
-    def test_record_test_with_markers(self):
+    def test_record_test_with_markers(self) -> None:
         """Test recording test with markers."""
         collector = ResultCollector()
 
@@ -114,7 +114,7 @@ class TestResultCollector:
         test = collector.test_suites["tests/test_example.py"].tests["test_slow"]
         assert test.markers == ["slow", "arango_single"]
 
-    def test_record_test_with_details(self):
+    def test_record_test_with_details(self) -> None:
         """Test recording failed test with details."""
         collector = ResultCollector()
 
@@ -128,7 +128,7 @@ class TestResultCollector:
         test = collector.test_suites["tests/test_example.py"].tests["test_failed"]
         assert test.details == "AssertionError: Expected 5, got 3"
 
-    def test_set_metadata(self):
+    def test_set_metadata(self) -> None:
         """Test setting metadata."""
         collector = ResultCollector()
 
@@ -139,7 +139,7 @@ class TestResultCollector:
         assert collector.metadata["version"] == "1.0.0"
         assert collector.metadata["additional"] == "info"
 
-    def test_finalize_results(self):
+    def test_finalize_results(self) -> None:
         """Test finalizing results."""
         collector = ResultCollector()
 
@@ -179,7 +179,7 @@ class TestResultCollector:
         # Should be marked as finalized
         assert collector._finalized is True
 
-    def test_finalize_results_twice_error(self):
+    def test_finalize_results_twice_error(self) -> None:
         """Test that finalizing twice raises error."""
         collector = ResultCollector()
 
@@ -188,7 +188,7 @@ class TestResultCollector:
         with pytest.raises(ResultProcessingError, match="already finalized"):
             collector.finalize_results()
 
-    def test_add_result_after_finalize_error(self):
+    def test_add_result_after_finalize_error(self) -> None:
         """Test that adding results after finalize raises error."""
         collector = ResultCollector()
 
@@ -203,7 +203,7 @@ class TestResultCollector:
                 duration=1.0,
             )
 
-    def test_suite_summary_calculation(self):
+    def test_suite_summary_calculation(self) -> None:
         """Test that suite summaries are calculated correctly."""
         collector = ResultCollector()
 
@@ -231,7 +231,7 @@ class TestResultCollector:
         assert suite_data["summary"]["passed"] == 2
         assert suite_data["summary"]["failed"] == 1
 
-    def test_export_json(self, temp_dir):
+    def test_export_json(self, temp_dir: Path) -> None:
         """Test exporting results as JSON."""
         collector = ResultCollector()
 
@@ -266,7 +266,7 @@ class TestResultCollector:
         assert "summary" in data
         assert len(data["test_suites"]) == 1
 
-    def test_export_junit(self, temp_dir):
+    def test_export_junit(self, temp_dir: Path) -> None:
         """Test exporting results as JUnit XML."""
         collector = ResultCollector()
 
@@ -295,7 +295,7 @@ class TestResultCollector:
         assert "<testcase" in content
         assert "<failure" in content
 
-    def test_export_multiple_formats(self, temp_dir):
+    def test_export_multiple_formats(self, temp_dir: Path) -> None:
         """Test exporting results in multiple formats."""
         collector = ResultCollector()
 
@@ -317,7 +317,7 @@ class TestResultCollector:
 class TestResultCollectorEdgeCases:
     """Test edge cases and error conditions."""
 
-    def test_empty_result_collection(self, temp_dir):
+    def test_empty_result_collection(self, temp_dir: Path) -> None:
         """Test handling empty result collection."""
         collector = ResultCollector()
 
@@ -333,7 +333,7 @@ class TestResultCollectorEdgeCases:
         exported_files = collector.export_results(["json"], temp_dir)
         assert "json" in exported_files
 
-    def test_very_short_duration_tests(self):
+    def test_very_short_duration_tests(self) -> None:
         """Test handling tests with very short durations."""
         collector = ResultCollector()
 
@@ -353,7 +353,7 @@ class TestResultCollectorEdgeCases:
         assert results["summary"]["total"] == 2
         assert results["summary"]["passed"] == 2
 
-    def test_test_with_crash_info(self):
+    def test_test_with_crash_info(self) -> None:
         """Test test result with crash information."""
         from armadillo.core.types import CrashInfo
         from armadillo.core.value_objects import ServerId
@@ -385,7 +385,7 @@ class TestResultCollectorEdgeCases:
         assert test["crash_info"]["srv1"]["exit_code"] == -11
         assert test["crash_info"]["srv1"]["signal"] == 11
 
-    def test_large_number_of_tests(self):
+    def test_large_number_of_tests(self) -> None:
         """Test handling large number of test results."""
         collector = ResultCollector()
 

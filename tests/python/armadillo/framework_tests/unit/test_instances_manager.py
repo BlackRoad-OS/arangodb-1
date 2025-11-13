@@ -13,8 +13,10 @@ from armadillo.instances.deployment_plan import (
     SingleServerDeploymentPlan,
     ClusterDeploymentPlan,
 )
+from typing import Any, Optional
 from armadillo.core.types import DeploymentMode, ServerRole, ServerConfig
 from armadillo.core.context import ApplicationContext
+from armadillo.core.value_objects import DeploymentId, ServerId
 
 
 class TestInstanceManagerBasic:
@@ -23,7 +25,9 @@ class TestInstanceManagerBasic:
     def test_manager_can_be_created(self) -> None:
         """Test InstanceManager can be instantiated."""
         app_context = ApplicationContext.for_testing()
-        manager = InstanceManager("test_deployment", app_context=app_context)
+        manager = InstanceManager(
+            DeploymentId("test_deployment"), app_context=app_context
+        )
 
         assert manager is not None
         assert manager.deployment_id == "test_deployment"
@@ -31,7 +35,7 @@ class TestInstanceManagerBasic:
     def test_manager_has_expected_attributes(self) -> None:
         """Test manager has expected attributes."""
         app_context = ApplicationContext.for_testing()
-        manager = InstanceManager("test", app_context=app_context)
+        manager = InstanceManager(DeploymentId("test"), app_context=app_context)
 
         # Check that expected attributes exist
         assert hasattr(manager, "deployment_id")
@@ -44,14 +48,14 @@ class TestInstanceManagerBasic:
     def test_manager_has_expected_methods(self) -> None:
         """Test manager has expected public methods."""
         app_context = ApplicationContext.for_testing()
-        manager = InstanceManager("test", app_context=app_context)
+        manager = InstanceManager(DeploymentId("test"), app_context=app_context)
 
         # Check that public methods exist
-        assert hasattr(manager, "create_deployment_plan")
+        assert hasattr(manager, "create_cluster_deployment_plan")
         assert hasattr(manager, "deploy_servers")
         assert hasattr(manager, "shutdown_deployment")
         assert hasattr(manager, "get_server")
-        assert callable(manager.create_deployment_plan)
+        assert callable(manager.create_cluster_deployment_plan)
         assert callable(manager.deploy_servers)
         assert callable(manager.shutdown_deployment)
         assert callable(manager.get_server)
@@ -59,8 +63,12 @@ class TestInstanceManagerBasic:
     def test_unique_deployment_ids(self) -> None:
         """Test deployment IDs are preserved correctly."""
         app_context = ApplicationContext.for_testing()
-        manager1 = InstanceManager("deployment_one", app_context=app_context)
-        manager2 = InstanceManager("deployment_two", app_context=app_context)
+        manager1 = InstanceManager(
+            DeploymentId("deployment_one"), app_context=app_context
+        )
+        manager2 = InstanceManager(
+            DeploymentId("deployment_two"), app_context=app_context
+        )
 
         assert manager1.deployment_id != manager2.deployment_id
         assert manager1.deployment_id == "deployment_one"
@@ -146,15 +154,17 @@ class TestDeploymentPlan:
 class TestInstanceManagerDeployment:
     """Test InstanceManager deployment operations with minimal mocking."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.app_context = ApplicationContext.for_testing()
-        self.manager = InstanceManager("test_deployment", app_context=self.app_context)
+        self.manager = InstanceManager(
+            DeploymentId("test_deployment"), app_context=self.app_context
+        )
 
     def test_get_server_no_servers(self) -> None:
         """Test getting server when no servers exist."""
         try:
-            server = self.manager.get_server("nonexistent")
+            server = self.manager.get_server(ServerId("nonexistent"))
             # Should return None for nonexistent server
             assert server is None
         except Exception:
@@ -166,11 +176,9 @@ class TestInstanceManagerDeployment:
         from armadillo.core.types import ClusterConfig
 
         try:
-            result = self.manager.create_deployment_plan(
-                mode=DeploymentMode.SINGLE_SERVER, cluster_config=ClusterConfig()
-            )
+            result = self.manager.create_single_server_plan()
             # If successful, should return some result
-            assert result is not None or result is None  # Either is acceptable
+            assert result is not None
         except Exception:
             # Creation might fail due to missing dependencies, that's ok for this test
             pass
@@ -180,12 +188,11 @@ class TestInstanceManagerDeployment:
         from armadillo.core.types import ClusterConfig
 
         try:
-            result = self.manager.create_deployment_plan(
-                mode=DeploymentMode.CLUSTER,
+            result = self.manager.create_cluster_deployment_plan(
                 cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1),
             )
             # If successful, should return some result
-            assert result is not None or result is None  # Either is acceptable
+            assert result is not None
         except Exception:
             # Creation might fail due to missing dependencies, that's ok for this test
             pass
@@ -199,21 +206,25 @@ class TestInstanceManagerErrorHandling:
         app_context = ApplicationContext.for_testing()
 
         # Test with empty string
-        manager1 = InstanceManager("", app_context=app_context)
-        assert manager1.deployment_id == ""
+        manager1 = InstanceManager(DeploymentId(""), app_context=app_context)
+        assert manager1.deployment_id == DeploymentId("")
 
         # Test with special characters
-        manager2 = InstanceManager("test-deployment_123", app_context=app_context)
-        assert manager2.deployment_id == "test-deployment_123"
+        manager2 = InstanceManager(
+            DeploymentId("test-deployment_123"), app_context=app_context
+        )
+        assert manager2.deployment_id == DeploymentId("test-deployment_123")
 
 
 class TestInstanceManagerMockIntegration:
     """Test manager with safe mocking."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.app_context = ApplicationContext.for_testing()
-        self.manager = InstanceManager("mock_test", app_context=self.app_context)
+        self.manager = InstanceManager(
+            DeploymentId("mock_test"), app_context=self.app_context
+        )
 
     def test_shutdown_deployment_handles_no_deployment(self) -> None:
         """Test shutdown when no deployment exists."""
@@ -231,26 +242,28 @@ class TestInstanceManagerLifecycleDeployment:
     class FakeServer:
         """Minimal fake server used to populate orchestrator internal dict without real processes."""
 
-        def __init__(self, server_id, role, port=8529):
+        def __init__(
+            self, server_id: ServerId, role: ServerRole, port: int = 8529
+        ) -> None:
             self.server_id = server_id
             self.role = role
             self.port = port
             self.endpoint = f"http://localhost:{port}/{server_id}"
             self._running = True
 
-        def is_running(self):
+        def is_running(self) -> bool:
             return self._running
 
-        def get_pid(self):
+        def get_pid(self) -> int:
             return 12345
 
-        def get_port(self):
-            return self.port
+        def get_port(self) -> int:
+            return int(self.port)
 
-        def get_role(self):
-            return self.role
+        def get_role(self) -> ServerRole:
+            return ServerRole(self.role)
 
-        def get_info(self):
+        def get_info(self) -> Any:
             from armadillo.instances.server import ArangoServerInfo
             from pathlib import Path
 
@@ -264,19 +277,21 @@ class TestInstanceManagerLifecycleDeployment:
                 process_info=None,
             )
 
-        def stop(self, timeout=None):
+        def stop(self, timeout: Optional[float] = None) -> None:
             self._running = False
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         self.app_context = ApplicationContext.for_testing()
         # InstanceManager sets use_lifecycle_strategies=True when constructing orchestrator
-        self.manager = InstanceManager("lifecycle_test", app_context=self.app_context)
+        self.manager = InstanceManager(
+            DeploymentId("lifecycle_test"), app_context=self.app_context
+        )
 
-    def _inject_fake_execution(self, plan):
+    def _inject_fake_execution(self, plan: Any) -> None:
         """Patch orchestrator.execute_deployment to return fake deployment."""
         orch = self.manager._deployment_orchestrator
 
-        def fake_execute_deployment(p, timeout=None):
+        def fake_execute_deployment(p: Any, timeout: Optional[float] = None) -> Any:
             from armadillo.instances.deployment_plan import (
                 SingleServerDeploymentPlan,
                 ClusterDeploymentPlan,
@@ -296,7 +311,7 @@ class TestInstanceManagerLifecycleDeployment:
                 server = self.FakeServer(sid, ServerRole.SINGLE)
                 return SingleServerDeployment(
                     plan=p,
-                    server=server,
+                    server=server,  # type: ignore[arg-type]  # Using FakeServer instead of ArangoServer
                     status=DeploymentStatus(is_deployed=True, is_healthy=True),
                     timing=DeploymentTiming(startup_time=time.time()),
                 )
@@ -312,7 +327,7 @@ class TestInstanceManagerLifecycleDeployment:
                     servers[sid] = self.FakeServer(sid, role)
                 return ClusterDeployment(
                     plan=p,
-                    servers=servers,
+                    servers=servers,  # type: ignore[arg-type]  # Using FakeServer instead of ArangoServer
                     status=DeploymentStatus(is_deployed=True, is_healthy=True),
                     timing=DeploymentTiming(startup_time=time.time()),
                 )

@@ -34,7 +34,9 @@ def temp_log_file() -> Generator[Path, None, None]:
         log_path.unlink()
 
 
-def test_add_file_logging_after_initial_config(clean_logging: None, temp_log_file: Path) -> None:
+def test_add_file_logging_after_initial_config(
+    clean_logging: None, temp_log_file: Path
+) -> None:
     """Test that file logging can be added after initial configuration."""
     # Initial configuration (console only)
     configure_logging(enable_console=False, enable_json=False)
@@ -97,7 +99,9 @@ def test_add_file_logging_creates_parent_directory(clean_logging: None) -> None:
         assert "Test message" in log_file.read_text()
 
 
-def test_add_file_logging_respects_level(clean_logging: None, temp_log_file: Path) -> None:
+def test_add_file_logging_respects_level(
+    clean_logging: None, temp_log_file: Path
+) -> None:
     """Test that file handler respects the specified log level."""
     configure_logging(enable_console=False, enable_json=False)
 
@@ -121,7 +125,9 @@ def test_add_file_logging_respects_level(clean_logging: None, temp_log_file: Pat
     assert "Warning message" in log_content
 
 
-def test_add_file_logging_with_context(clean_logging: None, temp_log_file: Path) -> None:
+def test_add_file_logging_with_context(
+    clean_logging: None, temp_log_file: Path
+) -> None:
     """Test that file logging includes context information."""
     from armadillo.core.log import set_log_context
 

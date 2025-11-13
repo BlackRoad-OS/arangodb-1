@@ -2,6 +2,7 @@
 
 import pytest
 import asyncio
+from typing import Any
 from unittest.mock import Mock, AsyncMock, patch
 
 from armadillo.core.types import HealthStatus
@@ -12,7 +13,7 @@ from armadillo.instances.health_checker import ServerHealthChecker
 class TestServerHealthChecker:
     """Test server health checking functionality."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         # Create mock logger
         self.mock_logger = Mock()
@@ -28,7 +29,7 @@ class TestServerHealthChecker:
         )
 
     @patch("armadillo.instances.health_checker.is_process_running", return_value=True)
-    def test_check_readiness_success(self, mock_is_running):
+    def test_check_readiness_success(self, mock_is_running: Any) -> None:
         """Test successful readiness check."""
         # Mock successful health check
         with patch.object(self.health_checker, "check_health") as mock_check_health:
@@ -47,7 +48,7 @@ class TestServerHealthChecker:
             )
 
     @patch("armadillo.instances.health_checker.is_process_running", return_value=False)
-    def test_check_readiness_process_not_running(self, mock_is_running):
+    def test_check_readiness_process_not_running(self, mock_is_running: Any) -> None:
         """Test readiness check when process is not running."""
         result = self.health_checker.check_readiness(
             ServerId("test_server"), "http://localhost:8529"
@@ -59,7 +60,7 @@ class TestServerHealthChecker:
         )
 
     @patch("armadillo.instances.health_checker.is_process_running", return_value=True)
-    def test_check_readiness_health_check_fails(self, mock_is_running):
+    def test_check_readiness_health_check_fails(self, mock_is_running: Any) -> None:
         """Test readiness check when health check fails."""
         with patch.object(self.health_checker, "check_health") as mock_check_health:
             mock_check_health.return_value = HealthStatus(
@@ -67,7 +68,7 @@ class TestServerHealthChecker:
             )
 
             result = self.health_checker.check_readiness(
-                "test_server", "http://localhost:8529"
+                ServerId("test_server"), "http://localhost:8529"
             )
 
             assert result is False
@@ -79,10 +80,10 @@ class TestServerHealthChecker:
         "armadillo.instances.health_checker.is_process_running",
         side_effect=Exception("Process check error"),
     )
-    def test_check_readiness_exception_handling(self, mock_is_running):
+    def test_check_readiness_exception_handling(self, mock_is_running: Any) -> None:
         """Test readiness check exception handling."""
         result = self.health_checker.check_readiness(
-            "test_server", "http://localhost:8529"
+            ServerId("test_server"), "http://localhost:8529"
         )
 
         assert result is False
@@ -95,14 +96,14 @@ class TestServerHealthChecker:
         assert str(call_args[0][2]) == "Process check error"
 
     @patch("asyncio.run")
-    def test_check_health_success(self, mock_asyncio_run):
+    def test_check_health_success(self, mock_asyncio_run: Any) -> None:
         """Test successful health check."""
         expected_status = HealthStatus(
             is_healthy=True, response_time=0.2, details={"version": "3.9.0"}
         )
 
         # Mock asyncio.run to return expected status without awaiting coroutine
-        def mock_run(coro):
+        def mock_run(coro: Any) -> HealthStatus:
             # Close the coroutine to prevent "never awaited" warning
             coro.close()
             return expected_status
@@ -114,11 +115,11 @@ class TestServerHealthChecker:
         mock_asyncio_run.assert_called_once()
 
     @patch("asyncio.run")
-    def test_check_health_exception_handling(self, mock_asyncio_run):
+    def test_check_health_exception_handling(self, mock_asyncio_run: Any) -> None:
         """Test health check exception handling."""
 
         # Mock asyncio.run to raise exception without awaiting coroutine
-        def mock_run(coro):
+        def mock_run(coro: Any) -> None:
             # Close the coroutine to prevent "never awaited" warning
             coro.close()
             raise Exception("Async error")
@@ -127,6 +128,7 @@ class TestServerHealthChecker:
         result = self.health_checker.check_health("http://localhost:8529", timeout=5.0)
 
         assert result.is_healthy is False
+        assert result.error_message is not None
         assert "Health check error: Async error" in result.error_message
         assert result.response_time >= 0
         mock_asyncio_run.assert_called_once()
@@ -134,7 +136,7 @@ class TestServerHealthChecker:
     # NOTE: Async health check tests are skipped due to conflicts with global socket mocking
     # in unit test environment. Real async health checking is covered by integration tests.
 
-    def test_health_checker_protocol_compliance(self):
+    def test_health_checker_protocol_compliance(self) -> None:
         """Test that ServerHealthChecker implements HealthChecker protocol."""
         # This test verifies that the class implements the expected interface
         assert hasattr(self.health_checker, "check_readiness")
@@ -143,23 +145,26 @@ class TestServerHealthChecker:
         assert callable(self.health_checker.check_health)
 
     @patch("asyncio.run")
-    def test_health_checker_integration_with_dependencies(self, mock_asyncio_run):
+    def test_health_checker_integration_with_dependencies(
+        self, mock_asyncio_run: Any
+    ) -> None:
         """Test health checker integration with injected dependencies."""
         # Test logger integration
-        result = self.health_checker.check_readiness(
-            "test_server", "http://localhost:8529"
+        readiness_result = self.health_checker.check_readiness(
+            ServerId("test_server"), "http://localhost:8529"
         )
         # Logger should be called (either success or failure)
         assert self.mock_logger.debug.called
+        assert isinstance(readiness_result, bool)
 
         # Test auth provider integration with proper mocking
         mock_status = HealthStatus(is_healthy=True, response_time=0.1)
 
-        def mock_run(coro):
+        def mock_run(coro: Any) -> HealthStatus:
             # Close the coroutine to prevent "never awaited" warning
             coro.close()
             return mock_status
 
         mock_asyncio_run.side_effect = mock_run
-        result = self.health_checker.check_health("http://localhost:8529")
-        assert result == mock_status
+        health_result = self.health_checker.check_health("http://localhost:8529")
+        assert health_result == mock_status

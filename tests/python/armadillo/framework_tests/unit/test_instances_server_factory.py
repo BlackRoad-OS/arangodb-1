@@ -14,7 +14,7 @@ from armadillo.instances.server_factory import StandardServerFactory
 class TestStandardServerFactory:
     """Test server factory functionality."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         # Create mock logger
         self.mock_logger = Mock()
@@ -24,7 +24,7 @@ class TestStandardServerFactory:
 
         self.factory = StandardServerFactory(app_context=self.app_context)
 
-    def test_create_single_server_instance(self):
+    def test_create_single_server_instance(self) -> None:
         """Test creating a single server instance."""
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -54,7 +54,7 @@ class TestStandardServerFactory:
             8529,
         )
 
-    def test_create_cluster_instances(self):
+    def test_create_cluster_instances(self) -> None:
         """Test creating multiple server instances for a cluster."""
         servers_config = [
             ServerConfig(
@@ -105,7 +105,7 @@ class TestStandardServerFactory:
         # Should have logged creation of all 3 servers
         assert self.mock_logger.debug.call_count == 3
 
-    def test_generate_server_id(self):
+    def test_generate_server_id(self) -> None:
         """Test server ID generation for different roles."""
         assert self.factory._generate_server_id(ServerRole.AGENT, 0) == ServerId(
             "agent_0"
@@ -123,7 +123,7 @@ class TestStandardServerFactory:
             "server_0"
         )
 
-    def test_invalid_port_type_error(self):
+    def test_invalid_port_type_error(self) -> None:
         """Test error handling for invalid port types."""
         # With pydantic validation, the error occurs immediately during ServerConfig creation
         from pydantic import ValidationError
@@ -131,12 +131,12 @@ class TestStandardServerFactory:
         with pytest.raises(ValidationError, match="Input should be a valid integer"):
             ServerConfig(
                 role=ServerRole.SINGLE,
-                port="invalid_port",  # String instead of int
+                port="invalid_port",  # type: ignore[arg-type]  # String instead of int - testing validation
                 data_dir=Path("/fake/data"),
                 log_file=Path("/fake/log"),
             )
 
-    def test_minimal_config_creation(self):
+    def test_minimal_config_creation(self) -> None:
         """Test that MinimalConfig is created with correct values."""
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -154,6 +154,7 @@ class TestStandardServerFactory:
         # Check that the minimal config was passed correctly
         # We can't directly access it, but we can verify the server was created successfully
         assert server.server_id == ServerId("server_0")
+        assert server.paths.config is not None
         assert server.paths.config.args["custom"] == "arg"
 
         # Verify that data_dir and log_file from ServerConfig are preserved
@@ -163,7 +164,7 @@ class TestStandardServerFactory:
         assert server.paths.config.memory_limit_mb == 512
         assert server.paths.config.startup_timeout == 45.0
 
-    def test_post_creation_configuration(self):
+    def test_post_creation_configuration(self) -> None:
         """Test that servers are configured after creation."""
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -181,9 +182,10 @@ class TestStandardServerFactory:
 
         # Check that ServerConfig was stored for reference
         assert hasattr(server.paths, "config")
+        assert server.paths.config is not None
         assert server.paths.config.data_dir == server_config.data_dir
 
-    def test_dependency_creation(self):
+    def test_dependency_creation(self) -> None:
         """Test that dependencies are created for each server."""
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -203,7 +205,7 @@ class TestStandardServerFactory:
         assert server._app_context.port_allocator is not None
         assert server._app_context.auth_provider is not None
 
-    def test_empty_server_list(self):
+    def test_empty_server_list(self) -> None:
         """Test handling empty server configuration list."""
         servers = self.factory.create_server_instances([])
 
@@ -213,13 +215,13 @@ class TestStandardServerFactory:
         # Should not have logged any server creation
         self.mock_logger.debug.assert_not_called()
 
-    def test_server_factory_protocol_compliance(self):
+    def test_server_factory_protocol_compliance(self) -> None:
         """Test that StandardServerFactory implements ServerFactory protocol."""
         # This test verifies that the class implements the expected interface
         assert hasattr(self.factory, "create_server_instances")
         assert callable(self.factory.create_server_instances)
 
-    def test_multiple_agents_indexing(self):
+    def test_multiple_agents_indexing(self) -> None:
         """Test that multiple servers of same role get proper indexing."""
         servers_config = [
             ServerConfig(
@@ -254,7 +256,7 @@ class TestStandardServerFactory:
         assert servers[ServerId("agent_1")].port == 8531
         assert servers[ServerId("agent_2")].port == 8532
 
-    def test_args_copying(self):
+    def test_args_copying(self) -> None:
         """Test that server config args are properly copied."""
         server_config = ServerConfig(
             role=ServerRole.SINGLE,
@@ -268,6 +270,7 @@ class TestStandardServerFactory:
         server = servers[ServerId("server_0")]
 
         # Original args should be copied, not referenced
+        assert server.paths.config is not None
         assert server.paths.config.args == {"original": "value"}
 
         # TODO: Config args are currently referenced, not copied (bug)

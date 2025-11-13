@@ -4,6 +4,7 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
+from typing import Any, Generator
 from unittest.mock import patch, mock_open, Mock
 
 from armadillo.utils.filesystem import (
@@ -23,19 +24,19 @@ from armadillo.core.errors import FilesystemError, PathError, AtomicWriteError
 class TestFilesystemService:
     """Test FilesystemService class."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up mock config for tests."""
         self.mock_config = Mock()
         self.mock_config.work_dir = Path("/tmp/test_work")
         self.mock_config.temp_dir = Path("/tmp/test_temp")
 
-    def test_filesystem_service_creation(self):
+    def test_filesystem_service_creation(self) -> None:
         """Test FilesystemService creation."""
         service = FilesystemService(self.mock_config)
 
         assert service._config is not None
 
-    def test_work_dir_creation(self, temp_dir):
+    def test_work_dir_creation(self, temp_dir: Path) -> None:
         """Test work directory creation and caching."""
         self.mock_config.work_dir = temp_dir
         service = FilesystemService(self.mock_config)
@@ -46,7 +47,7 @@ class TestFilesystemService:
         assert work_dir1 == work_dir2  # Should be cached
         assert work_dir1 == temp_dir
 
-    def test_work_dir_from_config(self, temp_dir):
+    def test_work_dir_from_config(self, temp_dir: Path) -> None:
         """Test work directory from configuration."""
         self.mock_config.work_dir = temp_dir
         service = FilesystemService(self.mock_config)
@@ -55,7 +56,7 @@ class TestFilesystemService:
 
         assert work_dir == temp_dir
 
-    def test_server_dir_creation(self, temp_dir):
+    def test_server_dir_creation(self, temp_dir: Path) -> None:
         """Test server directory creation."""
         self.mock_config.work_dir = temp_dir
         service = FilesystemService(self.mock_config)
@@ -65,7 +66,7 @@ class TestFilesystemService:
         assert server_dir == temp_dir / "servers" / "test_server"
         assert server_dir.exists()
 
-    def test_temp_dir_creation(self, temp_dir):
+    def test_temp_dir_creation(self, temp_dir: Path) -> None:
         """Test temporary directory creation."""
         self.mock_config.temp_dir = temp_dir
         service = FilesystemService(self.mock_config)
@@ -78,7 +79,7 @@ class TestFilesystemService:
             mock_mkdtemp.assert_called_once()
             assert result == Path(temp_dir / "temp_123")
 
-    def test_atomic_write_text(self, temp_dir):
+    def test_atomic_write_text(self, temp_dir: Path) -> None:
         """Test atomic write with text data."""
         service = FilesystemService(self.mock_config)
         target_file = temp_dir / "test.txt"
@@ -89,7 +90,7 @@ class TestFilesystemService:
         assert target_file.exists()
         assert target_file.read_text() == content
 
-    def test_atomic_write_bytes(self, temp_dir):
+    def test_atomic_write_bytes(self, temp_dir: Path) -> None:
         """Test atomic write with binary data."""
         service = FilesystemService(self.mock_config)
         target_file = temp_dir / "test.bin"
@@ -100,7 +101,7 @@ class TestFilesystemService:
         assert target_file.exists()
         assert target_file.read_bytes() == content
 
-    def test_atomic_write_creates_parent_dirs(self, temp_dir):
+    def test_atomic_write_creates_parent_dirs(self, temp_dir: Path) -> None:
         """Test atomic write creates parent directories."""
         service = FilesystemService(self.mock_config)
         target_file = temp_dir / "nested" / "deep" / "test.txt"
@@ -113,7 +114,7 @@ class TestFilesystemService:
         assert target_file.parent.exists()
 
     @patch("tempfile.NamedTemporaryFile")
-    def test_atomic_write_failure_cleanup(self, mock_temp_file, temp_dir):
+    def test_atomic_write_failure_cleanup(self, mock_temp_file: Any, temp_dir: Path) -> None:
         """Test atomic write cleans up on failure."""
         service = FilesystemService(self.mock_config)
         target_file = temp_dir / "test.txt"
@@ -128,7 +129,7 @@ class TestFilesystemService:
         with pytest.raises(AtomicWriteError):
             atomic_write(target_file, "content")
 
-    def test_read_text_success(self, temp_dir):
+    def test_read_text_success(self, temp_dir: Path) -> None:
         """Test successful text file reading."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "test.txt"
@@ -139,7 +140,7 @@ class TestFilesystemService:
         result = read_text(test_file)
         assert result == content
 
-    def test_read_text_file_not_found(self, temp_dir):
+    def test_read_text_file_not_found(self, temp_dir: Path) -> None:
         """Test reading non-existent text file."""
         service = FilesystemService(self.mock_config)
         nonexistent_file = temp_dir / "nonexistent.txt"
@@ -147,7 +148,7 @@ class TestFilesystemService:
         with pytest.raises(PathError, match="File not found"):
             read_text(nonexistent_file)
 
-    def test_read_text_permission_error(self, temp_dir):
+    def test_read_text_permission_error(self, temp_dir: Path) -> None:
         """Test reading text file with permission error."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "restricted.txt"
@@ -159,7 +160,7 @@ class TestFilesystemService:
             with pytest.raises(FilesystemError, match="Permission denied"):
                 read_text(test_file)
 
-    def test_read_text_encoding_error(self, temp_dir):
+    def test_read_text_encoding_error(self, temp_dir: Path) -> None:
         """Test reading text file with encoding error."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "binary.txt"
@@ -170,7 +171,7 @@ class TestFilesystemService:
         with pytest.raises(FilesystemError, match="Encoding error"):
             read_text(test_file)
 
-    def test_read_bytes_success(self, temp_dir):
+    def test_read_bytes_success(self, temp_dir: Path) -> None:
         """Test successful binary file reading."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "test.bin"
@@ -181,7 +182,7 @@ class TestFilesystemService:
         result = read_bytes(test_file)
         assert result == content
 
-    def test_read_bytes_file_not_found(self, temp_dir):
+    def test_read_bytes_file_not_found(self, temp_dir: Path) -> None:
         """Test reading non-existent binary file."""
         service = FilesystemService(self.mock_config)
         nonexistent_file = temp_dir / "nonexistent.bin"
@@ -189,7 +190,7 @@ class TestFilesystemService:
         with pytest.raises(PathError, match="File not found"):
             read_bytes(nonexistent_file)
 
-    def test_ensure_dir_new_directory(self, temp_dir):
+    def test_ensure_dir_new_directory(self, temp_dir: Path) -> None:
         """Test ensuring new directory exists."""
         service = FilesystemService(self.mock_config)
         new_dir = temp_dir / "new" / "nested" / "directory"
@@ -200,7 +201,7 @@ class TestFilesystemService:
         assert new_dir.exists()
         assert new_dir.is_dir()
 
-    def test_ensure_dir_existing_directory(self, temp_dir):
+    def test_ensure_dir_existing_directory(self, temp_dir: Path) -> None:
         """Test ensuring existing directory."""
         service = FilesystemService(self.mock_config)
         existing_dir = temp_dir / "existing"
@@ -211,7 +212,7 @@ class TestFilesystemService:
         assert result == existing_dir
         assert existing_dir.exists()
 
-    def test_ensure_dir_permission_error(self, temp_dir):
+    def test_ensure_dir_permission_error(self, temp_dir: Path) -> None:
         """Test ensure directory with permission error."""
         service = FilesystemService(self.mock_config)
 
@@ -219,7 +220,7 @@ class TestFilesystemService:
             with pytest.raises(FilesystemError, match="Permission denied"):
                 ensure_dir(temp_dir / "restricted")
 
-    def test_safe_remove_file(self, temp_dir):
+    def test_safe_remove_file(self, temp_dir: Path) -> None:
         """Test safely removing a file."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "test.txt"
@@ -230,7 +231,7 @@ class TestFilesystemService:
         assert result is True
         assert not test_file.exists()
 
-    def test_safe_remove_directory(self, temp_dir):
+    def test_safe_remove_directory(self, temp_dir: Path) -> None:
         """Test safely removing a directory."""
         service = FilesystemService(self.mock_config)
         test_dir = temp_dir / "test_dir"
@@ -242,7 +243,7 @@ class TestFilesystemService:
         assert result is True
         assert not test_dir.exists()
 
-    def test_safe_remove_nonexistent(self, temp_dir):
+    def test_safe_remove_nonexistent(self, temp_dir: Path) -> None:
         """Test safely removing non-existent path."""
         service = FilesystemService(self.mock_config)
         nonexistent = temp_dir / "nonexistent"
@@ -251,7 +252,7 @@ class TestFilesystemService:
 
         assert result is False
 
-    def test_safe_remove_error_handling(self, temp_dir):
+    def test_safe_remove_error_handling(self, temp_dir: Path) -> None:
         """Test safe remove with error (should not raise)."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "test.txt"
@@ -263,7 +264,7 @@ class TestFilesystemService:
             assert result is False
             # File should still exist due to mocked error
 
-    def test_copy_file_success(self, temp_dir):
+    def test_copy_file_success(self, temp_dir: Path) -> None:
         """Test successful file copying."""
         service = FilesystemService(self.mock_config)
         src_file = temp_dir / "source.txt"
@@ -277,7 +278,7 @@ class TestFilesystemService:
         assert dst_file.exists()
         assert dst_file.read_text() == content
 
-    def test_copy_file_creates_parent_dirs(self, temp_dir):
+    def test_copy_file_creates_parent_dirs(self, temp_dir: Path) -> None:
         """Test copy file creates parent directories."""
         service = FilesystemService(self.mock_config)
         src_file = temp_dir / "source.txt"
@@ -291,7 +292,7 @@ class TestFilesystemService:
         assert dst_file.exists()
         assert dst_file.read_text() == content
 
-    def test_copy_file_preserve_metadata(self, temp_dir):
+    def test_copy_file_preserve_metadata(self, temp_dir: Path) -> None:
         """Test copy file with metadata preservation."""
         service = FilesystemService(self.mock_config)
         src_file = temp_dir / "source.txt"
@@ -303,7 +304,7 @@ class TestFilesystemService:
             copy_file(src_file, dst_file, preserve_metadata=True)
             mock_copy2.assert_called_once_with(src_file, dst_file)
 
-    def test_copy_file_no_preserve_metadata(self, temp_dir):
+    def test_copy_file_no_preserve_metadata(self, temp_dir: Path) -> None:
         """Test copy file without metadata preservation."""
         service = FilesystemService(self.mock_config)
         src_file = temp_dir / "source.txt"
@@ -315,7 +316,7 @@ class TestFilesystemService:
             copy_file(src_file, dst_file, preserve_metadata=False)
             mock_copy.assert_called_once_with(src_file, dst_file)
 
-    def test_copy_file_source_not_found(self, temp_dir):
+    def test_copy_file_source_not_found(self, temp_dir: Path) -> None:
         """Test copying non-existent source file."""
         service = FilesystemService(self.mock_config)
         src_file = temp_dir / "nonexistent.txt"
@@ -324,7 +325,7 @@ class TestFilesystemService:
         with pytest.raises(PathError, match="Source file not found"):
             copy_file(src_file, dst_file)
 
-    def test_get_size(self, temp_dir):
+    def test_get_size(self, temp_dir: Path) -> None:
         """Test getting file size."""
         service = FilesystemService(self.mock_config)
         test_file = temp_dir / "test.txt"
@@ -336,7 +337,7 @@ class TestFilesystemService:
 
         assert size == len(content.encode("utf-8"))
 
-    def test_get_size_file_not_found(self, temp_dir):
+    def test_get_size_file_not_found(self, temp_dir: Path) -> None:
         """Test getting size of non-existent file."""
         service = FilesystemService(self.mock_config)
         nonexistent_file = temp_dir / "nonexistent.txt"
@@ -344,7 +345,7 @@ class TestFilesystemService:
         with pytest.raises(PathError, match="File not found"):
             get_size(nonexistent_file)
 
-    def test_list_files_simple(self, temp_dir):
+    def test_list_files_simple(self, temp_dir: Path) -> None:
         """Test listing files in directory."""
         service = FilesystemService(self.mock_config)
 
@@ -358,7 +359,7 @@ class TestFilesystemService:
         file_names = {f.name for f in files}
         assert file_names == {"file1.txt", "file2.txt"}
 
-    def test_list_files_recursive(self, temp_dir):
+    def test_list_files_recursive(self, temp_dir: Path) -> None:
         """Test recursive file listing."""
         service = FilesystemService(self.mock_config)
 
@@ -373,7 +374,7 @@ class TestFilesystemService:
         file_names = {f.name for f in files}
         assert file_names == {"file1.txt", "file2.txt"}
 
-    def test_list_files_directory_not_found(self, temp_dir):
+    def test_list_files_directory_not_found(self, temp_dir: Path) -> None:
         """Test listing files in non-existent directory."""
         service = FilesystemService(self.mock_config)
         nonexistent_dir = temp_dir / "nonexistent"
@@ -383,7 +384,7 @@ class TestFilesystemService:
         ):
             list_files(nonexistent_dir)
 
-    def test_temp_file_context_manager(self, temp_dir):
+    def test_temp_file_context_manager(self, temp_dir: Path) -> None:
         """Test temporary file context manager."""
         service = FilesystemService(self.mock_config)
 
@@ -396,7 +397,7 @@ class TestFilesystemService:
             # File should be cleaned up after context exit
             assert not temp_file.exists()
 
-    def test_cleanup_work_dir(self, temp_dir):
+    def test_cleanup_work_dir(self, temp_dir: Path) -> None:
         """Test work directory cleanup."""
         service = FilesystemService(self.mock_config)
         service._work_dir = temp_dir
@@ -412,7 +413,7 @@ class TestFilesystemService:
 class TestUtilityFunctions:
     """Test standalone utility functions (not part of FilesystemService)."""
 
-    def test_atomic_write(self, temp_dir):
+    def test_atomic_write(self, temp_dir: Path) -> None:
         """Test global atomic_write function."""
         test_file = temp_dir / "test.txt"
         content = "Global write test"
@@ -422,7 +423,7 @@ class TestUtilityFunctions:
         assert test_file.exists()
         assert test_file.read_text() == content
 
-    def test_global_read_text(self, temp_dir):
+    def test_global_read_text(self, temp_dir: Path) -> None:
         """Test global read_text function."""
         test_file = temp_dir / "test.txt"
         content = "Global read test"
@@ -432,7 +433,7 @@ class TestUtilityFunctions:
 
         assert result == content
 
-    def test_global_read_bytes(self, temp_dir):
+    def test_global_read_bytes(self, temp_dir: Path) -> None:
         """Test global read_bytes function."""
         test_file = temp_dir / "test.bin"
         content = b"Global read bytes test"
@@ -442,7 +443,7 @@ class TestUtilityFunctions:
 
         assert result == content
 
-    def test_global_ensure_dir(self, temp_dir):
+    def test_global_ensure_dir(self, temp_dir: Path) -> None:
         """Test global ensure_dir function."""
         new_dir = temp_dir / "new_dir"
 
@@ -451,7 +452,7 @@ class TestUtilityFunctions:
         assert result == new_dir
         assert new_dir.exists()
 
-    def test_global_safe_remove(self, temp_dir):
+    def test_global_safe_remove(self, temp_dir: Path) -> None:
         """Test global safe_remove function."""
         test_file = temp_dir / "test.txt"
         test_file.write_text("content")

@@ -3,6 +3,7 @@
 import pytest
 import time
 import threading
+from typing import Any
 from unittest.mock import Mock, patch
 
 from armadillo.core.time import (
@@ -206,7 +207,7 @@ class TestTimeoutManager:
         # The test passes if we can start and stop without errors
 
     @patch("time.time")
-    def test_global_deadline_exceeded(self, mock_time) -> None:
+    def test_global_deadline_exceeded(self, mock_time: Any) -> None:
         """Test global deadline exceeded detection."""
         manager = TimeoutManager()
 
@@ -221,6 +222,7 @@ class TestTimeoutManager:
 
         with patch.object(manager, "_trigger_watchdog_timeout") as mock_trigger:
             # This would normally be called by watchdog loop
+            assert manager._global_deadline is not None
             assert manager._global_deadline <= time.time()
             # In real scenario, watchdog would trigger timeout
 

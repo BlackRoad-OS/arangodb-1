@@ -226,4 +226,3 @@ def test_slow_3() -> None:
         assert (
             "global timeout" in output.lower() or "timeout" in output.lower()
         ), f"Expected global timeout message in output, got: {output}"
-

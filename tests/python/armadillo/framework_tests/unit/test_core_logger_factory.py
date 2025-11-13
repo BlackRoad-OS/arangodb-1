@@ -24,15 +24,15 @@ from armadillo.core.log import (
 class TestIsolatedLogManager:
     """Test isolated log manager functionality."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.manager = IsolatedLogManager("test")
 
-    def teardown_method(self):
+    def teardown_method(self) -> None:
         """Clean up after test."""
         self.manager.shutdown()
 
-    def test_basic_logger_creation(self):
+    def test_basic_logger_creation(self) -> None:
         """Test basic logger creation with namespace isolation."""
         self.manager.configure(enable_json=False, enable_console=False)
 
@@ -42,7 +42,7 @@ class TestIsolatedLogManager:
         assert logger.propagate is False
         assert logger.level == logging.DEBUG
 
-    def test_namespace_isolation(self):
+    def test_namespace_isolation(self) -> None:
         """Test that different namespaces create isolated loggers."""
         manager1 = IsolatedLogManager("ns1")
         manager2 = IsolatedLogManager("ns2")
@@ -61,7 +61,7 @@ class TestIsolatedLogManager:
             manager1.shutdown()
             manager2.shutdown()
 
-    def test_reconfiguration_allowed(self):
+    def test_reconfiguration_allowed(self) -> None:
         """Test that reconfiguration is allowed for test isolation."""
         # First configuration
         self.manager.configure(
@@ -79,7 +79,7 @@ class TestIsolatedLogManager:
         assert logger1.name == "test.test"
         assert logger2.name == "test.test2"
 
-    def test_context_management(self):
+    def test_context_management(self) -> None:
         """Test context management functionality."""
         self.manager.configure(enable_json=False, enable_console=False)
 
@@ -96,7 +96,7 @@ class TestIsolatedLogManager:
         self.manager.clear_context()
         assert self.manager.get_context() == {}
 
-    def test_context_manager(self):
+    def test_context_manager(self) -> None:
         """Test context manager functionality."""
         self.manager.configure(enable_json=False, enable_console=False)
 
@@ -167,7 +167,7 @@ class TestIsolatedLogManager:
             if log_file.exists():
                 log_file.unlink()
 
-    def test_logger_caching(self):
+    def test_logger_caching(self) -> None:
         """Test that loggers are cached and reused."""
         self.manager.configure(enable_json=False, enable_console=False)
 
@@ -176,7 +176,7 @@ class TestIsolatedLogManager:
 
         assert logger1 is logger2
 
-    def test_shutdown_cleanup(self):
+    def test_shutdown_cleanup(self) -> None:
         """Test that shutdown properly cleans up resources."""
         with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f:
             log_file = Path(f.name)
@@ -202,24 +202,24 @@ class TestIsolatedLogManager:
 class TestStandardLoggerFactory:
     """Test standard logger factory implementation."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.factory = StandardLoggerFactory(
             namespace="factory_test", enable_json=False, enable_console=False
         )
 
-    def teardown_method(self):
+    def teardown_method(self) -> None:
         """Clean up after test."""
         self.factory.shutdown()
 
-    def test_logger_creation(self):
+    def test_logger_creation(self) -> None:
         """Test logger creation through factory."""
         logger = self.factory.create_logger("test")
 
         assert logger.name == "factory_test.test"
         assert logger.propagate is False
 
-    def test_context_convenience_methods(self):
+    def test_context_convenience_methods(self) -> None:
         """Test context management convenience methods."""
         # Set context
         self.factory.set_context(test="value")
@@ -233,7 +233,7 @@ class TestStandardLoggerFactory:
         self.factory.clear_context()
         assert self.factory.get_context() == {}
 
-    def test_protocol_compliance(self):
+    def test_protocol_compliance(self) -> None:
         """Test that StandardLoggerFactory implements LoggerFactory protocol."""
         assert hasattr(self.factory, "create_logger")
         assert hasattr(self.factory, "shutdown")
@@ -244,11 +244,11 @@ class TestStandardLoggerFactory:
 class TestLoggingEventFunctions:
     """Test logging event utility functions."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test environment."""
         self.mock_logger = Mock()
 
-    def test_log_event(self):
+    def test_log_event(self) -> None:
         """Test generic event logging."""
         log_event(self.mock_logger, "custom", "Test event", extra_field="value")
 
@@ -256,7 +256,7 @@ class TestLoggingEventFunctions:
             "Test event", extra={"event_type": "custom", "extra_field": "value"}
         )
 
-    def test_log_process_event(self):
+    def test_log_process_event(self) -> None:
         """Test process event logging."""
         log_process_event(self.mock_logger, "started", pid=1234, command="test")
 
@@ -270,7 +270,7 @@ class TestLoggingEventFunctions:
             "Process %s %s", 1234, "started", extra=expected_extra
         )
 
-    def test_log_process_event_without_pid(self):
+    def test_log_process_event_without_pid(self) -> None:
         """Test process event logging without PID."""
         log_process_event(self.mock_logger, "failed")
 
@@ -279,7 +279,7 @@ class TestLoggingEventFunctions:
             "Process %s %s", None, "failed", extra=expected_extra
         )
 
-    def test_log_server_event(self):
+    def test_log_server_event(self) -> None:
         """Test server event logging."""
         log_server_event(self.mock_logger, "startup", server_id="srv_1", port=8529)
 
@@ -293,7 +293,7 @@ class TestLoggingEventFunctions:
             "Server %s %s", "srv_1", "startup", extra=expected_extra
         )
 
-    def test_log_server_event_without_id(self):
+    def test_log_server_event_without_id(self) -> None:
         """Test server event logging without server ID."""
         log_server_event(self.mock_logger, "shutdown")
 
@@ -302,7 +302,7 @@ class TestLoggingEventFunctions:
             "Server %s %s", None, "shutdown", extra=expected_extra
         )
 
-    def test_log_test_event(self):
+    def test_log_test_event(self) -> None:
         """Test test event logging."""
         log_test_event(
             self.mock_logger, "started", test_name="test_feature", suite="integration"
@@ -318,7 +318,7 @@ class TestLoggingEventFunctions:
             "Test %s %s", "test_feature", "started", extra=expected_extra
         )
 
-    def test_log_test_event_without_name(self):
+    def test_log_test_event_without_name(self) -> None:
         """Test test event logging without test name."""
         log_test_event(self.mock_logger, "completed")
 
@@ -331,7 +331,7 @@ class TestLoggingEventFunctions:
 class TestLoggerFactoryIsolation:
     """Test that different logger factories are properly isolated."""
 
-    def test_multiple_factories_isolation(self):
+    def test_multiple_factories_isolation(self) -> None:
         """Test that multiple factories don't interfere with each other."""
         factory1 = StandardLoggerFactory(
             namespace="test1", enable_json=False, enable_console=False
@@ -360,7 +360,7 @@ class TestLoggerFactoryIsolation:
             factory1.shutdown()
             factory2.shutdown()
 
-    def test_factory_context_doesnt_leak_to_global(self):
+    def test_factory_context_doesnt_leak_to_global(self) -> None:
         """Test that factory context doesn't leak to global context."""
         from armadillo.core.log import get_log_context, clear_log_context
 

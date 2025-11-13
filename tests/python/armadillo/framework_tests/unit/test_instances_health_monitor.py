@@ -1,23 +1,25 @@
 """Unit tests for HealthMonitor."""
 
 import pytest
+from typing import Any
 from unittest.mock import Mock, MagicMock, patch
 from armadillo.instances.health_monitor import HealthMonitor
 from armadillo.core.types import HealthStatus, ServerRole, ServerStats
 from armadillo.core.errors import HealthCheckError
+from armadillo.core.value_objects import ServerId
 
 
 class TestHealthMonitor:
     """Test HealthMonitor basic functionality."""
 
-    def test_init(self):
+    def test_init(self) -> None:
         """Test HealthMonitor initialization."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
 
         assert monitor._logger == mock_logger
 
-    def test_check_server_health_success(self):
+    def test_check_server_health_success(self) -> None:
         """Test checking healthy server."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -33,7 +35,7 @@ class TestHealthMonitor:
         assert result == healthy_status
         mock_server.health_check_sync.assert_called_once_with(timeout=10.0)
 
-    def test_check_server_health_failure(self):
+    def test_check_server_health_failure(self) -> None:
         """Test checking unhealthy server."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -45,9 +47,10 @@ class TestHealthMonitor:
         result = monitor.check_server_health(mock_server, timeout=10.0)
 
         assert not result.is_healthy
+        assert result.error_message is not None
         assert "Connection failed" in result.error_message
 
-    def test_check_deployment_health_all_healthy(self):
+    def test_check_deployment_health_all_healthy(self) -> None:
         """Test checking deployment with all healthy servers."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -64,14 +67,14 @@ class TestHealthMonitor:
             is_healthy=True, response_time=0.1
         )
 
-        servers = {"server1": server1, "server2": server2}
+        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
 
         result = monitor.check_deployment_health(servers, timeout=30.0)
 
         assert result.is_healthy
         assert result.error_message is None
 
-    def test_check_deployment_health_some_unhealthy(self):
+    def test_check_deployment_health_some_unhealthy(self) -> None:
         """Test checking deployment with some unhealthy servers."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -88,15 +91,16 @@ class TestHealthMonitor:
             is_healthy=False, response_time=0.2, error_message="Not responding"
         )
 
-        servers = {"server1": server1, "server2": server2}
+        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
 
         result = monitor.check_deployment_health(servers, timeout=30.0)
 
         assert not result.is_healthy
+        assert result.error_message is not None
         assert "server2" in result.error_message
         assert "1/2 servers unhealthy" in result.error_message
 
-    def test_check_deployment_health_empty_servers(self):
+    def test_check_deployment_health_empty_servers(self) -> None:
         """Test checking deployment with no servers."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -104,9 +108,10 @@ class TestHealthMonitor:
         result = monitor.check_deployment_health({}, timeout=30.0)
 
         assert not result.is_healthy
+        assert result.error_message is not None
         assert "No servers" in result.error_message
 
-    def test_collect_server_stats_success(self):
+    def test_collect_server_stats_success(self) -> None:
         """Test collecting server statistics."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -127,7 +132,7 @@ class TestHealthMonitor:
         assert result == mock_stats
         mock_server.get_stats.assert_called_once()
 
-    def test_collect_server_stats_failure(self):
+    def test_collect_server_stats_failure(self) -> None:
         """Test collecting stats from failed server."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -140,7 +145,7 @@ class TestHealthMonitor:
 
         assert result is None
 
-    def test_collect_deployment_stats(self):
+    def test_collect_deployment_stats(self) -> None:
         """Test collecting stats from multiple servers."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -167,20 +172,20 @@ class TestHealthMonitor:
         )
         server2.get_stats.return_value = stats2
 
-        servers = {"server1": server1, "server2": server2}
+        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
 
         result = monitor.collect_deployment_stats(servers)
 
         assert len(result) == 2
-        assert result["server1"] == stats1
-        assert result["server2"] == stats2
+        assert result[ServerId("server1")] == stats1
+        assert result[ServerId("server2")] == stats2
 
 
 class TestHealthMonitorReadiness:
     """Test HealthMonitor readiness checking."""
 
     @patch("armadillo.instances.health_monitor.requests.get")
-    def test_check_coordinator_readiness_success(self, mock_get):
+    def test_check_coordinator_readiness_success(self, mock_get: Any) -> None:
         """Test checking coordinator readiness."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -204,7 +209,7 @@ class TestHealthMonitorReadiness:
         assert call_args[1]["timeout"] == 10.0
 
     @patch("armadillo.instances.health_monitor.requests.get")
-    def test_check_agent_readiness_success(self, mock_get):
+    def test_check_agent_readiness_success(self, mock_get: Any) -> None:
         """Test checking agent readiness."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -226,7 +231,7 @@ class TestHealthMonitorReadiness:
         assert "/_api/agency/read" in mock_get.call_args[0][0]
 
     @patch("armadillo.instances.health_monitor.requests.get")
-    def test_check_readiness_failure(self, mock_get):
+    def test_check_readiness_failure(self, mock_get: Any) -> None:
         """Test readiness check failure."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -242,10 +247,11 @@ class TestHealthMonitorReadiness:
         is_ready, error = monitor.check_server_readiness(mock_server, timeout=10.0)
 
         assert not is_ready
+        assert error is not None
         assert "500" in error
 
     @patch("armadillo.instances.health_monitor.requests.get")
-    def test_check_readiness_service_api_disabled(self, mock_get):
+    def test_check_readiness_service_api_disabled(self, mock_get: Any) -> None:
         """Test readiness check when service API is disabled."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -274,7 +280,7 @@ class TestHealthMonitorReadiness:
         assert is_ready
         assert error is None
 
-    def test_verify_deployment_ready_success(self):
+    def test_verify_deployment_ready_success(self) -> None:
         """Test verifying all servers are ready."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -287,14 +293,14 @@ class TestHealthMonitorReadiness:
             server2 = Mock()
             server2.server_id = "server2"
 
-            servers = {"server1": server1, "server2": server2}
+            servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
 
             # Should not raise
             monitor.verify_deployment_ready(servers, timeout=60.0)
 
             assert mock_check.call_count == 2
 
-    def test_verify_deployment_ready_failure(self):
+    def test_verify_deployment_ready_failure(self) -> None:
         """Test verifying deployment with unready servers."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -305,7 +311,7 @@ class TestHealthMonitorReadiness:
             server1 = Mock()
             server1.server_id = "server1"
 
-            servers = {"server1": server1}
+            servers: dict[ServerId, Any] = {ServerId("server1"): server1}
 
             with pytest.raises(HealthCheckError, match="not ready"):
                 monitor.verify_deployment_ready(servers, timeout=60.0)
@@ -314,7 +320,7 @@ class TestHealthMonitorReadiness:
 class TestHealthMonitorIntegration:
     """Test HealthMonitor integration scenarios."""
 
-    def test_deployment_health_with_mixed_states(self):
+    def test_deployment_health_with_mixed_states(self) -> None:
         """Test deployment health with servers in various states."""
         mock_logger = Mock()
         monitor = HealthMonitor(mock_logger)
@@ -338,10 +344,11 @@ class TestHealthMonitorIntegration:
         server3.server_id = "server3"
         server3.health_check_sync.side_effect = Exception("Network timeout")
 
-        servers = {"server1": server1, "server2": server2, "server3": server3}
+        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2, ServerId("server3"): server3}
 
         result = monitor.check_deployment_health(servers, timeout=30.0)
 
         assert not result.is_healthy
+        assert result.error_message is not None
         assert "2/3 servers unhealthy" in result.error_message
         assert "server2" in result.error_message or "server3" in result.error_message

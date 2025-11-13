@@ -1143,7 +1143,7 @@ def create_package_deployment(package_name: str) -> Any:
                 package_name,
             )
             cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-            plan = manager.create_deployment_plan(cluster_config)
+            plan = manager.create_cluster_deployment_plan(cluster_config)
             manager.deploy_servers(plan, timeout=300.0)
             logger.info("Package cluster deployment %s ready", deployment_id)
             plugin._package_deployments[deployment_id] = manager

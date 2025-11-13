@@ -10,6 +10,7 @@ from pathlib import Path
 
 from armadillo.core.process import ProcessSupervisor
 from armadillo.core.errors import ProcessStartupError
+from armadillo.core.value_objects import ServerId
 
 
 class TestProcessSupervisorMinimal:
@@ -36,22 +37,24 @@ class TestProcessSupervisorMinimal:
         # Test with invalid command should not crash the supervisor
         try:
             result = self.supervisor.start(
-                "test_invalid", ["nonexistent_command_12345"], inherit_console=True
+                ServerId("test_invalid"),
+                ["nonexistent_command_12345"],
+                inherit_console=True,
             )
         except Exception:
             pass  # Expected to fail, just ensure it doesn't crash badly
 
     def test_is_running_nonexistent_process(self) -> None:
         """Test checking if nonexistent process is running."""
-        assert self.supervisor.is_running("nonexistent") is False
+        assert self.supervisor.is_running(ServerId("nonexistent")) is False
 
     def test_is_running_returns_boolean(self) -> None:
         """Test is_running returns boolean values."""
         # Should return False for nonexistent process
-        assert self.supervisor.is_running("nonexistent") is False
+        assert self.supervisor.is_running(ServerId("nonexistent")) is False
 
         # Method should always return a boolean
-        result = self.supervisor.is_running("any_process_id")
+        result = self.supervisor.is_running(ServerId("any_process_id"))
         assert isinstance(result, bool)
 
     def test_list_processes_returns_list(self) -> None:
@@ -65,7 +68,7 @@ class TestProcessSupervisorMinimal:
         """Test stopping nonexistent process doesn't crash."""
         # Should not raise error
         try:
-            self.supervisor.stop("nonexistent")
+            self.supervisor.stop(ServerId("nonexistent"))
         except Exception:
             pytest.fail("stop() should handle nonexistent processes gracefully")
 
@@ -97,12 +100,14 @@ class TestProcessSupervisorErrorHandling:
 
         # Should handle invalid inputs gracefully
         try:
-            supervisor.start("test", ["nonexistent_command_xyz"], inherit_console=True)
+            supervisor.start(
+                ServerId("test"), ["nonexistent_command_xyz"], inherit_console=True
+            )
         except Exception:
             pass  # Expected to fail, just ensure no crash
 
         # Should still be functional
-        assert supervisor.is_running("test") is False
+        assert supervisor.is_running(ServerId("test")) is False
 
 
 class TestModuleLevelFunctions:
@@ -116,7 +121,7 @@ class TestModuleLevelFunctions:
 
         # Test it handles bad input gracefully
         try:
-            start_supervised_process("test", ["nonexistent_xyz"])
+            start_supervised_process(ServerId("test"), ["nonexistent_xyz"])
         except Exception:
             pass  # Expected to fail, just ensure function exists
 
@@ -127,7 +132,7 @@ class TestModuleLevelFunctions:
         assert callable(is_process_running)
 
         # Should return False for nonexistent process
-        result = is_process_running("nonexistent_test_process_xyz")
+        result = is_process_running(ServerId("nonexistent_test_process_xyz"))
         assert isinstance(result, bool)
 
 
@@ -176,6 +181,6 @@ class TestBasicIntegration:
         assert hasattr(supervisor, "list_processes")
 
         # Should work with nonexistent processes
-        assert supervisor.is_running("nonexistent") is False
+        assert supervisor.is_running(ServerId("nonexistent")) is False
         processes = supervisor.list_processes()
         assert isinstance(processes, list)

@@ -4,13 +4,14 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
+from typing import Generator
 from unittest.mock import Mock, patch
 
 from armadillo.core.types import ArmadilloConfig, DeploymentMode
 
 
 @pytest.fixture
-def temp_dir():
+def temp_dir() -> Generator[Path, None, None]:
     """Provide a temporary directory for tests."""
     temp_path = Path(tempfile.mkdtemp(prefix="armadillo_test_"))
     try:
@@ -21,7 +22,7 @@ def temp_dir():
 
 
 @pytest.fixture
-def mock_config():
+def mock_config() -> ArmadilloConfig:
     """Provide a mock configuration for testing."""
     return ArmadilloConfig(
         deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -33,7 +34,7 @@ def mock_config():
 
 
 @pytest.fixture
-def isolated_environment(temp_dir):
+def isolated_environment(temp_dir: Path) -> Generator[Path, None, None]:
     """Provide an isolated environment for tests."""
     # Mock environment variables
     with patch.dict("os.environ", {}, clear=True):
@@ -48,7 +49,7 @@ def isolated_environment(temp_dir):
 
 
 @pytest.fixture
-def mock_process():
+def mock_process() -> Generator[Mock, None, None]:
     """Mock subprocess.Popen for process testing."""
     mock_popen = Mock()
     mock_popen.pid = 12345
@@ -62,7 +63,7 @@ def mock_process():
 
 
 @pytest.fixture
-def mock_logger():
+def mock_logger() -> Generator[Mock, None, None]:
     """Mock logger for testing."""
     with patch("armadillo.core.log.get_logger") as mock_get_logger:
         logger = Mock()
@@ -71,7 +72,7 @@ def mock_logger():
 
 
 @pytest.fixture
-def reset_global_state():
+def reset_global_state() -> Generator[None, None, None]:
     """Reset global state between tests. Not autouse - only used when needed."""
     # For unit tests, we need minimal setup and teardown to avoid expensive operations
 

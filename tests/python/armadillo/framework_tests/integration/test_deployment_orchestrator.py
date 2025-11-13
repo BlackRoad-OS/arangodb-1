@@ -8,6 +8,8 @@ These tests verify that the orchestrator correctly:
 """
 
 import pytest
+from pathlib import Path
+from typing import Generator, Any
 from unittest.mock import Mock, MagicMock, patch
 from concurrent.futures import ThreadPoolExecutor
 
@@ -27,13 +29,13 @@ from armadillo.instances.health_monitor import HealthMonitor
 
 
 @pytest.fixture
-def logger():
+def logger() -> Any:
     """Create logger for tests."""
     return get_logger(__name__)
 
 
 @pytest.fixture
-def executor():
+def executor() -> Generator[ThreadPoolExecutor, None, None]:
     """Create thread pool executor."""
     executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="test-orchestrator")
     yield executor
@@ -41,27 +43,27 @@ def executor():
 
 
 @pytest.fixture
-def server_factory():
+def server_factory() -> Mock:
     """Create mock server factory."""
     factory = Mock(spec=ServerFactory)
     return factory
 
 
 @pytest.fixture
-def health_monitor():
+def health_monitor() -> Mock:
     """Create mock health monitor."""
     monitor = Mock(spec=HealthMonitor)
     return monitor
 
 
 @pytest.fixture
-def timeout_config():
+def timeout_config() -> TimeoutConfig:
     """Create timeout configuration."""
     return TimeoutConfig()
 
 
 @pytest.fixture
-def orchestrator(logger, server_factory, executor, timeout_config):
+def orchestrator(logger: Any, server_factory: Mock, executor: ThreadPoolExecutor, timeout_config: TimeoutConfig) -> DeploymentOrchestrator:
     """Create orchestrator instance."""
     return DeploymentOrchestrator(
         logger=logger,
@@ -86,16 +88,16 @@ class TestSingleServerDeployment:
     """Test single server deployment lifecycle."""
 
     def test_execute_deployment_populates_servers_dict(
-        self, orchestrator, server_factory, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, health_monitor: Mock
+    ) -> None:
         """Verify execute_deployment creates and stores server in internal dict."""
         # Setup
         plan = SingleServerDeploymentPlan(
             server=ServerConfig(
                 role=ServerRole.SINGLE,
                 port=8529,
-                data_dir="/tmp/test",
-                log_file="/tmp/test/arangod.log",
+                data_dir=Path("/tmp/test"),
+                log_file=Path("/tmp/test/arangod.log"),
             ),
         )
 
@@ -117,16 +119,16 @@ class TestSingleServerDeployment:
         assert servers[ServerId("SNGL-1")] == mock_server
 
     def test_shutdown_clears_servers_dict(
-        self, orchestrator, server_factory, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, health_monitor: Mock
+    ) -> None:
         """Verify shutdown_deployment releases servers and clears internal dict."""
         # Setup deployment first
         plan = SingleServerDeploymentPlan(
             server=ServerConfig(
                 role=ServerRole.SINGLE,
                 port=8529,
-                data_dir="/tmp/test",
-                log_file="/tmp/test/arangod.log",
+                data_dir=Path("/tmp/test"),
+                log_file=Path("/tmp/test/arangod.log"),
             ),
         )
 
@@ -145,7 +147,7 @@ class TestSingleServerDeployment:
         # Verify
         mock_server.stop.assert_called_once()
 
-    def test_shutdown_with_no_servers(self, orchestrator) -> None:
+    def test_shutdown_with_no_servers(self, orchestrator: DeploymentOrchestrator) -> None:
         """Verify shutdown with empty deployment does not error."""
         # Create empty deployment
         from armadillo.instances.deployment import (
@@ -161,8 +163,8 @@ class TestSingleServerDeployment:
                 server=ServerConfig(
                     role=ServerRole.SINGLE,
                     port=8529,
-                    data_dir="/tmp/test",
-                    log_file="/tmp/test/arangod.log",
+                    data_dir=Path("/tmp/test"),
+                    log_file=Path("/tmp/test/arangod.log"),
                 )
             ),
             server=Mock(),
@@ -178,8 +180,8 @@ class TestClusterDeployment:
     """Test cluster deployment lifecycle and ordering."""
 
     def test_cluster_deployment_success(
-        self, orchestrator, server_factory, executor, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, executor: ThreadPoolExecutor, health_monitor: Mock
+    ) -> None:
         """Verify cluster deployment succeeds and all servers are present."""
         # Setup cluster plan
         plan = ClusterDeploymentPlan(
@@ -187,38 +189,38 @@ class TestClusterDeployment:
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8531,
-                    data_dir="/tmp/agent1",
-                    log_file="/tmp/agent1/arangod.log",
+                    data_dir=Path("/tmp/agent1"),
+                    log_file=Path("/tmp/agent1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8532,
-                    data_dir="/tmp/agent2",
-                    log_file="/tmp/agent2/arangod.log",
+                    data_dir=Path("/tmp/agent2"),
+                    log_file=Path("/tmp/agent2/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8533,
-                    data_dir="/tmp/agent3",
-                    log_file="/tmp/agent3/arangod.log",
+                    data_dir=Path("/tmp/agent3"),
+                    log_file=Path("/tmp/agent3/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8629,
-                    data_dir="/tmp/dbserver1",
-                    log_file="/tmp/dbserver1/arangod.log",
+                    data_dir=Path("/tmp/dbserver1"),
+                    log_file=Path("/tmp/dbserver1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8630,
-                    data_dir="/tmp/dbserver2",
-                    log_file="/tmp/dbserver2/arangod.log",
+                    data_dir=Path("/tmp/dbserver2"),
+                    log_file=Path("/tmp/dbserver2/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.COORDINATOR,
                     port=8529,
-                    data_dir="/tmp/coord1",
-                    log_file="/tmp/coord1/arangod.log",
+                    data_dir=Path("/tmp/coord1"),
+                    log_file=Path("/tmp/coord1/arangod.log"),
                 ),
             ],
         )
@@ -264,8 +266,8 @@ class TestClusterDeployment:
         assert sum(1 for s in servers.values() if s.role == ServerRole.COORDINATOR) == 1
 
     def test_cluster_shutdown_role_based_order(
-        self, orchestrator, server_factory, executor, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, executor: ThreadPoolExecutor, health_monitor: Mock
+    ) -> None:
         """Verify cluster shuts down in role-based order: non-agents → agents."""
         # Setup and deploy cluster
         plan = ClusterDeploymentPlan(
@@ -273,20 +275,20 @@ class TestClusterDeployment:
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8531,
-                    data_dir="/tmp/agent1",
-                    log_file="/tmp/agent1/arangod.log",
+                    data_dir=Path("/tmp/agent1"),
+                    log_file=Path("/tmp/agent1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8629,
-                    data_dir="/tmp/dbserver1",
-                    log_file="/tmp/dbserver1/arangod.log",
+                    data_dir=Path("/tmp/dbserver1"),
+                    log_file=Path("/tmp/dbserver1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.COORDINATOR,
                     port=8529,
-                    data_dir="/tmp/coord1",
-                    log_file="/tmp/coord1/arangod.log",
+                    data_dir=Path("/tmp/coord1"),
+                    log_file=Path("/tmp/coord1/arangod.log"),
                 ),
             ],
         )
@@ -307,9 +309,9 @@ class TestClusterDeployment:
         deployment = orchestrator.execute_deployment(plan, timeout=60.0)
 
         # Track shutdown order
-        shutdown_calls = []
+        shutdown_calls: list[Any] = []
 
-        def track_stop(*args, **kwargs):
+        def track_stop(*args: Any, **kwargs: Any) -> None:
             shutdown_calls.append(args[0] if args else None)
 
         # Replace stop methods to track call order
@@ -339,15 +341,15 @@ class TestEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_duplicate_deployment_detection(
-        self, orchestrator, server_factory, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, health_monitor: Mock
+    ) -> None:
         """Verify executing deployment twice without shutdown is handled."""
         plan = SingleServerDeploymentPlan(
             server=ServerConfig(
                 role=ServerRole.SINGLE,
                 port=8529,
-                data_dir="/tmp/test",
-                log_file="/tmp/test/arangod.log",
+                data_dir=Path("/tmp/test"),
+                log_file=Path("/tmp/test/arangod.log"),
             ),
         )
 
@@ -375,28 +377,28 @@ class TestEdgeCases:
         assert ServerId("SNGL-2") in servers
 
     def test_partial_startup_failure_cleanup(
-        self, orchestrator, server_factory, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, health_monitor: Mock
+    ) -> None:
         """Verify partial deployment failure triggers cleanup."""
         plan = ClusterDeploymentPlan(
             servers=[
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8531,
-                    data_dir="/tmp/agent1",
-                    log_file="/tmp/agent1/arangod.log",
+                    data_dir=Path("/tmp/agent1"),
+                    log_file=Path("/tmp/agent1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8629,
-                    data_dir="/tmp/dbserver1",
-                    log_file="/tmp/dbserver1/arangod.log",
+                    data_dir=Path("/tmp/dbserver1"),
+                    log_file=Path("/tmp/dbserver1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.COORDINATOR,
                     port=8529,
-                    data_dir="/tmp/coord1",
-                    log_file="/tmp/coord1/arangod.log",
+                    data_dir=Path("/tmp/coord1"),
+                    log_file=Path("/tmp/coord1/arangod.log"),
                 ),
             ],
         )
@@ -427,34 +429,34 @@ class TestEdgeCases:
         # to shutdown_deployment call or automatic rollback
 
     def test_agent_startup_failure_aborts_sequence(
-        self, orchestrator, server_factory, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, health_monitor: Mock
+    ) -> None:
         """Verify failure during agent startup aborts cluster deployment."""
         plan = ClusterDeploymentPlan(
             servers=[
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8531,
-                    data_dir="/tmp/agent1",
-                    log_file="/tmp/agent1/arangod.log",
+                    data_dir=Path("/tmp/agent1"),
+                    log_file=Path("/tmp/agent1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8629,
-                    data_dir="/tmp/dbserver1",
-                    log_file="/tmp/dbserver1/arangod.log",
+                    data_dir=Path("/tmp/dbserver1"),
+                    log_file=Path("/tmp/dbserver1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.COORDINATOR,
                     port=8529,
-                    data_dir="/tmp/coord1",
-                    log_file="/tmp/coord1/arangod.log",
+                    data_dir=Path("/tmp/coord1"),
+                    log_file=Path("/tmp/coord1/arangod.log"),
                 ),
             ],
         )
 
         # Make server creation fail for agents
-        def create_with_failure(configs):
+        def create_with_failure(configs: Any) -> None:
             # Raise error when trying to create servers (simulating agent start failure)
             raise ServerStartupError("Failed to start agent AGNT-1")
 
@@ -466,35 +468,35 @@ class TestEdgeCases:
 
         # Orchestrator is stateless - no state to check
 
-    def test_get_server_returns_none_for_missing(self, orchestrator) -> None:
+    def test_get_server_returns_none_for_missing(self, orchestrator: DeploymentOrchestrator) -> None:
         """Verify get_server is no longer available (orchestrator is stateless)."""
         # Orchestrator no longer stores deployment state
         # This test is no longer applicable - orchestrator is stateless
         pass
 
     def test_shutdown_continues_on_individual_failure(
-        self, orchestrator, server_factory, health_monitor
-    ):
+        self, orchestrator: DeploymentOrchestrator, server_factory: Mock, health_monitor: Mock
+    ) -> None:
         """Verify shutdown continues even if individual server stop fails."""
         plan = ClusterDeploymentPlan(
             servers=[
                 ServerConfig(
                     role=ServerRole.AGENT,
                     port=8531,
-                    data_dir="/tmp/agent1",
-                    log_file="/tmp/agent1/arangod.log",
+                    data_dir=Path("/tmp/agent1"),
+                    log_file=Path("/tmp/agent1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8629,
-                    data_dir="/tmp/dbserver1",
-                    log_file="/tmp/dbserver1/arangod.log",
+                    data_dir=Path("/tmp/dbserver1"),
+                    log_file=Path("/tmp/dbserver1/arangod.log"),
                 ),
                 ServerConfig(
                     role=ServerRole.DBSERVER,
                     port=8630,
-                    data_dir="/tmp/dbserver2",
-                    log_file="/tmp/dbserver2/arangod.log",
+                    data_dir=Path("/tmp/dbserver2"),
+                    log_file=Path("/tmp/dbserver2/arangod.log"),
                 ),
             ],
         )

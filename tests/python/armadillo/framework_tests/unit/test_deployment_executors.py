@@ -13,6 +13,8 @@ They use lightweight mocks to avoid spawning real processes.
 """
 
 from types import SimpleNamespace
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, Mock
 import pytest
 
@@ -34,7 +36,7 @@ from armadillo.instances.cluster_bootstrapper import ClusterBootstrapper
 # ---------------------------------------------------------------------------
 
 
-def make_server_config(role: ServerRole, port: int, tmp_path):
+def make_server_config(role: ServerRole, port: int, tmp_path: Path) -> ServerConfig:
     data_dir = tmp_path / f"{role.value}_data"
     log_file = tmp_path / f"{role.value}.log"
     return ServerConfig(
@@ -47,16 +49,19 @@ def make_server_config(role: ServerRole, port: int, tmp_path):
 
 
 class DummyLogger:
-    def info(self, *a, **kw):
+    def info(self, *a: Any, **kw: Any) -> None:
         pass
 
-    def debug(self, *a, **kw):
+    def debug(self, *a: Any, **kw: Any) -> None:
         pass
 
-    def warning(self, *a, **kw):
+    def warning(self, *a: Any, **kw: Any) -> None:
         pass
 
-    def error(self, *a, **kw):
+    def error(self, *a: Any, **kw: Any) -> None:
+        pass
+
+    def exception(self, *a: Any, **kw: Any) -> None:
         pass
 
 
@@ -65,7 +70,7 @@ class DummyLogger:
 # ---------------------------------------------------------------------------
 
 
-def test_single_server_executor_success(tmp_path) -> None:
+def test_single_server_executor_success(tmp_path: Path) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = SingleServerDeploymentPlan(
@@ -81,7 +86,7 @@ def test_single_server_executor_success(tmp_path) -> None:
 
     # Mock factory returning single server dict
     class MockFactory:
-        def create_server_instances(self, servers_config):
+        def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
             assert len(servers_config) == 1
             return {server_id: mock_server}
 
@@ -104,7 +109,7 @@ def test_single_server_executor_success(tmp_path) -> None:
     mock_server.health_check_sync.assert_called_once()
 
 
-def test_single_server_executor_wrong_plan_type(tmp_path) -> None:
+def test_single_server_executor_wrong_plan_type(tmp_path: Path) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -112,7 +117,7 @@ def test_single_server_executor_wrong_plan_type(tmp_path) -> None:
     cluster_plan = ClusterDeploymentPlan(servers=[])
 
     class MockFactory:
-        def create_server_instances(self, servers_config):
+        def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
             return {}
 
     executor = SingleServerExecutor(logger, MockFactory(), timeouts)
@@ -121,7 +126,7 @@ def test_single_server_executor_wrong_plan_type(tmp_path) -> None:
         executor.deploy(cluster_plan)
 
 
-def test_single_server_executor_health_failure(tmp_path) -> None:
+def test_single_server_executor_health_failure(tmp_path: Path) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = SingleServerDeploymentPlan(
@@ -135,7 +140,7 @@ def test_single_server_executor_health_failure(tmp_path) -> None:
     )
 
     class MockFactory:
-        def create_server_instances(self, servers_config):
+        def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
             return {server_id: mock_server}
 
     executor = SingleServerExecutor(logger, MockFactory(), timeouts)
@@ -148,7 +153,7 @@ def test_single_server_executor_health_failure(tmp_path) -> None:
     mock_server.health_check_sync.assert_called_once()
 
 
-def test_single_server_executor_shutdown(tmp_path) -> None:
+def test_single_server_executor_shutdown(tmp_path: Path) -> None:
     """Test single server executor shutdown."""
     logger = DummyLogger()
     timeouts = TimeoutConfig()
@@ -186,7 +191,7 @@ def test_single_server_executor_shutdown(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_cluster_executor_success(tmp_path, monkeypatch) -> None:
+def test_cluster_executor_success(tmp_path: Path, monkeypatch: Any) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
@@ -206,12 +211,12 @@ def test_cluster_executor_success(tmp_path, monkeypatch) -> None:
         servers_dict[sid] = SimpleNamespace(role=cfg.role)
 
     class MockFactory:
-        def create_server_instances(self, servers_config):
+        def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
             assert servers_config == server_configs
             return servers_dict
 
     # Monkeypatch bootstrapper to avoid real startup logic
-    def fake_bootstrap(self, servers, timeout=0):
+    def fake_bootstrap(self: Any, servers: Any, timeout: float = 0) -> None:
         # Just verify servers dict is passed correctly
         assert servers == servers_dict
 
@@ -230,12 +235,12 @@ def test_cluster_executor_success(tmp_path, monkeypatch) -> None:
     executor_pool.shutdown(wait=True)
 
 
-def test_cluster_executor_wrong_plan_type(monkeypatch) -> None:
+def test_cluster_executor_wrong_plan_type(monkeypatch: Any) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
 
     class MockFactory:
-        def create_server_instances(self, servers_config):
+        def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
             return {}
 
     from concurrent.futures import ThreadPoolExecutor
@@ -249,8 +254,8 @@ def test_cluster_executor_wrong_plan_type(monkeypatch) -> None:
         server=ServerConfig(
             role=ServerRole.SINGLE,
             port=18000,
-            data_dir=".",
-            log_file="arangod.log",
+            data_dir=Path("."),
+            log_file=Path("arangod.log"),
             args={},
         )
     )
@@ -261,17 +266,17 @@ def test_cluster_executor_wrong_plan_type(monkeypatch) -> None:
     executor_pool.shutdown(wait=True)
 
 
-def test_cluster_executor_empty_servers(monkeypatch) -> None:
+def test_cluster_executor_empty_servers(monkeypatch: Any) -> None:
     logger = DummyLogger()
     timeouts = TimeoutConfig()
     plan = ClusterDeploymentPlan(servers=[])
 
     class MockFactory:
-        def create_server_instances(self, servers_config):
+        def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
             assert servers_config == []
             return {}
 
-    def fake_bootstrap(self, servers, timeout=0):
+    def fake_bootstrap(self: Any, servers: Any, timeout: float = 0) -> None:
         # Should not be called with empty servers; but if called, do nothing
         return
 
@@ -290,7 +295,7 @@ def test_cluster_executor_empty_servers(monkeypatch) -> None:
     executor_pool.shutdown(wait=True)
 
 
-def test_cluster_executor_shutdown(tmp_path) -> None:
+def test_cluster_executor_shutdown(tmp_path: Path) -> None:
     """Test cluster executor shutdown with role-based order."""
     logger = DummyLogger()
     timeouts = TimeoutConfig()
@@ -312,7 +317,7 @@ def test_cluster_executor_shutdown(tmp_path) -> None:
     coordinator.server_id = ServerId("coordinator_0")
     coordinator.role = ServerRole.COORDINATOR
 
-    servers = {
+    servers: dict[ServerId, Any] = {
         agent1.server_id: agent1,
         agent2.server_id: agent2,
         dbserver.server_id: dbserver,

@@ -5,6 +5,7 @@ Only tests essential functionality with complete mocking - no real filesystem op
 """
 
 import pytest
+from typing import Any
 from unittest.mock import Mock, patch
 from pathlib import Path
 
@@ -36,8 +37,8 @@ class TestValidationFullyMocked:
     @patch("pathlib.Path.is_dir", return_value=True)
     @patch("pathlib.Path.exists", return_value=True)
     def test_validate_build_directory_success(
-        self, mock_exists, mock_is_dir, mock_access
-    ):
+        self, mock_exists: Any, mock_is_dir: Any, mock_access: Any
+    ) -> None:
         """Test validation success with complete mocking."""
         detector = BuildDetector()
 
@@ -49,7 +50,7 @@ class TestValidationFullyMocked:
         assert mock_access.called
 
     @patch("pathlib.Path.exists", return_value=False)
-    def test_validate_build_directory_failure(self, mock_exists) -> None:
+    def test_validate_build_directory_failure(self, mock_exists: Any) -> None:
         """Test validation failure with mocking."""
         detector = BuildDetector()
 
@@ -63,7 +64,7 @@ class TestDetectionFullyMocked:
     """Test detection with complete mocking - no real operations."""
 
     @patch("shutil.which", return_value="/usr/bin/arangod")
-    def test_detect_from_path_success(self, mock_which) -> None:
+    def test_detect_from_path_success(self, mock_which: Any) -> None:
         """Test successful detection from PATH with mocking."""
         detector = BuildDetector()
 
@@ -76,7 +77,7 @@ class TestDetectionFullyMocked:
             assert result == Path("/usr/bin")
 
     @patch("shutil.which", return_value=None)
-    def test_detect_not_found(self, mock_which) -> None:
+    def test_detect_not_found(self, mock_which: Any) -> None:
         """Test when build directory cannot be found."""
         detector = BuildDetector()
 
@@ -151,7 +152,7 @@ class TestErrorHandling:
     """Test error handling scenarios with mocking."""
 
     @patch("shutil.which", side_effect=Exception("Mock error"))
-    def test_handles_which_error_gracefully(self, mock_which) -> None:
+    def test_handles_which_error_gracefully(self, mock_which: Any) -> None:
         """Test that errors in which() don't crash the detector creation."""
         # Just test that we can create a detector even if which() fails
         detector = BuildDetector()
@@ -165,7 +166,7 @@ class TestErrorHandling:
         with patch("pathlib.Path.exists", return_value=False):
             # This should handle None gracefully or raise appropriate error
             try:
-                result = detector.validate_build_directory(None)
+                result = detector.validate_build_directory(None)  # type: ignore[arg-type]  # Testing error handling
                 # If it doesn't crash, that's good
             except (TypeError, AttributeError):
                 # Expected for None input
@@ -177,7 +178,7 @@ class TestMockingStrategies:
 
     @patch.object(BuildDetector, "validate_build_directory")
     @patch("shutil.which")
-    def test_complete_method_mocking(self, mock_which, mock_validate) -> None:
+    def test_complete_method_mocking(self, mock_which: Any, mock_validate: Any) -> None:
         """Test with complete method mocking."""
         mock_which.return_value = None
         mock_validate.return_value = False

@@ -1,11 +1,13 @@
 """Unit tests for ClusterBootstrapper."""
 
 import pytest
+from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from concurrent.futures import ThreadPoolExecutor
 from armadillo.instances.cluster_bootstrapper import ClusterBootstrapper
 from armadillo.core.types import ServerRole
 from armadillo.core.errors import ServerStartupError, AgencyError, ClusterError
+from armadillo.core.value_objects import ServerId
 
 
 class TestClusterBootstrapper:
@@ -34,20 +36,20 @@ class TestClusterBootstrapper:
         agent2 = Mock()
         agent2.role = ServerRole.AGENT
 
-        servers = {
-            "agent1": agent1,
-            "coord1": coord1,
-            "agent2": agent2,
+        servers: dict[ServerId, Any] = {
+            ServerId("agent1"): agent1,
+            ServerId("coord1"): coord1,
+            ServerId("agent2"): agent2,
         }
 
         agents = bootstrapper._get_agents(servers)
 
         assert len(agents) == 2
-        assert ("agent1", agent1) in agents
-        assert ("agent2", agent2) in agents
+        assert (ServerId("agent1"), agent1) in agents
+        assert (ServerId("agent2"), agent2) in agents
 
     @patch("armadillo.instances.cluster_bootstrapper.requests.get")
-    def test_check_agent_config_success(self, mock_get) -> None:
+    def test_check_agent_config_success(self, mock_get: Any) -> None:
         """Test checking agent configuration successfully."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -61,14 +63,14 @@ class TestClusterBootstrapper:
         mock_response.json.return_value = {"leaderId": "agent1", "lastAcked": 123}
         mock_get.return_value = mock_response
 
-        config = bootstrapper._check_agent_config("agent1", mock_server)
+        config = bootstrapper._check_agent_config(ServerId("agent1"), mock_server)
 
         assert config is not None
         assert config["leaderId"] == "agent1"
         assert config["lastAcked"] == 123
 
     @patch("armadillo.instances.cluster_bootstrapper.requests.get")
-    def test_check_agent_config_not_ready(self, mock_get) -> None:
+    def test_check_agent_config_not_ready(self, mock_get: Any) -> None:
         """Test checking agent that's not ready."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -81,7 +83,7 @@ class TestClusterBootstrapper:
         mock_response.status_code = 503
         mock_get.return_value = mock_response
 
-        config = bootstrapper._check_agent_config("agent1", mock_server)
+        config = bootstrapper._check_agent_config(ServerId("agent1"), mock_server)
 
         assert config is None
 
@@ -98,10 +100,10 @@ class TestClusterBootstrapper:
         agent3 = Mock()
         agent3.endpoint = "http://localhost:8533"
 
-        agents = [
-            ("agent1", agent1),
-            ("agent2", agent2),
-            ("agent3", agent3),
+        agents: list[tuple[ServerId, Any]] = [
+            (ServerId("agent1"), agent1),
+            (ServerId("agent2"), agent2),
+            (ServerId("agent3"), agent3),
         ]
 
         # Mock all agents having consensus
@@ -128,7 +130,7 @@ class TestClusterBootstrapper:
 
         agent1 = Mock()
         agent2 = Mock()
-        agents = [("agent1", agent1), ("agent2", agent2)]
+        agents: list[tuple[ServerId, Any]] = [(ServerId("agent1"), agent1), (ServerId("agent2"), agent2)]
 
         # Mock agents disagreeing on leader
         with patch.object(bootstrapper, "_check_agent_config") as mock_check:
@@ -162,10 +164,10 @@ class TestClusterBootstrapper:
         coord1 = Mock()
         coord1.role = ServerRole.COORDINATOR
 
-        servers = {
-            "agent1": agent1,
-            "agent2": agent2,
-            "coord1": coord1,
+        servers: dict[ServerId, Any] = {
+            ServerId("agent1"): agent1,
+            ServerId("agent2"): agent2,
+            ServerId("coord1"): coord1,
         }
 
         bootstrapper._start_servers_by_role(
@@ -190,7 +192,7 @@ class TestClusterBootstrapper:
         agent1 = Mock()
         agent1.role = ServerRole.AGENT
 
-        servers = {"agent1": agent1}
+        servers: dict[ServerId, Any] = {ServerId("agent1"): agent1}
 
         with pytest.raises(ServerStartupError, match="Startup failed"):
             bootstrapper._start_servers_by_role(
@@ -203,7 +205,7 @@ class TestClusterBootstrapper:
         mock_executor = Mock()
         bootstrapper = ClusterBootstrapper(mock_logger, mock_executor)
 
-        servers = {}
+        servers: dict[ServerId, Any] = {}
 
         with pytest.raises(AgencyError, match="No agent servers"):
             bootstrapper.wait_for_agency_ready(servers, timeout=5.0)
@@ -221,10 +223,10 @@ class TestClusterBootstrapper:
         agent3 = Mock()
         agent3.role = ServerRole.AGENT
 
-        servers = {
-            "agent1": agent1,
-            "agent2": agent2,
-            "agent3": agent3,
+        servers: dict[ServerId, Any] = {
+            ServerId("agent1"): agent1,
+            ServerId("agent2"): agent2,
+            ServerId("agent3"): agent3,
         }
 
         # Mock agency becoming ready immediately
@@ -240,13 +242,13 @@ class TestClusterBootstrapper:
         mock_executor = Mock()
         bootstrapper = ClusterBootstrapper(mock_logger, mock_executor)
 
-        servers = {}
+        servers: dict[ServerId, Any] = {}
 
         with pytest.raises(ClusterError, match="No coordinator"):
             bootstrapper.wait_for_cluster_ready(servers, timeout=5.0)
 
     @patch("armadillo.instances.cluster_bootstrapper.requests.get")
-    def test_wait_for_cluster_ready_success(self, mock_get) -> None:
+    def test_wait_for_cluster_ready_success(self, mock_get: Any) -> None:
         """Test successful cluster readiness."""
         mock_logger = Mock()
         mock_executor = Mock()
@@ -256,7 +258,7 @@ class TestClusterBootstrapper:
         coord1.role = ServerRole.COORDINATOR
         coord1.endpoint = "http://localhost:8529"
 
-        servers = {"coord1": coord1}
+        servers: dict[ServerId, Any] = {ServerId("coord1"): coord1}
 
         # Mock successful health check
         mock_response = Mock()
@@ -291,10 +293,10 @@ class TestClusterBootstrapperIntegration:
         coord1.role = ServerRole.COORDINATOR
         coord1.endpoint = "http://localhost:8529"
 
-        servers = {
-            "agent1": agent1,
-            "db1": dbserver1,
-            "coord1": coord1,
+        servers: dict[ServerId, Any] = {
+            ServerId("agent1"): agent1,
+            ServerId("db1"): dbserver1,
+            ServerId("coord1"): coord1,
         }
 
         # Mock agency and cluster ready checks

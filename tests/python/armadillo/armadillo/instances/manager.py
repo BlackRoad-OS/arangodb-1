@@ -126,7 +126,7 @@ class InstanceManager:
         server_id = ServerId(str(self.deployment_id))
         return self._app_context.deployment_planner.create_single_server_plan(server_id)
 
-    def create_deployment_plan(
+    def create_cluster_deployment_plan(
         self, cluster_config: Optional[ClusterConfig] = None
     ) -> DeploymentPlan:
         """Create deployment plan for cluster using injected planner.

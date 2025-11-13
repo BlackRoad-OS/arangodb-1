@@ -29,10 +29,10 @@ class TestApplicationContext:
 
         # Attempting to modify should raise FrozenInstanceError
         with pytest.raises(Exception):  # dataclass FrozenInstanceError
-            ctx.config = ArmadilloConfig()
+            ctx.config = ArmadilloConfig()  # type: ignore[misc]  # Testing immutability
 
         with pytest.raises(Exception):
-            ctx.logger = Mock()
+            ctx.logger = Mock()  # type: ignore[misc]  # Testing immutability
 
     def test_create_with_all_defaults(self) -> None:
         """Should create valid context with all default dependencies."""
@@ -190,7 +190,7 @@ class TestApplicationContextForTesting:
 class TestApplicationContextIntegration:
     """Integration tests for ApplicationContext with real dependencies."""
 
-    def test_context_with_real_dependencies(self, tmp_path) -> None:
+    def test_context_with_real_dependencies(self, tmp_path: Path) -> None:
         """Should work with real dependency implementations."""
         config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
@@ -218,7 +218,7 @@ class TestApplicationContextIntegration:
         test_dir = ctx.filesystem.work_dir()
         assert test_dir.exists()
 
-    def test_multiple_contexts_are_independent(self, tmp_path) -> None:
+    def test_multiple_contexts_are_independent(self, tmp_path: Path) -> None:
         """Multiple contexts should not interfere with each other."""
         config1 = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
