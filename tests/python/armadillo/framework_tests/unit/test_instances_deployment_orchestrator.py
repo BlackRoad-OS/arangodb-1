@@ -37,7 +37,7 @@ class TestDeploymentOrchestrator:
 
         # Create single server plan
         plan = SingleServerDeploymentPlan(server=Mock())
-        executor = orchestrator._create_executor(plan)
+        executor = orchestrator._executor_factory.create_executor(plan)
 
         # Verify correct executor type
         from armadillo.instances.deployment_executor import SingleServerExecutor
@@ -58,7 +58,7 @@ class TestDeploymentOrchestrator:
 
         # Create cluster plan
         plan = ClusterDeploymentPlan()
-        executor = orchestrator._create_executor(plan)
+        executor = orchestrator._executor_factory.create_executor(plan)
 
         # Verify correct executor type
         from armadillo.instances.deployment_executor import ClusterExecutor
@@ -77,7 +77,7 @@ class TestDeploymentOrchestrator:
         plan = Mock()
 
         with pytest.raises(ServerError, match="Unsupported deployment plan type"):
-            orchestrator._create_executor(plan)
+            orchestrator._executor_factory.create_executor(plan)
 
     def test_execute_deployment_single(self):
         """Test executing single server deployment."""
@@ -122,8 +122,10 @@ class TestDeploymentOrchestrator:
             mock_executor,
         )
 
-        # Patch _create_executor to return our mock executor
-        orchestrator._create_executor = Mock(return_value=mock_executor_instance)
+        # Patch executor factory to return our mock executor
+        orchestrator._executor_factory.create_executor = Mock(
+            return_value=mock_executor_instance
+        )
 
         plan = SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE))
         orchestrator.execute_deployment(plan, timeout=5.0)
@@ -199,8 +201,10 @@ class TestDeploymentOrchestrator:
             mock_executor,
         )
 
-        # Patch _create_executor to return our mock executor
-        orchestrator._create_executor = Mock(return_value=mock_executor_instance)
+        # Patch executor factory to return our mock executor
+        orchestrator._executor_factory.create_executor = Mock(
+            return_value=mock_executor_instance
+        )
 
         plan = ClusterDeploymentPlan(
             servers=[
@@ -260,9 +264,7 @@ class TestDeploymentOrchestrator:
         orchestrator.shutdown_deployment(timeout=10.0)
 
         # Verify executor.shutdown was called with deployment
-        mock_executor_instance.shutdown.assert_called_once_with(
-            mock_deployment, 10.0
-        )
+        mock_executor_instance.shutdown.assert_called_once_with(mock_deployment, 10.0)
         assert orchestrator.get_servers() == {}
         assert orchestrator._current_executor is None
         assert orchestrator._deployment is None

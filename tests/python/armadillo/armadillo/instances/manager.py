@@ -52,10 +52,6 @@ class ThreadingResources:
             ),
         )
 
-    def cleanup(self) -> None:
-        """Clean up threading resources."""
-        self.executor.shutdown(wait=True)
-
 
 class InstanceManager:
     """Manages lifecycle of multiple ArangoDB server instances."""
@@ -252,11 +248,9 @@ class InstanceManager:
         Returns:
             ServerHealthInfo with crashes and exit codes (filtered to this deployment's servers)
         """
-        from ..core.process import _process_supervisor
-
-        # Get all health data from the global supervisor
-        all_exit_codes = _process_supervisor.get_exit_codes()
-        all_crashes = _process_supervisor.get_crash_state()
+        # Get all health data from the injected process supervisor
+        all_exit_codes = self._app_context.process_supervisor.get_exit_codes()
+        all_crashes = self._app_context.process_supervisor.get_crash_state()
 
         # Get the set of server IDs that belong to this deployment
         servers = self._deployment.get_servers() if self._deployment else {}

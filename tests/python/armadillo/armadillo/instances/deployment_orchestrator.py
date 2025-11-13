@@ -26,6 +26,7 @@ from .deployment_executor import (
     SingleServerExecutor,
     ClusterExecutor,
 )
+from .deployment_executor_factory import DeploymentExecutorFactory
 
 
 class DeploymentOrchestrator:
@@ -61,20 +62,12 @@ class DeploymentOrchestrator:
         self._current_executor: Optional[object] = (
             None  # SingleServerExecutor or ClusterExecutor
         )
-
-    def _create_executor(
-        self, plan: DeploymentPlan
-    ) -> Union[SingleServerExecutor, ClusterExecutor]:
-        """Create lifecycle-owning deployment executor based on plan type."""
-        if isinstance(plan, SingleServerDeploymentPlan):
-            return SingleServerExecutor(
-                self._logger, self._server_factory, self._timeouts
-            )
-        if isinstance(plan, ClusterDeploymentPlan):
-            return ClusterExecutor(
-                self._logger, self._server_factory, self._executor, self._timeouts
-            )
-        raise ServerError(f"Unsupported deployment plan type: {type(plan)}")
+        self._executor_factory = DeploymentExecutorFactory(
+            logger=logger,
+            server_factory=server_factory,
+            thread_executor=executor,
+            timeout_config=self._timeouts,
+        )
 
     def execute_deployment(
         self, plan: DeploymentPlan, timeout: Optional[float] = None
@@ -107,7 +100,7 @@ class DeploymentOrchestrator:
 
         try:
             # Executor owns full lifecycle (create + start + verify)
-            executor = self._create_executor(plan)
+            executor = self._executor_factory.create_executor(plan)
             deployment = executor.deploy(plan, timeout=timeout)
             self._deployment = deployment
             self._current_executor = executor
