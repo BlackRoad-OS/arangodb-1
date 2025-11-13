@@ -58,10 +58,6 @@ class DeploymentOrchestrator:
         self._server_factory = server_factory
         self._executor = executor
         self._timeouts = timeout_config or TimeoutConfig()
-        self._deployment: Optional[Deployment] = None
-        self._current_executor: Optional[object] = (
-            None  # SingleServerExecutor or ClusterExecutor
-        )
         self._executor_factory = DeploymentExecutorFactory(
             logger=logger,
             server_factory=server_factory,
@@ -71,8 +67,19 @@ class DeploymentOrchestrator:
 
     def execute_deployment(
         self, plan: DeploymentPlan, timeout: Optional[float] = None
-    ) -> None:
-        """Execute deployment based on plan using executor pattern."""
+    ) -> Deployment:
+        """Execute deployment based on plan using executor pattern.
+
+        Args:
+            plan: Deployment plan to execute
+            timeout: Optional timeout override
+
+        Returns:
+            Deployment object with deployed servers
+
+        Raises:
+            ServerStartupError: If deployment fails
+        """
         # Use config defaults if timeout not specified
         if timeout is None:
             timeout = (
@@ -102,13 +109,13 @@ class DeploymentOrchestrator:
             # Executor owns full lifecycle (create + start + verify)
             executor = self._executor_factory.create_executor(plan)
             deployment = executor.deploy(plan, timeout=timeout)
-            self._deployment = deployment
-            self._current_executor = executor
 
             elapsed_total = time.time() - start_time
             self._logger.info(
                 "Deployment completed successfully in %.2fs", elapsed_total
             )
+
+            return deployment
 
         except (ServerStartupError, ProcessError, ClusterError, OSError) as e:
             self._logger.error("Deployment failed: %s", e, exc_info=True)
@@ -116,27 +123,25 @@ class DeploymentOrchestrator:
 
     def shutdown_deployment(
         self,
+        deployment: Deployment,
         timeout: Optional[float] = None,
     ) -> None:
         """Shutdown all servers in the deployment using executor.
 
         Args:
+            deployment: Deployment to shutdown
             timeout: Maximum time to wait for shutdown (uses config default if None)
 
         Raises:
             ServerError: If shutdown fails critically
         """
-        if not self._deployment or not self._current_executor:
-            self._logger.debug("No deployment to shutdown")
-            return
-
         if timeout is None:
             # Calculate timeout based on number of servers
             # Allow per-server timeout + 20% buffer for coordination overhead
-            num_servers = self._deployment.get_server_count()
+            num_servers = deployment.get_server_count()
             timeout = self._timeouts.server_shutdown * max(1, num_servers) * 1.2
         else:
-            num_servers = self._deployment.get_server_count()
+            num_servers = deployment.get_server_count()
 
         self._logger.info(
             "Shutting down %d server(s) with %.1fs timeout",
@@ -145,28 +150,13 @@ class DeploymentOrchestrator:
         )
 
         # Print shutdown message with newline to separate from test output
-        if isinstance(self._deployment, SingleServerDeployment):
+        if isinstance(deployment, SingleServerDeployment):
             print_status("\nShutting down server")
         else:
             print_status(
-                f"\nShutting down cluster with {self._deployment.get_server_count()} servers"
+                f"\nShutting down cluster with {deployment.get_server_count()} servers"
             )
 
-        # Delegate to executor (it knows the correct shutdown order)
-        self._current_executor.shutdown(self._deployment, timeout)
-
-        # Clear storage after shutdown
-        self._deployment = None
-        self._current_executor = None
-
-    def get_servers(self) -> Dict[ServerId, ArangoServer]:
-        """Get current servers dict."""
-        return self._deployment.get_servers() if self._deployment else {}
-
-    def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
-        """Get a single server by ID."""
-        return self._deployment.get_server(server_id) if self._deployment else None
-
-    def get_deployment(self) -> Optional[Deployment]:
-        """Get the current deployment."""
-        return self._deployment
+        # Create executor for shutdown (executors are stateless, can recreate)
+        executor = self._executor_factory.create_executor(deployment.plan)
+        executor.shutdown(deployment, timeout)

@@ -25,7 +25,6 @@ class TestDeploymentOrchestrator:
         assert orchestrator._logger == mock_logger
         assert orchestrator._server_factory == mock_factory
         assert orchestrator._executor == mock_executor
-        assert orchestrator._deployment is None
 
     def test_create_executor_single_server(self):
         """Test creating executor for single server plan."""
@@ -128,11 +127,11 @@ class TestDeploymentOrchestrator:
         )
 
         plan = SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE))
-        orchestrator.execute_deployment(plan, timeout=5.0)
+        deployment = orchestrator.execute_deployment(plan, timeout=5.0)
 
-        # Internal deployment should be populated
-        assert orchestrator._deployment is not None
-        servers = orchestrator.get_servers()
+        # Deployment should be returned
+        assert deployment is not None
+        servers = deployment.get_servers()
         assert len(servers) == 1
         assert "server_0" in servers
         # Note: start() and health_check_sync() are called by the executor, not orchestrator
@@ -214,9 +213,9 @@ class TestDeploymentOrchestrator:
                 Mock(role=ServerRole.COORDINATOR),
             ]
         )
-        orchestrator.execute_deployment(plan, timeout=10.0)
+        deployment = orchestrator.execute_deployment(plan, timeout=10.0)
 
-        servers = orchestrator.get_servers()
+        servers = deployment.get_servers()
         assert set(servers.keys()) == {
             "agent_0",
             "agent_1",
@@ -258,13 +257,12 @@ class TestDeploymentOrchestrator:
             Mock(),  # factory unused for shutdown test
             mock_executor,
         )
-        orchestrator._deployment = mock_deployment
-        orchestrator._current_executor = mock_executor_instance
+        # Patch executor factory to return our mock executor
+        orchestrator._executor_factory.create_executor = Mock(
+            return_value=mock_executor_instance
+        )
 
-        orchestrator.shutdown_deployment(timeout=10.0)
+        orchestrator.shutdown_deployment(mock_deployment, timeout=10.0)
 
         # Verify executor.shutdown was called with deployment
         mock_executor_instance.shutdown.assert_called_once_with(mock_deployment, 10.0)
-        assert orchestrator.get_servers() == {}
-        assert orchestrator._current_executor is None
-        assert orchestrator._deployment is None

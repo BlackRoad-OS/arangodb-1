@@ -158,10 +158,10 @@ class InstanceManager:
 
             try:
                 # Delegate to DeploymentOrchestrator for the actual deployment
-                self._deployment_orchestrator.execute_deployment(plan, timeout=timeout)
-
-                # Get deployment from orchestrator and store it
-                self._deployment = self._deployment_orchestrator.get_deployment()
+                # InstanceManager is the single source of truth for deployment state
+                self._deployment = self._deployment_orchestrator.execute_deployment(
+                    plan, timeout=timeout
+                )
                 if self._deployment:
                     startup_time = time.time()
                     self._deployment.mark_deployed(startup_time)
@@ -219,9 +219,11 @@ class InstanceManager:
 
         with timeout_scope(timeout, f"shutdown_deployment_{self.deployment_id}"):
             # Delegate to DeploymentOrchestrator for shutdown
-            # Executor determines shutdown order internally
+            # Pass deployment explicitly - InstanceManager is single source of truth
             logger.debug("Calling DeploymentOrchestrator.shutdown_deployment")
-            self._deployment_orchestrator.shutdown_deployment(timeout=timeout)
+            self._deployment_orchestrator.shutdown_deployment(
+                self._deployment, timeout=timeout
+            )
             logger.debug(
                 "DeploymentOrchestrator.shutdown_deployment completed successfully"
             )

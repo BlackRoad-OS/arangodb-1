@@ -108,10 +108,10 @@ class TestSingleServerDeployment:
         health_monitor.check_deployment_health.return_value = Mock(is_healthy=True)
 
         # Execute
-        orchestrator.execute_deployment(plan, timeout=30.0)
+        deployment = orchestrator.execute_deployment(plan, timeout=30.0)
 
         # Verify
-        servers = orchestrator.get_servers()
+        servers = deployment.get_servers()
         assert len(servers) == 1
         assert ServerId("SNGL-1") in servers
         assert servers[ServerId("SNGL-1")] == mock_server
@@ -136,26 +136,42 @@ class TestSingleServerDeployment:
         }
         health_monitor.check_deployment_health.return_value = Mock(is_healthy=True)
 
-        orchestrator.execute_deployment(plan, timeout=30.0)
-        assert len(orchestrator.get_servers()) == 1
+        deployment = orchestrator.execute_deployment(plan, timeout=30.0)
+        assert len(deployment.get_servers()) == 1
 
         # Execute shutdown
-        orchestrator.shutdown_deployment(timeout=30.0)
+        orchestrator.shutdown_deployment(deployment, timeout=30.0)
 
         # Verify
-        assert len(orchestrator.get_servers()) == 0
         mock_server.stop.assert_called_once()
 
     def test_shutdown_with_no_servers(self, orchestrator):
-        """Verify shutdown with empty server dict does not error."""
-        # No deployment executed
-        assert len(orchestrator.get_servers()) == 0
+        """Verify shutdown with empty deployment does not error."""
+        # Create empty deployment
+        from armadillo.instances.deployment import (
+            SingleServerDeployment,
+            DeploymentStatus,
+            DeploymentTiming,
+        )
+        from armadillo.instances.deployment_plan import SingleServerDeploymentPlan
+        from armadillo.core.types import ServerConfig, ServerRole
 
-        # Should not raise
-        orchestrator.shutdown_deployment(timeout=30.0)
+        empty_deployment = SingleServerDeployment(
+            plan=SingleServerDeploymentPlan(
+                server=ServerConfig(
+                    role=ServerRole.SINGLE,
+                    port=8529,
+                    data_dir="/tmp/test",
+                    log_file="/tmp/test/arangod.log",
+                )
+            ),
+            server=Mock(),
+            status=DeploymentStatus(is_deployed=False, is_healthy=False),
+            timing=DeploymentTiming(),
+        )
 
-        # Still empty
-        assert len(orchestrator.get_servers()) == 0
+        # Should not raise (empty deployment)
+        orchestrator.shutdown_deployment(empty_deployment, timeout=30.0)
 
 
 class TestClusterDeployment:
@@ -236,10 +252,10 @@ class TestClusterDeployment:
         health_monitor.check_deployment_health.return_value = Mock(is_healthy=True)
 
         # Execute
-        orchestrator.execute_deployment(plan, timeout=60.0)
+        deployment = orchestrator.execute_deployment(plan, timeout=60.0)
 
         # Verify servers stored
-        servers = orchestrator.get_servers()
+        servers = deployment.get_servers()
         assert len(servers) == 6
 
         # Verify all servers are present
@@ -288,7 +304,7 @@ class TestClusterDeployment:
         server_factory.create_server_instances.return_value = servers_dict
         health_monitor.check_deployment_health.return_value = Mock(is_healthy=True)
 
-        orchestrator.execute_deployment(plan, timeout=60.0)
+        deployment = orchestrator.execute_deployment(plan, timeout=60.0)
 
         # Track shutdown order
         shutdown_calls = []
@@ -301,7 +317,7 @@ class TestClusterDeployment:
             server.stop = Mock(side_effect=lambda s=server: shutdown_calls.append(s))
 
         # Execute shutdown
-        orchestrator.shutdown_deployment(timeout=30.0)
+        orchestrator.shutdown_deployment(deployment, timeout=30.0)
 
         # Verify shutdown happened
         assert len(shutdown_calls) == 3
@@ -342,19 +358,19 @@ class TestEdgeCases:
         health_monitor.check_deployment_health.return_value = Mock(is_healthy=True)
 
         # First deployment succeeds
-        orchestrator.execute_deployment(plan, timeout=30.0)
-        assert len(orchestrator.get_servers()) == 1
+        deployment1 = orchestrator.execute_deployment(plan, timeout=30.0)
+        assert len(deployment1.get_servers()) == 1
 
-        # Second deployment should replace (clears previous state)
+        # Second deployment returns new deployment
         mock_server2 = create_mock_server("SNGL-2", ServerRole.SINGLE)
         server_factory.create_server_instances.return_value = {
             ServerId("SNGL-2"): mock_server2
         }
 
-        orchestrator.execute_deployment(plan, timeout=30.0)
+        deployment2 = orchestrator.execute_deployment(plan, timeout=30.0)
 
         # Should have new server
-        servers = orchestrator.get_servers()
+        servers = deployment2.get_servers()
         assert len(servers) == 1
         assert ServerId("SNGL-2") in servers
 
@@ -448,14 +464,13 @@ class TestEdgeCases:
         with pytest.raises(ServerStartupError, match="Failed to start agent"):
             orchestrator.execute_deployment(plan, timeout=60.0)
 
-        # No servers should be stored
-        assert len(orchestrator.get_servers()) == 0
+        # Orchestrator is stateless - no state to check
 
     def test_get_server_returns_none_for_missing(self, orchestrator):
-        """Verify get_server returns None for non-existent server ID."""
-        # No deployment
-        result = orchestrator.get_server(ServerId("MISSING-1"))
-        assert result is None
+        """Verify get_server is no longer available (orchestrator is stateless)."""
+        # Orchestrator no longer stores deployment state
+        # This test is no longer applicable - orchestrator is stateless
+        pass
 
     def test_shutdown_continues_on_individual_failure(
         self, orchestrator, server_factory, health_monitor
@@ -497,7 +512,7 @@ class TestEdgeCases:
         server_factory.create_server_instances.return_value = servers_dict
         health_monitor.check_deployment_health.return_value = Mock(is_healthy=True)
 
-        orchestrator.execute_deployment(plan, timeout=60.0)
+        deployment = orchestrator.execute_deployment(plan, timeout=60.0)
 
         # Make first dbserver fail to stop
         from armadillo.core.errors import ServerShutdownError
@@ -505,12 +520,9 @@ class TestEdgeCases:
         mock_dbserver1.stop.side_effect = ServerShutdownError("Force kill failed")
 
         # Shutdown should continue despite failure
-        orchestrator.shutdown_deployment(timeout=30.0)
+        orchestrator.shutdown_deployment(deployment, timeout=30.0)
 
         # All servers should have been attempted
         mock_dbserver1.stop.assert_called_once()
         mock_dbserver2.stop.assert_called_once()
         mock_agent.stop.assert_called_once()
-
-        # State should be cleared
-        assert len(orchestrator.get_servers()) == 0
