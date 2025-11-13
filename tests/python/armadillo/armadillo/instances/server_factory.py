@@ -1,20 +1,14 @@
 """Server instance factory for creating ArangoDB servers from deployment plans."""
 
-from typing import Dict, Protocol
+from typing import Dict, Optional
 from ..core.types import ServerRole, ServerConfig
-from ..core.context import ApplicationContext
 from ..core.errors import ServerError
 from ..core.value_objects import ServerId
+from ..core.protocols import ServerFactory  # Import Protocol from protocols module
+from ..core.context import (
+    ApplicationContext,
+)  # No circular dependency - protocols doesn't import context
 from .server import ArangoServer
-
-
-class ServerFactory(Protocol):
-    """Protocol for server factories to enable dependency injection."""
-
-    def create_server_instances(
-        self, servers_config: list[ServerConfig]
-    ) -> Dict[ServerId, ArangoServer]:
-        """Create ArangoServer instances from ServerConfig objects."""
 
 
 class StandardServerFactory:
@@ -24,11 +18,12 @@ class StandardServerFactory:
     providing clean dependency injection and improved testability.
     """
 
-    def __init__(self, app_context: ApplicationContext) -> None:
+    def __init__(self, app_context: Optional[ApplicationContext] = None) -> None:
         """Initialize factory with application context.
 
         Args:
-            app_context: Application context containing all dependencies
+            app_context: Application context containing all dependencies.
+                         Can be None if set_app_context() will be called later.
         """
         self._app_context = app_context
 
@@ -52,8 +47,10 @@ class StandardServerFactory:
             Dictionary mapping server_id to ArangoServer instances
 
         Raises:
-            ServerError: If server creation fails
+            ServerError: If server creation fails or app_context is not set
         """
+        if self._app_context is None:
+            raise ServerError("Application context must be set before creating servers")
         servers = {}
         for i, server_config in enumerate(servers_config):
             server_id = self._generate_server_id(server_config.role, i)
@@ -91,8 +88,10 @@ class StandardServerFactory:
             Configured ArangoServer instance
 
         Raises:
-            ServerError: If port is invalid or server creation fails
+            ServerError: If port is invalid, server creation fails, or app_context is not set
         """
+        if self._app_context is None:
+            raise ServerError("Application context must be set before creating servers")
         port_value = server_config.port
         if not isinstance(port_value, int):
             raise ServerError(

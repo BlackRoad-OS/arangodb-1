@@ -112,7 +112,7 @@ class IsolatedLogManager:
         self._context.clear_context()
 
     @contextmanager
-    def context(self, **kwargs: Any):
+    def context(self, **kwargs: Any) -> Any:
         """Context manager for temporary context variables."""
         with self._context.context(**kwargs):
             yield
@@ -202,7 +202,7 @@ class StandardLoggerFactory:
         self._manager.clear_context()
 
     @contextmanager
-    def context(self, **kwargs: Any):
+    def context(self, **kwargs: Any) -> Any:
         """Context manager for temporary context variables."""
         with self._manager.context(**kwargs):
             yield

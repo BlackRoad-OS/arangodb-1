@@ -85,7 +85,7 @@ class ServerCommandBuilder:
                 if isinstance(value, list):
                     for item in value:
                         command.extend([f"--{key}", str(item)])
-                else:
+                elif value is not None:
                     command.extend([f"--{key}", str(value)])
         self._logger.debug(">>> ARANGOD COMMAND FOR %s <<<", str(params.server_id))
         self._logger.debug("Command: %s", " ".join(command))
@@ -124,5 +124,4 @@ class ServerCommandBuilder:
             return "etc/testing/arangod-coordinator.conf"
         if role == ServerRole.DBSERVER:
             return "etc/testing/arangod-dbserver.conf"
-
-        return "etc/testing/arangod.conf"
+        # All ServerRole enum values are handled above

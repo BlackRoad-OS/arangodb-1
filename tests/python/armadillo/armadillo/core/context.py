@@ -26,13 +26,19 @@ from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
 
+from typing import Dict, Any
+
 from .types import ArmadilloConfig
 from .log import Logger
+from .protocols import ServerFactory
 from ..utils.ports import PortAllocator
 from ..utils.auth import AuthProvider
 from ..utils.filesystem import FilesystemService
 from .process import ProcessSupervisor
 from ..results.collector import ResultCollector
+
+# Import DeploymentPlanner - it doesn't create circular dependency
+from ..instances.deployment_planner import DeploymentPlanner
 
 
 @dataclass(frozen=True)
@@ -63,8 +69,8 @@ class ApplicationContext:
     filesystem: FilesystemService
     process_supervisor: ProcessSupervisor
     result_collector: ResultCollector
-    server_factory: "ServerFactory"
-    deployment_planner: "DeploymentPlanner"
+    server_factory: ServerFactory
+    deployment_planner: DeploymentPlanner
 
     @classmethod
     def create(
@@ -153,9 +159,9 @@ class ApplicationContext:
         from ..instances.deployment_planner import DeploymentPlanner
 
         # Create server factory
-        server_factory = StandardServerFactory(
-            app_context=None  # Will be set after context creation
-        )
+        # Note: We pass None here to break circular dependency
+        # The actual context will be set via set_app_context() after creation
+        server_factory = StandardServerFactory(app_context=None)
 
         # Create deployment planner
         deployment_planner = DeploymentPlanner(
@@ -186,7 +192,7 @@ class ApplicationContext:
     def for_testing(
         cls,
         config: Optional[ArmadilloConfig] = None,
-        **overrides,
+        **overrides: Any,
     ) -> "ApplicationContext":
         """Create application context for testing with sensible defaults.
 

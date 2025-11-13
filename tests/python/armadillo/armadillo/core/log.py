@@ -6,24 +6,25 @@ from pathlib import Path
 
 
 from .log_formatters import StructuredFormatter, ArmadilloRichHandler, _log_context
+from .value_objects import ServerContext, ServerId
 
 
 class Logger(Protocol):
     """Protocol for logger instances to enable dependency injection."""
 
-    def debug(self, msg: str, *args, **kwargs) -> None:
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log debug message."""
 
-    def info(self, msg: str, *args, **kwargs) -> None:
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log info message."""
 
-    def warning(self, msg: str, *args, **kwargs) -> None:
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log warning message."""
 
-    def error(self, msg: str, *args, **kwargs) -> None:
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log error message."""
 
-    def exception(self, msg: str, *args, **kwargs) -> None:
+    def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log exception with traceback."""
 
 
@@ -133,7 +134,7 @@ class LogManager:
 _log_manager = LogManager()
 
 
-def configure_logging(**kwargs) -> None:
+def configure_logging(**kwargs: Any) -> None:
     """Configure the global logging system."""
     _log_manager.configure(**kwargs)
 
@@ -189,16 +190,18 @@ def reset_logging() -> None:
     _log_manager.reset_configuration()
 
 
-def log_event(logger: logging.Logger, event_type: str, message: str, **kwargs) -> None:
+def log_event(
+    logger: Logger, event_type: str, message: str, **kwargs: Any
+) -> None:
     """Log a structured event with context."""
     logger.info(message, extra={"event_type": event_type, **kwargs})
 
 
 def log_process_event(
-    logger: logging.Logger, event: str, pid: Optional[int] = None, **kwargs
+    logger: Logger, event: str, pid: Optional[int] = None, **kwargs: Any
 ) -> None:
     """Log a process-related event."""
-    extra = {"event_type": "process", "process_event": event}
+    extra: Dict[str, Any] = {"event_type": "process", "process_event": event}
     if pid is not None:
         extra["pid"] = pid
     extra.update(kwargs)
@@ -206,19 +209,17 @@ def log_process_event(
 
 
 def log_server_event(
-    logger: logging.Logger,
+    logger: Logger,
     event: str,
-    server_id: Union[str, "ServerContext", None] = None,
-    **kwargs,
+    server_id: Union[str, ServerContext, ServerId, None] = None,
+    **kwargs: Any,
 ) -> None:
     """Log a server-related event.
 
-    Accepts either a string server_id or a ServerContext for enriched logging
+    Accepts either a string server_id, ServerId, or a ServerContext for enriched logging
     with PID information.
     """
-    from .value_objects import ServerContext
-
-    extra = {"event_type": "server", "server_event": event}
+    extra: Dict[str, Any] = {"event_type": "server", "server_event": event}
 
     if isinstance(server_id, ServerContext):
         # Enriched logging with PID
@@ -227,6 +228,10 @@ def log_server_event(
         if server_id.pid is not None:
             extra["pid"] = server_id.pid
         display_id = str(server_id)  # Uses ServerContext.__str__()
+    elif isinstance(server_id, ServerId):
+        # ServerId object
+        extra["server_id"] = str(server_id)
+        display_id = str(server_id)
     elif server_id is not None:
         # Legacy string server_id
         extra["server_id"] = server_id
@@ -239,10 +244,10 @@ def log_server_event(
 
 
 def log_test_event(
-    logger: logging.Logger, event: str, test_name: Optional[str] = None, **kwargs
+    logger: Logger, event: str, test_name: Optional[str] = None, **kwargs: Any
 ) -> None:
     """Log a test-related event."""
-    extra = {"event_type": "test", "test_event": event}
+    extra: Dict[str, Any] = {"event_type": "test", "test_event": event}
     if test_name is not None:
         extra["test_name"] = test_name
     extra.update(kwargs)
@@ -250,7 +255,7 @@ def log_test_event(
 
 
 # Context management shortcuts
-def set_log_context(**kwargs) -> None:
+def set_log_context(**kwargs: Any) -> None:
     """Set logging context for current thread."""
     _log_context.set_context(**kwargs)
 
@@ -265,6 +270,6 @@ def clear_log_context() -> None:
     _log_context.clear_context()
 
 
-def log_context(**kwargs):
+def log_context(**kwargs: Any) -> Any:
     """Context manager for temporary logging context."""
     return _log_context.context(**kwargs)

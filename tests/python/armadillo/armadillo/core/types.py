@@ -1,7 +1,7 @@
 """Core type definitions for the Armadillo framework."""
 
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
@@ -141,7 +141,7 @@ class ServerConfig(BaseModel):
     port: int
     data_dir: Path
     log_file: Path
-    args: Dict[str, str] = Field(default_factory=dict)
+    args: Dict[str, Union[str, List[str], int, float, bool]] = Field(default_factory=dict)
     memory_limit_mb: Optional[int] = None
     startup_timeout: float = 30.0
 

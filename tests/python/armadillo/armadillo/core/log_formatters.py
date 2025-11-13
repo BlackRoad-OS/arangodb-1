@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Callable, Iterator, Union
 from contextlib import contextmanager
 
 from rich.console import Console
@@ -29,7 +29,7 @@ class LogContext:
         """Get current thread context."""
         if not hasattr(self._local, "context"):
             return {}
-        return self._local.context.copy()
+        return dict(self._local.context.copy())
 
     def clear_context(self) -> None:
         """Clear context for current thread."""
@@ -37,7 +37,7 @@ class LogContext:
             self._local.context.clear()
 
     @contextmanager
-    def context(self, **kwargs: Any):
+    def context(self, **kwargs: Any) -> Iterator[None]:
         """Context manager for temporary context variables."""
         old_context = self.get_context()
         try:
@@ -58,7 +58,11 @@ class StructuredFormatter(logging.Formatter):
     Optionally accepts a context getter to unify context across managers.
     """
 
-    def __init__(self, include_context: bool = True, context_getter=None) -> None:
+    def __init__(
+        self,
+        include_context: bool = True,
+        context_getter: Optional[Callable[[], Dict[str, Any]]] = None,
+    ) -> None:
         super().__init__()
         self.include_context = include_context
         # If not provided, we'll call the module-level getter at format-time
@@ -66,7 +70,7 @@ class StructuredFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
-        log_entry = {
+        log_entry: Dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(
                 record.created, tz=timezone.utc
             ).isoformat(),
@@ -77,13 +81,14 @@ class StructuredFormatter(logging.Formatter):
 
         # Add exception information if present
         if record.exc_info:
-            log_entry["exception"] = {
+            exc_dict: Dict[str, Optional[str]] = {
                 "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
                 "message": str(record.exc_info[1]) if record.exc_info[1] else None,
                 "traceback": (
                     self.formatException(record.exc_info) if record.exc_info else None
                 ),
             }
+            log_entry["exception"] = exc_dict
 
         # Add extra fields from record
         extra_fields = {}
@@ -118,7 +123,7 @@ class StructuredFormatter(logging.Formatter):
 
         # Add thread context if enabled
         if self.include_context:
-            context = {}
+            context: Dict[str, Any] = {}
             try:
                 if self._context_getter is not None:
                     context = self._context_getter()
@@ -137,7 +142,11 @@ class StructuredFormatter(logging.Formatter):
 class ArmadilloRichHandler(RichHandler):
     """Custom Rich handler with structured log formatting."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        level: Union[int, str] = 0,
+        **kwargs: Any,
+    ) -> None:
         # Configure rich console with armadillo theme
         theme = Theme(
             {
@@ -153,8 +162,11 @@ class ArmadilloRichHandler(RichHandler):
             }
         )
 
+        # Always create our themed console - remove console from kwargs if present
+        # to avoid passing it twice to RichHandler
+        kwargs.pop("console", None)
         console = Console(theme=theme, stderr=True)
-        super().__init__(*args, console=console, **kwargs)
+        super().__init__(level=level, console=console, **kwargs)
 
     def render_message(self, record: logging.LogRecord, message: str) -> Text:
         """Render message with context-aware styling."""

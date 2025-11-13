@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import threading
 import atexit
-from typing import Optional, List, Protocol
+from typing import Optional, List, Protocol, Callable, Iterator, Any
 from pathlib import Path
 from contextlib import contextmanager
 from ..core.logger_factory import LoggerFactory, StandardLoggerFactory
@@ -67,7 +67,7 @@ class IsolatedTestContext:
         )
         self._port_manager = PortManager()
         self._allocated_ports: List[int] = []
-        self._cleanup_callbacks: List[callable] = []
+        self._cleanup_callbacks: List[Callable[[], None]] = []
         self._lock = threading.RLock()
         self._cleaned_up = False
         if cleanup_on_exit:
@@ -92,7 +92,7 @@ class IsolatedTestContext:
         """Get the working directory for this test context."""
         return self._work_dir
 
-    def create_logger(self, name: str):
+    def create_logger(self, name: str) -> Any:
         """Create a logger within this test context."""
         return self._logger_factory.create_logger(name)
 
@@ -110,13 +110,13 @@ class IsolatedTestContext:
             if port in self._allocated_ports:
                 self._allocated_ports.remove(port)
 
-    def add_cleanup_callback(self, callback: callable) -> None:
+    def add_cleanup_callback(self, callback: Callable[[], None]) -> None:
         """Add a cleanup callback to be called during context cleanup."""
         with self._lock:
             self._cleanup_callbacks.append(callback)
 
     @contextmanager
-    def temp_logger(self, name: str):
+    def temp_logger(self, name: str) -> Iterator[Any]:
         """Context manager for temporary logger that cleans up after use."""
         logger_obj = self.create_logger(name)
         try:
@@ -125,7 +125,7 @@ class IsolatedTestContext:
             pass
 
     @contextmanager
-    def temp_port(self, preferred: Optional[int] = None):
+    def temp_port(self, preferred: Optional[int] = None) -> Iterator[int]:
         """Context manager for temporary port that releases after use."""
         port = self.allocate_port(preferred)
         try:
@@ -172,13 +172,13 @@ class IsolatedTestContext:
             self._cleaned_up = True
 
 
-def create_test_context(test_name: str, **kwargs) -> IsolatedTestContext:
+def create_test_context(test_name: str, **kwargs: Any) -> IsolatedTestContext:
     """Create an isolated test context."""
     return IsolatedTestContext(test_name=test_name, **kwargs)
 
 
 @contextmanager
-def temp_test_context(test_name: str = "", **kwargs):
+def temp_test_context(test_name: str = "", **kwargs: Any) -> Iterator[IsolatedTestContext]:
     """Context manager for temporary test context."""
     context = create_test_context(test_name, cleanup_on_exit=False, **kwargs)
     try:

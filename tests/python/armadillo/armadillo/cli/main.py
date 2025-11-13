@@ -54,7 +54,7 @@ def main(
     config_file: Optional[Path] = typer.Option(
         None, "--config", "-c", help="Configuration file path"
     ),
-):
+) -> None:
     """Armadillo: Modern ArangoDB Testing Framework."""
     # Validate verbose and log_level are not both specified
     if verbose > 0 and log_level is not None:
@@ -86,7 +86,7 @@ def main(
 
 
 @app.command()
-def version():
+def version() -> None:
     """Show version information."""
     from .. import __version__
 
@@ -110,7 +110,7 @@ def version():
 
 
 @app.command()
-def config():
+def config() -> None:
     """Show current configuration."""
     from ..core.config import get_config
 
@@ -170,7 +170,7 @@ def config():
         raise typer.Exit(1)
 
 
-def cli_main():
+def cli_main() -> None:
     """Entry point for the CLI."""
     try:
         app()

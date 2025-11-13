@@ -28,6 +28,7 @@ from ..core.process import (
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import FilesystemService
+from ..utils.auth import AuthProvider
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
 from .command_builder import ServerCommandParams
@@ -185,7 +186,7 @@ class ArangoServer:
             >>> server.start()
         """
         actual_port = port or app_context.port_allocator.allocate_port()
-        paths = ServerPaths.from_config(str(server_id), None, app_context.filesystem)
+        paths = ServerPaths.from_config(server_id, None, app_context.filesystem)
         return cls(
             server_id,
             role=ServerRole.SINGLE,
@@ -222,7 +223,7 @@ class ArangoServer:
             >>> agent = ArangoServer.create_cluster_server(ServerId("agent1"), ServerRole.AGENT, 8529, ctx)
             >>> agent.start()
         """
-        paths = ServerPaths.from_config(str(server_id), config, app_context.filesystem)
+        paths = ServerPaths.from_config(server_id, config, app_context.filesystem)
         return cls(
             server_id, role=role, port=port, paths=paths, app_context=app_context
         )
@@ -249,7 +250,7 @@ class ArangoServer:
         return self._app_context.config
 
     @property
-    def _auth(self) -> "AuthProvider":
+    def _auth(self) -> AuthProvider:
         """Get authentication provider from application context."""
         return self._app_context.auth_provider
 
@@ -438,7 +439,7 @@ class ArangoServer:
                         process_stats = get_process_stats(self.server_id)
 
                         return ServerStats(
-                            server_id=process_stats.pid if process_stats else 0,
+                            pid=process_stats.pid if process_stats else 0,
                             memory_usage=(
                                 process_stats.memory_rss if process_stats else 0
                             ),
@@ -454,6 +455,7 @@ class ArangoServer:
                             ),
                             additional_metrics=stats_data,
                         )
+                    return None
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logger.debug("Failed to get server stats: %s", e)
             return None

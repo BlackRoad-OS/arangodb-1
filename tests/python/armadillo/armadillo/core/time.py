@@ -5,7 +5,7 @@ import time
 import threading
 import signal
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Iterator, AsyncIterator
 from dataclasses import dataclass
 from contextlib import contextmanager, asynccontextmanager
 from .errors import DeadlineExceededError
@@ -92,7 +92,7 @@ class TimeoutManager:
         timeout: float,
         name: str = "scope",
         watchdog_timeout: Optional[float] = None,
-    ):
+    ) -> Iterator[TimeoutScope]:
         """Create a timeout scope context manager."""
         start_time = time.time()
         deadline = start_time + timeout
@@ -120,19 +120,29 @@ class TimeoutManager:
             logger.debug("Exiting timeout scope '%s' after %ss", name, elapsed)
 
     @asynccontextmanager
-    async def async_timeout_scope(self, timeout: float, name: str = "async_scope"):
-        """Create an async timeout scope context manager."""
+    async def async_timeout_scope(
+        self, timeout: float, name: str = "async_scope"
+    ) -> AsyncIterator[TimeoutScope]:
+        """Create an async timeout scope context manager.
+
+        Note: This creates a scope but does not enforce async timeout automatically.
+        Callers should wrap their async operations with asyncio.wait_for() if needed.
+        """
         clamped_timeout = self.clamp_timeout(timeout, name)
+        start_time = time.time()
+        deadline = start_time + clamped_timeout
+        if self._global_deadline and deadline > self._global_deadline:
+            deadline = self._global_deadline
+        parent_scope = self._get_current_scope()
+        scope = TimeoutScope(name, deadline, parent_scope, None)
+        self._set_current_scope(scope)
+        logger.debug("Entering async timeout scope '%s' with deadline %ss", name, clamped_timeout)
         try:
-            async with asyncio.timeout(clamped_timeout):
-                with self.timeout_scope(clamped_timeout, name) as scope:
-                    yield scope
-        except asyncio.TimeoutError as e:
-            raise DeadlineExceededError(
-                f"Async timeout scope '{name}' exceeded deadline",
-                deadline=time.time() + clamped_timeout,
-                elapsed=clamped_timeout,
-            ) from e
+            yield scope
+        finally:
+            self._set_current_scope(parent_scope)
+            elapsed = time.time() - start_time
+            logger.debug("Exiting async timeout scope '%s' after %ss", name, elapsed)
 
     def _get_current_scope(self) -> Optional[TimeoutScope]:
         """Get current timeout scope for this thread."""
@@ -201,7 +211,7 @@ class TimeoutManager:
     def get_status(self) -> Dict[str, Any]:
         """Get current timeout manager status."""
         current_time = time.time()
-        status = {
+        status: Dict[str, Any] = {
             "current_time": current_time,
             "watchdog_active": self._watchdog_thread
             and self._watchdog_thread.is_alive(),
@@ -211,12 +221,13 @@ class TimeoutManager:
             status["global_remaining"] = max(0.0, self._global_deadline - current_time)
         current_scope = self._get_current_scope()
         if current_scope:
-            status["current_scope"] = {
+            scope_dict: Dict[str, Any] = {
                 "name": current_scope.name,
                 "deadline": current_scope.deadline,
                 "remaining": current_scope.remaining(),
                 "effective_remaining": current_scope.effective_remaining(),
             }
+            status["current_scope"] = scope_dict
         return status
 
 
@@ -247,12 +258,12 @@ def clamp_timeout(
 
 def timeout_scope(
     timeout: float, name: str = "scope", watchdog_timeout: Optional[float] = None
-):
+) -> Any:
     """Create timeout scope context manager."""
     return _timeout_manager.timeout_scope(timeout, name, watchdog_timeout)
 
 
-def async_timeout_scope(timeout: float, name: str = "async_scope"):
+def async_timeout_scope(timeout: float, name: str = "async_scope") -> Any:
     """Create async timeout scope context manager."""
     return _timeout_manager.async_timeout_scope(timeout, name)
 

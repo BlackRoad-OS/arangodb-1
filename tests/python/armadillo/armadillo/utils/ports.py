@@ -35,7 +35,7 @@ class PortManager:
         """
         self.base_port = base_port
         self.max_ports = max_ports
-        self._allocated = set()
+        self._allocated: set[int] = set()
         self._lock = threading.Lock()
 
     def allocate_port(self, preferred: Optional[int] = None) -> int:

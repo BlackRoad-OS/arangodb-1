@@ -4,7 +4,7 @@ import os
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union, Optional, Any
 from contextlib import contextmanager
 from ..core.errors import FilesystemError, PathError, AtomicWriteError
 from ..core.log import get_logger
@@ -188,6 +188,8 @@ class FilesystemService:
                 base_work_dir = self._config.work_dir
             else:
                 # Use temp_dir/work as base
+                if self._config.temp_dir is None:
+                    raise FilesystemError("temp_dir is not configured")
                 base_work_dir = self._config.temp_dir / "work"
 
             if self._test_session_id:
@@ -206,15 +208,20 @@ class FilesystemService:
 
     def temp_dir(self, prefix: str = "armadillo") -> Path:
         """Create a temporary directory."""
+        if self._config.temp_dir is None:
+            raise FilesystemError("temp_dir is not configured")
         base_temp = self._config.temp_dir / "temp"
         base_temp.mkdir(parents=True, exist_ok=True)
         temp_path = Path(tempfile.mkdtemp(prefix=f"{prefix}_", dir=base_temp))
         return temp_path
 
     @contextmanager
-    def temp_file(self, suffix: str = "", prefix: str = "armadillo", text: bool = True):
+    def temp_file(
+        self, suffix: str = "", prefix: str = "armadillo", text: bool = True
+    ) -> Any:
         """Context manager for temporary files."""
         temp_directory = self.temp_dir()
+        tmp_path: Optional[Path] = None
         try:
             with tempfile.NamedTemporaryFile(
                 mode="w+t" if text else "w+b",
@@ -226,7 +233,7 @@ class FilesystemService:
                 tmp_path = Path(tmp_file.name)
                 yield tmp_path
         finally:
-            if tmp_path.exists():
+            if tmp_path is not None and tmp_path.exists():
                 try:
                     tmp_path.unlink()
                 except OSError as e:

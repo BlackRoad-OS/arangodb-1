@@ -23,7 +23,7 @@ def summary(
     output_format: str = typer.Option(
         "rich", "--format", help="Output format: rich, plain, json"
     ),
-):
+) -> None:
     """Analyze test results and show summary."""
     if not result_files:
         console.print("[red]No result files provided[/red]")
@@ -56,7 +56,7 @@ def summary(
 
 
 @analyze_app.command()
-def list_analyzers():
+def list_analyzers() -> None:
     """List available result analyzers."""
     analyzers = [
         ("pretty", "Human-readable summary with failure details", "✅ Phase 1"),
@@ -79,7 +79,7 @@ def list_analyzers():
 
 def _load_results(result_files: List[Path]) -> Dict[str, Any]:
     """Load and aggregate result files."""
-    aggregated = {
+    aggregated: Dict[str, Any] = {
         "total_files": len(result_files),
         "total_tests": 0,
         "total_duration": 0.0,
@@ -101,8 +101,8 @@ def _load_results(result_files: List[Path]) -> Dict[str, Any]:
             raise typer.Exit(1)
         try:
             content = read_text(result_file)
-            result_data = from_json_string(content)
-            file_info = {
+            result_data: Dict[str, Any] = from_json_string(content)
+            file_info: Dict[str, Any] = {
                 "file": str(result_file),
                 "duration": result_data.get("duration_s", 0.0),
                 "test_count": len(result_data.get("tests", {})),
@@ -111,10 +111,10 @@ def _load_results(result_files: List[Path]) -> Dict[str, Any]:
             aggregated["files"].append(file_info)
             aggregated["total_duration"] += file_info["duration"]
             aggregated["total_tests"] += file_info["test_count"]
-            file_summary = file_info["summary"]
+            file_summary: Dict[str, Any] = file_info["summary"]
             for key in aggregated["summary"]:
                 aggregated["summary"][key] += file_summary.get(key, 0)
-            tests = result_data.get("tests", {})
+            tests: Dict[str, Any] = result_data.get("tests", {})
             for test_name, test_data in tests.items():
                 if test_data.get("status") in ["failed", "error", "crashed", "timeout"]:
                     aggregated["failed_tests"].append(

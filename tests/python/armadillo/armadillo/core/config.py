@@ -14,7 +14,7 @@ T = TypeVar("T")
 
 def load_env_overrides(prefix: str = "ARMADILLO_") -> Dict[str, Any]:
     """Load environment variables with the given prefix and convert to appropriate types."""
-    overrides = {}
+    overrides: Dict[str, Any] = {}
 
     for key, value in os.environ.items():
         if key.startswith(prefix):
@@ -99,6 +99,10 @@ class ConfigProvider(Protocol):
     def infrastructure(self) -> InfrastructureConfig:
         """Infrastructure configuration."""
 
+    @property
+    def show_server_logs(self) -> bool:
+        """Whether to show server logs in output."""
+
 
 class ConfigManager:
     """Central configuration management."""
@@ -176,7 +180,7 @@ class ConfigManager:
 _config_manager = ConfigManager()
 
 
-def load_config(**kwargs) -> ArmadilloConfig:
+def load_config(**kwargs: Any) -> ArmadilloConfig:
     """Load global configuration."""
     return _config_manager.load_config(**kwargs)
 

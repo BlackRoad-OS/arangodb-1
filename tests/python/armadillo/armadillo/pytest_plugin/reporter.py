@@ -11,7 +11,8 @@ from pathlib import Path
 from _pytest.reports import TestReport
 
 from ..core.log import get_logger
-from ..core.types import ExecutionOutcome
+from ..core.types import ExecutionOutcome, ServerHealthInfo
+from ..core.value_objects import DeploymentId
 from ..core.process import has_any_crash
 from ..results.collector import ResultCollector
 from ..utils.output import write_stdout
@@ -444,8 +445,8 @@ class ArmadilloReporter:
     def export_results(
         self,
         output_dir: Path,
-        formats: Optional[list] = None,
-        server_health: Optional[Dict["DeploymentId", "ServerHealthInfo"]] = None,
+        formats: Optional[list[str]] = None,
+        server_health: Optional[Dict[DeploymentId, ServerHealthInfo]] = None,
     ) -> None:
         """Export collected results to specified formats.
 
