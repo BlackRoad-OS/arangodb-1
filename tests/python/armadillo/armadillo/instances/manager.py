@@ -28,36 +28,11 @@ from ..core.log import get_logger, log_server_event
 from ..core.time import timeout_scope, clamp_timeout
 from .server import ArangoServer
 from .deployment_plan import DeploymentPlan, SingleServerDeploymentPlan
+from .deployment import Deployment, SingleServerDeployment, ClusterDeployment
 from .health_monitor import HealthMonitor
 from .deployment_orchestrator import DeploymentOrchestrator
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class DeploymentStatus:
-    """Status information for a deployment."""
-
-    is_deployed: bool = False
-    is_healthy: bool = False
-
-
-@dataclass
-class DeploymentTiming:
-    """Timing information for a deployment."""
-
-    startup_time: Optional[float] = None
-    shutdown_time: Optional[float] = None
-
-
-@dataclass
-class DeploymentState:
-    """Runtime state of a deployment."""
-
-    servers: Dict[ServerId, ArangoServer] = field(default_factory=dict)
-    deployment_plan: Optional[DeploymentPlan] = None
-    status: DeploymentStatus = field(default_factory=DeploymentStatus)
-    timing: DeploymentTiming = field(default_factory=DeploymentTiming)
 
 
 @dataclass
@@ -100,8 +75,8 @@ class InstanceManager:
         self.deployment_id = deployment_id
         self._app_context = app_context
 
-        # Initialize runtime state and threading resources
-        self.state = DeploymentState()
+        # Initialize deployment state and threading resources
+        self._deployment: Optional[Deployment] = None
         self._threading = ThreadingResources.create_for_deployment(deployment_id)
 
         # Initialize architectural components
@@ -122,7 +97,7 @@ class InstanceManager:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         try:
-            if self.state.status.is_deployed:
+            if self._deployment and self._deployment.status.is_deployed:
                 self.shutdown_deployment()
         finally:
             self._threading.executor.shutdown(wait=True)
@@ -171,11 +146,9 @@ class InstanceManager:
             ServerStartupError: If server deployment fails
             TimeoutError: If deployment times out
         """
-        if self.state.status.is_deployed:
+        if self._deployment and self._deployment.status.is_deployed:
             raise ServerError("Deployment already active")
 
-        # Store the plan being deployed
-        self.state.deployment_plan = plan
         timeout = clamp_timeout(timeout, "deployment")
 
         with timeout_scope(timeout, f"deploy_servers_{self.deployment_id}"):
@@ -186,23 +159,22 @@ class InstanceManager:
                 1 if isinstance(plan, SingleServerDeploymentPlan) else len(plan.servers)
             )
             logger.info("Starting deployment of %s servers", num_servers)
-            self.state.timing.startup_time = time.time()
 
             try:
                 # Delegate to DeploymentOrchestrator for the actual deployment
                 self._deployment_orchestrator.execute_deployment(plan, timeout=timeout)
 
-                # Sync state from orchestrator internal dict (new lifecycle path)
-                self._sync_state_from_orchestrator()
+                # Get deployment from orchestrator and store it
+                self._deployment = self._deployment_orchestrator.get_deployment()
+                if self._deployment:
+                    self._deployment.timing.startup_time = time.time()
+                    self._deployment.status.is_deployed = True
+                    self._deployment.status.is_healthy = True
 
-                # Mark deployment as active
-                self.state.status.is_deployed = True
-                self.state.status.is_healthy = True
-
-                deployment_time = time.time() - self.state.timing.startup_time
-                logger.info(
-                    "Deployment completed successfully in %.2fs", deployment_time
-                )
+                    deployment_time = time.time() - self._deployment.timing.startup_time
+                    logger.info(
+                        "Deployment completed successfully in %.2fs", deployment_time
+                    )
 
             except (
                 ServerStartupError,
@@ -220,13 +192,6 @@ class InstanceManager:
                     pass
                 raise ServerStartupError(f"Failed to deploy servers: {e}") from e
 
-    def _sync_state_from_orchestrator(self) -> None:
-        """Synchronize state from DeploymentOrchestrator internal storage.
-
-        The orchestrator now owns the authoritative servers dict; we mirror it for facade access.
-        """
-        self.state.servers = self._deployment_orchestrator.get_servers()
-
     def shutdown_deployment(self, timeout: Optional[float] = None) -> None:
         """Shutdown all deployed servers in correct order.
 
@@ -235,13 +200,13 @@ class InstanceManager:
         Args:
             timeout: Maximum time to wait for shutdown (uses config default if None)
         """
-        if not self.state.status.is_deployed:
+        if not self._deployment or not self._deployment.status.is_deployed:
             logger.debug("No deployment to shutdown")
             return
 
         # Use config default if not specified (scales with server count)
         if timeout is None:
-            num_servers = len(self.state.servers)
+            num_servers = self._deployment.get_server_count()
             timeout = (
                 self._app_context.config.timeouts.server_shutdown
                 * max(1, num_servers)
@@ -249,12 +214,12 @@ class InstanceManager:
             )
 
         timeout = clamp_timeout(timeout, "shutdown")
-        self.state.timing.shutdown_time = time.time()
+        self._deployment.timing.shutdown_time = time.time()
 
         logger.debug(
             "InstanceManager.shutdown_deployment: deployment_id=%s, servers=%d",
             self.deployment_id,
-            len(self.state.servers),
+            self._deployment.get_server_count(),
         )
 
         with timeout_scope(timeout, f"shutdown_deployment_{self.deployment_id}"):
@@ -270,11 +235,10 @@ class InstanceManager:
             self._release_ports()
 
             # Clear state
-            self.state.servers.clear()
-            self.state.status.is_deployed = False
-            self.state.status.is_healthy = False
+            self._deployment.status.is_deployed = False
+            self._deployment.status.is_healthy = False
 
-            shutdown_time = time.time() - self.state.timing.shutdown_time
+            shutdown_time = time.time() - self._deployment.timing.shutdown_time
             logger.info("Deployment shutdown completed in %.2fs", shutdown_time)
 
     def get_server_health(self) -> ServerHealthInfo:
@@ -296,7 +260,8 @@ class InstanceManager:
         all_crashes = _process_supervisor.get_crash_state()
 
         # Get the set of server IDs that belong to this deployment
-        deployment_server_ids = set(self.state.servers.keys())
+        servers = self._deployment.get_servers() if self._deployment else {}
+        deployment_server_ids = set(servers.keys())
 
         # Filter to only include servers from THIS deployment
         relevant_crashes = {
@@ -316,34 +281,13 @@ class InstanceManager:
             exit_codes={str(k): v for k, v in relevant_exit_codes.items()},
         )
 
-    def restart_deployment(self, timeout: Optional[float] = None) -> None:
-        """Restart the entire deployment.
-
-        Args:
-            timeout: Maximum time for restart operation (uses config default if None)
-        """
-        if timeout is None:
-            timeout = self._app_context.config.timeouts.deployment_cluster
-
-        logger.info("Restarting deployment (timeout: %.1fs)", timeout)
-
-        # Preserve current plan
-        current_plan = self.state.deployment_plan
-
-        # Shutdown current deployment (allocate half the timeout)
-        self.shutdown_deployment(timeout / 2)
-
-        # Restore plan and redeploy
-        self.state.deployment_plan = current_plan
-        self.deploy_servers(timeout / 2)
-
     def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
         """Get server instance by ID."""
-        return self.state.servers.get(server_id)
+        return self._deployment.get_server(server_id) if self._deployment else None
 
     def get_servers_by_role(self, role: ServerRole) -> List[ArangoServer]:
         """Get all servers with the specified role."""
-        return [s for s in self.state.servers.values() if s.role == role]
+        return self._deployment.get_servers_by_role(role) if self._deployment else []
 
     def get_all_servers(self) -> Dict[ServerId, ArangoServer]:
         """Get all servers as a dictionary.
@@ -351,7 +295,7 @@ class InstanceManager:
         Returns:
             Dictionary mapping server IDs to server instances
         """
-        return dict(self.state.servers)
+        return self._deployment.get_servers() if self._deployment else {}
 
     def get_coordination_endpoints(self) -> List[str]:
         """Get coordination endpoints (coordinators or single server).
@@ -359,13 +303,9 @@ class InstanceManager:
         Returns:
             List of coordination endpoints
         """
-        from .deployment_plan import ClusterDeploymentPlan
-
-        if not self.state.deployment_plan:
+        if not self._deployment:
             return []
-        if isinstance(self.state.deployment_plan, ClusterDeploymentPlan):
-            return self.state.deployment_plan.coordination_endpoints
-        return []
+        return self._deployment.get_coordination_endpoints()
 
     def get_agency_endpoints(self) -> List[str]:
         """Get agency endpoints.
@@ -373,12 +313,12 @@ class InstanceManager:
         Returns:
             List of agency endpoints
         """
-        from .deployment_plan import ClusterDeploymentPlan
+        from .deployment import ClusterDeployment
 
-        if not self.state.deployment_plan:
+        if not self._deployment:
             return []
-        if isinstance(self.state.deployment_plan, ClusterDeploymentPlan):
-            return self.state.deployment_plan.agency_endpoints
+        if isinstance(self._deployment, ClusterDeployment):
+            return self._deployment.get_agency_endpoints()
         return []
 
     def check_deployment_health(self, timeout: Optional[float] = None) -> HealthStatus:
@@ -393,22 +333,22 @@ class InstanceManager:
         if timeout is None:
             timeout = self._app_context.config.timeouts.health_check_extended
 
-        if not self.state.status.is_deployed:
+        if not self._deployment or not self._deployment.status.is_deployed:
             return HealthStatus(
                 is_healthy=False,
                 response_time=0.0,
                 error_message="No deployment active",
             )
 
-        # Delegate to HealthMonitor for health checking (authoritative orchestrator dict)
-        servers = self._deployment_orchestrator.get_servers()
+        # Delegate to HealthMonitor for health checking
+        servers = self._deployment.get_servers()
 
         health_status = self._health_monitor.check_deployment_health(
             servers, timeout=timeout
         )
 
         # Update state based on health status
-        self.state.status.is_healthy = health_status.is_healthy
+        self._deployment.status.is_healthy = health_status.is_healthy
 
         return health_status
 
@@ -418,22 +358,22 @@ class InstanceManager:
         Returns:
             Dictionary mapping server IDs to their stats
         """
-        # Delegate to HealthMonitor for stats collection (authoritative orchestrator dict)
-        servers = self._deployment_orchestrator.get_servers()
+        # Delegate to HealthMonitor for stats collection
+        servers = self._deployment.get_servers() if self._deployment else {}
 
         return self._health_monitor.collect_deployment_stats(servers)
 
     def is_deployed(self) -> bool:
         """Check if deployment is active."""
-        return self.state.status.is_deployed
+        return self._deployment is not None and self._deployment.status.is_deployed
 
     def is_healthy(self) -> bool:
         """Check if deployment is healthy."""
-        return self.state.status.is_healthy
+        return self._deployment is not None and self._deployment.status.is_healthy
 
     def get_server_count(self) -> int:
         """Get total number of servers in deployment."""
-        return len(self.state.servers)
+        return self._deployment.get_server_count() if self._deployment else 0
 
     def get_deployment_info(self) -> Dict[str, Any]:
         """Get comprehensive deployment information.
@@ -443,20 +383,30 @@ class InstanceManager:
         """
         info = {
             "deployment_id": self.deployment_id,
-            "is_deployed": self.state.status.is_deployed,
-            "is_healthy": self.state.status.is_healthy,
-            "server_count": len(self.state.servers),
-            "startup_time": self.state.timing.startup_time,
-            "shutdown_time": self.state.timing.shutdown_time,
+            "is_deployed": (
+                self._deployment.status.is_deployed if self._deployment else False
+            ),
+            "is_healthy": (
+                self._deployment.status.is_healthy if self._deployment else False
+            ),
+            "server_count": (
+                self._deployment.get_server_count() if self._deployment else 0
+            ),
+            "startup_time": (
+                self._deployment.timing.startup_time if self._deployment else None
+            ),
+            "shutdown_time": (
+                self._deployment.timing.shutdown_time if self._deployment else None
+            ),
         }
 
-        if self.state.deployment_plan:
-            from .deployment_plan import SingleServerDeploymentPlan
+        if self._deployment:
+            from .deployment import SingleServerDeployment
 
-            # Determine deployment mode from plan type
+            # Determine deployment mode from deployment type
             deployment_mode = (
                 "single_server"
-                if isinstance(self.state.deployment_plan, SingleServerDeploymentPlan)
+                if isinstance(self._deployment, SingleServerDeployment)
                 else "cluster"
             )
 
@@ -470,7 +420,8 @@ class InstanceManager:
 
         # Add server details
         info["servers"] = {}
-        for server_id, server in self.state.servers.items():
+        servers = self._deployment.get_servers() if self._deployment else {}
+        for server_id, server in servers.items():
             info["servers"][str(server_id)] = {
                 "role": server.role.value,
                 "endpoint": server.endpoint,
@@ -492,7 +443,8 @@ class InstanceManager:
         """Release all allocated ports for this deployment."""
         try:
             # Release ports for each server in this deployment
-            for server in self.state.servers.values():
+            servers = self._deployment.get_servers() if self._deployment else {}
+            for server in servers.values():
                 if hasattr(server, "port"):
                     self._app_context.port_allocator.release_port(server.port)
                     logger.debug(

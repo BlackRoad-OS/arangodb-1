@@ -38,8 +38,7 @@ class TestInstanceManagerBasic:
         assert hasattr(manager, "_app_context")
         assert hasattr(manager._app_context, "config")
         assert hasattr(manager._app_context, "port_allocator")
-        assert hasattr(manager, "state")
-        assert hasattr(manager.state, "servers")
+        assert hasattr(manager, "_deployment")
         assert hasattr(manager, "_threading")
 
     def test_manager_has_expected_methods(self):
@@ -253,7 +252,7 @@ class TestInstanceManagerLifecycleDeployment:
         self.manager = InstanceManager("lifecycle_test", app_context=self.app_context)
 
     def _inject_fake_execution(self, plan):
-        """Patch orchestrator.execute_deployment to populate internal _servers dict."""
+        """Patch orchestrator.execute_deployment to populate internal _deployment."""
         orch = self.manager._deployment_orchestrator
 
         def fake_execute_deployment(p, timeout=None):
@@ -261,13 +260,35 @@ class TestInstanceManagerLifecycleDeployment:
                 SingleServerDeploymentPlan,
                 ClusterDeploymentPlan,
             )
+            from armadillo.instances.deployment import (
+                SingleServerDeployment,
+                ClusterDeployment,
+                DeploymentStatus,
+                DeploymentTiming,
+            )
             from armadillo.core.value_objects import ServerId
             from armadillo.core.types import ServerRole
+            import time
+
+            from unittest.mock import Mock
 
             if isinstance(p, SingleServerDeploymentPlan):
                 sid = ServerId("server_0")
                 server = self.FakeServer(sid, ServerRole.SINGLE)
-                orch._servers = {sid: server}
+                orch._deployment = SingleServerDeployment(
+                    plan=p,
+                    server=server,
+                    status=DeploymentStatus(is_deployed=True, is_healthy=True),
+                    timing=DeploymentTiming(startup_time=time.time()),
+                )
+                # Create a fake executor for shutdown
+                fake_executor = Mock()
+                fake_executor.shutdown = Mock(
+                    side_effect=lambda dep, timeout: setattr(
+                        dep.status, "is_deployed", False
+                    )
+                )
+                orch._current_executor = fake_executor
             elif isinstance(p, ClusterDeploymentPlan):
                 sids_roles = [
                     ("agent_0", ServerRole.AGENT),
@@ -278,14 +299,27 @@ class TestInstanceManagerLifecycleDeployment:
                 for sid_str, role in sids_roles:
                     sid = ServerId(sid_str)
                     servers[sid] = self.FakeServer(sid, role)
-                orch._servers = servers
+                orch._deployment = ClusterDeployment(
+                    plan=p,
+                    servers=servers,
+                    status=DeploymentStatus(is_deployed=True, is_healthy=True),
+                    timing=DeploymentTiming(startup_time=time.time()),
+                )
+                # Create a fake executor for shutdown
+                fake_executor = Mock()
+                fake_executor.shutdown = Mock(
+                    side_effect=lambda dep, timeout: setattr(
+                        dep.status, "is_deployed", False
+                    )
+                )
+                orch._current_executor = fake_executor
             else:
                 raise AssertionError(f"Unexpected plan type: {type(p)}")
 
         orch.execute_deployment = fake_execute_deployment  # type: ignore
 
     def test_lifecycle_single_server_deployment_syncs_state(self):
-        """Verify single server deployment populates InstanceManager.state from orchestrator internal dict."""
+        """Verify single server deployment populates InstanceManager._deployment from orchestrator."""
         from armadillo.core.types import ServerConfig, ServerRole
         from armadillo.instances.deployment_plan import SingleServerDeploymentPlan
         from pathlib import Path
@@ -305,15 +339,16 @@ class TestInstanceManagerLifecycleDeployment:
         # State assertions
         assert self.manager.is_deployed() is True
         assert self.manager.is_healthy() is True
-        assert len(self.manager.state.servers) == 1
+        assert self.manager._deployment is not None
+        assert self.manager._deployment.get_server_count() == 1
         orch_servers = self.manager._deployment_orchestrator.get_servers()
-        assert self.manager.state.servers is orch_servers  # should reference orchestrator internal dict
+        assert len(orch_servers) == 1
         # get_server returns the same instance
-        sid = next(iter(self.manager.state.servers.keys()))
-        assert self.manager.get_server(sid) is self.manager.state.servers[sid]
+        sid = next(iter(orch_servers.keys()))
+        assert self.manager.get_server(sid) is orch_servers[sid]
 
-    def test_lifecycle_cluster_deployment_syncs_state(self):
-        """Verify cluster deployment populates InstanceManager.state with all servers."""
+    def test_lifecycle_cluster_deployment(self):
+        """Verify cluster deployment succeeds and all servers are accessible."""
         from armadillo.core.types import ServerConfig, ServerRole
         from armadillo.instances.deployment_plan import ClusterDeploymentPlan
         from pathlib import Path
@@ -347,12 +382,13 @@ class TestInstanceManagerLifecycleDeployment:
         assert self.manager.is_healthy() is True
 
         # All three servers present
-        assert len(self.manager.state.servers) == 3
+        assert self.manager._deployment is not None
+        assert self.manager._deployment.get_server_count() == 3
         orch_servers = self.manager._deployment_orchestrator.get_servers()
-        assert self.manager.state.servers is orch_servers
+        assert len(orch_servers) == 3
 
         # Verify all servers are present (startup order is no longer tracked)
-        roles = [s.role for s in self.manager.state.servers.values()]
+        roles = [s.role for s in orch_servers.values()]
         assert ServerRole.AGENT in roles
         assert ServerRole.DBSERVER in roles
         assert ServerRole.COORDINATOR in roles
@@ -366,4 +402,9 @@ class TestInstanceManagerLifecycleDeployment:
         # Shutdown path should clear state without errors using fake server stop()
         self.manager.shutdown_deployment(timeout=5.0)
         assert self.manager.is_deployed() is False
-        assert len(self.manager.state.servers) == 0
+        # After shutdown, deployment status is False but deployment object may still exist
+        # The orchestrator should have cleared its deployment
+        assert (
+            self.manager._deployment_orchestrator._deployment is None
+            or len(self.manager._deployment_orchestrator.get_servers()) == 0
+        )

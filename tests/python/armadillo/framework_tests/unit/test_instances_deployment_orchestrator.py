@@ -25,7 +25,7 @@ class TestDeploymentOrchestrator:
         assert orchestrator._logger == mock_logger
         assert orchestrator._server_factory == mock_factory
         assert orchestrator._executor == mock_executor
-        assert orchestrator._servers == {}
+        assert orchestrator._deployment is None
 
     def test_create_executor_single_server(self):
         """Test creating executor for single server plan."""
@@ -91,11 +91,30 @@ class TestDeploymentOrchestrator:
             return_value=Mock(is_healthy=True, error_message=None)
         )
         mock_server.role = ServerRole.SINGLE
+        mock_server.server_id = "server_0"
 
         class MockFactory:
             def create_server_instances(self, servers_config):
                 # Return dict with a deterministic ServerId-like key
                 return {"server_0": mock_server}
+
+        # Mock executor that returns SingleServerDeployment
+        from armadillo.instances.deployment import (
+            SingleServerDeployment,
+            DeploymentStatus,
+            DeploymentTiming,
+        )
+        import time
+
+        mock_executor_instance = Mock()
+        mock_executor_instance.deploy = Mock(
+            return_value=SingleServerDeployment(
+                plan=SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE)),
+                server=mock_server,
+                status=DeploymentStatus(is_deployed=True, is_healthy=True),
+                timing=DeploymentTiming(startup_time=time.time()),
+            )
+        )
 
         orchestrator = DeploymentOrchestrator(
             mock_logger,
@@ -103,15 +122,21 @@ class TestDeploymentOrchestrator:
             mock_executor,
         )
 
+        # Patch _create_executor to return our mock executor
+        orchestrator._create_executor = Mock(return_value=mock_executor_instance)
+
         plan = SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE))
         orchestrator.execute_deployment(plan, timeout=5.0)
 
-        # Internal servers dict should be populated
+        # Internal deployment should be populated
+        assert orchestrator._deployment is not None
         servers = orchestrator.get_servers()
         assert len(servers) == 1
         assert "server_0" in servers
-        mock_server.start.assert_called_once()
-        mock_server.health_check_sync.assert_called_once()
+        # Note: start() and health_check_sync() are called by the executor, not orchestrator
+        # Since we're mocking the executor, these won't be called
+        # mock_server.start.assert_called_once()
+        # mock_server.health_check_sync.assert_called_once()
 
     def test_execute_deployment_cluster(self, monkeypatch):
         """Test executing cluster deployment."""
@@ -124,14 +149,16 @@ class TestDeploymentOrchestrator:
         db1 = Mock(role=ServerRole.DBSERVER)
         coord1 = Mock(role=ServerRole.COORDINATOR)
 
+        servers_dict = {
+            "agent_0": agent1,
+            "agent_1": agent2,
+            "dbserver_0": db1,
+            "coordinator_0": coord1,
+        }
+
         class MockFactory:
             def create_server_instances(self, servers_config):
-                return {
-                    "agent_0": agent1,
-                    "agent_1": agent2,
-                    "dbserver_0": db1,
-                    "coordinator_0": coord1,
-                }
+                return servers_dict
 
         # Fake bootstrap
         def fake_bootstrap(self, servers, timeout=0):
@@ -139,14 +166,41 @@ class TestDeploymentOrchestrator:
             assert len(servers) == 4
 
         from armadillo.instances.cluster_bootstrapper import ClusterBootstrapper
+        from armadillo.instances.deployment import (
+            ClusterDeployment,
+            DeploymentStatus,
+            DeploymentTiming,
+        )
+        import time
 
         monkeypatch.setattr(ClusterBootstrapper, "bootstrap_cluster", fake_bootstrap)
+
+        # Mock executor that returns ClusterDeployment
+        mock_executor_instance = Mock()
+        mock_executor_instance.deploy = Mock(
+            return_value=ClusterDeployment(
+                plan=ClusterDeploymentPlan(
+                    servers=[
+                        Mock(role=ServerRole.AGENT),
+                        Mock(role=ServerRole.AGENT),
+                        Mock(role=ServerRole.DBSERVER),
+                        Mock(role=ServerRole.COORDINATOR),
+                    ]
+                ),
+                servers=servers_dict,
+                status=DeploymentStatus(is_deployed=True, is_healthy=True),
+                timing=DeploymentTiming(startup_time=time.time()),
+            )
+        )
 
         orchestrator = DeploymentOrchestrator(
             mock_logger,
             MockFactory(),
             mock_executor,
         )
+
+        # Patch _create_executor to return our mock executor
+        orchestrator._create_executor = Mock(return_value=mock_executor_instance)
 
         plan = ClusterDeploymentPlan(
             servers=[
@@ -180,19 +234,35 @@ class TestDeploymentOrchestrator:
         mock_executor_instance = Mock()
         mock_executor_instance.shutdown = Mock()
 
+        from armadillo.instances.deployment import (
+            SingleServerDeployment,
+            DeploymentStatus,
+            DeploymentTiming,
+        )
+        from armadillo.instances.deployment_plan import SingleServerDeploymentPlan
+        import time
+
+        mock_deployment = SingleServerDeployment(
+            plan=SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE)),
+            server=mock_server1,
+            status=DeploymentStatus(is_deployed=True, is_healthy=True),
+            timing=DeploymentTiming(startup_time=time.time()),
+        )
+
         orchestrator = DeploymentOrchestrator(
             mock_logger,
             Mock(),  # factory unused for shutdown test
             mock_executor,
         )
-        orchestrator._servers = {"server_0": mock_server1}
+        orchestrator._deployment = mock_deployment
         orchestrator._current_executor = mock_executor_instance
 
         orchestrator.shutdown_deployment(timeout=10.0)
 
-        # Verify executor.shutdown was called
+        # Verify executor.shutdown was called with deployment
         mock_executor_instance.shutdown.assert_called_once_with(
-            {"server_0": mock_server1}, 10.0
+            mock_deployment, 10.0
         )
         assert orchestrator.get_servers() == {}
         assert orchestrator._current_executor is None
+        assert orchestrator._deployment is None

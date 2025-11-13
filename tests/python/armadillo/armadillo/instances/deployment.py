@@ -1,0 +1,108 @@
+"""Deployment domain types representing complete deployments."""
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+from ..core.value_objects import ServerId
+from ..core.types import ServerRole
+from .server import ArangoServer
+from .deployment_plan import SingleServerDeploymentPlan, ClusterDeploymentPlan
+
+
+@dataclass
+class DeploymentStatus:
+    """Status information for a deployment."""
+
+    is_deployed: bool = False
+    is_healthy: bool = False
+
+
+@dataclass
+class DeploymentTiming:
+    """Timing information for a deployment."""
+
+    startup_time: Optional[float] = None
+    shutdown_time: Optional[float] = None
+
+
+@dataclass
+class Deployment(ABC):
+    """Base class for deployments.
+
+    Provides common fields and methods that work for both single server and cluster.
+    The abstract get_servers() method provides a unified interface, eliminating
+    the need for special cases in calling code.
+    """
+
+    @abstractmethod
+    def get_servers(self) -> Dict[ServerId, ArangoServer]:
+        """Get all servers as a dictionary.
+
+        This method provides a unified interface - all calling code can use
+        .values(), .items(), .keys(), etc. without special cases.
+
+        Returns:
+            Dictionary mapping server IDs to server instances
+        """
+        pass
+
+    def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
+        """Get a single server by ID."""
+        return self.get_servers().get(server_id)
+
+    def get_servers_by_role(self, role: ServerRole) -> List[ArangoServer]:
+        """Get all servers with the specified role."""
+        return [s for s in self.get_servers().values() if s.role == role]
+
+    def get_server_count(self) -> int:
+        """Get total number of servers."""
+        return len(self.get_servers())
+
+    def is_empty(self) -> bool:
+        """Check if deployment has no servers."""
+        return self.get_server_count() == 0
+
+
+@dataclass
+class SingleServerDeployment(Deployment):
+    """Single server deployment.
+
+    Enforces that only one server can exist - stored as a single object, not a dict.
+    This provides type safety: you cannot accidentally have multiple servers.
+    """
+
+    plan: SingleServerDeploymentPlan
+    server: ArangoServer  # Single server object, not dict - enforces constraint
+    status: DeploymentStatus = field(default_factory=DeploymentStatus)
+    timing: DeploymentTiming = field(default_factory=DeploymentTiming)
+
+    def get_servers(self) -> Dict[ServerId, ArangoServer]:
+        """Get servers as dict (wraps single server for unified interface)."""
+        return {self.server.server_id: self.server}
+
+    def get_coordination_endpoints(self) -> List[str]:
+        """Get coordination endpoint (single server endpoint)."""
+        return [self.server.endpoint]
+
+
+@dataclass
+class ClusterDeployment(Deployment):
+    """Cluster deployment with multiple servers."""
+
+    plan: ClusterDeploymentPlan
+    servers: Dict[ServerId, ArangoServer] = field(default_factory=dict)
+    status: DeploymentStatus = field(default_factory=DeploymentStatus)
+    timing: DeploymentTiming = field(default_factory=DeploymentTiming)
+
+    def get_servers(self) -> Dict[ServerId, ArangoServer]:
+        """Get all servers."""
+        return self.servers
+
+    def get_coordination_endpoints(self) -> List[str]:
+        """Get coordinator endpoints."""
+        return self.plan.coordination_endpoints
+
+    def get_agency_endpoints(self) -> List[str]:
+        """Get agency endpoints."""
+        return self.plan.agency_endpoints
+

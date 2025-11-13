@@ -19,6 +19,7 @@ from .deployment_plan import (
     SingleServerDeploymentPlan,
     ClusterDeploymentPlan,
 )
+from .deployment import Deployment, SingleServerDeployment
 from .server import ArangoServer
 from .server_factory import ServerFactory
 from .deployment_executor import (
@@ -32,7 +33,7 @@ class DeploymentOrchestrator:
 
     This class is responsible for:
     - Executing deployments based on a DeploymentPlan
-    - Managing deployment lifecycle (start, stop, restart)
+    - Managing deployment lifecycle (start, stop)
     - Coordinating between specialized components
     - Delegating mode-specific logic to deployment executors
     """
@@ -56,7 +57,7 @@ class DeploymentOrchestrator:
         self._server_factory = server_factory
         self._executor = executor
         self._timeouts = timeout_config or TimeoutConfig()
-        self._servers: Dict[ServerId, ArangoServer] = {}
+        self._deployment: Optional[Deployment] = None
         self._current_executor: Optional[object] = (
             None  # SingleServerExecutor or ClusterExecutor
         )
@@ -107,7 +108,8 @@ class DeploymentOrchestrator:
         try:
             # Executor owns full lifecycle (create + start + verify)
             executor = self._create_executor(plan)
-            self._servers = executor.deploy(plan, timeout=timeout)
+            deployment = executor.deploy(plan, timeout=timeout)
+            self._deployment = deployment
             self._current_executor = executor
 
             elapsed_total = time.time() - start_time
@@ -131,61 +133,47 @@ class DeploymentOrchestrator:
         Raises:
             ServerError: If shutdown fails critically
         """
-        if not self._servers or not self._current_executor:
+        if not self._deployment or not self._current_executor:
             self._logger.debug("No deployment to shutdown")
             return
 
         if timeout is None:
             # Calculate timeout based on number of servers
             # Allow per-server timeout + 20% buffer for coordination overhead
-            num_servers = len(self._servers)
+            num_servers = self._deployment.get_server_count()
             timeout = self._timeouts.server_shutdown * max(1, num_servers) * 1.2
+        else:
+            num_servers = self._deployment.get_server_count()
 
         self._logger.info(
             "Shutting down %d server(s) with %.1fs timeout",
-            len(self._servers),
+            num_servers,
             timeout,
         )
 
         # Print shutdown message with newline to separate from test output
-        if len(self._servers) == 1:
+        if isinstance(self._deployment, SingleServerDeployment):
             print_status("\nShutting down server")
         else:
-            print_status(f"\nShutting down cluster with {len(self._servers)} servers")
+            print_status(
+                f"\nShutting down cluster with {self._deployment.get_server_count()} servers"
+            )
 
         # Delegate to executor (it knows the correct shutdown order)
-        self._current_executor.shutdown(self._servers, timeout)
+        self._current_executor.shutdown(self._deployment, timeout)
 
         # Clear storage after shutdown
-        self._servers.clear()
+        self._deployment = None
         self._current_executor = None
-
-    def restart_deployment(self, timeout: Optional[float] = None) -> None:
-        """Restart all servers in the deployment.
-
-        Args:
-            timeout: Maximum time for restart operation (uses config default if None)
-        """
-        if timeout is None:
-            timeout = self._timeouts.deployment_cluster  # Conservative default
-
-        self._logger.info("Restarting deployment (timeout: %.1fs)", timeout)
-
-        # Shutdown first
-        shutdown_timeout = timeout * 0.3
-        self.shutdown_deployment(timeout=shutdown_timeout)
-
-        # We can't restart without a plan - this would need to be stored
-        raise NotImplementedError(
-            "Restart requires storing the original deployment plan. "
-            "Use InstanceManager.restart_deployment() instead."
-        )
 
     def get_servers(self) -> Dict[ServerId, ArangoServer]:
         """Get current servers dict."""
-        return self._servers
+        return self._deployment.get_servers() if self._deployment else {}
 
     def get_server(self, server_id: ServerId) -> Optional[ArangoServer]:
         """Get a single server by ID."""
-        servers = self.get_servers()
-        return servers.get(server_id)
+        return self._deployment.get_server(server_id) if self._deployment else None
+
+    def get_deployment(self) -> Optional[Deployment]:
+        """Get the current deployment."""
+        return self._deployment

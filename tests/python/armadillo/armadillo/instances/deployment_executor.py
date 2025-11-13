@@ -1,5 +1,6 @@
 """Deployment executors for different ArangoDB deployment modes."""
 
+import time
 from typing import Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 from ..core.log import Logger
@@ -11,6 +12,13 @@ from .deployment_plan import (
     DeploymentPlan,
     SingleServerDeploymentPlan,
     ClusterDeploymentPlan,
+)
+from .deployment import (
+    Deployment,
+    SingleServerDeployment,
+    ClusterDeployment,
+    DeploymentStatus,
+    DeploymentTiming,
 )
 from .cluster_bootstrapper import ClusterBootstrapper
 from .server_factory import ServerFactory
@@ -38,15 +46,15 @@ class SingleServerExecutor:
 
     def deploy(
         self, plan: DeploymentPlan, timeout: Optional[float] = None
-    ) -> Dict[ServerId, ArangoServer]:
-        """Deploy a single server and return instances dict.
+    ) -> SingleServerDeployment:
+        """Deploy a single server and return deployment.
 
         Args:
             plan: SingleServerDeploymentPlan instance
             timeout: Optional override (falls back to configured single deployment timeout)
 
         Returns:
-            Dict mapping ServerId -> ArangoServer
+            SingleServerDeployment with deployed server
 
         Raises:
             ServerError: On type mismatch or health verification failure
@@ -75,31 +83,32 @@ class SingleServerExecutor:
             )
 
         self._logger.info("Single server %s started and verified", server_id)
-        return servers
+        return SingleServerDeployment(
+            plan=plan,
+            server=server,  # Single server object, not dict
+            status=DeploymentStatus(is_deployed=True, is_healthy=True),
+            timing=DeploymentTiming(startup_time=time.time()),
+        )
 
-    def shutdown(
-        self, servers: Dict[ServerId, ArangoServer], timeout: float
-    ) -> None:
+    def shutdown(self, deployment: SingleServerDeployment, timeout: float) -> None:
         """Shutdown single server.
 
         Trivial: only one server to stop.
 
         Args:
-            servers: Dictionary of servers to shutdown
+            deployment: SingleServerDeployment to shutdown
             timeout: Maximum time to wait for shutdown
 
         Raises:
             ServerShutdownError: If shutdown fails
         """
-        if not servers:
-            return
-
-        server = next(iter(servers.values()))
+        server = deployment.server  # Direct access, no dict iteration needed
         self._logger.info("Shutting down single server: %s", server.server_id)
 
         try:
             server.stop(timeout=timeout)
             self._logger.info("Server stopped successfully")
+            deployment.status.is_deployed = False
         except (ServerShutdownError, ProcessError, OSError) as e:
             self._logger.error("Failed to stop server: %s", e)
             raise
@@ -129,15 +138,15 @@ class ClusterExecutor:
 
     def deploy(
         self, plan: DeploymentPlan, timeout: Optional[float] = None
-    ) -> Dict[ServerId, ArangoServer]:
-        """Deploy a cluster and return instances dict.
+    ) -> ClusterDeployment:
+        """Deploy a cluster and return deployment.
 
         Args:
             plan: ClusterDeploymentPlan instance
             timeout: Optional total deployment timeout (defaults to configured cluster timeout)
 
         Returns:
-            Dict mapping ServerId -> ArangoServer
+            ClusterDeployment with deployed servers
 
         Raises:
             ClusterError: On type mismatch or readiness failure propagated from bootstrapper
@@ -155,11 +164,14 @@ class ClusterExecutor:
         self._bootstrapper.bootstrap_cluster(servers, timeout=effective_timeout)
 
         self._logger.info("Cluster deployment successful")
-        return servers
+        return ClusterDeployment(
+            plan=plan,
+            servers=servers,  # Dict for multiple servers
+            status=DeploymentStatus(is_deployed=True, is_healthy=True),
+            timing=DeploymentTiming(startup_time=time.time()),
+        )
 
-    def shutdown(
-        self, servers: Dict[ServerId, ArangoServer], timeout: float
-    ) -> None:
+    def shutdown(self, deployment: ClusterDeployment, timeout: float) -> None:
         """Shutdown cluster in role-based order.
 
         Shutdown order: Non-agents first, then agents
@@ -169,17 +181,18 @@ class ClusterExecutor:
         shutdown of coordinators and dbservers.
 
         Args:
-            servers: Dictionary of servers to shutdown
+            deployment: ClusterDeployment to shutdown
             timeout: Maximum time to wait for shutdown
 
         Raises:
             ServerShutdownError: If shutdown fails critically
         """
+        servers = deployment.get_servers()
         if not servers:
             return
 
         # Separate by role
-        agents = [s for s in servers.values() if s.role == ServerRole.AGENT]
+        agents = deployment.get_servers_by_role(ServerRole.AGENT)
         non_agents = [s for s in servers.values() if s.role != ServerRole.AGENT]
 
         self._logger.info(
@@ -189,7 +202,7 @@ class ClusterExecutor:
         )
 
         # Calculate per-server timeout
-        total_servers = len(servers)
+        total_servers = deployment.get_server_count()
         per_server_timeout = timeout / max(1, total_servers)
 
         failed_shutdowns = []
@@ -220,4 +233,6 @@ class ClusterExecutor:
             self._logger.warning(
                 "Some servers failed to shutdown cleanly: %s", failed_shutdowns
             )
+
+        deployment.status.is_deployed = False
 

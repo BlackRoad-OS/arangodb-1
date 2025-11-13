@@ -2,7 +2,7 @@
 
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any
 
 import requests
 

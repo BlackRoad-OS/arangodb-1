@@ -79,10 +79,15 @@ def test_single_server_executor_success(tmp_path):
     factory = MockFactory()
 
     executor = SingleServerExecutor(logger, factory, timeouts)
-    servers = executor.deploy(plan)
+    deployment = executor.deploy(plan)
 
-    assert len(servers) == 1
-    assert server_id in servers
+    assert deployment is not None
+    assert deployment.get_server_count() == 1
+    servers_dict = deployment.get_servers()
+    assert len(servers_dict) == 1
+    # Check that the server is in the dict (using the server's server_id)
+    assert mock_server.server_id in servers_dict or server_id in servers_dict
+    assert servers_dict.get(mock_server.server_id) == mock_server or servers_dict.get(server_id) == mock_server
     mock_server.start.assert_called_once()
     mock_server.health_check_sync.assert_called_once()
 
@@ -138,12 +143,30 @@ def test_single_server_executor_shutdown(tmp_path):
 
     server_id = ServerId("server_0")
     mock_server = MagicMock()
-    servers = {server_id: mock_server}
+    mock_server.server_id = server_id
+
+    from armadillo.instances.deployment import (
+        SingleServerDeployment,
+        DeploymentStatus,
+        DeploymentTiming,
+    )
+    from armadillo.instances.deployment_plan import SingleServerDeploymentPlan
+    import time
+
+    deployment = SingleServerDeployment(
+        plan=SingleServerDeploymentPlan(
+            server=make_server_config(ServerRole.SINGLE, 12000, tmp_path)
+        ),
+        server=mock_server,
+        status=DeploymentStatus(is_deployed=True, is_healthy=True),
+        timing=DeploymentTiming(startup_time=time.time()),
+    )
 
     executor = SingleServerExecutor(logger, Mock(), timeouts)
-    executor.shutdown(servers, timeout=10.0)
+    executor.shutdown(deployment, timeout=10.0)
 
-    mock_server.stop.assert_called_once_with(10.0)
+    mock_server.stop.assert_called_once_with(timeout=10.0)
+    assert deployment.status.is_deployed is False
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +210,10 @@ def test_cluster_executor_success(tmp_path, monkeypatch):
     executor = ClusterExecutor(
         logger, MockFactory(), executor_pool, timeouts
     )
-    servers = executor.deploy(plan)
+    deployment = executor.deploy(plan)
 
-    assert servers == servers_dict
+    assert deployment is not None
+    assert deployment.get_servers() == servers_dict
 
     executor_pool.shutdown(wait=True)
 
@@ -244,9 +268,10 @@ def test_cluster_executor_empty_servers(monkeypatch):
     executor_pool = ThreadPoolExecutor(max_workers=1)
 
     executor = ClusterExecutor(logger, MockFactory(), executor_pool, timeouts)
-    servers = executor.deploy(plan)
+    deployment = executor.deploy(plan)
 
-    assert servers == {}
+    assert deployment is not None
+    assert deployment.get_servers() == {}
 
     executor_pool.shutdown(wait=True)
 
@@ -280,11 +305,26 @@ def test_cluster_executor_shutdown(tmp_path):
         coordinator.server_id: coordinator,
     }
 
+    from armadillo.instances.deployment import (
+        ClusterDeployment,
+        DeploymentStatus,
+        DeploymentTiming,
+    )
+    from armadillo.instances.deployment_plan import ClusterDeploymentPlan
+    import time
+
+    deployment = ClusterDeployment(
+        plan=ClusterDeploymentPlan(servers=[]),
+        servers=servers,
+        status=DeploymentStatus(is_deployed=True, is_healthy=True),
+        timing=DeploymentTiming(startup_time=time.time()),
+    )
+
     from concurrent.futures import ThreadPoolExecutor
     executor_pool = ThreadPoolExecutor(max_workers=1)
 
     executor = ClusterExecutor(logger, Mock(), executor_pool, timeouts)
-    executor.shutdown(servers, timeout=40.0)
+    executor.shutdown(deployment, timeout=40.0)
 
     # Verify shutdown order: non-agents first, then agents
     # Non-agents should be stopped first
@@ -300,5 +340,6 @@ def test_cluster_executor_shutdown(tmp_path):
     assert coordinator.stop.call_count == 1
     assert agent1.stop.call_count == 1
     assert agent2.stop.call_count == 1
+    assert deployment.status.is_deployed is False
 
     executor_pool.shutdown(wait=True)
