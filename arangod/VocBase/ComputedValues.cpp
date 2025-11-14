@@ -70,11 +70,12 @@ namespace arangodb {
 
 // expression context used for calculating computed values inside
 ComputedValuesExpressionContext::ComputedValuesExpressionContext(
-    transaction::Methods& trx, LogicalCollection& collection)
+    transaction::Methods& trx, LogicalCollection& collection, ResourceMonitor* rm)
     : aql::ExpressionContext(),
       _trx(trx),
       _collection(collection),
-      _failOnWarning(false) {}
+      _failOnWarning(false),
+      _resourceMonitor(rm) {}
 
 TRI_vocbase_t& ComputedValuesExpressionContext::vocbase() const {
   return _trx.vocbase();
@@ -314,6 +315,11 @@ void ComputedValues::ComputedValue::computeAttribute(
   auto const& vopts = ctx.trx().vpackOptions();
   aql::AqlValueMaterializer materializer(&vopts);
   output.add(_name, materializer.slice(result));
+}
+
+ResourceMonitor& ComputedValues::ComputedValue::getResourceMonitor()
+    const noexcept {
+  return _queryContext->resourceMonitor();
 }
 
 ComputedValues::ComputedValues(TRI_vocbase_t& vocbase,
@@ -610,6 +616,13 @@ void ComputedValues::toVelocyPack(velocypack::Builder& result) const {
     it.toVelocyPack(result);
   }
   result.close();
+}
+
+ResourceMonitor* ComputedValues::getResourceMonitor() const noexcept {
+  if (_values.empty()) {
+    return nullptr;
+  }
+  return &_values[0].getResourceMonitor();
 }
 
 }  // namespace arangodb

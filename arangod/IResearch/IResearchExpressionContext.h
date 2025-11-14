@@ -31,6 +31,7 @@
 #include "Basics/Exceptions.h"
 #include "Containers/FlatHashMap.h"
 
+#include <Aql/QueryContext.h>
 #include <velocypack/Slice.h>
 
 namespace arangodb {
@@ -84,6 +85,11 @@ struct ViewExpressionContextBase : public arangodb::aql::ExpressionContext {
   bool killed() const override final;
 
   aql::AstNode const* _expr{};  // for troubleshooting
+
+  virtual ResourceMonitor* getResourceMonitorPtr()
+      const noexcept override final {
+    return &_query->resourceMonitor();
+  }
 
  protected:
   arangodb::transaction::Methods* _trx;
