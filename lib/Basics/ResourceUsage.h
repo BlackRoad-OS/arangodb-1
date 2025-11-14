@@ -132,6 +132,8 @@ class ResourceUsageScope {
 
   std::uint64_t current() const noexcept;
 
+  ResourceMonitor& resourceMonitor() const noexcept { return _resourceMonitor; }
+
  private:
   ResourceMonitor& _resourceMonitor;
   std::uint64_t _value;
