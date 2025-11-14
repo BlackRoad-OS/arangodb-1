@@ -78,7 +78,7 @@ AqlValue functions::RegexMatches(ExpressionContext* expressionContext,
     builder->openArray();
     builder->add(aqlValueToMatch.slice());
     builder->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
@@ -118,7 +118,7 @@ AqlValue functions::RegexMatches(ExpressionContext* expressionContext,
     // empty string again.
     result->add(VPackValue(""));
     result->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(result->slice(), result->size(), rm);
   }
@@ -144,7 +144,7 @@ AqlValue functions::RegexMatches(ExpressionContext* expressionContext,
   }
 
   result->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(result->slice(), result->size(), rm);
 }
@@ -185,7 +185,7 @@ AqlValue functions::RegexSplit(ExpressionContext* expressionContext,
     builder->openArray();
     builder->add(aqlValueToSplit.slice());
     builder->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
@@ -224,7 +224,7 @@ AqlValue functions::RegexSplit(ExpressionContext* expressionContext,
     // empty string again.
     result->add(VPackValue(""));
     result->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(result->slice(), result->size(), rm);
   }
@@ -286,7 +286,7 @@ AqlValue functions::RegexSplit(ExpressionContext* expressionContext,
   }
 
   result->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(result->slice(), result->size(), rm);
 }

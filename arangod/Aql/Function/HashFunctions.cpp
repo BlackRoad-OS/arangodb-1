@@ -88,7 +88,7 @@ AqlValue functions::Md5(ExpressionContext* exprCtx, AstNode const&,
   char hex[32];
   rest::SslInterface::sslHEX(hash, 16, &hex[0]);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(std::string_view{&hex[0], 32}, rm);
 }
@@ -113,7 +113,7 @@ AqlValue functions::Sha1(ExpressionContext* exprCtx, AstNode const&,
   char hex[40];
   rest::SslInterface::sslHEX(hash, 20, &hex[0]);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(std::string_view{&hex[0], 40}, rm);
 }
@@ -138,7 +138,7 @@ AqlValue functions::Sha256(ExpressionContext* exprCtx, AstNode const&,
   char hex[64];
   rest::SslInterface::sslHEX(hash, 32, &hex[0]);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(std::string_view{&hex[0], 64}, rm);
 }
@@ -163,7 +163,7 @@ AqlValue functions::Sha512(ExpressionContext* exprCtx, AstNode const&,
   char hex[128];
   rest::SslInterface::sslHEX(hash, 64, &hex[0]);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(std::string_view{&hex[0], 128}, rm);
 }
@@ -184,7 +184,7 @@ AqlValue functions::Crc32(ExpressionContext* exprCtx, AstNode const&,
   char out[9];
   size_t length = TRI_StringUInt32HexInPlace(crc, &out[0]);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(std::string_view{&out[0], length}, rm);
 }
@@ -205,7 +205,7 @@ AqlValue functions::Fnv64(ExpressionContext* exprCtx, AstNode const&,
   char out[17];
   size_t length = TRI_StringUInt64HexInPlace(hashval, &out[0]);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(std::string_view{&out[0], length}, rm);
 }

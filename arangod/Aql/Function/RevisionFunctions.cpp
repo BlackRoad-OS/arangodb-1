@@ -87,7 +87,7 @@ AqlValue functions::DecodeRev(ExpressionContext* expressionContext,
   builder->add("count", VPackValue(count));
   builder->close();
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }

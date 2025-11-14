@@ -102,7 +102,7 @@ AqlValue functions::ParseIdentifier(ExpressionContext* expressionContext,
                                          identifier.size() - pos - 1,
                                          VPackValueType::String));
       builder->close();
-      ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+      ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
       return AqlValue(builder->slice(), builder->size(), rm);
     }

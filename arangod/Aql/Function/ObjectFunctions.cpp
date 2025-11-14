@@ -131,8 +131,7 @@ void unsetOrKeep(transaction::Methods* trx, VPackSlice const& value,
 AqlValue mergeParameters(ExpressionContext* expressionContext,
                          aql::functions::VPackFunctionParametersView parameters,
                          char const* funcName, bool recursive) {
-  ResourceMonitor* resourceMonitor =
-      functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* resourceMonitor = expressionContext->getResourceMonitor();
 
   size_t const n = parameters.size();
 
@@ -285,7 +284,7 @@ AqlValue functions::Unset(ExpressionContext* expressionContext, AstNode const&,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, true, false, *builder.get());
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -314,7 +313,7 @@ AqlValue functions::UnsetRecursive(ExpressionContext* expressionContext,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, true, true, *builder.get());
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -342,7 +341,7 @@ AqlValue functions::Keep(ExpressionContext* expressionContext, AstNode const&,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, false, false, *builder.get());
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -371,7 +370,7 @@ AqlValue functions::KeepRecursive(ExpressionContext* expressionContext,
   VPackSlice slice = materializer.slice(value);
   transaction::BuilderLeaser builder(trx);
   unsetOrKeep(trx, slice, names, false, true, *builder.get());
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -518,7 +517,7 @@ AqlValue functions::Attributes(ExpressionContext* expressionContext,
     }
     builder->close();
 
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
@@ -535,7 +534,7 @@ AqlValue functions::Attributes(ExpressionContext* expressionContext,
     builder->add(VPackValue(it));
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -594,7 +593,7 @@ AqlValue functions::Values(ExpressionContext* expressionContext, AstNode const&,
   }
   builder->close();
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -826,7 +825,7 @@ AqlValue functions::Zip(ExpressionContext* expressionContext, AstNode const&,
 
   builder->close();
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -870,7 +869,7 @@ AqlValue functions::Entries(ExpressionContext* expressionContext,
 
   builder->close();
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }

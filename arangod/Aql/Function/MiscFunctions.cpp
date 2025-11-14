@@ -189,7 +189,7 @@ AqlValue functions::Reverse(ExpressionContext* expressionContext,
       builder->add(it);
     }
     builder->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   } else if (value.isString()) {

@@ -129,7 +129,7 @@ AqlValue functions::ToString(ExpressionContext* expr, AstNode const&,
 
   appendAsString(trx.vpackOptions(), adapter, value);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expr);
+  ResourceMonitor* rm = expr->getResourceMonitor();
 
   return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
 }
@@ -153,7 +153,7 @@ AqlValue functions::ToChar(ExpressionContext* ctx, AstNode const&,
   int32_t offset = 0;
   U8_APPEND_UNSAFE(&buffer[0], offset, c);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+  ResourceMonitor* rm = ctx->getResourceMonitor();
 
   return AqlValue(std::string_view(&buffer[0], static_cast<size_t>(offset)),
                   rm);
@@ -168,7 +168,7 @@ AqlValue functions::Repeat(ExpressionContext* ctx, AstNode const&,
   int64_t r = repetitions.toInt64();
   if (r == 0) {
     // empty string
-    ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+    ResourceMonitor* rm = ctx->getResourceMonitor();
 
     return AqlValue(std::string_view("", 0), rm);
   }
@@ -209,7 +209,7 @@ AqlValue functions::Repeat(ExpressionContext* ctx, AstNode const&,
   }
 
   // hand over string to AqlValue
-  ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+  ResourceMonitor* rm = ctx->getResourceMonitor();
 
   return AqlValue(std::string_view(buffer->data(), buffer->size()), rm);
 }
@@ -409,7 +409,7 @@ AqlValue functions::ConcatSeparator(ExpressionContext* ctx, AstNode const&,
         appendAsString(vopts, adapter, AqlValue(it.begin()));
         found = true;
       }
-      ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+      ResourceMonitor* rm = ctx->getResourceMonitor();
 
       return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
     }
@@ -433,7 +433,7 @@ AqlValue functions::ConcatSeparator(ExpressionContext* ctx, AstNode const&,
     found = true;
   }
 
-  ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+  ResourceMonitor* rm = ctx->getResourceMonitor();
 
   return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
 }
@@ -1230,7 +1230,7 @@ AqlValue functions::Concat(ExpressionContext* ctx, AstNode const&,
         // convert member to a string and append
         appendAsString(vopts, adapter, AqlValue(it.begin()));
       }
-      ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+      ResourceMonitor* rm = ctx->getResourceMonitor();
 
       return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
     }
@@ -1248,7 +1248,7 @@ AqlValue functions::Concat(ExpressionContext* ctx, AstNode const&,
     appendAsString(vopts, adapter, member);
   }
 
-  ResourceMonitor* rm = functions::getResourceMonitor(ctx);
+  ResourceMonitor* rm = ctx->getResourceMonitor();
 
   return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
 }
@@ -1346,7 +1346,7 @@ AqlValue functions::Split(ExpressionContext* expressionContext, AstNode const&,
     builder->openArray();
     builder->add(aqlValueToSplit.slice());
     builder->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
@@ -1376,7 +1376,7 @@ AqlValue functions::Split(ExpressionContext* expressionContext, AstNode const&,
     // empty string again.
     result->add(VPackValue(""));
     result->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(result->slice(), result->size(), rm);
   }
@@ -1439,7 +1439,7 @@ AqlValue functions::Split(ExpressionContext* expressionContext, AstNode const&,
   }
 
   result->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(result->slice(), result->size(), rm);
 }

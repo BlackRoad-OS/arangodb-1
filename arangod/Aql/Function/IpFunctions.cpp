@@ -87,7 +87,7 @@ AqlValue functions::IpV4FromNumber(ExpressionContext* expressionContext,
   digit = (number & 0x0000ffULL);
   p += basics::StringUtils::itoa(digit, p);
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(std::string_view{&result[0], p}, rm);
 }

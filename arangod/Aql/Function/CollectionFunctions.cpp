@@ -98,7 +98,7 @@ AqlValue functions::Collections(ExpressionContext* exprCtx, AstNode const&,
 
   builder->close();
 
-  ResourceMonitor* rm = functions::getResourceMonitor(exprCtx);
+  ResourceMonitor* rm = exprCtx->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }

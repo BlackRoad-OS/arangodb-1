@@ -132,7 +132,7 @@ AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
     builder->openArray();
     builder->add(p);
     builder->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
@@ -161,7 +161,7 @@ AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
     builder->add(p);
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -198,7 +198,7 @@ AqlValue functions::Pop(ExpressionContext* expressionContext, AstNode const&,
     iterator.next();
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -276,7 +276,7 @@ AqlValue functions::Append(ExpressionContext* expressionContext, AstNode const&,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -329,7 +329,7 @@ AqlValue functions::Unshift(ExpressionContext* expressionContext,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -369,7 +369,7 @@ AqlValue functions::Shift(ExpressionContext* expressionContext, AstNode const&,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -432,7 +432,7 @@ AqlValue functions::RemoveValue(ExpressionContext* expressionContext,
     builder->add(it);
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -478,7 +478,7 @@ AqlValue functions::RemoveValues(ExpressionContext* expressionContext,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -531,7 +531,7 @@ AqlValue functions::RemoveNth(ExpressionContext* expressionContext,
     cur++;
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -610,7 +610,7 @@ AqlValue functions::ReplaceNth(ExpressionContext* expressionContext,
     builder->add(replaceValue);
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -715,7 +715,7 @@ AqlValue functions::Interleave(aql::ExpressionContext* expressionContext,
   }
 
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -773,7 +773,7 @@ AqlValue functions::Range(ExpressionContext* expressionContext, AstNode const&,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -856,7 +856,7 @@ AqlValue functions::Unique(ExpressionContext* expressionContext, AstNode const&,
   }
 
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -897,7 +897,7 @@ AqlValue functions::SortedUnique(ExpressionContext* expressionContext,
     builder->add(it);
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -943,7 +943,7 @@ AqlValue functions::Sorted(ExpressionContext* expressionContext, AstNode const&,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -988,7 +988,7 @@ AqlValue functions::Union(ExpressionContext* expressionContext, AstNode const&,
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1050,7 +1050,7 @@ AqlValue functions::UnionDistinct(ExpressionContext* expressionContext,
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1124,7 +1124,7 @@ AqlValue functions::Intersection(ExpressionContext* expressionContext,
   TRI_IF_FAILURE("AqlFunctions::OutOfMemory3") {
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1185,7 +1185,7 @@ AqlValue functions::Outersection(ExpressionContext* expressionContext,
   TRI_IF_FAILURE("AqlFunctions::OutOfMemory3") {
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1226,7 +1226,7 @@ AqlValue functions::Flatten(ExpressionContext* expressionContext,
   builder->openArray();
   flattenList(listSlice, maxDepth, 0, *builder.get());
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1377,7 +1377,7 @@ AqlValue functions::Minus(ExpressionContext* expressionContext, AstNode const&,
     builder->add(it.first);
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1450,7 +1450,7 @@ AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
   }
 
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1489,7 +1489,7 @@ AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
     }
   }
   builder->close();
-  ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }

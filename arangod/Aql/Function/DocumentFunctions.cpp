@@ -172,7 +172,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
         // not found
         return AqlValue(AqlValueHintNull());
       }
-      ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+      ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
       return AqlValue(builder->slice(), builder->size(), rm);
     }
@@ -189,7 +189,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
         }
       }
       builder->close();
-      ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+      ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
       return AqlValue(builder->slice(), builder->size(), rm);
     }
@@ -215,7 +215,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
     if (builder->isEmpty()) {
       return AqlValue(AqlValueHintNull());
     }
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
@@ -235,7 +235,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
     }
 
     builder->close();
-    ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
+    ResourceMonitor* rm = expressionContext->getResourceMonitor();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   }
