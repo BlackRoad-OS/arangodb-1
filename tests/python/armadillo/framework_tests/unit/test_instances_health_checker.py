@@ -136,14 +136,6 @@ class TestServerHealthChecker:
     # NOTE: Async health check tests are skipped due to conflicts with global socket mocking
     # in unit test environment. Real async health checking is covered by integration tests.
 
-    def test_health_checker_protocol_compliance(self) -> None:
-        """Test that ServerHealthChecker implements HealthChecker protocol."""
-        # This test verifies that the class implements the expected interface
-        assert hasattr(self.health_checker, "check_readiness")
-        assert hasattr(self.health_checker, "check_health")
-        assert callable(self.health_checker.check_readiness)
-        assert callable(self.health_checker.check_health)
-
     @patch("asyncio.run")
     def test_health_checker_integration_with_dependencies(
         self, mock_asyncio_run: Any

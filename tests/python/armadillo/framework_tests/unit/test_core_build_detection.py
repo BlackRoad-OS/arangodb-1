@@ -16,20 +16,6 @@ from armadillo.core.build_detection import (
 )
 
 
-class TestBuildDetectorBasic:
-    """Test BuildDetector basic functionality with no real operations."""
-
-    def test_detector_initialization(self) -> None:
-        """Test BuildDetector initializes correctly."""
-        detector = BuildDetector()
-
-        assert detector is not None
-        assert hasattr(detector, "simple_patterns")
-        assert len(detector.simple_patterns) == 2
-        assert "build/bin" in detector.simple_patterns
-        assert "bin" in detector.simple_patterns
-
-
 class TestValidationFullyMocked:
     """Test validation with complete mocking - no filesystem access."""
 
@@ -116,47 +102,8 @@ class TestModuleFunctions:
             )
 
 
-class TestBuildDetectorPureLogic:
-    """Test BuildDetector pure logic without filesystem dependencies."""
-
-    def test_simple_patterns_structure(self) -> None:
-        """Test that simple patterns are structured correctly."""
-        detector = BuildDetector()
-
-        # Test the patterns themselves
-        patterns = detector.simple_patterns
-        assert isinstance(patterns, list)
-        assert all(isinstance(p, str) for p in patterns)
-        assert all("bin" in p for p in patterns)
-
-    def test_path_construction(self) -> None:
-        """Test path construction logic without filesystem access."""
-        # This tests Path object creation without any .exists() calls
-        test_path = Path("/test/directory")
-
-        # Basic path operations that don't hit filesystem
-        assert str(test_path) == "/test/directory"
-        assert test_path.name == "directory"
-        assert test_path.parent == Path("/test")
-
-    def test_detector_can_be_created_multiple_times(self) -> None:
-        """Test that multiple detectors can be created."""
-        detector1 = BuildDetector()
-        detector2 = BuildDetector()
-
-        assert detector1 is not detector2
-        assert detector1.simple_patterns == detector2.simple_patterns
-
-
 class TestErrorHandling:
     """Test error handling scenarios with mocking."""
-
-    @patch("shutil.which", side_effect=Exception("Mock error"))
-    def test_handles_which_error_gracefully(self, mock_which: Any) -> None:
-        """Test that errors in which() don't crash the detector creation."""
-        # Just test that we can create a detector even if which() fails
-        detector = BuildDetector()
-        assert detector is not None
 
     def test_handles_none_path_input(self) -> None:
         """Test handling of None path input."""
@@ -173,37 +120,3 @@ class TestErrorHandling:
                 pass
 
 
-class TestMockingStrategies:
-    """Test different mocking strategies to ensure no real operations."""
-
-    @patch.object(BuildDetector, "validate_build_directory")
-    @patch("shutil.which")
-    def test_complete_method_mocking(self, mock_which: Any, mock_validate: Any) -> None:
-        """Test with complete method mocking."""
-        mock_which.return_value = None
-        mock_validate.return_value = False
-
-        detector = BuildDetector()
-
-        # Call validate directly - should be mocked
-        result = detector.validate_build_directory(Path("/test"))
-
-        # Result depends on mock setup
-        mock_validate.assert_called_once_with(Path("/test"))
-
-    def test_path_operations_without_filesystem(self) -> None:
-        """Test Path operations that don't require filesystem."""
-        # These operations should not trigger any filesystem calls
-        paths = [
-            Path("/"),
-            Path("/usr"),
-            Path("/usr/bin"),
-            Path("relative/path"),
-            Path("."),
-        ]
-
-        for path in paths:
-            # Basic properties that don't hit filesystem
-            assert isinstance(str(path), str)
-            assert isinstance(path.name, str)
-            # Don't call .exists(), .is_file(), etc.

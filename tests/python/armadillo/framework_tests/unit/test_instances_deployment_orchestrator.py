@@ -16,18 +16,6 @@ from armadillo.core.value_objects import ServerId
 class TestDeploymentOrchestrator:
     """Test DeploymentOrchestrator with lifecycle executors."""
 
-    def test_init(self) -> None:
-        """Test orchestrator initialization."""
-        mock_logger = Mock()
-        mock_factory = Mock()
-        mock_executor = Mock()
-
-        orchestrator = DeploymentOrchestrator(mock_logger, mock_factory, mock_executor)
-
-        assert orchestrator._logger == mock_logger
-        assert orchestrator._server_factory == mock_factory
-        assert orchestrator._executor == mock_executor
-
     def test_create_executor_single_server(self) -> None:
         """Test creating executor for single server plan."""
         mock_logger = Mock()

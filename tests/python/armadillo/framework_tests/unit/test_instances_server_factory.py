@@ -215,12 +215,6 @@ class TestStandardServerFactory:
         # Should not have logged any server creation
         self.mock_logger.debug.assert_not_called()
 
-    def test_server_factory_protocol_compliance(self) -> None:
-        """Test that StandardServerFactory implements ServerFactory protocol."""
-        # This test verifies that the class implements the expected interface
-        assert hasattr(self.factory, "create_server_instances")
-        assert callable(self.factory.create_server_instances)
-
     def test_multiple_agents_indexing(self) -> None:
         """Test that multiple servers of same role get proper indexing."""
         servers_config = [

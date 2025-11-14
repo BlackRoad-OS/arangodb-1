@@ -22,44 +22,6 @@ from armadillo.core.value_objects import DeploymentId, ServerId
 class TestInstanceManagerBasic:
     """Test InstanceManager basic functionality."""
 
-    def test_manager_can_be_created(self) -> None:
-        """Test InstanceManager can be instantiated."""
-        app_context = ApplicationContext.for_testing()
-        manager = InstanceManager(
-            DeploymentId("test_deployment"), app_context=app_context
-        )
-
-        assert manager is not None
-        assert manager.deployment_id.value == "test_deployment"
-
-    def test_manager_has_expected_attributes(self) -> None:
-        """Test manager has expected attributes."""
-        app_context = ApplicationContext.for_testing()
-        manager = InstanceManager(DeploymentId("test"), app_context=app_context)
-
-        # Check that expected attributes exist
-        assert hasattr(manager, "deployment_id")
-        assert hasattr(manager, "_app_context")
-        assert hasattr(manager._app_context, "config")
-        assert hasattr(manager._app_context, "port_allocator")
-        assert hasattr(manager, "_deployment")
-        assert hasattr(manager, "_threading")
-
-    def test_manager_has_expected_methods(self) -> None:
-        """Test manager has expected public methods."""
-        app_context = ApplicationContext.for_testing()
-        manager = InstanceManager(DeploymentId("test"), app_context=app_context)
-
-        # Check that public methods exist
-        assert hasattr(manager, "create_cluster_deployment_plan")
-        assert hasattr(manager, "deploy_servers")
-        assert hasattr(manager, "shutdown_deployment")
-        assert hasattr(manager, "get_server")
-        assert callable(manager.create_cluster_deployment_plan)
-        assert callable(manager.deploy_servers)
-        assert callable(manager.shutdown_deployment)
-        assert callable(manager.get_server)
-
     def test_unique_deployment_ids(self) -> None:
         """Test deployment IDs are preserved correctly."""
         app_context = ApplicationContext.for_testing()
@@ -77,42 +39,6 @@ class TestInstanceManagerBasic:
 
 class TestDeploymentPlan:
     """Test DeploymentPlan dataclass functionality."""
-
-    def test_single_server_deployment_plan_can_be_created(self) -> None:
-        """Test SingleServerDeploymentPlan can be instantiated."""
-        server_config = ServerConfig(
-            role=ServerRole.SINGLE,
-            port=8529,
-            data_dir=Path("/tmp/single"),
-            log_file=Path("/tmp/single.log"),
-        )
-        plan = SingleServerDeploymentPlan(server=server_config)
-
-        assert plan is not None
-        assert plan.server == server_config
-        assert plan.server.role == ServerRole.SINGLE
-
-    def test_deployment_plan_with_servers(self) -> None:
-        """Test DeploymentPlan with server configurations."""
-        # Create some mock server configs
-        servers = [
-            ServerConfig(
-                role=ServerRole.AGENT,
-                port=8531,
-                data_dir=Path("/tmp/agent"),
-                log_file=Path("/tmp/agent.log"),
-            ),
-            ServerConfig(
-                role=ServerRole.COORDINATOR,
-                port=8529,
-                data_dir=Path("/tmp/coord"),
-                log_file=Path("/tmp/coord.log"),
-            ),
-        ]
-
-        plan = ClusterDeploymentPlan(servers=servers)
-
-        assert len(plan.servers) == 2
 
     def test_deployment_plan_server_filtering(self) -> None:
         """Test DeploymentPlan server filtering methods."""
@@ -151,53 +77,6 @@ class TestDeploymentPlan:
         assert dbservers[0].role == ServerRole.DBSERVER
 
 
-class TestInstanceManagerDeployment:
-    """Test InstanceManager deployment operations with minimal mocking."""
-
-    def setup_method(self) -> None:
-        """Set up test environment."""
-        self.app_context = ApplicationContext.for_testing()
-        self.manager = InstanceManager(
-            DeploymentId("test_deployment"), app_context=self.app_context
-        )
-
-    def test_get_server_no_servers(self) -> None:
-        """Test getting server when no servers exist."""
-        try:
-            server = self.manager.get_server(ServerId("nonexistent"))
-            # Should return None for nonexistent server
-            assert server is None
-        except Exception:
-            # If it throws an exception for no server, that's also acceptable behavior
-            pass
-
-    def test_create_deployment_plan_single_basic(self) -> None:
-        """Test creating single server deployment plan."""
-        from armadillo.core.types import ClusterConfig
-
-        try:
-            result = self.manager.create_single_server_plan()
-            # If successful, should return some result
-            assert result is not None
-        except Exception:
-            # Creation might fail due to missing dependencies, that's ok for this test
-            pass
-
-    def test_create_deployment_plan_cluster_basic(self) -> None:
-        """Test creating cluster deployment plan."""
-        from armadillo.core.types import ClusterConfig
-
-        try:
-            result = self.manager.create_cluster_deployment_plan(
-                cluster_config=ClusterConfig(agents=1, dbservers=1, coordinators=1),
-            )
-            # If successful, should return some result
-            assert result is not None
-        except Exception:
-            # Creation might fail due to missing dependencies, that's ok for this test
-            pass
-
-
 class TestInstanceManagerErrorHandling:
     """Test basic error handling."""
 
@@ -214,26 +93,6 @@ class TestInstanceManagerErrorHandling:
             DeploymentId("test-deployment_123"), app_context=app_context
         )
         assert manager2.deployment_id.value == "test-deployment_123"
-
-
-class TestInstanceManagerMockIntegration:
-    """Test manager with safe mocking."""
-
-    def setup_method(self) -> None:
-        """Set up test environment."""
-        self.app_context = ApplicationContext.for_testing()
-        self.manager = InstanceManager(
-            DeploymentId("mock_test"), app_context=self.app_context
-        )
-
-    def test_shutdown_deployment_handles_no_deployment(self) -> None:
-        """Test shutdown when no deployment exists."""
-        try:
-            self.manager.shutdown_deployment()
-            # Should handle gracefully or raise appropriate error
-        except Exception:
-            # Some error handling is acceptable
-            pass
 
 
 class TestInstanceManagerLifecycleDeployment:

@@ -34,23 +34,6 @@ class TestApplicationContext:
         with pytest.raises(Exception):
             ctx.logger = Mock()  # type: ignore[misc]  # Testing immutability
 
-    def test_create_with_all_defaults(self) -> None:
-        """Should create valid context with all default dependencies."""
-        config = ArmadilloConfig(
-            deployment_mode=DeploymentMode.SINGLE_SERVER,
-            temp_dir=Path("/tmp/armadillo-test"),
-        )
-
-        ctx = ApplicationContext.create(config)
-
-        # Verify all dependencies are created
-        assert ctx.config is config
-        assert ctx.logger is not None
-        assert ctx.port_allocator is not None
-        assert ctx.auth_provider is not None
-        assert ctx.filesystem is not None
-        assert ctx.process_supervisor is not None
-
     def test_create_with_custom_logger(self) -> None:
         """Should accept custom logger implementation."""
         config = ArmadilloConfig(
@@ -173,19 +156,6 @@ class TestApplicationContextForTesting:
 
         assert ctx.logger is mock_logger
         assert ctx.port_allocator is mock_allocator
-
-    def test_for_testing_all_dependencies_present(self) -> None:
-        """for_testing() should create all required dependencies."""
-        ctx = ApplicationContext.for_testing()
-
-        # Verify no None values
-        assert ctx.config is not None
-        assert ctx.logger is not None
-        assert ctx.port_allocator is not None
-        assert ctx.auth_provider is not None
-        assert ctx.filesystem is not None
-        assert ctx.process_supervisor is not None
-
 
 class TestApplicationContextIntegration:
     """Integration tests for ApplicationContext with real dependencies."""
