@@ -5,6 +5,7 @@ import logging
 import signal
 import time
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Dict, Union
 
@@ -44,17 +45,93 @@ from ..utils.crypto import random_id
 
 logger = get_logger(__name__)
 
-# Global flags to track if we should abort remaining tests
-_ABORT_REMAINING_TESTS: bool = False
-_CRASH_DETECTED_DURING_TEST: Optional[str] = (
-    None  # Store nodeid of test where crash was detected
-)
-_TIMEOUT_DETECTED_DURING_TEST: Optional[str] = (
-    None  # Store nodeid of test where timeout was detected
-)
+# Module-level session reference for hooks that don't receive config/session parameters.
+# This is intentionally minimal - only used for hooks like pytest_runtest_logstart that
+# have no other way to access the plugin. All test execution state lives in the plugin.
+_current_session: Optional[Session] = None
 
-# Session config reference for hooks that don't receive it
-_current_session_config: Optional[pytest.Config] = None
+
+@dataclass
+class SessionExecutionState:
+    """Encapsulates session-level execution state for test abortion logic.
+
+    This state tracks critical failures (crashes, timeouts, deployment issues)
+    that require aborting remaining tests to prevent unreliable results.
+
+    Why abort remaining tests?
+    - After a timeout: System may be in unknown state (similar to crash)
+    - After a crash: Database state is corrupted and unreliable
+    - These failures invalidate assumptions that subsequent tests rely on
+
+    Black Box Design:
+    - This component owns all test abortion state and logic
+    - External code calls methods, doesn't manipulate state directly
+    - Can be tested independently of pytest machinery
+    """
+
+    abort_remaining_tests: bool = False
+    crash_detected_in_test: Optional[str] = None  # nodeid where crash occurred
+    timeout_detected_in_test: Optional[str] = None  # nodeid where timeout occurred
+
+    def should_abort_test(self, test_nodeid: str) -> tuple[bool, Optional[str]]:
+        """Determine if a test should be aborted and why.
+
+        Args:
+            test_nodeid: The pytest node ID of the test being checked
+
+        Returns:
+            (should_abort, reason_message): Tuple of whether to abort and why
+        """
+        if not self.abort_remaining_tests:
+            return False, None
+
+        # Don't skip the test that caused the timeout/crash itself
+        if (
+            self.timeout_detected_in_test
+            and self.timeout_detected_in_test != test_nodeid
+        ):
+            reason = (
+                f"Skipping test due to timeout in previous test: {self.timeout_detected_in_test}\n"
+                f"System may be in unknown state after timeout."
+            )
+            return True, reason
+
+        if self.crash_detected_in_test and self.crash_detected_in_test != test_nodeid:
+            reason = f"Skipping test due to server crash in previous test: {self.crash_detected_in_test}"
+            return True, reason
+
+        return False, None
+
+    def record_timeout(self, test_nodeid: str) -> None:
+        """Record that a timeout occurred in a test.
+
+        Args:
+            test_nodeid: The pytest node ID where the timeout occurred
+        """
+        self.timeout_detected_in_test = test_nodeid
+        self.abort_remaining_tests = True
+        logger.error(
+            "Timeout recorded for test %s - aborting remaining tests", test_nodeid
+        )
+
+    def record_crash(self, test_nodeid: str) -> None:
+        """Record that a crash occurred in a test.
+
+        Args:
+            test_nodeid: The pytest node ID where the crash occurred
+        """
+        self.crash_detected_in_test = test_nodeid
+        self.abort_remaining_tests = True
+        logger.error(
+            "Crash recorded for test %s - aborting remaining tests", test_nodeid
+        )
+
+    def reset(self) -> None:
+        """Reset state for a new test session."""
+        self.abort_remaining_tests = False
+        self.crash_detected_in_test = None
+        self.timeout_detected_in_test = None
+        logger.debug("Session execution state reset")
 
 
 class ArmadilloPlugin:
@@ -72,6 +149,9 @@ class ArmadilloPlugin:
             None  # Shared context for all package deployments
         )
         self.reporter: Optional["ArmadilloReporter"] = None  # Created in sessionstart
+
+        # Session execution state - encapsulates test abortion logic
+        self.execution_state = SessionExecutionState()
 
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
@@ -173,7 +253,6 @@ class ArmadilloPlugin:
 
     def pytest_sessionstart(self, _session: pytest.Session) -> None:
         """Called at the beginning of the pytest session."""
-        global _ABORT_REMAINING_TESTS, _CRASH_DETECTED_DURING_TEST, _TIMEOUT_DETECTED_DURING_TEST
         logger.debug("ArmadilloPlugin: Session start")
         # Config already loaded by CLI and pytest_configure
         # Don't call load_config() again to avoid duplicate build detection
@@ -181,9 +260,7 @@ class ArmadilloPlugin:
         # Note: Session-level directory isolation not currently enabled
         # (would require ApplicationContext integration in pytest fixtures)
         # Clear any crash/timeout state from previous runs
-        _ABORT_REMAINING_TESTS = False
-        _CRASH_DETECTED_DURING_TEST = None
-        _TIMEOUT_DETECTED_DURING_TEST = None
+        self.execution_state.reset()
         clear_crash_state()
 
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
@@ -229,8 +306,6 @@ plugin_key = StashKey["ArmadilloPlugin"]()
 
 def pytest_configure(config: pytest.Config) -> None:
     """Plugin entry point - create and store plugin in stash."""
-    global _current_session_config
-    _current_session_config = config
     plugin = ArmadilloPlugin()
     config.stash[plugin_key] = plugin
     plugin.pytest_configure(config)
@@ -238,10 +313,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Plugin cleanup entry point."""
-    global _current_session_config
     plugin = config.stash[plugin_key]
     plugin.pytest_unconfigure(config)
-    _current_session_config = None
 
 
 def _get_plugin(obj: Union[Config, Session, Item]) -> ArmadilloPlugin:
@@ -342,11 +415,19 @@ def pytest_addoption(parser: Any) -> None:
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: Session) -> None:
     """Set up test session and register cleanup handlers."""
+    global _current_session
+    _current_session = session
+
     logger.debug("Starting pytest plugin setup")
     logger.info("Test session started")
 
+    # Get plugin and reset execution state for new session
+    plugin = _get_plugin(session)
+    plugin.execution_state.reset()
+    clear_crash_state()
+
     # Register cleanup handlers for both normal and abnormal exits
-    atexit.register(_emergency_cleanup)
+    atexit.register(_emergency_cleanup, session)
 
     # Install signal handlers for Ctrl+C and SIGTERM to ensure cleanup
     def _signal_handler(signum: int, _frame: Any) -> None:
@@ -357,7 +438,7 @@ def pytest_sessionstart(session: Session) -> None:
         logger.warning("Received %s, performing emergency cleanup...", signal_name)
 
         # Perform cleanup and wait for it to complete
-        _emergency_cleanup()
+        _emergency_cleanup(session)
 
         # Give cleanup time to work (max 10 seconds)
         logger.info("Waiting for processes to terminate...")
@@ -394,7 +475,6 @@ def pytest_sessionstart(session: Session) -> None:
 
     # Create shared ApplicationContext for the entire pytest session
     # This ensures all deployments share the same context (port allocator, filesystem, etc.)
-    plugin = _get_plugin(session)
     session_id = random_id(8)
     plugin._session_app_context = ApplicationContext.create(framework_config)
     plugin._session_app_context.filesystem.set_test_session_id(session_id)
@@ -518,6 +598,8 @@ def _cleanup_temp_dir_if_needed(_session: Session, exitstatus: int) -> None:
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
     """Clean up all resources at the end of test session."""
+    global _current_session
+
     logger.debug("Starting pytest plugin cleanup")
 
     # If deployment failed, set exit status to failure
@@ -577,34 +659,24 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
             stop_watchdog()
         except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
             logger.debug("Error stopping watchdog: %s", e)
+        # Clear session reference
+        _current_session = None
 
 
 def pytest_runtest_setup(item: Item) -> None:
     """Handle test setup - check if we should skip due to previous crash, timeout, or deployment failure."""
-    # If deployment failed, skip all tests
     plugin = _get_plugin(item)
+
+    # If deployment failed, skip all tests
     if plugin._deployment_failed:
         pytest.skip(
             f"Test skipped due to deployment failure: {plugin._deployment_failure_reason}"
         )
 
-    # If a timeout was detected in a previous test, skip all remaining tests
-    # (timeout means system is in unknown state, similar to crash)
-    if _ABORT_REMAINING_TESTS:
-        if _TIMEOUT_DETECTED_DURING_TEST is not None:
-            if _TIMEOUT_DETECTED_DURING_TEST != item.nodeid:
-                pytest.skip(
-                    f"Skipping test due to timeout in previous test: {_TIMEOUT_DETECTED_DURING_TEST}\n"
-                    f"System may be in unknown state after timeout."
-                )
-
-    # If a crash was detected in a previous test, skip all remaining tests
-    if _ABORT_REMAINING_TESTS:
-        if _CRASH_DETECTED_DURING_TEST is not None:
-            if _CRASH_DETECTED_DURING_TEST != item.nodeid:
-                pytest.skip(
-                    f"Skipping test due to server crash in previous test: {_CRASH_DETECTED_DURING_TEST}"
-                )
+    # Check if we should abort this test due to previous failures
+    should_abort, reason = plugin.execution_state.should_abort_test(item.nodeid)
+    if should_abort:
+        pytest.skip(reason)
 
     # Handle reporter setup
     if not _is_compact_mode_enabled() and plugin.reporter:
@@ -630,8 +702,6 @@ def pytest_runtest_teardown(
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_runtest_makereport(item: Item, call: Any) -> Any:
     """Hook to modify test reports and detect crashes/timeouts."""
-    global _ABORT_REMAINING_TESTS, _CRASH_DETECTED_DURING_TEST, _TIMEOUT_DETECTED_DURING_TEST
-
     plugin = _get_plugin(item)
 
     # Let pytest create the report first
@@ -655,8 +725,7 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
         )
 
         if is_timeout:
-            _TIMEOUT_DETECTED_DURING_TEST = item.nodeid
-            _ABORT_REMAINING_TESTS = True
+            plugin.execution_state.record_timeout(item.nodeid)
 
             timeout_message = (
                 f"Test timed out and was terminated.\n\n"
@@ -670,11 +739,6 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
             # Update the report with clear timeout message
             report.longrepr = timeout_message
             report.outcome = "failed"
-
-            logger.error(
-                "Test %s timed out - aborting remaining tests to prevent unreliable results",
-                item.nodeid,
-            )
 
             # Record as timeout in the result collector
             if not _is_compact_mode_enabled() and plugin.reporter:
@@ -692,8 +756,7 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
 
         # Mark this test as failed due to crash
         report.outcome = "failed"
-        _CRASH_DETECTED_DURING_TEST = item.nodeid
-        _ABORT_REMAINING_TESTS = True
+        plugin.execution_state.record_crash(item.nodeid)
 
         # Build comprehensive crash message
         crash_messages = []
@@ -739,12 +802,12 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
 def pytest_runtest_logreport(report: Any) -> None:
     """Handle test report."""
     # Note: report object has .config but only for session/terminal reports
-    # For test reports, we need to use the session's config which we can't access here
-    # We'll use a module-level reference that's set during pytest_configure
+    # For test reports, we try to get the plugin from the report's config if available
     if not _is_compact_mode_enabled():
-        global _current_session_config
-        if _current_session_config:
-            plugin = _current_session_config.stash.get(plugin_key, None)
+        # Try to get config from report if available
+        config = getattr(report, "config", None)
+        if config:
+            plugin = config.stash.get(plugin_key, None)
             if plugin and plugin.reporter:
                 plugin.reporter.pytest_runtest_logreport(report)
 
@@ -754,9 +817,9 @@ def pytest_runtest_logstart(
 ) -> Optional[str]:
     """Override pytest's default test file output to suppress filename printing."""
     if not _is_compact_mode_enabled():
-        global _current_session_config
-        if _current_session_config:
-            plugin = _current_session_config.stash.get(plugin_key, None)
+        global _current_session
+        if _current_session:
+            plugin = _get_plugin(_current_session)
             if plugin and plugin.reporter:
                 # Call our reporter but suppress pytest's default filename output
                 plugin.reporter.pytest_runtest_logstart(nodeid, location)
@@ -794,11 +857,11 @@ def pytest_terminal_summary(
 
 def _cleanup_all_deployments(emergency: bool = True) -> None:
     """Cleanup all tracked deployments with bulletproof shutdown."""
-    global _current_session_config
-    if not _current_session_config:
-        logger.debug("No session config - cannot cleanup deployments")
+    global _current_session
+    if not _current_session:
+        logger.debug("No session available - cannot cleanup deployments")
         return
-    plugin = _current_session_config.stash.get(plugin_key, None)
+    plugin = _get_plugin(_current_session)
     if not plugin:
         logger.debug("No plugin instance - cannot cleanup deployments")
         return
@@ -1015,13 +1078,18 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
         logger.error("Stack trace: %s", traceback.format_exc())
 
 
-def _emergency_cleanup() -> None:
-    """Emergency cleanup function registered with atexit."""
+def _emergency_cleanup(session: Optional[Session] = None) -> None:
+    """Emergency cleanup function registered with atexit.
+
+    Args:
+        session: Optional session object. If not provided, uses global _current_session.
+    """
     # Check if there's actually anything to clean up
-    global _current_session_config
-    if not _current_session_config:
+    global _current_session
+    cleanup_session = session or _current_session
+    if not cleanup_session:
         return
-    plugin = _current_session_config.stash.get(plugin_key, None)
+    plugin = _get_plugin(cleanup_session)
     if not plugin:
         return
     has_deployments = bool(plugin._package_deployments)
@@ -1078,10 +1146,10 @@ def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> 
         manager: The instance manager that was shut down
         deployment_id: Identifier for this deployment (string)
     """
-    global _current_session_config
-    if not _current_session_config:
+    global _current_session
+    if not _current_session:
         return
-    plugin = _current_session_config.stash.get(plugin_key, None)
+    plugin = _get_plugin(_current_session)
     if not plugin:
         return
     health = manager.get_server_health()
@@ -1119,10 +1187,10 @@ def create_package_deployment(package_name: str) -> Any:
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
 
-    global _current_session_config
-    if not _current_session_config:
-        raise RuntimeError("Cannot create deployment: no session config available")
-    plugin = _current_session_config.stash.get(plugin_key, None)
+    global _current_session
+    if not _current_session:
+        raise RuntimeError("Cannot create deployment: no session available")
+    plugin = _get_plugin(_current_session)
     if not plugin:
         raise RuntimeError("Cannot create deployment: no plugin instance available")
 

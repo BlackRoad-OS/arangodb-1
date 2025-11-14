@@ -180,7 +180,9 @@ class TestArmadilloPluginIntegration:
 
     @patch("armadillo.pytest_plugin.plugin.atexit.register")
     @patch("armadillo.pytest_plugin.plugin.set_global_deadline")
-    def test_emergency_cleanup_registration(self, mock_set_deadline: Any, mock_atexit: Any) -> None:
+    def test_emergency_cleanup_registration(
+        self, mock_set_deadline: Any, mock_atexit: Any
+    ) -> None:
         """Test plugin registers emergency cleanup."""
         plugin = ArmadilloPlugin()
         mock_session = Mock()
@@ -214,6 +216,7 @@ class TestArmadilloPluginIntegration:
         # _armadillo_config is Optional[ArmadilloConfig], not a dict
         # This test should check that config can be set, but using proper type
         from armadillo.core.types import DeploymentMode
+
         test_config = ArmadilloConfig(
             deployment_mode=DeploymentMode.SINGLE_SERVER,
             temp_dir=Path("/tmp/test"),
@@ -288,7 +291,9 @@ class TestArmadilloReporter:
     @patch("sys.stdout.write")
     @patch("sys.stdout.flush")
     @patch("builtins.open", side_effect=OSError("No /dev/tty available"))
-    def test_reporter_run_header_output(self, mock_open: Any, mock_flush: Any, mock_write: Any) -> None:
+    def test_reporter_run_header_output(
+        self, mock_open: Any, mock_flush: Any, mock_write: Any
+    ) -> None:
         """Test reporter outputs RUN header when test starts."""
         reporter = ArmadilloReporter()
 
@@ -353,18 +358,22 @@ class TestArmadilloPytestHooks:
             setattr(reporter_module, "_reporter", None)
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
-    @patch("armadillo.pytest_plugin.plugin._current_session_config")
-    def test_pytest_runtest_logstart_hook_connected(self, mock_config: Any, mock_compact: Any) -> None:
+    @patch("armadillo.pytest_plugin.plugin._current_session")
+    def test_pytest_runtest_logstart_hook_connected(
+        self, mock_session: Any, mock_compact: Any
+    ) -> None:
         """Test pytest_runtest_logstart hook calls reporter correctly."""
         mock_compact.return_value = False
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
 
-        # Set up stash mock
+        # Set up session and stash mock
         mock_stash = Mock()
-        mock_stash.get = Mock(return_value=mock_plugin)
+        mock_stash.__getitem__ = Mock(return_value=mock_plugin)
+        mock_config = Mock()
         mock_config.stash = mock_stash
+        mock_session.config = mock_config
 
         nodeid = "test_file.py::test_function"
         location = ("test_file.py", 10, "test_function")
@@ -381,8 +390,11 @@ class TestArmadilloPytestHooks:
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
         mock_plugin._deployment_failed = False
+        mock_plugin.execution_state = Mock()
+        mock_plugin.execution_state.should_abort_test = Mock(return_value=(False, None))
 
         mock_item = Mock()
+        mock_item.nodeid = "test_file.py::test_func"
         mock_config = Mock()
         mock_stash = Mock()
         mock_stash.__getitem__ = Mock(return_value=mock_plugin)
@@ -432,8 +444,7 @@ class TestArmadilloPytestHooks:
         mock_reporter.pytest_runtest_teardown.assert_called_once_with(mock_item)
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
-    @patch("armadillo.pytest_plugin.plugin._current_session_config")
-    def test_pytest_runtest_logreport_hook_connected(self, mock_config: Any, mock_compact: Any) -> None:
+    def test_pytest_runtest_logreport_hook_connected(self, mock_compact: Any) -> None:
         """Test pytest_runtest_logreport hook calls reporter correctly."""
         mock_compact.return_value = False
         mock_reporter = Mock()
@@ -443,9 +454,13 @@ class TestArmadilloPytestHooks:
         # Set up stash mock
         mock_stash = Mock()
         mock_stash.get = Mock(return_value=mock_plugin)
+        mock_config = Mock()
         mock_config.stash = mock_stash
 
+        # Report now provides its own config
         mock_report = Mock()
+        mock_report.config = mock_config
+
         pytest_runtest_logreport(mock_report)
 
         mock_reporter.pytest_runtest_logreport.assert_called_once_with(mock_report)
@@ -458,8 +473,11 @@ class TestArmadilloPytestHooks:
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
         mock_plugin._deployment_failed = False
+        mock_plugin.execution_state = Mock()
+        mock_plugin.execution_state.should_abort_test = Mock(return_value=(False, None))
 
         mock_item = Mock()
+        mock_item.nodeid = "test_file.py::test_func"
         mock_config = Mock()
         mock_stash = Mock()
         mock_stash.__getitem__ = Mock(return_value=mock_plugin)
@@ -508,8 +526,10 @@ class TestArmadilloReporterRegressionTests:
         assert callable(pytest_runtest_logreport)
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
-    @patch("armadillo.pytest_plugin.plugin._current_session_config")
-    def test_hooks_call_reporter_when_non_compact(self, mock_config: Any, mock_compact: Any) -> None:
+    @patch("armadillo.pytest_plugin.plugin._current_session")
+    def test_hooks_call_reporter_when_non_compact(
+        self, mock_session: Any, mock_compact: Any
+    ) -> None:
         """Test hooks call reporter when compact mode is disabled.
 
         This is a regression test for the missing hook connections.
@@ -519,11 +539,15 @@ class TestArmadilloReporterRegressionTests:
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
         mock_plugin._deployment_failed = False
+        mock_plugin.execution_state = Mock()
+        mock_plugin.execution_state.should_abort_test = Mock(return_value=(False, None))
 
         # Set up stash mock
         mock_stash = Mock()
-        mock_stash.get = Mock(return_value=mock_plugin)
+        mock_stash.__getitem__ = Mock(return_value=mock_plugin)
+        mock_config = Mock()
         mock_config.stash = mock_stash
+        mock_session.config = mock_config
 
         # Test that each hook calls the reporter
         pytest_runtest_logstart(
@@ -532,6 +556,7 @@ class TestArmadilloReporterRegressionTests:
         mock_reporter.pytest_runtest_logstart.assert_called_once()
 
         mock_item = Mock()
+        mock_item.nodeid = "test_file.py::test_func"
         mock_item_config = Mock()
         mock_item_stash = Mock()
         mock_item_stash.__getitem__ = Mock(return_value=mock_plugin)
