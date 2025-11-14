@@ -1075,7 +1075,8 @@ struct AggregatorList : public Aggregator {
     // velocypack slice.
     auto builderCopy = builder;
     builderCopy.close();
-    return AqlValue(std::move(*builderCopy.steal()));
+    return AqlValue(std::move(*builderCopy.steal()),
+                    &_usageScope.resourceMonitor());
   }
 
   mutable arangodb::velocypack::Builder builder;
