@@ -34,6 +34,9 @@ BatchOptions::~BatchOptions() = default;
 void BatchOptions::ensureComputedValuesContext(Methods& trx,
                                                LogicalCollection& collection) {
   if (computedValuesContext == nullptr) {
+    ResourceMonitor* rm = computedValues != nullptr
+                          ? computedValues->getResourceMonitor()
+                          : nullptr;
     computedValuesContext =
         std::make_unique<ComputedValuesExpressionContext>(trx, collection);
   }

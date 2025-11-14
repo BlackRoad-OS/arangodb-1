@@ -339,6 +339,11 @@ class InvertedIndexExpressionContext final : public aql::ExpressionContext {
     TRI_ASSERT(false);
   }
 
+  virtual ResourceMonitor* getResourceMonitorPtr()
+      const noexcept override final {
+    return nullptr;
+  }
+
   transaction::Methods& _trx;
   aql::AqlFunctionsInternalCache& _cache;
 };
