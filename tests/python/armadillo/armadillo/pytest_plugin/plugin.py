@@ -676,6 +676,9 @@ def pytest_runtest_setup(item: Item) -> None:
     # Check if we should abort this test due to previous failures
     should_abort, reason = plugin.execution_state.should_abort_test(item.nodeid)
     if should_abort:
+        assert (
+            reason is not None
+        ), "Abort reason should be set when should_abort is True"
         pytest.skip(reason)
 
     # Handle reporter setup
