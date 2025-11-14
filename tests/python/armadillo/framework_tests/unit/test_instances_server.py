@@ -46,7 +46,9 @@ class TestArangoServerBasic:
         for role in roles:
             if role == ServerRole.SINGLE:
                 server = ArangoServer.create_single_server(
-                    server_id=ServerId(f"test_{role.value}"), app_context=app_context, port=8530
+                    server_id=ServerId(f"test_{role.value}"),
+                    app_context=app_context,
+                    port=8530,
                 )
             else:
                 server = ArangoServer.create_cluster_server(
@@ -110,34 +112,6 @@ class TestArangoServerBasic:
 class TestArangoServerPublicInterface:
     """Test the public interface works as expected."""
 
-    def test_has_expected_methods(self) -> None:
-        """Test server has expected public methods."""
-        app_context = ApplicationContext.for_testing()
-        server = ArangoServer.create_single_server(
-            server_id=ServerId("test"), app_context=app_context, port=8529
-        )
-
-        # Check that public methods exist
-        assert hasattr(server, "start")
-        assert hasattr(server, "stop")
-        assert hasattr(server, "is_running")
-        assert callable(server.start)
-        assert callable(server.stop)
-        assert callable(server.is_running)
-
-    def test_has_expected_properties(self) -> None:
-        """Test server has expected public properties."""
-        app_context = ApplicationContext.for_testing()
-        server = ArangoServer.create_single_server(
-            server_id=ServerId("test"), app_context=app_context, port=8529
-        )
-
-        # Check that public properties exist
-        assert hasattr(server, "server_id")
-        assert hasattr(server, "role")
-        assert hasattr(server, "port")
-        assert hasattr(server, "endpoint")
-
     def test_endpoint_format(self) -> None:
         """Test endpoint format is consistent."""
         app_context = ApplicationContext.for_testing()
@@ -193,7 +167,9 @@ class TestArangoServerLifecycle:
     @patch("armadillo.instances.server.start_supervised_process")
     @patch("armadillo.instances.server.is_process_running", return_value=True)
     @patch("pathlib.Path.exists", return_value=True)
-    def test_start_server_calls_process(self, mock_exists: Any, mock_is_running: Any, mock_start: Any) -> None:
+    def test_start_server_calls_process(
+        self, mock_exists: Any, mock_is_running: Any, mock_start: Any
+    ) -> None:
         """Test server start calls process supervisor."""
         mock_start.return_value = Mock(pid=12345)
 
@@ -226,7 +202,9 @@ class TestArangoServerLifecycle:
 
         self.server.stop()
 
-        mock_stop.assert_called_once_with(ServerId("test_server"), graceful=True, timeout=30.0)
+        mock_stop.assert_called_once_with(
+            ServerId("test_server"), graceful=True, timeout=30.0
+        )
 
     def test_stop_server_not_started(self) -> None:
         """Test stopping server that wasn't started doesn't crash."""
@@ -396,7 +374,9 @@ class TestArangoServerIntegration:
 
     @patch("armadillo.instances.server.start_supervised_process")
     @patch("pathlib.Path.exists", return_value=True)
-    def test_start_attempts_process_creation(self, mock_exists: Any, mock_start_process: Any) -> None:
+    def test_start_attempts_process_creation(
+        self, mock_exists: Any, mock_start_process: Any
+    ) -> None:
         """Test start attempts to create a process."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(

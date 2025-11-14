@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock
 
-from armadillo.core.types import ServerRole, ServerConfig
+from armadillo.core.types import ServerRole, ServerConfig, DeploymentMode
 from armadillo.core.context import ApplicationContext
 from armadillo.core.errors import ServerError
 from armadillo.core.value_objects import ServerId
@@ -152,7 +152,6 @@ class TestStandardServerFactory:
         server = servers[ServerId("server_0")]
 
         # Check that the minimal config was passed correctly
-        # We can't directly access it, but we can verify the server was created successfully
         assert server.server_id == ServerId("server_0")
         assert server.paths.config is not None
         assert server.paths.config.args["custom"] == "arg"
@@ -199,11 +198,13 @@ class TestStandardServerFactory:
 
         # Check that server has the expected dependencies via app_context
         # These are tested by verifying the server was created successfully with all required components
-        assert server._app_context is not None
-        assert server._app_context.config is not None
-        assert server._app_context.logger is not None
-        assert server._app_context.port_allocator is not None
-        assert server._app_context.auth_provider is not None
+        assert (
+            server._app_context.config.deployment_mode == DeploymentMode.SINGLE_SERVER
+        )
+        assert server._app_context.port_allocator.allocate_port() > 0
+        server._app_context.port_allocator.release_port(
+            server._app_context.port_allocator.allocate_port()
+        )
 
     def test_empty_server_list(self) -> None:
         """Test handling empty server configuration list."""

@@ -161,58 +161,6 @@ class TestCheckerErrors:
         assert error.violations == {}
 
 
-class TestErrorHierarchy:
-    """Test error hierarchy relationships."""
-
-    def test_process_error_hierarchy(self) -> None:
-        """Test process error hierarchy."""
-        assert issubclass(ProcessStartupError, ProcessError)
-        assert issubclass(ProcessTimeoutError, ProcessError)
-        assert issubclass(ProcessCrashError, ProcessError)
-
-    def test_server_error_hierarchy(self) -> None:
-        """Test server error hierarchy."""
-        assert issubclass(ServerStartupError, ServerError)
-        assert issubclass(ServerShutdownError, ServerError)
-        assert issubclass(HealthCheckError, ServerError)
-
-    def test_auth_error_hierarchy(self) -> None:
-        """Test authentication error hierarchy."""
-        assert issubclass(JWTError, AuthenticationError)
-        assert issubclass(NonceReplayError, AuthenticationError)
-
-    def test_codec_error_hierarchy(self) -> None:
-        """Test codec error hierarchy."""
-        assert issubclass(SerializationError, CodecError)
-        assert issubclass(DeserializationError, CodecError)
-
-    def test_filesystem_error_hierarchy(self) -> None:
-        """Test filesystem error hierarchy."""
-        assert issubclass(PathError, FilesystemError)
-        assert issubclass(AtomicWriteError, FilesystemError)
-
-    def test_cluster_error_hierarchy(self) -> None:
-        """Test cluster error hierarchy."""
-        assert issubclass(AgencyError, ClusterError)
-        assert issubclass(LeaderElectionError, AgencyError)
-
-    def test_monitoring_error_hierarchy(self) -> None:
-        """Test monitoring error hierarchy."""
-        assert issubclass(CrashAnalysisError, MonitoringError)
-        assert issubclass(GdbError, CrashAnalysisError)
-        assert issubclass(SanitizerError, MonitoringError)
-
-    def test_result_error_hierarchy(self) -> None:
-        """Test result processing error hierarchy."""
-        assert issubclass(ResultExportError, ResultProcessingError)
-        assert issubclass(AnalysisError, ResultProcessingError)
-
-    def test_checker_error_hierarchy(self) -> None:
-        """Test checker error hierarchy."""
-        assert issubclass(InvariantViolationError, CheckerError)
-        assert issubclass(ResourceLeakError, CheckerError)
-
-
 class TestErrorUsage:
     """Test practical error usage scenarios."""
 

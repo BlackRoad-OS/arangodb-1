@@ -32,8 +32,6 @@ class TestArmadilloPluginBasic:
         plugin = ArmadilloPlugin()
 
         assert plugin is not None
-        assert hasattr(plugin, "_package_deployments")
-        assert hasattr(plugin, "_armadillo_config")
 
     def test_plugin_initial_state(self) -> None:
         """Test plugin initial state."""
@@ -42,21 +40,6 @@ class TestArmadilloPluginBasic:
         assert isinstance(plugin._package_deployments, dict)
         assert len(plugin._package_deployments) == 0
         assert plugin._armadillo_config is None
-
-    def test_plugin_has_expected_methods(self) -> None:
-        """Test plugin has expected pytest hook methods."""
-        plugin = ArmadilloPlugin()
-
-        # Check that pytest hook methods exist
-        expected_methods = [
-            "pytest_configure",
-            "pytest_sessionstart",
-            "pytest_sessionfinish",
-        ]
-
-        for method_name in expected_methods:
-            assert hasattr(plugin, method_name)
-            assert callable(getattr(plugin, method_name))
 
 
 class TestArmadilloPluginConfiguration:
@@ -284,8 +267,6 @@ class TestArmadilloReporter:
         reporter = ArmadilloReporter()
 
         assert reporter is not None
-        assert hasattr(reporter, "test_times")
-        assert hasattr(reporter, "suite_start_times")
         assert isinstance(reporter.test_times, dict)
 
     @patch("sys.stdout.write")

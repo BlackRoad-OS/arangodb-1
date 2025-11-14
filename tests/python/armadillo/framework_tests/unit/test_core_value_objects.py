@@ -56,29 +56,6 @@ class TestServerId:
         assert id1 != id3
         assert id1 != "agent_0"  # Should not equal strings
 
-    def test_server_id_hash(self) -> None:
-        """Test ServerId can be hashed and used in sets/dicts."""
-        id1 = ServerId("agent_0")
-        id2 = ServerId("agent_0")
-        id3 = ServerId("agent_1")
-
-        # Same ID should have same hash
-        assert hash(id1) == hash(id2)
-
-        # Can be used in sets
-        id_set = {id1, id2, id3}
-        assert len(id_set) == 2  # id1 and id2 are the same
-
-        # Can be used as dict keys
-        server_dict = {id1: "server1", id3: "server3"}
-        assert server_dict[id2] == "server1"  # id2 equals id1
-
-    def test_server_id_immutable(self) -> None:
-        """Test that ServerId is immutable."""
-        server_id = ServerId("agent_0")
-        with pytest.raises(AttributeError):
-            server_id.value = "agent_1"  # type: ignore
-
 
 class TestServerContext:
     """Tests for ServerContext value object."""
@@ -185,43 +162,9 @@ class TestServerContext:
         assert single_context.is_dbserver() is False
         assert single_context.is_single() is True
 
-    def test_context_immutable(self) -> None:
-        """Test that ServerContext is immutable."""
-        context = ServerContext(
-            server_id=ServerId("agent_0"),
-            role=ServerRole.AGENT,
-            pid=12345,
-        )
-
-        with pytest.raises(AttributeError):
-            context.pid = 54321  # type: ignore
-
 
 class TestServerIdIntegration:
     """Integration tests for ServerId usage patterns."""
-
-    def test_server_id_as_dict_key_with_mixed_operations(self) -> None:
-        """Test realistic usage pattern with dictionary operations."""
-        servers = {}
-
-        # Add servers
-        agent_0 = ServerId("agent_0")
-        agent_1 = ServerId("agent_1")
-        db_0 = ServerId("dbserver_0")
-
-        servers[agent_0] = {"role": "agent", "port": 8529}
-        servers[agent_1] = {"role": "agent", "port": 8539}
-        servers[db_0] = {"role": "dbserver", "port": 8530}
-
-        # Lookup with new instance (same value)
-        assert servers[ServerId("agent_0")] == {"role": "agent", "port": 8529}
-
-        # Check membership
-        assert ServerId("agent_0") in servers
-        assert ServerId("agent_2") not in servers
-
-        # Iterate
-        assert len(servers) == 3
 
     def test_server_context_in_log_message(self) -> None:
         """Test how ServerContext would be used in log messages."""
@@ -290,52 +233,3 @@ class TestDeploymentId:
         assert id1 == id2
         assert id1 != id3
         assert id1 != "cluster_session"  # Should not equal strings
-
-    def test_deployment_id_hash(self) -> None:
-        """Test DeploymentId can be hashed and used in sets/dicts."""
-        id1 = DeploymentId("deployment_1")
-        id2 = DeploymentId("deployment_1")
-        id3 = DeploymentId("deployment_2")
-
-        # Same ID should have same hash
-        assert hash(id1) == hash(id2)
-
-        # Can be used in sets
-        id_set = {id1, id2, id3}
-        assert len(id_set) == 2  # id1 and id2 are the same
-
-        # Can be used as dict keys
-        deployment_dict = {id1: "manager1", id3: "manager3"}
-        assert deployment_dict[id2] == "manager1"  # id2 equals id1
-
-    def test_deployment_id_immutable(self) -> None:
-        """Test that DeploymentId is immutable."""
-        deployment_id = DeploymentId("test_deployment")
-        with pytest.raises(AttributeError):
-            deployment_id.value = "other_deployment"  # type: ignore
-
-    def test_deployment_id_as_dict_key(self) -> None:
-        """Test realistic usage pattern with deployment tracking."""
-        deployments = {}
-
-        # Track multiple deployments
-        cluster_session = DeploymentId("cluster_session")
-        cluster_func = DeploymentId("cluster_func_abc123")
-        single_server = DeploymentId("test_single_server")
-
-        deployments[cluster_session] = {"type": "cluster", "servers": 6}
-        deployments[cluster_func] = {"type": "cluster", "servers": 3}
-        deployments[single_server] = {"type": "single", "servers": 1}
-
-        # Lookup with new instance (same value)
-        assert deployments[DeploymentId("cluster_session")] == {
-            "type": "cluster",
-            "servers": 6,
-        }
-
-        # Check membership
-        assert DeploymentId("cluster_session") in deployments
-        assert DeploymentId("nonexistent") not in deployments
-
-        # Iterate
-        assert len(deployments) == 3

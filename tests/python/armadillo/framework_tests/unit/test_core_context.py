@@ -114,9 +114,9 @@ class TestApplicationContext:
         assert ctx.logger is mock_logger
         assert ctx.port_allocator is mock_allocator
         assert ctx.auth_provider is mock_auth
-        # Other dependencies should still use defaults
-        assert ctx.filesystem is not None
-        assert ctx.process_supervisor is not None
+        # Other dependencies should still use defaults - verify by using them
+        assert ctx.filesystem.work_dir() is not None
+        assert isinstance(ctx.process_supervisor.list_processes(), list)
 
 
 class TestApplicationContextForTesting:
@@ -126,7 +126,7 @@ class TestApplicationContextForTesting:
         """for_testing() should create minimal test configuration."""
         ctx = ApplicationContext.for_testing()
 
-        assert ctx.config is not None
+        # Verify config is properly initialized
         assert ctx.config.deployment_mode == DeploymentMode.SINGLE_SERVER
         assert ctx.config.is_test_mode is True
         assert ctx.config.temp_dir == Path("/tmp/armadillo-test")
@@ -157,6 +157,7 @@ class TestApplicationContextForTesting:
         assert ctx.logger is mock_logger
         assert ctx.port_allocator is mock_allocator
 
+
 class TestApplicationContextIntegration:
     """Integration tests for ApplicationContext with real dependencies."""
 
@@ -170,9 +171,6 @@ class TestApplicationContextIntegration:
         )
 
         ctx = ApplicationContext.create(config)
-
-        # Verify we can use the dependencies
-        assert ctx.logger is not None
 
         # Port allocator should work
         port = ctx.port_allocator.allocate_port()

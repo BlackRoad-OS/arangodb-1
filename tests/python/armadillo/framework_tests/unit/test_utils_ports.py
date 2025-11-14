@@ -83,6 +83,6 @@ class TestPortManager:
         ports = [pm.allocate_port() for _ in range(5)]
         # Release one
         pm.release_port(ports[2])
-        # Should be able to allocate again
+        # Should be able to allocate again - verify it works
         new_port = pm.allocate_port()
-        assert new_port is not None
+        assert new_port in range(8529, 8534)  # Should be one of the valid ports
