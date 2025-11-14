@@ -145,7 +145,8 @@ class TestDeploymentPlanner:
             assert agent.args["agency.my-address"] == f"tcp://127.0.0.1:{8529 + i}"
             assert "agency.endpoint" in agent.args
             endpoint_value = agent.args["agency.endpoint"]
-            assert isinstance(endpoint_value, str)
+            # agency.endpoint is a list of all agent endpoints
+            assert isinstance(endpoint_value, list)
             assert "tcp://127.0.0.1:8529" in endpoint_value
             assert "tcp://127.0.0.1:8530" in endpoint_value
 
@@ -233,7 +234,9 @@ class TestDeploymentPlanner:
 
         for agent in agents:
             agency_endpoint_value = agent.args["agency.endpoint"]
-            assert isinstance(agency_endpoint_value, str)
+            # agency.endpoint is a list of all agent endpoints
+            assert isinstance(agency_endpoint_value, list)
+            assert len(agency_endpoint_value) == len(expected_agency_endpoints)
             for endpoint in expected_agency_endpoints:
                 assert endpoint in agency_endpoint_value
 

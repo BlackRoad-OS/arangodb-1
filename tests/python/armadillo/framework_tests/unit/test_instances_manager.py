@@ -30,7 +30,7 @@ class TestInstanceManagerBasic:
         )
 
         assert manager is not None
-        assert manager.deployment_id == "test_deployment"
+        assert manager.deployment_id.value == "test_deployment"
 
     def test_manager_has_expected_attributes(self) -> None:
         """Test manager has expected attributes."""
@@ -71,8 +71,8 @@ class TestInstanceManagerBasic:
         )
 
         assert manager1.deployment_id != manager2.deployment_id
-        assert manager1.deployment_id == "deployment_one"
-        assert manager2.deployment_id == "deployment_two"
+        assert manager1.deployment_id.value == "deployment_one"
+        assert manager2.deployment_id.value == "deployment_two"
 
 
 class TestDeploymentPlan:
@@ -205,15 +205,15 @@ class TestInstanceManagerErrorHandling:
         """Test manager creation with edge case deployment IDs."""
         app_context = ApplicationContext.for_testing()
 
-        # Test with empty string
-        manager1 = InstanceManager(DeploymentId(""), app_context=app_context)
-        assert manager1.deployment_id == DeploymentId("")
+        # Test with empty string - should raise ValueError
+        with pytest.raises(ValueError, match="DeploymentId cannot be empty"):
+            InstanceManager(DeploymentId(""), app_context=app_context)
 
-        # Test with special characters
+        # Test with special characters (valid)
         manager2 = InstanceManager(
             DeploymentId("test-deployment_123"), app_context=app_context
         )
-        assert manager2.deployment_id == DeploymentId("test-deployment_123")
+        assert manager2.deployment_id.value == "test-deployment_123"
 
 
 class TestInstanceManagerMockIntegration:

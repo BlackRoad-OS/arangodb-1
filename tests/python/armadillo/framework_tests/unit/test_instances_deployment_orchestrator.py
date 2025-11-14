@@ -92,10 +92,12 @@ class TestDeploymentOrchestrator:
             return_value=Mock(is_healthy=True, error_message=None)
         )
         mock_server.role = ServerRole.SINGLE
-        mock_server.server_id = "server_0"
+        mock_server.server_id = ServerId("server_0")
 
         class MockFactory:
-            def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
+            def create_server_instances(
+                self, servers_config: Any
+            ) -> dict[ServerId, Any]:
                 # Return dict with a deterministic ServerId-like key
                 return {ServerId("server_0"): mock_server}
 
@@ -124,9 +126,11 @@ class TestDeploymentOrchestrator:
         )
 
         # Patch executor factory to return our mock executor
-        setattr(orchestrator._executor_factory, "create_executor", Mock(
-            return_value=mock_executor_instance
-        ))
+        setattr(
+            orchestrator._executor_factory,
+            "create_executor",
+            Mock(return_value=mock_executor_instance),
+        )
 
         plan = SingleServerDeploymentPlan(server=Mock(role=ServerRole.SINGLE))
         deployment = orchestrator.execute_deployment(plan, timeout=5.0)
@@ -160,7 +164,9 @@ class TestDeploymentOrchestrator:
         }
 
         class MockFactory:
-            def create_server_instances(self, servers_config: Any) -> dict[ServerId, Any]:
+            def create_server_instances(
+                self, servers_config: Any
+            ) -> dict[ServerId, Any]:
                 return servers_dict
 
         # Fake bootstrap
@@ -203,9 +209,11 @@ class TestDeploymentOrchestrator:
         )
 
         # Patch executor factory to return our mock executor
-        setattr(orchestrator._executor_factory, "create_executor", Mock(
-            return_value=mock_executor_instance
-        ))
+        setattr(
+            orchestrator._executor_factory,
+            "create_executor",
+            Mock(return_value=mock_executor_instance),
+        )
 
         plan = ClusterDeploymentPlan(
             servers=[
@@ -260,9 +268,11 @@ class TestDeploymentOrchestrator:
             mock_executor,
         )
         # Patch executor factory to return our mock executor
-        setattr(orchestrator._executor_factory, "create_executor", Mock(
-            return_value=mock_executor_instance
-        ))
+        setattr(
+            orchestrator._executor_factory,
+            "create_executor",
+            Mock(return_value=mock_executor_instance),
+        )
 
         orchestrator.shutdown_deployment(mock_deployment, timeout=10.0)
 

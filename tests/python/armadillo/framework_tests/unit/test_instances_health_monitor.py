@@ -67,7 +67,10 @@ class TestHealthMonitor:
             is_healthy=True, response_time=0.1
         )
 
-        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
+        servers: dict[ServerId, Any] = {
+            ServerId("server1"): server1,
+            ServerId("server2"): server2,
+        }
 
         result = monitor.check_deployment_health(servers, timeout=30.0)
 
@@ -91,7 +94,10 @@ class TestHealthMonitor:
             is_healthy=False, response_time=0.2, error_message="Not responding"
         )
 
-        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
+        servers: dict[ServerId, Any] = {
+            ServerId("server1"): server1,
+            ServerId("server2"): server2,
+        }
 
         result = monitor.check_deployment_health(servers, timeout=30.0)
 
@@ -125,12 +131,12 @@ class TestHealthMonitor:
             connection_count=50,
             uptime=100.0,
         )
-        mock_server.get_stats.return_value = mock_stats
+        mock_server.get_stats_sync.return_value = mock_stats
 
         result = monitor.collect_server_stats(mock_server)
 
         assert result == mock_stats
-        mock_server.get_stats.assert_called_once()
+        mock_server.get_stats_sync.assert_called_once()
 
     def test_collect_server_stats_failure(self) -> None:
         """Test collecting stats from failed server."""
@@ -139,7 +145,7 @@ class TestHealthMonitor:
 
         mock_server = Mock()
         mock_server.server_id = "server1"
-        mock_server.get_stats.side_effect = Exception("Stats unavailable")
+        mock_server.get_stats_sync.side_effect = Exception("Stats unavailable")
 
         result = monitor.collect_server_stats(mock_server)
 
@@ -159,7 +165,7 @@ class TestHealthMonitor:
             connection_count=50,
             uptime=100.0,
         )
-        server1.get_stats.return_value = stats1
+        server1.get_stats_sync.return_value = stats1
 
         server2 = Mock()
         server2.server_id = "server2"
@@ -170,9 +176,12 @@ class TestHealthMonitor:
             connection_count=100,
             uptime=200.0,
         )
-        server2.get_stats.return_value = stats2
+        server2.get_stats_sync.return_value = stats2
 
-        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
+        servers: dict[ServerId, Any] = {
+            ServerId("server1"): server1,
+            ServerId("server2"): server2,
+        }
 
         result = monitor.collect_deployment_stats(servers)
 
@@ -293,7 +302,10 @@ class TestHealthMonitorReadiness:
             server2 = Mock()
             server2.server_id = "server2"
 
-            servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2}
+            servers: dict[ServerId, Any] = {
+                ServerId("server1"): server1,
+                ServerId("server2"): server2,
+            }
 
             # Should not raise
             monitor.verify_deployment_ready(servers, timeout=60.0)
@@ -344,7 +356,11 @@ class TestHealthMonitorIntegration:
         server3.server_id = "server3"
         server3.health_check_sync.side_effect = Exception("Network timeout")
 
-        servers: dict[ServerId, Any] = {ServerId("server1"): server1, ServerId("server2"): server2, ServerId("server3"): server3}
+        servers: dict[ServerId, Any] = {
+            ServerId("server1"): server1,
+            ServerId("server2"): server2,
+            ServerId("server3"): server3,
+        }
 
         result = monitor.check_deployment_health(servers, timeout=30.0)
 
