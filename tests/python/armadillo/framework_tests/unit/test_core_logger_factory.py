@@ -112,34 +112,15 @@ class TestIsolatedLogManager:
         assert context["base"] == "value"
         assert "temp" not in context
 
-    def test_thread_isolation(self):
-        """Test that context is isolated between threads."""
-        pytest.skip("Threading is globally mocked - test requires real threads")
+    def test_thread_isolation(self) -> None:
+        """Test that context is isolated between threads.
 
-        self.manager.configure(enable_json=False, enable_console=False)
+        Note: This test is moved to integration tests (test_logger_factory.py)
+        because it requires real threading, which is mocked in unit tests.
+        """
+        pytest.skip("Moved to integration tests - see test_logger_factory.py")
 
-        contexts = {}
-        barrier = threading.Barrier(2)
-
-        def thread_worker(thread_id):
-            self.manager.set_context(thread_id=thread_id)
-            barrier.wait()  # Synchronize
-            time.sleep(0.01)  # Small delay
-            contexts[thread_id] = self.manager.get_context()
-
-        thread1 = threading.Thread(target=thread_worker, args=(1,))
-        thread2 = threading.Thread(target=thread_worker, args=(2,))
-
-        thread1.start()
-        thread2.start()
-        thread1.join()
-        thread2.join()
-
-        # Each thread should have its own context
-        assert contexts[1]["thread_id"] == 1
-        assert contexts[2]["thread_id"] == 2
-
-    def test_json_file_logging(self):
+    def test_json_file_logging(self) -> None:
         """Test JSON file logging configuration."""
         with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as f:
             log_file = Path(f.name)
