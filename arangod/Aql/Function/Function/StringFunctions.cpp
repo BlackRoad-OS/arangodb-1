@@ -128,7 +128,7 @@ AqlValue functions::ToString(ExpressionContext* expr, AstNode const&,
   velocypack::StringSink adapter(buffer.get());
 
   appendAsString(trx.vpackOptions(), adapter, value);
-
+  
   ResourceMonitor* rm = functions::getResourceMonitor(expr);
 
   return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
@@ -155,8 +155,7 @@ AqlValue functions::ToChar(ExpressionContext* ctx, AstNode const&,
 
   ResourceMonitor* rm = functions::getResourceMonitor(ctx);
 
-  return AqlValue(std::string_view(&buffer[0], static_cast<size_t>(offset)),
-                  rm);
+  return AqlValue(std::string_view(&buffer[0], static_cast<size_t>(offset)), rm);
 }
 
 AqlValue functions::Repeat(ExpressionContext* ctx, AstNode const&,

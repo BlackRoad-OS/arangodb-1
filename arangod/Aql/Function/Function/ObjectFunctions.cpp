@@ -131,8 +131,7 @@ void unsetOrKeep(transaction::Methods* trx, VPackSlice const& value,
 AqlValue mergeParameters(ExpressionContext* expressionContext,
                          aql::functions::VPackFunctionParametersView parameters,
                          char const* funcName, bool recursive) {
-  ResourceMonitor* resourceMonitor =
-      functions::getResourceMonitor(expressionContext);
+  ResourceMonitor* resourceMonitor = functions::getResourceMonitor(expressionContext);
 
   size_t const n = parameters.size();
 

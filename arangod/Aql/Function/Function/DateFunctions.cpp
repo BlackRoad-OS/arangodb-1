@@ -134,9 +134,8 @@ AqlValue timeAqlValue(ExpressionContext* expressionContext, char const* AFN,
 
   ResourceMonitor* rm = functions::getResourceMonitor(expressionContext);
 
-  return AqlValue(std::string_view{&formatted[0], utc ? sizeof(formatted)
-                                                      : sizeof(formatted) - 1},
-                  rm);
+  return AqlValue(std::string_view{
+      &formatted[0], utc ? sizeof(formatted) : sizeof(formatted) - 1}, rm);
 }
 
 DateSelectionModifier parseDateModifierFlag(VPackSlice flag) {
