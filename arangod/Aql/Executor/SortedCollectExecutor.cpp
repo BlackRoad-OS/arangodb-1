@@ -276,7 +276,7 @@ void SortedCollectExecutor::CollectGroup::writeToOutput(
   if (infos.getCollectRegister().value() != RegisterId::maxRegisterId) {
     TRI_ASSERT(_builder.isOpenArray());
     _builder.close();
-    AqlValue val(std::move(_buffer));
+    AqlValue val(std::move(_buffer), &infos.resourceMonitor());
     AqlValueGuard guard{val, true};
     TRI_ASSERT(_buffer.size() == 0);
     _builder.clear();
