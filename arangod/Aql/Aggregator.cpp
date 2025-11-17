@@ -186,16 +186,8 @@ struct AggregatorMin final : public Aggregator {
          AqlValue::Compare(_vpackOptions, value, cmpValue, true) > 0)) {
       // the value `null` itself will not be used in MIN() to compare lower than
       // e.g. value `false`
-      auto memoryUsage = value.memoryUsage();
-      int64_t memDelta = cmpValue.memoryUsage() - memoryUsage;
-      if (memDelta > 0) {
-        resourceUsageScope().increase(memDelta);
-      }
       value.destroy();
       value = cmpValue.clone();
-      if (memDelta < 0) {
-        resourceUsageScope().decrease(std::abs(memDelta));
-      }
     }
   }
 
@@ -228,16 +220,8 @@ struct AggregatorMax final : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     if (value.isEmpty() ||
         AqlValue::Compare(_vpackOptions, value, cmpValue, true) < 0) {
-      auto memoryUsage = value.memoryUsage();
-      int64_t memDelta = cmpValue.memoryUsage() - memoryUsage;
-      if (memDelta > 0) {
-        resourceUsageScope().increase(memDelta);
-      }
       value.destroy();
       value = cmpValue.clone();
-      if (memDelta < 0) {
-        resourceUsageScope().decrease(std::abs(memDelta));
-      }
     }
   }
 
