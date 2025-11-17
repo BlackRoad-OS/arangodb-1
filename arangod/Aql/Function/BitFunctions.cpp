@@ -355,7 +355,7 @@ AqlValue functions::BitDeconstruct(ExpressionContext* expressionContext,
         compare <<= 1;
       }
       builder->close();
-      ResourceMonitor* rm = expressionContext->getResourceMonitor();
+      ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
       return AqlValue(builder->slice(), builder->size(), rm);
     }
@@ -387,7 +387,7 @@ AqlValue functions::BitToString(ExpressionContext* expressionContext,
       }
     }
 
-    ResourceMonitor* rm = expressionContext->getResourceMonitor();
+    ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
     return AqlValue(std::string_view{&buffer[0], p}, rm);
   }

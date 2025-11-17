@@ -63,7 +63,7 @@ AqlValue functions::JsonStringify(ExpressionContext* exprCtx, AstNode const&,
   VPackDumper dumper(&adapter, trx->transactionContextPtr()->getVPackOptions());
   dumper.dump(slice);
 
-  ResourceMonitor* rm = exprCtx->getResourceMonitor();
+  ResourceMonitor* rm = exprCtx->getResourceMonitorPtr();
 
   return AqlValue(std::string_view{buffer->data(), buffer->length()}, rm);
 }
@@ -92,7 +92,7 @@ AqlValue functions::JsonParse(ExpressionContext* expressionContext,
 
   try {
     std::shared_ptr<VPackBuilder> builder = velocypack::Parser::fromJson(p, l);
-    ResourceMonitor* rm = expressionContext->getResourceMonitor();
+    ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
     return AqlValue(builder->slice(), builder->size(), rm);
   } catch (...) {

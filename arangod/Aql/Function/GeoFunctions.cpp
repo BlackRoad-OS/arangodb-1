@@ -703,7 +703,7 @@ AqlValue functions::GeoPoint(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -757,7 +757,7 @@ AqlValue functions::GeoMultiPoint(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -809,7 +809,7 @@ AqlValue functions::GeoPolygon(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -895,7 +895,7 @@ AqlValue functions::GeoMultiPolygon(ExpressionContext* expressionContext,
     return AqlValue(AqlValueHintNull());
   }
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -949,7 +949,7 @@ AqlValue functions::GeoLinestring(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }
@@ -1022,7 +1022,7 @@ AqlValue functions::GeoMultiLinestring(ExpressionContext* expressionContext,
   builder->close();
   builder->close();
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }

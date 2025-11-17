@@ -87,7 +87,7 @@ AqlValue functions::SchemaGet(ExpressionContext* expressionContext,
                      " has no rule object"));
   }
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(slice, builder->size(), rm);
 }
@@ -121,7 +121,7 @@ AqlValue functions::SchemaValidate(ExpressionContext* expressionContext,
       VPackObjectBuilder guard(resultBuilder.builder());
       resultBuilder->add("valid", VPackValue(true));
     }
-    ResourceMonitor* rm = expressionContext->getResourceMonitor();
+    ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
     return AqlValue(resultBuilder->slice(), resultBuilder->size(), rm);
   }
@@ -159,7 +159,7 @@ AqlValue functions::SchemaValidate(ExpressionContext* expressionContext,
     }
   }
 
-  ResourceMonitor* rm = expressionContext->getResourceMonitor();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   return AqlValue(resultBuilder->slice(), resultBuilder->size(), rm);
 }

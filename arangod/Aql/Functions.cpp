@@ -148,10 +148,10 @@ AqlValue functions::numberValue(double value, bool nullify) {
 }
 
 /// @brief Get ResourceMonitor if available
-/// @deprecated Use expressionContext->getResourceMonitor() directly instead
+/// @deprecated Use expressionContext->getResourceMonitorPtr() directly instead
 ResourceMonitor* functions::getResourceMonitor(
     ExpressionContext* expressionContext) noexcept {
-  return expressionContext->getResourceMonitor();
+  return expressionContext->getResourceMonitorPtr();
 }
 
 /// @brief extra a collection name from an AqlValue
