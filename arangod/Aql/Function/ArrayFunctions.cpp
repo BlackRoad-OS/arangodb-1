@@ -1489,7 +1489,7 @@ AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
     }
   }
   builder->close();
-  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+  ResourceMonitor* rm = ctx->getResourceMonitorPtr();
 
   return AqlValue(builder->slice(), builder->size(), rm);
 }

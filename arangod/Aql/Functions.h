@@ -41,7 +41,7 @@ namespace velocypack {
 class Slice;
 }
 
-class ResourceMonitor;
+struct ResourceMonitor;
 
 namespace aql {
 struct AstNode;
