@@ -575,8 +575,9 @@ class IResearchInvertedIndexIterator final
                   } else {
                     SearchDoc doc(_snapshot.segment(_readerOffset - 1),
                                   _doc->value);
-                    return callback(aql::AqlValue{doc.encode(_buf)},
-                                    _projections);
+                    return callback(
+                        aql::AqlValue{doc.encode(_buf), &_memory._monitor},
+                        _projections);
                   }
                 }();
                 if (emitRes) {
@@ -702,8 +703,9 @@ class IResearchInvertedIndexMergeIterator final
                 if constexpr (emitLocalDocumentId) {
                   return callback(documentId, segment.projections);
                 } else {
-                  return callback(aql::AqlValue{doc.encode(_buf)},
-                                  segment.projections);
+                  return callback(
+                      aql::AqlValue{doc.encode(_buf), &_memory._monitor},
+                      segment.projections);
                 }
               }();
               if (emitRes) {
