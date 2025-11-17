@@ -107,7 +107,9 @@ AqlValue functions::MakeDistributeInput(
   }
   TRI_ASSERT(input.isObject());
 
-  return AqlValue{input};
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+
+  return AqlValue{input, 0, rm};
 }
 
 AqlValue functions::MakeDistributeInputWithKeyCreation(
@@ -115,6 +117,8 @@ AqlValue functions::MakeDistributeInputWithKeyCreation(
     VPackFunctionParametersView parameters) {
   transaction::Methods& trx = expressionContext->trx();
   AqlValue value = aql::functions::extractFunctionParameterValue(parameters, 0);
+
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
   VPackSlice opts =
       aql::functions::extractFunctionParameterValue(parameters, 2).slice();
@@ -196,8 +200,7 @@ AqlValue functions::MakeDistributeInputWithKeyCreation(
       objectGuard->add(StaticStrings::ToString,
                        input.get(StaticStrings::ToString));
     }
-
-    return AqlValue{builder->slice()};
+    return AqlValue{builder->slice(), 0, rm};
   }
 
   if (buildNewObject) {
@@ -211,16 +214,18 @@ AqlValue functions::MakeDistributeInputWithKeyCreation(
       builder->add(cur.key.stringView(), cur.value);
     }
     builder->close();
-    return AqlValue{builder->slice()};
+    return AqlValue{builder->slice(), 0, rm};
   }
 
-  return AqlValue{input};
+  return AqlValue{input, 0, rm};
 }
 
 AqlValue functions::MakeDistributeGraphInput(
     aql::ExpressionContext* expressionContext, AstNode const&,
     VPackFunctionParametersView parameters) {
   transaction::Methods& trx = expressionContext->trx();
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+
   AqlValue const& value =
       aql::functions::extractFunctionParameterValue(parameters, 0);
   VPackSlice input = value.slice();  // will throw when wrong type
@@ -241,7 +246,7 @@ AqlValue functions::MakeDistributeGraphInput(
       builder->close();
     }
 
-    return AqlValue{builder->slice()};
+    return AqlValue{builder->slice(), 0, rm};
   }
 
   // check input value
@@ -273,10 +278,10 @@ AqlValue functions::MakeDistributeGraphInput(
       builder->add(cur.key.stringView(), cur.value);
     }
     builder->close();
-    return AqlValue{builder->slice()};
+    return AqlValue{builder->slice(), 0, rm};
   }
 
-  return AqlValue{input};
+  return AqlValue{input, 0, rm};
 }
 
 #ifdef USE_ENTERPRISE
@@ -303,7 +308,8 @@ AqlValue functions::SelectSmartDistributeGraphInput(
       SmartGraphValidationHelper::SmartValidationResult::validateVertexId(
           fromId, expressionContext->vocbase());
   if (res.ok()) {
-    return AqlValue{input};
+    ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+    return AqlValue{input, 0, rm};
   }
   // From vertex is not smart. Use the other side.
 
