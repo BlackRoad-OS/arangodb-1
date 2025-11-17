@@ -561,45 +561,10 @@ struct AqlValue final {
   void setSupervisedData(AqlValueType, MemoryOriginType,
                          velocypack::ValueLength);
 
-  inline void swap(AqlValue& other) noexcept;
+  static uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
+                                     std::uint64_t len);
 
-  static inline uint8_t* allocateSupervised(
-      arangodb::ResourceMonitor& rm, std::uint64_t len,
-      MemoryOriginType mot = MemoryOriginType::New) {
-    std::size_t total = kPrefix + static_cast<std::size_t>(len);
-    void* base = nullptr;
-
-    // choose allocator based on MemoryOriginType
-    if (mot == MemoryOriginType::Malloc) {
-      base = std::malloc(total);
-    } else {
-      base = ::operator new(total);  // default (New)
-    }
-
-    if (ADB_UNLIKELY(base == nullptr)) {
-      THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
-    }
-
-    *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-    rm.increaseMemoryUsage(total);
-    return reinterpret_cast<uint8_t*>(base);
-  }
-
-  static inline void deallocateSupervised(
-      uint8_t* base, std::uint64_t len,
-      MemoryOriginType mot = MemoryOriginType::New) noexcept {
-    if (base == nullptr) {
-      return;
-    }
-    auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
-    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
-
-    if (mot == MemoryOriginType::Malloc) {
-      std::free(base);
-    } else {  // MemoryOriginType::New
-      ::operator delete(static_cast<void*>(base));
-    }
-  }
+  static void deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept;
 };
 
 static_assert(std::is_copy_constructible_v<AqlValue>);
