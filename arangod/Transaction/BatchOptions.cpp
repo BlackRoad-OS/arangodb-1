@@ -24,6 +24,7 @@
 #include "BatchOptions.h"
 
 #include "Aql/ExpressionContext.h"
+#include "Basics/ResourceUsage.h"
 #include "VocBase/ComputedValues.h"
 
 namespace arangodb::transaction {
@@ -34,8 +35,13 @@ BatchOptions::~BatchOptions() = default;
 void BatchOptions::ensureComputedValuesContext(Methods& trx,
                                                LogicalCollection& collection) {
   if (computedValuesContext == nullptr) {
-    computedValuesContext =
-        std::make_unique<ComputedValuesExpressionContext>(trx, collection);
+    // Get ResourceMonitor from ComputedValues if available
+    ResourceMonitor* resourceMonitor = nullptr;
+    if (computedValues != nullptr) {
+      resourceMonitor = computedValues->getResourceMonitor();
+    }
+    computedValuesContext = std::make_unique<ComputedValuesExpressionContext>(
+        trx, collection, resourceMonitor);
   }
 }
 
