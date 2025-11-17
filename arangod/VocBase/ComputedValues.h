@@ -157,6 +157,7 @@ class ComputedValues {
     bool keepNull() const noexcept;
     aql::Variable const* tempVariable() const noexcept;
     aql::QueryContext* queryContext() const noexcept;
+    ResourceMonitor* getResourceMonitor() const noexcept;
 
    private:
     TRI_vocbase_t& _vocbase;

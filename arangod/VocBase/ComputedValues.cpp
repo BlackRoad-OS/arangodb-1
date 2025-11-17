@@ -303,6 +303,14 @@ aql::QueryContext* ComputedValues::ComputedValue::queryContext()
   return _queryContext.get();
 }
 
+ResourceMonitor* ComputedValues::ComputedValue::getResourceMonitor()
+    const noexcept {
+  if (_queryContext != nullptr) {
+    return &_queryContext->resourceMonitor();
+  }
+  return nullptr;
+}
+
 void ComputedValues::ComputedValue::computeAttribute(
     aql::ExpressionContext& ctx, velocypack::Slice input,
     velocypack::Builder& output) const {
@@ -349,10 +357,7 @@ bool ComputedValues::mustComputeValuesOnReplace() const noexcept {
 
 ResourceMonitor* ComputedValues::getResourceMonitor() const noexcept {
   if (!_values.empty()) {
-    aql::QueryContext* queryContext = _values[0].queryContext();
-    if (queryContext != nullptr) {
-      return &queryContext->resourceMonitor();
-    }
+    return _values[0].getResourceMonitor();
   }
   return nullptr;
 }
