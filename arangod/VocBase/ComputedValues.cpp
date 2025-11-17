@@ -70,10 +70,12 @@ namespace arangodb {
 
 // expression context used for calculating computed values inside
 ComputedValuesExpressionContext::ComputedValuesExpressionContext(
-    transaction::Methods& trx, LogicalCollection& collection)
+    transaction::Methods& trx, LogicalCollection& collection,
+    ResourceMonitor* resourceMonitor)
     : aql::ExpressionContext(),
       _trx(trx),
       _collection(collection),
+      _resourceMonitor(resourceMonitor),
       _failOnWarning(false) {}
 
 TRI_vocbase_t& ComputedValuesExpressionContext::vocbase() const {
@@ -296,6 +298,11 @@ aql::Variable const* ComputedValues::ComputedValue::tempVariable()
   return _tempVariable;
 }
 
+aql::QueryContext* ComputedValues::ComputedValue::queryContext()
+    const noexcept {
+  return _queryContext.get();
+}
+
 void ComputedValues::ComputedValue::computeAttribute(
     aql::ExpressionContext& ctx, velocypack::Slice input,
     velocypack::Builder& output) const {
@@ -338,6 +345,16 @@ bool ComputedValues::mustComputeValuesOnUpdate() const noexcept {
 
 bool ComputedValues::mustComputeValuesOnReplace() const noexcept {
   return !_attributesForReplace.empty();
+}
+
+ResourceMonitor* ComputedValues::getResourceMonitor() const noexcept {
+  if (!_values.empty()) {
+    aql::QueryContext* queryContext = _values[0].queryContext();
+    if (queryContext != nullptr) {
+      return &queryContext->resourceMonitor();
+    }
+  }
+  return nullptr;
 }
 
 void ComputedValues::mergeComputedAttributes(

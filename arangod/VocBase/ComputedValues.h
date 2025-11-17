@@ -43,6 +43,7 @@ struct TRI_vocbase_t;
 
 namespace arangodb {
 class LogicalCollection;
+struct ResourceMonitor;
 struct ValidatorBase;
 
 namespace aql {
@@ -72,8 +73,9 @@ enum class ComputeValuesOn : uint8_t {
 // expression context used for calculating computed values inside
 class ComputedValuesExpressionContext final : public aql::ExpressionContext {
  public:
-  explicit ComputedValuesExpressionContext(transaction::Methods& trx,
-                                           LogicalCollection& collection);
+  explicit ComputedValuesExpressionContext(
+      transaction::Methods& trx, LogicalCollection& collection,
+      ResourceMonitor* resourceMonitor = nullptr);
 
   void registerWarning(ErrorCode errorCode, std::string_view msg) override;
 
@@ -110,6 +112,10 @@ class ComputedValuesExpressionContext final : public aql::ExpressionContext {
   // unregister a temporary variable from the ExpressionContext.
   void clearVariable(aql::Variable const* variable) noexcept override;
 
+  ResourceMonitor* getResourceMonitor() noexcept override {
+    return _resourceMonitor;
+  }
+
  private:
   std::string buildLogMessage(std::string_view type,
                               std::string_view msg) const;
@@ -117,6 +123,7 @@ class ComputedValuesExpressionContext final : public aql::ExpressionContext {
   transaction::Methods& _trx;
   LogicalCollection& _collection;
   aql::AqlFunctionsInternalCache _aqlFunctionsInternalCache;
+  ResourceMonitor* _resourceMonitor;
 
   // current runtime (execution) state follows...
   // current attribute name
@@ -149,6 +156,7 @@ class ComputedValues {
     bool failOnWarning() const noexcept;
     bool keepNull() const noexcept;
     aql::Variable const* tempVariable() const noexcept;
+    aql::QueryContext* queryContext() const noexcept;
 
    private:
     TRI_vocbase_t& _vocbase;
@@ -184,6 +192,16 @@ class ComputedValues {
   bool mustComputeValuesOnInsert() const noexcept;
   bool mustComputeValuesOnUpdate() const noexcept;
   bool mustComputeValuesOnReplace() const noexcept;
+
+  /// @brief Get ResourceMonitor from the first ComputedValue's QueryContext if
+  /// available
+  /// @return Pointer to ResourceMonitor if available, nullptr otherwise
+  /// @note Each ComputedValue has its own QueryContext and ResourceMonitor
+  /// instance,
+  ///       but all ResourceMonitor instances share the same
+  ///       GlobalResourceMonitor. We use the first one as a representative for
+  ///       all computed values.
+  ResourceMonitor* getResourceMonitor() const noexcept;
 
   void mergeComputedAttributes(
       aql::ExpressionContext& ctx, transaction::Methods& trx,
