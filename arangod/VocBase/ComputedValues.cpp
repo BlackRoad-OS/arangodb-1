@@ -52,6 +52,7 @@
 #include <span>
 #include <string_view>
 #include <type_traits>
+#include <immer/detail/combine_standard_layout.hpp>
 
 namespace {
 // name of bind parameter variable that contains the current document
@@ -147,7 +148,8 @@ aql::AqlValue ComputedValuesExpressionContext::getVariableValue(
     return aql::AqlValue(aql::AqlValueHintNull());
   }
   if (doCopy) {
-    return aql::AqlValue(aql::AqlValueHintSliceCopy(it->second));
+    return aql::AqlValue(aql::AqlValueHintSliceCopy(it->second),
+                         getResourceMonitorPtr());
   }
   return aql::AqlValue(aql::AqlValueHintSliceNoCopy(it->second));
 }
