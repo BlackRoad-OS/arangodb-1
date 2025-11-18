@@ -984,9 +984,7 @@ void AqlValue::destroy() noexcept {
       break;
     case VPACK_SUPERVISED_SLICE: {
       auto len = _data.supervisedSliceMeta.getLength();
-      deallocateSupervised(
-          _data.supervisedSliceMeta.pointer, len,
-          static_cast<MemoryOriginType>(_data.supervisedSliceMeta.getOrigin()));
+      deallocateSupervised(_data.supervisedSliceMeta.pointer, len);
       _data.supervisedSliceMeta.pointer = nullptr;
       _data.supervisedSliceMeta.lengthOrigin = 0;
       break;
@@ -1276,7 +1274,7 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
       // allocate block: [ rm* (prefix) | VelocyPack slice bytes (payload) ]
       // kPrefix = sizeof(ResourceMonitor*)
       // byteSize = size of the VelocyPack payload
-      uint8_t* base = allocateSupervised(*rm, byteSize, MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, byteSize);
       // Write the VelocyPack "head" byte for a short string into the payload.
       // VPack encodes short strings with first byte = 0x40 + length.
       // Ex: string "abc" (len=3) -> first payload byte = 0x43.
@@ -1303,7 +1301,7 @@ AqlValue::AqlValue(std::string_view s, arangodb::ResourceMonitor* rm) {
     if (rm != nullptr) {  // if this should be supervised
       setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New,
                         static_cast<velocypack::ValueLength>(byteSize));
-      uint8_t* base = allocateSupervised(*rm, byteSize, MemoryOriginType::New);
+      uint8_t* base = allocateSupervised(*rm, byteSize);
       // Write the VelocyPack type marker for a "long string" slice.
       // 0xbf means "string, long form". This is the first byte.
       base[kPrefix + 0] = static_cast<uint8_t>(0xbfU);
@@ -1349,7 +1347,7 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
     setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::Malloc,
                       static_cast<velocypack::ValueLength>(size));
-    uint8_t* p = allocateSupervised(*rm, size, MemoryOriginType::Malloc);
+    uint8_t* p = allocateSupervised(*rm, size);
     memcpy(p + kPrefix, slice.begin(), size);
     _data.supervisedSliceMeta.pointer = p;
     TRI_ASSERT(
@@ -1493,8 +1491,7 @@ void AqlValue::initFromSlice(VPackSlice slice, VPackValueLength length,
   if (length > sizeof(_data.inlineSliceMeta.slice)) {
     if (rm != nullptr) {
       setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New, length);
-      auto base = allocateSupervised(
-          *rm, length, MemoryOriginType::New);             // points to prefix
+      auto base = allocateSupervised(*rm, length);         // points to prefix
       std::memcpy(base + kPrefix, slice.begin(), length);  // copy into payload
       _data.supervisedSliceMeta.pointer = base;
       TRI_ASSERT(
@@ -1593,6 +1590,31 @@ void AqlValue::setSupervisedData(AqlValueType at, MemoryOriginType mot,
 
   TRI_ASSERT(type() == VPACK_SUPERVISED_SLICE);
   _data.supervisedSliceMeta.lengthOrigin = lo;
+}
+
+uint8_t* AqlValue::allocateSupervised(arangodb::ResourceMonitor& rm,
+                                      std::uint64_t len) {
+  std::size_t total = kPrefix + static_cast<std::size_t>(len);
+  void* base = nullptr;
+
+  base = ::operator new(total);  // default (New)
+
+  if (ADB_UNLIKELY(base == nullptr)) {
+    THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
+  }
+
+  *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
+  rm.increaseMemoryUsage(total);
+  return reinterpret_cast<uint8_t*>(base);
+}
+
+void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
+  if (base == nullptr) {
+    return;
+  }
+  auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
+  rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
+  ::operator delete(static_cast<void*>(base));
 }
 
 bool operator==(AqlValue const& a, AqlValue const& b) noexcept {
