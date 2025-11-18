@@ -60,7 +60,7 @@ void buildKeyObject(VPackBuilder& builder, std::string_view key,
 
 AqlValue convertToObject(transaction::Methods& trx, VPackSlice input,
                          bool allowKeyConversionToObject, bool canUseCustomKey,
-                         bool ignoreErrors) {
+                         bool ignoreErrors, ResourceMonitor* rm = nullptr) {
   // input is not an object.
   // if this happens, it must be a string key
   if (!input.isString() || !allowKeyConversionToObject) {
@@ -102,8 +102,9 @@ AqlValue functions::MakeDistributeInput(
         flags["allowKeyConversionToObject"].getBool();
     bool canUseCustomKey = flags["canUseCustomKey"].getBool();
     bool ignoreErrors = flags["ignoreErrors"].getBool();
+    ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
     return convertToObject(trx, input, allowKeyConversionToObject,
-                           canUseCustomKey, ignoreErrors);
+                           canUseCustomKey, ignoreErrors, rm);
   }
   TRI_ASSERT(input.isObject());
 
@@ -163,7 +164,8 @@ AqlValue functions::MakeDistributeInputWithKeyCreation(
 
   VPackSlice input = value.slice();  // will throw when wrong type
   if (!input.isObject()) {
-    return convertToObject(trx, input, true, canUseCustomKey, ignoreErrors);
+    ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+    return convertToObject(trx, input, true, canUseCustomKey, ignoreErrors, rm);
   }
 
   TRI_ASSERT(input.isObject());
