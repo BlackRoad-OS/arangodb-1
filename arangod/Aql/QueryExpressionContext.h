@@ -89,7 +89,7 @@ class QueryExpressionContext : public aql::ExpressionContext {
   ResourceMonitor& resourceMonitor() const { return _resourceMonitor; }
 
   virtual ResourceMonitor* getResourceMonitorPtr()
-    const noexcept override final {
+      const noexcept override final {
     return &_resourceMonitor;
   }
 
@@ -105,7 +105,7 @@ class QueryExpressionContext : public aql::ExpressionContext {
       if (it != _variables.end()) {
         // copy the slice we found
         mustDestroy = true;
-        return AqlValue((*it).second);
+        return AqlValue((*it).second, 0, getResourceMonitorPtr());
       }
     }
     return std::invoke(std::forward<F>(fn), variable, doCopy, mustDestroy);
