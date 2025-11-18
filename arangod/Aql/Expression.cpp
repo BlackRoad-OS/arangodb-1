@@ -677,7 +677,7 @@ AqlValue Expression::executeSimpleExpressionArray(ExpressionContext& ctx,
 
   builder->close();
   mustDestroy = true;  // AqlValue contains builder contains dynamic data
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), &_resourceMonitor);
 }
 
 // execute an expression of type ExpressionType::kSimple with OBJECT
@@ -792,7 +792,7 @@ AqlValue Expression::executeSimpleExpressionObject(ExpressionContext& ctx,
 
   mustDestroy = true;  // AqlValue contains builder contains dynamic data
 
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), &_resourceMonitor);
 }
 
 // execute an expression of type ExpressionType::kSimple with VALUE
@@ -975,7 +975,7 @@ AqlValue Expression::invokeV8Function(
   TRI_V8ToVPack(isolate, *builder.get(), result, false);
 
   mustDestroy = true;  // builder = dynamic data
-  return AqlValue(builder->slice(), builder->size());
+  return AqlValue(builder->slice(), builder->size(), &_resourceMonitor);
 }
 #endif
 
@@ -1674,7 +1674,7 @@ AqlValue Expression::executeSimpleExpressionExpansion(ExpressionContext& ctx,
     builder.close();
 
     mustDestroy = true;  // builder = dynamic data
-    value = AqlValue(std::move(buffer));
+    value = AqlValue(std::move(buffer), &_resourceMonitor);
   } else {
     bool localMustDestroy;
     AqlValue a = executeSimpleExpression(ctx, node->getMember(0),
@@ -1856,7 +1856,8 @@ AqlValue Expression::executeSimpleExpressionExpansion(ExpressionContext& ctx,
 
   builder.close();
   mustDestroy = true;
-  return AqlValue(std::move(buffer));  // builder = dynamic data
+  return AqlValue(std::move(buffer),
+                  &_resourceMonitor);  // builder = dynamic data
 }
 
 // execute an expression of type ExpressionType::kSimple with ITERATOR
