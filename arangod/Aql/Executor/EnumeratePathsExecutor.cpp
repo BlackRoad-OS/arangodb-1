@@ -248,7 +248,7 @@ auto EnumeratePathsExecutor<FinderType>::doOutputPath(OutputAqlItemRow& output)
   tmp->clear();
 
   if (_finder.getNextPath(*tmp.builder())) {
-    AqlValue path{tmp->slice()};
+    AqlValue path{tmp->slice(), 0, &_infos.query().resourceMonitor()};
     AqlValueGuard guard{path, true};
     output.moveValueInto(_infos.getOutputRegister(), _inputRow, &guard);
     output.advanceRow();
