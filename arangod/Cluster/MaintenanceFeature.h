@@ -45,6 +45,14 @@ class LogicalCollection;
 namespace maintenance {
 enum ActionState;
 
+/// @brief Statistics about shards in this maintenance cycle
+struct ShardStatistics {
+  std::unordered_set<ShardID> shards;
+  std::unordered_set<ShardID> leaderShards;
+  std::unordered_set<ShardID> outOfSyncShards;
+  std::unordered_set<ShardID> notReplicated;
+};
+
 // The following is used in multiple Maintenance actions and therefore
 // made available here.
 arangodb::Result collectionCount(arangodb::LogicalCollection const& collection,
@@ -627,6 +635,10 @@ class MaintenanceFeature : public ArangodFeature {
   metrics::Gauge<uint64_t>* _shards_leader_count = nullptr;
   metrics::Gauge<uint64_t>* _shards_not_replicated_count = nullptr;
   metrics::Counter* _sync_timeouts_total = nullptr;
+
+  // contains statistics about shards for all databases
+  std::unordered_map<std::string, maintenance::ShardStatistics>
+      _databaseStatistics;
 };
 
 }  // namespace arangodb

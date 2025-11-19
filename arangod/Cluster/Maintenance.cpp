@@ -1925,10 +1925,12 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
     containers::FlatHashMap<std::string, std::shared_ptr<VPackBuilder>> const&
         local,
     MaintenanceFeature::errors_t const& allErrors, std::string const& serverId,
-    VPackBuilder& report, ShardStatistics& shardStats,
-    ReplicatedLogStatusMapByDatabase const& localLogs,
+    VPackBuilder& report, ReplicatedLogStatusMapByDatabase const& localLogs,
     ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
   for (auto const& dbName : dirty) {
+    // initialize database statistics for this database, resetting whatever was
+    // previously
+    feature._databaseStatistics[dbName] = ShardStatistics{};
     auto lit = local.find(dbName);
     VPackSlice ldb;
     if (lit == local.end()) {
@@ -2061,7 +2063,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
         TRI_ASSERT(shSlice.isObject());
         auto const colName =
             shSlice.get(StaticStrings::DataSourcePlanId).copyString();
-        shardStats.numShards += 1;
+        feature._databaseStatistics[dbName].shards.insert(shName);
 
         if (replicationVersion == replication::Version::TWO &&
             !isReplication2Leader(shName, logs->second, shardsToLogs->second)) {
@@ -2150,12 +2152,13 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
               continue;
             }
 
-            shardStats.numLeaderShards += 1;
+            feature._databaseStatistics[dbName].leaderShards.insert(shName);
             if (!shardInSync) {
-              shardStats.numOutOfSyncShards += 1;
+              feature._databaseStatistics[dbName].outOfSyncShards.insert(
+                  shName);
             }
             if (!shardReplicated) {
-              shardStats.numNotReplicated += 1;
+              feature._databaseStatistics[dbName].notReplicated.insert(shName);
             }
 
             auto cp = std::vector<std::string>{AgencyCommHelper::path(),
@@ -2793,7 +2796,6 @@ arangodb::Result arangodb::maintenance::phaseTwo(
   feature.copyAllErrors(allErrors);
 
   arangodb::Result result;
-  ShardStatistics shardStats{};  // zero initialize
 
   report.add(VPackValue(PHASE_TWO));
   {
@@ -2805,9 +2807,9 @@ arangodb::Result arangodb::maintenance::phaseTwo(
       VPackObjectBuilder agency(&report);
       // Update Current
       try {
-        result = reportInCurrent(feature, plan, dirty, cur, local, allErrors,
-                                 serverId, report, shardStats, localLogs,
-                                 localShardIdToLogId);
+        result =
+            reportInCurrent(feature, plan, dirty, cur, local, allErrors,
+                            serverId, report, localLogs, localShardIdToLogId);
       } catch (std::exception const& e) {
         LOG_TOPIC("c9a75", ERR, Logger::MAINTENANCE)
             << "Error reporting in current: " << e.what();
@@ -2843,17 +2845,30 @@ arangodb::Result arangodb::maintenance::phaseTwo(
   TRI_ASSERT(feature._phase2_runtime_msec != nullptr);
   feature._phase2_runtime_msec->count(total_ms);
 
+  // Accumulate shard statistics from all databases
+  maintenance::ShardStatistics totalStats;
+  for (auto const& [dbName, dbStats] : feature._databaseStatistics) {
+    totalStats.shards.insert(dbStats.shards.begin(), dbStats.shards.end());
+    totalStats.leaderShards.insert(dbStats.leaderShards.begin(),
+                                   dbStats.leaderShards.end());
+    totalStats.outOfSyncShards.insert(dbStats.outOfSyncShards.begin(),
+                                      dbStats.outOfSyncShards.end());
+    totalStats.notReplicated.insert(dbStats.notReplicated.begin(),
+                                    dbStats.notReplicated.end());
+  }
+
+  // TODO move out of here(to feature preferably)
   TRI_ASSERT(feature._shards_out_of_sync != nullptr);
-  feature._shards_out_of_sync->store(shardStats.numOutOfSyncShards,
+  feature._shards_out_of_sync->store(totalStats.outOfSyncShards.size(),
                                      std::memory_order_relaxed);
   TRI_ASSERT(feature._shards_total_count != nullptr);
-  feature._shards_total_count->store(shardStats.numShards,
+  feature._shards_total_count->store(totalStats.shards.size(),
                                      std::memory_order_relaxed);
   TRI_ASSERT(feature._shards_leader_count != nullptr);
-  feature._shards_leader_count->store(shardStats.numLeaderShards,
+  feature._shards_leader_count->store(totalStats.leaderShards.size(),
                                       std::memory_order_relaxed);
   TRI_ASSERT(feature._shards_not_replicated_count != nullptr);
-  feature._shards_not_replicated_count->store(shardStats.numNotReplicated,
+  feature._shards_not_replicated_count->store(totalStats.notReplicated.size(),
                                               std::memory_order_relaxed);
 
   return result;
