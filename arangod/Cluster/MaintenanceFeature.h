@@ -183,6 +183,8 @@ class MaintenanceFeature : public ArangodFeature {
   Result requeueAction(std::shared_ptr<maintenance::Action>& action,
                        int newPriority);
 
+  void updateDatabaseStatistics();
+
  protected:
   std::shared_ptr<maintenance::Action> createAction(
       std::shared_ptr<maintenance::ActionDescription> const& description);
@@ -638,7 +640,7 @@ class MaintenanceFeature : public ArangodFeature {
 
   // contains statistics about shards for all databases
   std::unordered_map<std::string, maintenance::ShardStatistics>
-      _databaseStatistics;
+      _databaseShardsStats;
 };
 
 }  // namespace arangodb

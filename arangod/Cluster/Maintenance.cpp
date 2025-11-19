@@ -1930,7 +1930,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
   for (auto const& dbName : dirty) {
     // initialize database statistics for this database, resetting whatever was
     // previously
-    feature._databaseStatistics[dbName] = ShardStatistics{};
+    feature._databaseShardsStats[dbName] = ShardStatistics{};
     auto lit = local.find(dbName);
     VPackSlice ldb;
     if (lit == local.end()) {
@@ -2063,7 +2063,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
         TRI_ASSERT(shSlice.isObject());
         auto const colName =
             shSlice.get(StaticStrings::DataSourcePlanId).copyString();
-        feature._databaseStatistics[dbName].shards.insert(shName);
+        feature._databaseShardsStats[dbName].shards.insert(shName);
 
         if (replicationVersion == replication::Version::TWO &&
             !isReplication2Leader(shName, logs->second, shardsToLogs->second)) {
@@ -2152,13 +2152,13 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
               continue;
             }
 
-            feature._databaseStatistics[dbName].leaderShards.insert(shName);
+            feature._databaseShardsStats[dbName].leaderShards.insert(shName);
             if (!shardInSync) {
-              feature._databaseStatistics[dbName].outOfSyncShards.insert(
+              feature._databaseShardsStats[dbName].outOfSyncShards.insert(
                   shName);
             }
             if (!shardReplicated) {
-              feature._databaseStatistics[dbName].notReplicated.insert(shName);
+              feature._databaseShardsStats[dbName].notReplicated.insert(shName);
             }
 
             auto cp = std::vector<std::string>{AgencyCommHelper::path(),
@@ -2844,32 +2844,7 @@ arangodb::Result arangodb::maintenance::phaseTwo(
           .count();
   TRI_ASSERT(feature._phase2_runtime_msec != nullptr);
   feature._phase2_runtime_msec->count(total_ms);
-
-  // Accumulate shard statistics from all databases
-  maintenance::ShardStatistics totalStats;
-  for (auto const& [dbName, dbStats] : feature._databaseStatistics) {
-    totalStats.shards.insert(dbStats.shards.begin(), dbStats.shards.end());
-    totalStats.leaderShards.insert(dbStats.leaderShards.begin(),
-                                   dbStats.leaderShards.end());
-    totalStats.outOfSyncShards.insert(dbStats.outOfSyncShards.begin(),
-                                      dbStats.outOfSyncShards.end());
-    totalStats.notReplicated.insert(dbStats.notReplicated.begin(),
-                                    dbStats.notReplicated.end());
-  }
-
-  // TODO move out of here(to feature preferably)
-  TRI_ASSERT(feature._shards_out_of_sync != nullptr);
-  feature._shards_out_of_sync->store(totalStats.outOfSyncShards.size(),
-                                     std::memory_order_relaxed);
-  TRI_ASSERT(feature._shards_total_count != nullptr);
-  feature._shards_total_count->store(totalStats.shards.size(),
-                                     std::memory_order_relaxed);
-  TRI_ASSERT(feature._shards_leader_count != nullptr);
-  feature._shards_leader_count->store(totalStats.leaderShards.size(),
-                                      std::memory_order_relaxed);
-  TRI_ASSERT(feature._shards_not_replicated_count != nullptr);
-  feature._shards_not_replicated_count->store(totalStats.notReplicated.size(),
-                                              std::memory_order_relaxed);
-
+  feature.updateDatabaseStatistics();
+  
   return result;
 }

@@ -1308,3 +1308,31 @@ Result MaintenanceFeature::requeueAction(
   }
   return {};
 }
+
+void MaintenanceFeature::updateDatabaseStatistics() {
+  // Accumulate shard statistics from all databases
+maintenance::ShardStatistics totalStats;
+for (auto const& [dbName, dbStats] : _databaseShardsStats) {
+totalStats.shards.insert(dbStats.shards.begin(), dbStats.shards.end());
+totalStats.leaderShards.insert(dbStats.leaderShards.begin(),
+                               dbStats.leaderShards.end());
+totalStats.outOfSyncShards.insert(dbStats.outOfSyncShards.begin(),
+                                  dbStats.outOfSyncShards.end());
+totalStats.notReplicated.insert(dbStats.notReplicated.begin(),
+                                dbStats.notReplicated.end());
+}
+
+// TODO move out of here(to feature preferably)
+TRI_ASSERT(_shards_out_of_sync != nullptr);
+_shards_out_of_sync->store(totalStats.outOfSyncShards.size(),
+                                 std::memory_order_relaxed);
+TRI_ASSERT(_shards_total_count != nullptr);
+_shards_total_count->store(totalStats.shards.size(),
+                                 std::memory_order_relaxed);
+TRI_ASSERT(_shards_leader_count != nullptr);
+_shards_leader_count->store(totalStats.leaderShards.size(),
+                                  std::memory_order_relaxed);
+TRI_ASSERT(_shards_not_replicated_count != nullptr);
+_shards_not_replicated_count->store(totalStats.notReplicated.size(),
+                                          std::memory_order_relaxed);
+}
