@@ -66,6 +66,8 @@ class QueueTracer {
   // we are using this method we have already popped the first
   // Step from the queue, but it cannot be processed.
   void getStepsWithoutFetchedEdges(std::vector<Step*>& stepsToFetch);
+  template<class S, typename Inspector>
+  friend auto inspect(Inspector& f, QueueTracer<S>& x);
 
  private:
   QueueImpl _impl;
@@ -74,6 +76,9 @@ class QueueTracer {
   // We make this mutable to not violate the captured API
   mutable containers::FlatHashMap<std::string, TraceEntry> _stats;
 };
-
+template<class QueueImpl, typename Inspector>
+auto inspect(Inspector& f, QueueTracer<QueueImpl>& x) {
+  return f.object(x).fields(f.field("impl", x._impl));
+}
 }  // namespace graph
 }  // namespace arangodb

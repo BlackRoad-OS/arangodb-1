@@ -360,6 +360,10 @@ class MockGraphProvider {
   // Optional callback to compute the weight of an edge.
   std::optional<WeightCallback> _weightCallback;
 };
+template<typename Inspector>
+auto inspect(Inspector& f, MockGraphProvider::Step& x) {
+  return f.object(x).fields();
+}
 }  // namespace graph
 }  // namespace tests
 }  // namespace arangodb

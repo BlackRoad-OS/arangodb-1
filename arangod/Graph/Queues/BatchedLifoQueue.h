@@ -25,6 +25,7 @@
 
 #include "Basics/ResourceUsage.h"
 #include "Basics/debugging.h"
+#include "Inspection/Format.h"
 #include "Logger/LogMacros.h"
 #include "Graph/Queues/ExpansionMarker.h"
 
@@ -180,6 +181,8 @@ class BatchedLifoQueue {
       }
     }
   }
+  template<class S, typename Inspector>
+  friend auto inspect(Inspector& f, BatchedLifoQueue<S>& x);
 
  private:
   /// @brief queue datastore
@@ -188,6 +191,10 @@ class BatchedLifoQueue {
   /// @brief query context
   arangodb::ResourceMonitor& _resourceMonitor;
 };
+template<class StepType, typename Inspector>
+auto inspect(Inspector& f, BatchedLifoQueue<StepType>& x) {
+  return f.object(x).fields(f.field("queue", x._queue));
+}
 
 }  // namespace graph
 }  // namespace arangodb
