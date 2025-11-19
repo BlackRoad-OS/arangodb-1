@@ -998,7 +998,8 @@ ExecutionNode* ExecutionPlan::createCalculation(Variable* out,
     bool mustDestroy;  // can be ignored here; the variable takes ownership of
                        // the value.
     out->setConstantValue(
-        AqlValue(expr->execute(&exprContext, mustDestroy).slice()));
+        AqlValue(expr->execute(&exprContext, mustDestroy).slice(), 0,
+                 &_ast->query().resourceMonitor()));
   }
 
   CalculationNode* en =
@@ -2377,7 +2378,7 @@ ExecutionNode* ExecutionPlan::fromNodeWindow(ExecutionNode* previous,
       Expression expr(_ast, value);
       AqlValue val = expr.execute(&exprContext, mustDestroy);
       if (!mustDestroy && val.isPointer()) {  // force a copy
-        preceding = AqlValue(val.slice());
+        preceding = AqlValue(val.slice(), 0, &_ast->query().resourceMonitor());
       } else {
         preceding = val.clone();
       }
@@ -2385,7 +2386,7 @@ ExecutionNode* ExecutionPlan::fromNodeWindow(ExecutionNode* previous,
       Expression expr(_ast, value);
       AqlValue val = expr.execute(&exprContext, mustDestroy);
       if (!mustDestroy && val.isPointer()) {  // force a copy
-        following = AqlValue(val.slice());
+        following = AqlValue(val.slice(), 0, &_ast->query().resourceMonitor());
       } else {
         following = val.clone();
       }
