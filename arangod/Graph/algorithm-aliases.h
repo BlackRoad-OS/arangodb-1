@@ -239,9 +239,8 @@ struct DFSConfiguration {
       std::is_same_v<ProviderType,
                      enterprise::SmartGraphProvider<ClusterProviderStep>>,
       LifoQueue<Step>, BatchedLifoQueue<Step>>::type;
-  using Queue =
-      typename std::conditional<useTracing, QueueTracer<LifoQueue<Step>>,
-                                batched>::type;
+  using Queue = typename std::conditional<useTracing, QueueTracer<batched>,
+                                          batched>::type;
   using Store =
       typename std::conditional<useTracing, PathStoreTracer<PathStore<Step>>,
                                 PathStore<Step>>::type;
