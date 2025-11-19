@@ -41,7 +41,12 @@
 #include "Graph/PathManagement/PathValidatorTabooWrapper.h"
 #include "Graph/PathManagement/PathValidatorTracer.h"
 #include "Graph/Providers/ProviderTracer.h"
+#include "Graph/Steps/ClusterProviderStep.h"
 #include "Graph/Types/UniquenessLevel.h"
+
+#ifdef USE_ENTERPRISE
+#include "Enterprise/Graph/Providers/SmartGraphProvider.h"
+#endif
 
 namespace arangodb::graph {
 
@@ -226,9 +231,17 @@ struct DFSConfiguration {
       typename std::conditional<useTracing, ProviderTracer<ProviderType>,
                                 ProviderType>::type;
   using Step = typename Provider::Step;
+
+  // smart traversal queue on coordinator needs to be non-batched
+  // for that, SmartGraphProvider fns addExpansionIterator and expandToNextBatch
+  // need to be implemented
+  using batched = typename std::conditional<
+      std::is_same_v<ProviderType,
+                     enterprise::SmartGraphProvider<ClusterProviderStep>>,
+      LifoQueue<Step>, BatchedLifoQueue<Step>>::type;
   using Queue =
       typename std::conditional<useTracing, QueueTracer<LifoQueue<Step>>,
-                                BatchedLifoQueue<Step>>::type;
+                                batched>::type;
   using Store =
       typename std::conditional<useTracing, PathStoreTracer<PathStore<Step>>,
                                 PathStore<Step>>::type;
