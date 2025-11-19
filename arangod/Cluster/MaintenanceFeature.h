@@ -45,12 +45,12 @@ class LogicalCollection;
 namespace maintenance {
 enum ActionState;
 
-/// @brief Statistics about shards in this maintenance cycle
+/// @brief Statistics about shards in for every database
 struct ShardStatistics {
-  std::unordered_set<ShardID> shards;
-  std::unordered_set<ShardID> leaderShards;
-  std::unordered_set<ShardID> outOfSyncShards;
-  std::unordered_set<ShardID> notReplicated;
+  uint64_t shards = 0;
+  uint64_t leaderShards = 0;
+  uint64_t outOfSyncShards = 0;
+  uint64_t notReplicated = 0;
 };
 
 // The following is used in multiple Maintenance actions and therefore

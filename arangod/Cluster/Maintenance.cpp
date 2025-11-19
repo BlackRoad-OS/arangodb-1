@@ -2063,7 +2063,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
         TRI_ASSERT(shSlice.isObject());
         auto const colName =
             shSlice.get(StaticStrings::DataSourcePlanId).copyString();
-        feature._databaseShardsStats[dbName].shards.insert(shName);
+        ++feature._databaseShardsStats[dbName].shards;
 
         if (replicationVersion == replication::Version::TWO &&
             !isReplication2Leader(shName, logs->second, shardsToLogs->second)) {
@@ -2152,13 +2152,12 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
               continue;
             }
 
-            feature._databaseShardsStats[dbName].leaderShards.insert(shName);
+            ++feature._databaseShardsStats[dbName].leaderShards;
             if (!shardInSync) {
-              feature._databaseShardsStats[dbName].outOfSyncShards.insert(
-                  shName);
+              ++feature._databaseShardsStats[dbName].outOfSyncShards;
             }
             if (!shardReplicated) {
-              feature._databaseShardsStats[dbName].notReplicated.insert(shName);
+              ++feature._databaseShardsStats[dbName].notReplicated;
             }
 
             auto cp = std::vector<std::string>{AgencyCommHelper::path(),
@@ -2845,6 +2844,6 @@ arangodb::Result arangodb::maintenance::phaseTwo(
   TRI_ASSERT(feature._phase2_runtime_msec != nullptr);
   feature._phase2_runtime_msec->count(total_ms);
   feature.updateDatabaseStatistics();
-  
+
   return result;
 }
