@@ -1792,7 +1792,9 @@ AqlValue functions::DateFormat(ExpressionContext* expressionContext,
     localizeTimePoint(inputTimezone, tp);
   }
 
-  return AqlValue(basics::formatDate(aqlFormatString.slice().copyString(), tp));
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+  return AqlValue(basics::formatDate(aqlFormatString.slice().copyString(), tp),
+                  rm);
 }
 
 }  // namespace arangodb::aql
