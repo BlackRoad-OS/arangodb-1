@@ -1858,7 +1858,7 @@ AqlValue Expression::executeSimpleExpressionExpansion(ExpressionContext& ctx,
   }
 
   builder.close();
-  mustDestroy = true; // builder = dynamic data
+  mustDestroy = true;  // builder = dynamic data
   return AqlValue(std::move(buffer), rm);
 }
 
