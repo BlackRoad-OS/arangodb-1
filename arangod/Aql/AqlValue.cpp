@@ -983,6 +983,11 @@ void AqlValue::destroy() noexcept {
       delete _data.rangeMeta.range;
       break;
     case VPACK_SUPERVISED_SLICE: {
+      if (_data.supervisedSliceMeta.pointer == nullptr) {
+        // to prevent duplicate deletion
+        erase();
+        return;
+      }
       auto len = _data.supervisedSliceMeta.getLength();
       deallocateSupervised(_data.supervisedSliceMeta.pointer, len);
       _data.supervisedSliceMeta.pointer = nullptr;
