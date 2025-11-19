@@ -162,8 +162,8 @@ AqlValue functions::ShardId(ExpressionContext* expressionContext,
             // of AQL universality
     shardId = colName;
   }
-
-  return AqlValue{shardId};
+  ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
+  return AqlValue{shardId, rm};
 }
 
 /// @brief function COLLECTION_COUNT

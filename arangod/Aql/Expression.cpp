@@ -677,7 +677,8 @@ AqlValue Expression::executeSimpleExpressionArray(ExpressionContext& ctx,
 
   builder->close();
   mustDestroy = true;  // AqlValue contains builder contains dynamic data
-  return AqlValue(builder->slice(), builder->size(), &_resourceMonitor);
+  ResourceMonitor* rm = ctx.getResourceMonitorPtr();
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 // execute an expression of type ExpressionType::kSimple with OBJECT
@@ -791,8 +792,8 @@ AqlValue Expression::executeSimpleExpressionObject(ExpressionContext& ctx,
   builder->close();
 
   mustDestroy = true;  // AqlValue contains builder contains dynamic data
-
-  return AqlValue(builder->slice(), builder->size(), &_resourceMonitor);
+  ResourceMonitor* rm = ctx.getResourceMonitorPtr();
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 
 // execute an expression of type ExpressionType::kSimple with VALUE
@@ -975,7 +976,8 @@ AqlValue Expression::invokeV8Function(
   TRI_V8ToVPack(isolate, *builder.get(), result, false);
 
   mustDestroy = true;  // builder = dynamic data
-  return AqlValue(builder->slice(), builder->size(), &_resourceMonitor);
+  ResourceMonitor* rm = ctx.getResourceMonitorPtr();
+  return AqlValue(builder->slice(), builder->size(), rm);
 }
 #endif
 
@@ -1626,7 +1628,7 @@ AqlValue Expression::executeSimpleExpressionExpansion(ExpressionContext& ctx,
   auto levels = node->getIntValue(true);
 
   AqlValue value;
-
+  ResourceMonitor* rm = ctx.getResourceMonitorPtr();
   if (levels > 1) {
     // flatten value...
     bool localMustDestroy;
@@ -1674,7 +1676,8 @@ AqlValue Expression::executeSimpleExpressionExpansion(ExpressionContext& ctx,
     builder.close();
 
     mustDestroy = true;  // builder = dynamic data
-    value = AqlValue(std::move(buffer), &_resourceMonitor);
+
+    value = AqlValue(std::move(buffer), rm);
   } else {
     bool localMustDestroy;
     AqlValue a = executeSimpleExpression(ctx, node->getMember(0),
@@ -1855,9 +1858,8 @@ AqlValue Expression::executeSimpleExpressionExpansion(ExpressionContext& ctx,
   }
 
   builder.close();
-  mustDestroy = true;
-  return AqlValue(std::move(buffer),
-                  &_resourceMonitor);  // builder = dynamic data
+  mustDestroy = true; // builder = dynamic data
+  return AqlValue(std::move(buffer), rm);
 }
 
 // execute an expression of type ExpressionType::kSimple with ITERATOR
