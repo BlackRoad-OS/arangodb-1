@@ -47,6 +47,8 @@
 
 #include <velocypack/Builder.h>
 
+#define LOG_TRAVERSAL LOG_DEVEL_IF(false)
+
 using namespace arangodb;
 using namespace arangodb::graph;
 
@@ -137,9 +139,13 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
                            // expandToNextBatch
       _queue.pop();        // now we can pop NextBatch item savely
     }
+    LOG_TRAVERSAL << "Expanded " << inspection::json(step) << " | "
+                  << inspection::json(_queue);
     return;
   }
   TRI_ASSERT(std::holds_alternative<Step>(tmp));
+  LOG_TRAVERSAL << "Popped   " << inspection::json(std::get<Step>(tmp)) << " | "
+                << inspection::json(_queue);
   auto posPrevious = _interior.append(std::move(std::get<Step>(tmp)));
   auto& step = _interior.getStepReference(posPrevious);
 
@@ -178,6 +184,8 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
         _provider.addExpansionIterator(cursorId, step, [&]() -> void {
           _queue.append({Expansion{cursorId, posPrevious}});
         });
+        LOG_TRAVERSAL << "Pushed   " << inspection::json(step) << " | "
+                      << inspection::json(_queue);
       } else {
         if (!step.edgeFetched()) {
           // NOTE: The step we have should be the first, s.t. we are guaranteed
@@ -192,6 +200,8 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
         }
         _provider.expand(step, posPrevious,
                          [&](Step n) -> void { _queue.append(n); });
+        LOG_TRAVERSAL << "Expanded " << inspection::json(step) << " | "
+                      << inspection::json(_queue);
       }
     }
   } else if constexpr (std::is_same_v<
