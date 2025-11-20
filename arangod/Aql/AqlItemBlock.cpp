@@ -325,6 +325,10 @@ void AqlItemBlock::destroy() noexcept {
               // destroy() calls erase, so no need to call erase() again later
               continue;
             }
+          } else {
+            // value not found in _valueCount but requires destruction
+            it.destroy();
+            continue;
           }
         }
         // Note that if we do not know it the thing it has been stolen from us!
@@ -1040,6 +1044,10 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
         // destroy() calls erase() for AqlValues with dynamic memory
         return;
       }
+    } else {
+      // value not found in _valueCount but requires destruction
+      element.destroy();
+      return;
     }
   }
 
