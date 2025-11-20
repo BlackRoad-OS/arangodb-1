@@ -1,6 +1,10 @@
 devel
 -----
 
+* COR-13: New iresearch consolidation policy
+  - new algorithm that uses maxSkewThreshold and minDeletionRatio
+  - Bumped iresearch
+
 * COR-8: Added new metrics to track deployment metadata:
   - `arangodb_metadata_number_of_databases`: Total number of databases
   - `arangodb_metadata_number_of_collections`: Total number of collections
