@@ -1080,15 +1080,33 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
   for (auto const& reg : regs) {
     TRI_ASSERT(reg < numRegisters());
     if (getValueReference(currentRow, reg).isEmpty()) {
-      // First update the reference count, if this fails, the value is empty
       AqlValue const& a = getValueReference(fromRow, reg);
       if (a.requiresDestruction()) {
-        TRI_ASSERT(_valueCount.find(a.data()) != _valueCount.end());
-        ++_valueCount[a.data()].refCount;
+        // Check if the value is tracked in _valueCount (we own it)
+        auto it = _valueCount.find(a.data());
+        if (it != _valueCount.end()) {
+          // Fast path: Value is tracked - we own it, so we can safely reference
+          // it This is the normal case and maintains optimal performance
+          ++it->second.refCount;
+          _data[getAddress(currentRow, reg.value())] = a;
+          _maxModifiedRowIndex =
+              std::max<size_t>(_maxModifiedRowIndex, currentRow + 1);
+        } else {
+          // Slow path: Value is not tracked (was stolen)
+          // Ownership was transferred, so we cannot safely reference it.
+          // We must clone it to get our own copy that we're responsible for.
+          // This prevents use-after-free when toVelocyPack() hashes values.
+          AqlValue cloned = a.clone();
+          setValue(currentRow, reg.value(), cloned);
+          // setValue() properly registers the cloned value in _valueCount
+          // Skip the direct assignment below as setValue already handled it
+        }
+      } else {
+        // Value doesn't require destruction - safe to reference directly
+        _data[getAddress(currentRow, reg.value())] = a;
+        _maxModifiedRowIndex =
+            std::max<size_t>(_maxModifiedRowIndex, currentRow + 1);
       }
-      _data[getAddress(currentRow, reg.value())] = a;
-      _maxModifiedRowIndex =
-          std::max<size_t>(_maxModifiedRowIndex, currentRow + 1);
     }
   }
   // Copy over subqueryDepth
