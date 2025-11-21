@@ -1654,8 +1654,7 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
       case T::VPACK_SLICE_POINTER:
-        // Use content-based equality to match content-based hashing
-        // This ensures hash-equality consistency for hash-based containers
+        // Content-based equality to match content-based hashing
         return VPackSlice(a._data.slicePointerMeta.pointer)
             .binaryEquals(VPackSlice(b._data.slicePointerMeta.pointer));
       case T::VPACK_MANAGED_SLICE:
@@ -1667,12 +1666,10 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_SUPERVISED_SLICE: {
         auto as = VPackSlice(a._data.supervisedSliceMeta.getPayloadPtr());
         auto bs = VPackSlice(b._data.supervisedSliceMeta.getPayloadPtr());
-        return as.binaryEquals(bs);  // ignore monitor*
+        return as.binaryEquals(bs);
       }
       case T::RANGE:
-        // Use content-based equality to match content-based hashing
-        // This ensures hash-equality consistency for hash-based containers
-        // Compare _low and _high values instead of pointer addresses
+        // Content-based equality: compare bounds, not pointers
         return a._data.rangeMeta.range != nullptr &&
                b._data.rangeMeta.range != nullptr &&
                a._data.rangeMeta.range->_low == b._data.rangeMeta.range->_low &&
@@ -1682,7 +1679,7 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
     return false;
   }
 
-  // different types: allow supervised vs managed content-equality
+  // Cross-type equality: supervised vs managed with same content
   auto isSup = [](T t) { return t == T::VPACK_SUPERVISED_SLICE; };
   auto isMan = [](T t) {
     return t == T::VPACK_MANAGED_SLICE || t == T::VPACK_MANAGED_STRING;

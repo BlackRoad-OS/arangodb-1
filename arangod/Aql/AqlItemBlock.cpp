@@ -326,13 +326,7 @@ void AqlItemBlock::destroy() noexcept {
               continue;
             }
           } else {
-            // value not found in _valueCount but requires destruction
-            // This means the value was stolen - ownership was transferred.
-            // We should NOT destroy it here because the owner (who stole it) is
-            // responsible for destruction. Just erase it to clear the slot.
-            // Note: If we called destroy() here, it would free memory that the
-            // owner might still be using, causing use-after-free when the owner
-            // tries to destroy it later.
+            // Value was stolen - don't destroy it, just erase the slot
             it.erase();
             continue;
           }
@@ -1051,10 +1045,7 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
         return;
       }
     } else {
-      // value not found in _valueCount but requires destruction
-      // This means the value was stolen - ownership was transferred.
-      // We should NOT destroy it here because the owner (who stole it) is
-      // responsible for destruction. Just erase it to clear the slot.
+      // Value was stolen - don't destroy it, just erase the slot
       element.erase();
       return;
     }
@@ -1091,24 +1082,17 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
     if (getValueReference(currentRow, reg).isEmpty()) {
       AqlValue const& a = getValueReference(fromRow, reg);
       if (a.requiresDestruction()) {
-        // Check if the value is tracked in _valueCount (we own it)
         auto it = _valueCount.find(a.data());
         if (it != _valueCount.end()) {
-          // Fast path: Value is tracked - we own it, so we can safely reference
-          // it This is the normal case and maintains optimal performance
+          // Value is tracked - increment reference count
           ++it->second.refCount;
           _data[getAddress(currentRow, reg.value())] = a;
           _maxModifiedRowIndex =
               std::max<size_t>(_maxModifiedRowIndex, currentRow + 1);
         } else {
-          // Slow path: Value is not tracked (was stolen)
-          // Ownership was transferred, so we cannot safely reference it.
-          // We must clone it to get our own copy that we're responsible for.
-          // This prevents use-after-free when toVelocyPack() hashes values.
+          // Value was stolen - clone it to get our own copy
           AqlValue cloned = a.clone();
           setValue(currentRow, reg.value(), cloned);
-          // setValue() properly registers the cloned value in _valueCount
-          // Skip the direct assignment below as setValue already handled it
         }
       } else {
         // Value doesn't require destruction - safe to reference directly

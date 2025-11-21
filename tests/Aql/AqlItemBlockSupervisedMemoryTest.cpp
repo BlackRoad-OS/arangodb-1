@@ -22,108 +22,20 @@
 ///
 /// PURPOSE:
 /// --------
-/// This test file reproduces a memory leak bug in AqlItemBlock when handling
-/// supervised slices (VPACK_SUPERVISED_SLICE) via referenceValuesFromRow().
+/// Tests for memory leaks in AqlItemBlock when handling supervised slices
+/// via referenceValuesFromRow().
 ///
 /// THE BUG:
 /// --------
-/// In AqlItemBlock::referenceValuesFromRow() (AqlItemBlock.cpp:1067-1088),
-/// when a supervised slice is not found in _valueCount (which can happen in
-/// release builds where TRI_ASSERT is removed), the code uses operator[] which
-/// creates a default ValueInfo entry with refCount=0 and memoryUsage=0.
-/// Then refCount is incremented to 1, but memoryUsage remains 0.
-///
-/// When the block is destroyed, destroy() checks _valueCount. If a value is not
-/// found OR has memoryUsage=0, it only calls erase() (which just zeros the
-/// AqlValue struct) instead of destroy() (which frees the heap memory).
-/// This causes the supervised slice's heap allocation to never be freed ->
-/// LEAK.
+/// When referenceValuesFromRow() references a value that was stolen (removed
+/// from _valueCount), it creates a dangling reference. If the value is later
+/// accessed (e.g., during toVelocyPack() hashing), it causes use-after-free.
 ///
 /// THE FIX:
 /// --------
-/// In referenceValuesFromRow(), when a value is not found in _valueCount, we
-/// should explicitly register it with the correct memoryUsage, similar to what
-/// setValue() does. The fix should:
-/// 1. Check if value is in _valueCount
-/// 2. If found: increment refCount (current behavior)
-/// 3. If NOT found: register it properly with refCount=1 and correct
-/// memoryUsage
-///    - For supervised slices: don't call increaseMemoryUsage() (already
-///    accounted)
-///    - For managed slices/strings: call increaseMemoryUsage() and set
-///    memoryUsage
-///
-/// This ensures all values in _data are properly tracked in _valueCount, so
-/// destroy() can properly clean them up.
-///
-/// TEST SUITE STRUCTURE:
-/// ---------------------
-/// This test suite contains 9 tests, each serving a specific purpose:
-///
-/// 1. SupervisedSliceSetValueProperlyRegistered
-///    - BASELINE: Verifies setValue() works correctly
-///    - Purpose: Establish that basic mechanism works
-///    - If this fails: Bug might be in setValue(), not referenceValuesFromRow()
-///
-/// 2. ReferenceValuesFromRowUnregisteredSupervisedSliceLeak (MAIN TEST)
-///    - REPRODUCES THE BUG: The core test that triggers the memory leak
-///    - Purpose: Demonstrate the exact failure scenario
-///    - Uses: setValue() + referenceValuesFromRow() + steal() + destroy()
-///    - This is the test that should FAIL with the bug, PASS with the fix
-///
-/// 3. SupervisedSliceMultipleReferencesProperlyTracked
-///    - REFERENCE COUNTING: Verifies normal case (value found in _valueCount)
-///    - Purpose: Ensure fix doesn't break the working path
-///    - Tests: Multiple references to same value work correctly
-///
-/// 4. SupervisedSliceFromStringViewLeakScenario
-///    - REAL-WORLD SCENARIO: Reproduces exact LeakSanitizer report
-///    - Purpose: Test the exact code path from functions::Concat
-///    - Uses: string_view constructor (like in production code)
-///
-/// 5. StealSupervisedSliceThenDestroyBlock
-///    - STEAL OPERATION: Verifies steal() doesn't cause issues
-///    - Purpose: Isolate the bug to referenceValuesFromRow(), not steal()
-///    - Tests: Stealing + destroying remaining references works
-///
-/// 6. SupervisedSliceWithZeroMemoryUsageInValueCount
-///    - SIMPLE DESTROY: Verifies destroy() works with setValue()
-///    - Purpose: Sanity check that destroy mechanism works
-///    - Tests: Simple setValue() + destroy() path
-///
-/// 7. TwoAqlValuesSameSupervisedSliceDestroyOne
-///    - SHARED REFERENCES: Two AqlValues point to same supervised slice
-///    - Purpose: Test destroyValue() with reference counting
-///    - Tests: Destroying one of two shared references works correctly
-///    - Scenario: Row 0 and row 1 share value, destroy row 0, row 1 should
-///    remain
-///
-/// 8. TwoAqlValuesSameSupervisedSliceDestroyOneWithBugScenario
-///    - BUG SCENARIO WITH SHARED REFERENCES: Tests bug with destroyValue()
-///    - Purpose: Reproduce bug when destroying one of two shared references
-///    - Tests: If referenceValuesFromRow() creates bad entry, destroyValue()
-///    still works
-///    - Critical: Tests if bad _valueCount entry causes leak when using
-///    destroyValue()
-///
-/// 9. CopyAqlValueOutsideBlockDestroyOneInside
-///    - EXTERNAL COPY: AqlValue copied outside block, destroy inside block
-///    - Purpose: Test interaction between block's _valueCount and external
-///    copies
-///    - Tests: Shallow copy semantics and potential use-after-free issues
-///    - Warning: Demonstrates that external copies can have dangling pointers
-///
-/// HOW TO USE THESE TESTS:
-/// -----------------------
-/// 1. Run all tests with LeakSanitizer enabled
-/// 2. Test #2 should FAIL (detect leak) with the bug, PASS with the fix
-/// 3. Test #8 is particularly important - it tests the bug with destroyValue()
-/// 4. All other tests should PASS (they test working paths or isolate
-/// components)
-/// 5. If test #2 passes but others fail, the fix broke something
-/// 6. If test #1 fails, the bug is in setValue(), not referenceValuesFromRow()
-/// 7. Tests #7-9 specifically test scenarios with two AqlValues pointing to
-/// same memory
+/// In referenceValuesFromRow(), if a value is not found in _valueCount (was
+/// stolen), clone it instead of referencing it. This ensures the block owns
+/// all values it references.
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -146,6 +58,7 @@
 using namespace arangodb;
 using namespace arangodb::aql;
 using namespace arangodb::basics;
+using namespace velocypack;
 
 namespace arangodb {
 namespace tests {
@@ -275,12 +188,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 //    - Result: MEMORY LEAK (the supervised slice's heap allocation is never
 //    freed)
 //
-// HOW THIS TEST TRIGGERS THE FAILURE:
-// -----------------------------------
-// This test creates a scenario where a supervised slice ends up in _data
-// but with an incorrect _valueCount entry (or missing entry after steal).
-// When the block is destroyed, the value isn't properly destroyed, causing
-// a memory leak that LeakSanitizer will detect.
+// Tests that referencing a stolen value causes a memory leak
 //
 TEST_F(AqlItemBlockSupervisedMemoryTest,
        ReferenceValuesFromRowUnregisteredSupervisedSliceLeak) {
@@ -397,16 +305,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // ============================================================================
 // TEST 2: Reference counting test - verifies multiple references work
 // ============================================================================
-// PURPOSE:
-// --------
-// This test verifies that referenceValuesFromRow() correctly handles the
-// NORMAL case where a value is already in _valueCount. This is important
-// because:
-// 1. It shows referenceValuesFromRow() CAN work correctly (when value is found)
-// 2. It tests reference counting (multiple rows referencing same value)
-// 3. It ensures the fix doesn't break the normal, working path
+// Tests normal case: value is already in _valueCount (reference counting)
 //
-// WHAT IT CHECKS:
 // --------------
 // 1. referenceValuesFromRow() correctly increments refCount when value exists
 // 2. Multiple references to the same supervised slice don't leak memory
@@ -471,18 +371,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 }
 
 // ============================================================================
-// TEST: Reproduces the exact scenario from the LeakSanitizer report
-// ============================================================================
-// This test mimics what happens in functions::Concat (StringFunctions.cpp:1253)
-// where supervised slices are created using the string_view constructor.
-//
-// The leak report showed:
-//   Direct leak of 33 byte(s) in 1 object(s) allocated from:
-//   #1 allocateSupervised /root/project/arangod/Aql/AqlValue.cpp:1600
-//   #2 AqlValue::AqlValue(std::basic_string_view<...>, ResourceMonitor*)
-//   #3 functions::Concat(...)
-//
-// This test creates the same scenario to verify the fix works.
+// Reproduces the exact scenario from the LeakSanitizer report
+// (mimics functions::Concat with string_view constructor)
 //
 TEST_F(AqlItemBlockSupervisedMemoryTest,
        SupervisedSliceFromStringViewLeakScenario) {
@@ -534,15 +424,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // ============================================================================
 // TEST 3: Steal operation test - verifies steal() doesn't break cleanup
 // ============================================================================
-// PURPOSE:
-// --------
-// This test verifies that the steal() operation works correctly with
-// referenceValuesFromRow(). The steal() operation removes a value from
-// _valueCount, transferring ownership to the caller. This test ensures:
-// 1. Stealing doesn't cause double-free (if we destroy both stolen and block
-// values)
-// 2. Remaining references in the block are still properly tracked
-// 3. destroy() correctly handles values that were stolen from other rows
+// Tests that steal() works correctly with referenceValuesFromRow()
 //
 // WHAT IT CHECKS:
 // --------------
@@ -636,11 +518,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest, StealSupervisedSliceThenDestroyBlock) {
 // - This isolates the bug to referenceValuesFromRow(), not destroy() itself
 // - Simple baseline to compare against more complex scenarios
 //
-// NOTE:
-// -----
-// This test doesn't actually trigger the bug (it uses setValue(), not
-// referenceValuesFromRow()). It's here to verify the destroy mechanism works
-// when _valueCount entries are correct.
+// Tests destroy() with setValue() (baseline test)
 //
 TEST_F(AqlItemBlockSupervisedMemoryTest,
        SupervisedSliceWithZeroMemoryUsageInValueCount) {
@@ -1288,6 +1166,420 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
       << "Initial memory: " << initialMemory
       << ", Expected memory: " << expectedMemory
       << ", Leaked: " << monitor.current() << " bytes";
+}
+
+// Test clearRegisters() with supervised slices
+TEST(AqlItemBlockSupervisedMemoryTest,
+     ClearRegistersProperlyDestroysSupervisedSlices) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(3, 2);
+  auto initialMemory = monitor.current();
+
+  // Create supervised slices
+  std::string s1(500, 'a');
+  std::string s2(600, 'b');
+  std::string s3(700, 'c');
+
+  AqlValue v1(std::string_view{s1}, &monitor);
+  AqlValue v2(std::string_view{s2}, &monitor);
+  AqlValue v3(std::string_view{s3}, &monitor);
+
+  // Set values in different rows and registers
+  block->setValue(0, 0, v1);
+  block->setValue(0, 1, v2);
+  block->setValue(1, 0, v1);  // Same value as row 0, reg 0 (shared)
+  block->setValue(1, 1, v3);
+  block->setValue(2, 0, v2);  // Same value as row 0, reg 1 (shared)
+  block->setValue(2, 1, v3);  // Same value as row 1, reg 1 (shared)
+
+  auto afterSet = monitor.current();
+  EXPECT_GT(afterSet, initialMemory);
+
+  // Clear register 0 from all rows
+  RegIdFlatSet toClear;
+  toClear.insert(RegisterId::makeRegular(0));
+  block->clearRegisters(toClear);
+
+  // Register 0 should be cleared, register 1 should remain
+  EXPECT_TRUE(block->getValue(0, 0).isEmpty());
+  EXPECT_TRUE(block->getValue(1, 0).isEmpty());
+  EXPECT_TRUE(block->getValue(2, 0).isEmpty());
+
+  EXPECT_FALSE(block->getValue(0, 1).isEmpty());
+  EXPECT_FALSE(block->getValue(1, 1).isEmpty());
+  EXPECT_FALSE(block->getValue(2, 1).isEmpty());
+
+  // Memory should be reduced (register 0 values destroyed)
+  auto afterClear = monitor.current();
+  EXPECT_LT(afterClear, afterSet);
+
+  // Destroy block - should clean up remaining values
+  block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test shrink() with supervised slices
+TEST(AqlItemBlockSupervisedMemoryTest, ShrinkProperlyDestroysSupervisedSlices) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(5, 1);
+  auto initialMemory = monitor.current();
+
+  // Create supervised slices in multiple rows
+  std::string s1(400, 'a');
+  std::string s2(500, 'b');
+  std::string s3(600, 'c');
+
+  AqlValue v1(std::string_view{s1}, &monitor);
+  AqlValue v2(std::string_view{s2}, &monitor);
+  AqlValue v3(std::string_view{s3}, &monitor);
+
+  block->setValue(0, 0, v1);
+  block->setValue(1, 0, v2);
+  block->setValue(2, 0, v3);
+  block->setValue(3, 0, v1);  // Shared with row 0
+  block->setValue(4, 0, v2);  // Shared with row 1
+
+  auto afterSet = monitor.current();
+  EXPECT_GT(afterSet, initialMemory);
+
+  // Shrink to 3 rows (rows 3 and 4 should be destroyed)
+  block->shrink(3);
+
+  // Rows 0-2 should still exist
+  EXPECT_FALSE(block->getValue(0, 0).isEmpty());
+  EXPECT_FALSE(block->getValue(1, 0).isEmpty());
+  EXPECT_FALSE(block->getValue(2, 0).isEmpty());
+
+  // Memory should be reduced (rows 3-4 destroyed, but v1 and v2 still
+  // referenced)
+  auto afterShrink = monitor.current();
+  EXPECT_LE(afterShrink, afterSet);
+
+  // Destroy block
+  block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test slice() creates deep copy with supervised slices
+TEST(AqlItemBlockSupervisedMemoryTest, SliceCreatesDeepCopyOfSupervisedSlices) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(3, 1);
+  auto initialMemory = monitor.current();
+
+  std::string s(800, 'x');
+  AqlValue v(std::string_view{s}, &monitor);
+
+  block->setValue(0, 0, v);
+  block->setValue(1, 0, v);  // Shared reference
+  block->setValue(2, 0, v);  // Shared reference
+
+  auto afterSet = monitor.current();
+  EXPECT_GT(afterSet, initialMemory);
+
+  // Slice rows 1-2 (deep copy)
+  auto sliced = block->slice(1, 3);
+
+  // Sliced block should have independent copies
+  EXPECT_EQ(sliced->numRows(), 2);
+  EXPECT_FALSE(sliced->getValue(0, 0).isEmpty());
+  EXPECT_FALSE(sliced->getValue(1, 0).isEmpty());
+
+  // Memory should increase (new copies created)
+  auto afterSlice = monitor.current();
+  EXPECT_GT(afterSlice, afterSet);
+
+  // Destroy original block
+  block.reset(nullptr);
+  auto afterOriginalDestroy = monitor.current();
+  EXPECT_GT(afterOriginalDestroy,
+            initialMemory);  // Sliced block still holds memory
+
+  // Destroy sliced block
+  sliced.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test toVelocyPack() uses hash correctly (content-based, not pointer-based)
+TEST(AqlItemBlockSupervisedMemoryTest, ToVelocyPackUsesContentBasedHash) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(2, 1);
+  auto initialMemory = monitor.current();
+
+  // Create two supervised slices with same content but different allocations
+  std::string content(900, 'z');
+  Builder b1;
+  b1.add(Value(content));
+  Builder b2;
+  b2.add(Value(content));
+
+  AqlValue v1(b1.slice(), 0, &monitor);
+  AqlValue v2(b2.slice(), 0, &monitor);
+
+  // Different pointers
+  EXPECT_NE(v1.slice().start(), v2.slice().start());
+
+  // But same content
+  EXPECT_TRUE(v1.slice().binaryEquals(v2.slice()));
+
+  block->setValue(0, 0, v1);
+  block->setValue(1, 0, v2);
+
+  // toVelocyPack() should use content-based hash, so both values should
+  // be deduplicated (same hash -> same entry in hash table)
+  VPackBuilder result;
+  VPackOptions options;
+  block->toVelocyPack(&options, result);
+
+  // Verify serialization succeeded (no crash from use-after-free)
+  EXPECT_TRUE(result.slice().isObject());
+  EXPECT_TRUE(result.slice().hasKey("nrItems"));
+  EXPECT_TRUE(result.slice().hasKey("nrRegs"));
+  EXPECT_TRUE(result.slice().hasKey("data"));
+  EXPECT_TRUE(result.slice().hasKey("raw"));
+
+  // Both values should be in the serialized output
+  // The hash-based deduplication should work correctly
+  auto data = result.slice().get("data");
+  EXPECT_TRUE(data.isArray());
+
+  block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test destroyValue() with multiple references
+TEST(AqlItemBlockSupervisedMemoryTest, DestroyValueWithMultipleReferences) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(3, 1);
+  auto initialMemory = monitor.current();
+
+  std::string s(600, 'd');
+  AqlValue v(std::string_view{s}, &monitor);
+
+  // Set same value in multiple rows (shared references)
+  block->setValue(0, 0, v);
+  block->setValue(1, 0, v);
+  block->setValue(2, 0, v);
+
+  auto afterSet = monitor.current();
+  EXPECT_GT(afterSet, initialMemory);
+
+  // Destroy value in row 0 (refCount should decrease, but value should remain)
+  block->destroyValue(0, 0);
+  EXPECT_TRUE(block->getValue(0, 0).isEmpty());
+
+  // Rows 1 and 2 should still have the value
+  EXPECT_FALSE(block->getValue(1, 0).isEmpty());
+  EXPECT_FALSE(block->getValue(2, 0).isEmpty());
+
+  // Memory should still be tracked (value still exists in rows 1-2)
+  auto afterDestroy0 = monitor.current();
+  EXPECT_GT(afterDestroy0, initialMemory);
+
+  // Destroy value in row 1
+  block->destroyValue(1, 0);
+  EXPECT_TRUE(block->getValue(1, 0).isEmpty());
+
+  // Row 2 should still have the value
+  EXPECT_FALSE(block->getValue(2, 0).isEmpty());
+
+  // Destroy value in row 2 (last reference)
+  block->destroyValue(2, 0);
+  EXPECT_TRUE(block->getValue(2, 0).isEmpty());
+
+  // Now memory should be freed
+  auto afterDestroyAll = monitor.current();
+  EXPECT_EQ(afterDestroyAll, initialMemory);
+
+  block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test referenceValuesFromRow() with multiple registers
+TEST(AqlItemBlockSupervisedMemoryTest,
+     ReferenceValuesFromRowMultipleRegisters) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(2, 3);
+  auto initialMemory = monitor.current();
+
+  std::string s1(400, 'a');
+  std::string s2(500, 'b');
+  std::string s3(600, 'c');
+
+  AqlValue v1(std::string_view{s1}, &monitor);
+  AqlValue v2(std::string_view{s2}, &monitor);
+  AqlValue v3(std::string_view{s3}, &monitor);
+
+  // Set values in row 0
+  block->setValue(0, 0, v1);
+  block->setValue(0, 1, v2);
+  block->setValue(0, 2, v3);
+
+  auto afterSet = monitor.current();
+  EXPECT_GT(afterSet, initialMemory);
+
+  // Reference all registers from row 0 to row 1
+  RegIdFlatSet regs;
+  regs.insert(RegisterId::makeRegular(0));
+  regs.insert(RegisterId::makeRegular(1));
+  regs.insert(RegisterId::makeRegular(2));
+  block->referenceValuesFromRow(1, regs, 0);
+
+  // Row 1 should have all values
+  EXPECT_FALSE(block->getValue(1, 0).isEmpty());
+  EXPECT_FALSE(block->getValue(1, 1).isEmpty());
+  EXPECT_FALSE(block->getValue(1, 2).isEmpty());
+
+  // Memory should be the same (references, not copies)
+  auto afterReference = monitor.current();
+  EXPECT_EQ(afterReference, afterSet);
+
+  // Destroy block
+  block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test referenceValuesFromRow() with stolen value (should clone)
+TEST(AqlItemBlockSupervisedMemoryTest,
+     ReferenceValuesFromRowWithStolenValueClones) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(2, 1);
+  auto initialMemory = monitor.current();
+
+  std::string s(700, 'e');
+  AqlValue v(std::string_view{s}, &monitor);
+
+  // Set value in row 0
+  block->setValue(0, 0, v);
+  auto afterSet = monitor.current();
+  EXPECT_GT(afterSet, initialMemory);
+
+  // Steal the value
+  AqlValue stolen = block->getValue(0, 0);
+  block->steal(stolen);
+
+  // Reference from row 0 to row 1 (value is stolen, should clone)
+  RegIdFlatSet regs;
+  regs.insert(RegisterId::makeRegular(0));
+  block->referenceValuesFromRow(1, regs, 0);
+
+  // Row 1 should have a cloned value
+  EXPECT_FALSE(block->getValue(1, 0).isEmpty());
+
+  // Memory should increase (cloned value)
+  auto afterReference = monitor.current();
+  EXPECT_GT(afterReference, afterSet);
+
+  // Destroy block (should free cloned value)
+  block.reset(nullptr);
+  auto afterBlockDestroy = monitor.current();
+  EXPECT_GT(afterBlockDestroy, initialMemory);  // Stolen value still exists
+
+  // Destroy stolen value
+  stolen.destroy();
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test emplaceValue() with supervised slices
+TEST(AqlItemBlockSupervisedMemoryTest, EmplaceValueWithSupervisedSlice) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(2, 1);
+  auto initialMemory = monitor.current();
+
+  Builder b;
+  b.add(Value(std::string(500, 'f')));
+  VPackSlice s = b.slice();
+
+  // Use emplaceValue to construct in place
+  block->emplaceValue(0, 0, s, static_cast<ValueLength>(s.byteSize()),
+                      &monitor);
+
+  auto afterEmplace = monitor.current();
+  EXPECT_GT(afterEmplace, initialMemory);
+
+  EXPECT_FALSE(block->getValue(0, 0).isEmpty());
+  EXPECT_EQ(block->getValue(0, 0).type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
+}
+
+// Test complex scenario: setValue, referenceValuesFromRow, steal,
+// clearRegisters
+TEST(AqlItemBlockSupervisedMemoryTest, ComplexScenarioMultipleOperations) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor monitor(global);
+  AqlItemBlockManager manager(monitor);
+
+  auto block = manager.requestBlock(4, 2);
+  auto initialMemory = monitor.current();
+
+  std::string s1(300, 'g');
+  std::string s2(400, 'h');
+
+  AqlValue v1(std::string_view{s1}, &monitor);
+  AqlValue v2(std::string_view{s2}, &monitor);
+
+  // Set values
+  block->setValue(0, 0, v1);
+  block->setValue(0, 1, v2);
+  block->setValue(1, 0, v1);  // Shared
+
+  // Reference from row 0 to row 2
+  RegIdFlatSet regs;
+  regs.insert(RegisterId::makeRegular(0));
+  regs.insert(RegisterId::makeRegular(1));
+  block->referenceValuesFromRow(2, regs, 0);
+
+  // Steal value from row 1, register 0
+  AqlValue stolen = block->getValue(1, 0);
+  block->steal(stolen);
+
+  // Reference from row 2 to row 3 (row 2 has stolen value in reg 0, should
+  // clone)
+  block->referenceValuesFromRow(3, regs, 2);
+
+  // Clear register 1
+  RegIdFlatSet toClear;
+  toClear.insert(RegisterId::makeRegular(1));
+  block->clearRegisters(toClear);
+
+  // All register 1 values should be empty
+  for (size_t i = 0; i < 4; ++i) {
+    EXPECT_TRUE(block->getValue(i, 1).isEmpty());
+  }
+
+  // Destroy block
+  block.reset(nullptr);
+  auto afterBlockDestroy = monitor.current();
+  EXPECT_GT(afterBlockDestroy, initialMemory);  // Stolen value still exists
+
+  // Destroy stolen value
+  stolen.destroy();
+  EXPECT_EQ(monitor.current(), initialMemory);
 }
 
 }  // namespace aql

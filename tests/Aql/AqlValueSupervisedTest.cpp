@@ -1985,3 +1985,193 @@ TEST(AqlValueSupervisedTest, CompareBetweenManagedAndSupervisedReturnSame) {
   supervisedB1.destroy();
   supervisedB2.destroy();
 }
+
+// ====================== Hash tests ======================
+// Test that hash is content-based, not pointer-based
+// Same content with different pointers should produce same hash
+
+// Test hash for supervised slices: same content -> same hash
+TEST(AqlValueSupervisedTest, HashSameContentSupervisedSlice) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  std::string content(300, 'a');
+  Builder b1;
+  b1.add(Value(content));
+  Builder b2;
+  b2.add(Value(content));
+
+  AqlValue v1(b1.slice(), 0, &rm);
+  AqlValue v2(b2.slice(), 0, &rm);
+
+  // Different pointers (different allocations)
+  EXPECT_NE(v1.slice().start(), v2.slice().start());
+
+  // But same content -> same hash
+  std::hash<AqlValue> hasher;
+  EXPECT_EQ(hasher(v1), hasher(v2));
+
+  v1.destroy();
+  v2.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Test hash for managed slices: same content -> same hash
+TEST(AqlValueSupervisedTest, HashSameContentManagedSlice) {
+  std::string content(300, 'b');
+  Builder b1;
+  b1.add(Value(content));
+  Builder b2;
+  b2.add(Value(content));
+
+  AqlValue v1(b1.slice());
+  AqlValue v2(b2.slice());
+
+  // Different pointers
+  EXPECT_NE(v1.slice().start(), v2.slice().start());
+
+  // But same content -> same hash
+  std::hash<AqlValue> hasher;
+  EXPECT_EQ(hasher(v1), hasher(v2));
+
+  v1.destroy();
+  v2.destroy();
+}
+
+// Test hash for slice pointers: same pointer -> same hash, different pointer ->
+// different hash Note: VPACK_SLICE_POINTER uses pointer-based hashing by design
+// (it's a reference type)
+TEST(AqlValueSupervisedTest, HashSlicePointer) {
+  Builder b;
+  b.add(Value(42));
+  VPackSlice s = b.slice();
+
+  AqlValue p1(s.begin());  // VPACK_SLICE_POINTER
+  AqlValue p2(s.begin());  // same pointer
+
+  std::hash<AqlValue> hasher;
+  EXPECT_EQ(hasher(p1), hasher(p2));  // Same pointer -> same hash
+
+  Builder b2;
+  b2.add(Value(42));
+  AqlValue p3(b2.slice().begin());  // Different pointer, same content
+  // For slice pointers, different pointer means different hash (by design)
+  EXPECT_NE(hasher(p1), hasher(p3));
+
+  p1.destroy();
+  p2.destroy();
+  p3.destroy();
+}
+
+// Test hash for ranges: same bounds -> same hash
+TEST(AqlValueSupervisedTest, HashRangeContentBased) {
+  AqlValue r1(1, 100);
+  AqlValue r2(1, 100);  // Same bounds, different objects
+
+  std::hash<AqlValue> hasher;
+  // With content-based hashing, same bounds should produce same hash
+  EXPECT_EQ(hasher(r1), hasher(r2));
+
+  AqlValue r3(1, 101);  // Different bounds
+  EXPECT_NE(hasher(r1), hasher(r3));
+
+  r1.destroy();
+  r2.destroy();
+  r3.destroy();
+}
+
+// Test hash-equality consistency: if equal, then hash must be equal
+TEST(AqlValueSupervisedTest, HashEqualityConsistencySupervised) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  std::string content(500, 'x');
+  Builder b1;
+  b1.add(Value(content));
+  Builder b2;
+  b2.add(Value(content));
+
+  AqlValue v1(b1.slice(), 0, &rm);
+  AqlValue v2(b2.slice(), 0, &rm);
+
+  // They are equal (content-based)
+  expectEqualBothWays(v1, v2);
+
+  // Hash must also be equal (hash-equality consistency)
+  std::hash<AqlValue> hasher;
+  EXPECT_EQ(hasher(v1), hasher(v2));
+
+  v1.destroy();
+  v2.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Test hash-equality consistency: cross-type (supervised vs managed)
+TEST(AqlValueSupervisedTest, HashEqualityConsistencyCrossType) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  std::string content(400, 'y');
+  Builder b;
+  b.add(Value(content));
+  VPackSlice s = b.slice();
+
+  AqlValue supervised(s, 0, &rm);
+  AqlValue managed(s);
+
+  // They are equal (content-based cross-type comparison)
+  expectEqualBothWays(supervised, managed);
+
+  // Hash must also be equal (hash-equality consistency)
+  std::hash<AqlValue> hasher;
+  EXPECT_EQ(hasher(supervised), hasher(managed));
+
+  supervised.destroy();
+  managed.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Test hash for different content: should produce different hashes
+TEST(AqlValueSupervisedTest, HashDifferentContentDifferentHash) {
+  auto& g = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(g);
+
+  Builder b1;
+  b1.add(Value(std::string(300, 'a')));
+  Builder b2;
+  b2.add(Value(std::string(300, 'b')));
+
+  AqlValue v1(b1.slice(), 0, &rm);
+  AqlValue v2(b2.slice(), 0, &rm);
+
+  std::hash<AqlValue> hasher;
+  // Different content -> different hash
+  EXPECT_NE(hasher(v1), hasher(v2));
+
+  v1.destroy();
+  v2.destroy();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Test hash for inline values
+TEST(AqlValueSupervisedTest, HashInlineValues) {
+  Builder b1;
+  b1.add(Value(42));
+  Builder b2;
+  b2.add(Value(42));
+
+  AqlValue v1(b1.slice());
+  AqlValue v2(b2.slice());
+
+  std::hash<AqlValue> hasher;
+  EXPECT_EQ(hasher(v1), hasher(v2));
+
+  Builder b3;
+  b3.add(Value(43));
+  AqlValue v3(b3.slice());
+  EXPECT_NE(hasher(v1), hasher(v3));
+
+  v1.destroy();
+  v2.destroy();
+  v3.destroy();
+}
