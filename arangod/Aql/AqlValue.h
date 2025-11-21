@@ -343,8 +343,7 @@ struct AqlValue final {
   // note: this is the default constructor and should be as cheap as possible
   AqlValue() noexcept;
 
-  explicit AqlValue(DocumentData& data,
-                    arangodb::ResourceMonitor* rm = nullptr) noexcept;
+  explicit AqlValue(DocumentData& data) noexcept;
 
   // construct from pointer, not copying!
   explicit AqlValue(uint8_t const* pointer) noexcept;
@@ -565,6 +564,14 @@ struct AqlValue final {
                                      std::uint64_t len);
 
   static void deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept;
+
+  /// @brief get the ResourceMonitor pointer if this is a VPACK_SUPERVISED_SLICE
+  arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
+    if (type() == VPACK_SUPERVISED_SLICE) {
+      return _data.supervisedSliceMeta.getResourceMonitor();
+    }
+    return nullptr;
+  }
 };
 
 static_assert(std::is_copy_constructible_v<AqlValue>);
