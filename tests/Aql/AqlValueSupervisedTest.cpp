@@ -1985,3 +1985,121 @@ TEST(AqlValueSupervisedTest, CompareBetweenManagedAndSupervisedReturnSame) {
   supervisedB1.destroy();
   supervisedB2.destroy();
 }
+
+// Test the AqlValue(AqlValue const& other, void const* data) constructor
+// for VPACK_SUPERVISED_SLICE. This constructor is used when sharing values
+// between blocks (e.g., in cloneDataAndMoveShadow). The 'data' parameter
+// is the payload pointer (from data() method), but the constructor must
+// adjust it back to the base pointer (which includes ResourceMonitor* prefix).
+// Without the fix, this would cause a memory leak because destroy() would
+// read garbage memory when trying to access the ResourceMonitor*.
+TEST(AqlValueSupervisedTest, ConstructorWithDataPointerForSupervisedSlice) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+  ASSERT_EQ(rm.current(), 0U);
+
+  // Create a supervised slice with a large string
+  std::string big(4096, 'x');
+  Builder b;
+  b.add(Value(big));
+  Slice s = b.slice();
+
+  // Create original supervised AqlValue
+  AqlValue original(s, s.byteSize(), &rm);
+  ASSERT_EQ(original.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  size_t expectedMemory = s.byteSize() + ptrOverhead();
+  EXPECT_EQ(original.memoryUsage(), expectedMemory);
+  EXPECT_EQ(rm.current(), expectedMemory);
+
+  // Get the payload pointer (this is what data() returns)
+  void const* payloadPtr = original.data();
+
+  // Verify that payloadPtr is offset by kPrefix from the base
+  // The base pointer should be at payloadPtr - sizeof(ResourceMonitor*)
+  uint8_t const* basePtr =
+      static_cast<uint8_t const*>(payloadPtr) - sizeof(ResourceMonitor*);
+
+  // Verify we can read the ResourceMonitor* from the base
+  ResourceMonitor const* storedRm =
+      *reinterpret_cast<ResourceMonitor const* const*>(basePtr);
+  EXPECT_EQ(storedRm, &rm);
+
+  // Now use the AqlValue(AqlValue const&, void const*) constructor
+  // This simulates what happens in cloneDataAndMoveShadow when it calls
+  // AqlValue(a, (*it)) where (*it) is the payload pointer from cache
+  AqlValue shared(original, payloadPtr);
+  ASSERT_EQ(shared.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  // Memory should still be the same (sharing the same allocation)
+  EXPECT_EQ(rm.current(), expectedMemory);
+
+  // Both should point to the same data
+  EXPECT_EQ(original.data(), shared.data());
+  EXPECT_TRUE(original.slice().binaryEquals(shared.slice()));
+
+  // Destroy the shared copy - this should properly free the memory
+  // Without the fix, this would try to read ResourceMonitor* from the wrong
+  // location (payload pointer instead of base pointer), causing undefined
+  // behavior and memory leaks
+  shared.destroy();
+
+  // After destroying shared, the memory should be freed
+  // (since they share the same allocation)
+  EXPECT_EQ(rm.current(), 0U);
+
+  // The original's pointer is now dangling, so we can't call destroy() on it
+  // Instead, we erase it to zero out the bytes
+  original.erase();
+  EXPECT_EQ(rm.current(), 0U);
+}
+
+// Test the same scenario but with multiple shared copies to ensure
+// the fix works correctly in the reference counting scenario
+TEST(AqlValueSupervisedTest, MultipleSharedCopiesWithDataPointer) {
+  auto& global = GlobalResourceMonitor::instance();
+  ResourceMonitor rm(global);
+  ASSERT_EQ(rm.current(), 0U);
+
+  // Create a supervised slice
+  std::string big(8192, 'y');
+  Builder b;
+  b.add(Value(big));
+  Slice s = b.slice();
+
+  AqlValue original(s, s.byteSize(), &rm);
+  ASSERT_EQ(original.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
+  size_t expectedMemory = s.byteSize() + ptrOverhead();
+  EXPECT_EQ(original.memoryUsage(), expectedMemory);
+  EXPECT_EQ(rm.current(), expectedMemory);
+
+  void const* payloadPtr = original.data();
+
+  // Create multiple shared copies using the problematic constructor
+  // This simulates the scenario in AqlItemBlock where multiple rows
+  // might share the same value
+  AqlValue shared1(original, payloadPtr);
+  AqlValue shared2(original, payloadPtr);
+  AqlValue shared3(original, payloadPtr);
+
+  // All should point to the same data
+  EXPECT_EQ(original.data(), shared1.data());
+  EXPECT_EQ(original.data(), shared2.data());
+  EXPECT_EQ(original.data(), shared3.data());
+
+  // Memory should still be the same (one allocation shared by all)
+  EXPECT_EQ(rm.current(), expectedMemory);
+
+  // Destroy all shared copies - each destroy should work correctly
+  // Without the fix, these would cause memory leaks or crashes
+  shared1.destroy();
+  EXPECT_EQ(rm.current(), 0U);  // Memory should be freed after first destroy
+
+  // The other copies now have dangling pointers
+  shared2.erase();
+  shared3.erase();
+  original.erase();
+
+  EXPECT_EQ(rm.current(), 0U);
+}
