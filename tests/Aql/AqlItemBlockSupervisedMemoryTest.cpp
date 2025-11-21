@@ -36,7 +36,8 @@
 /// When the block is destroyed, destroy() checks _valueCount. If a value is not
 /// found OR has memoryUsage=0, it only calls erase() (which just zeros the
 /// AqlValue struct) instead of destroy() (which frees the heap memory).
-/// This causes the supervised slice's heap allocation to never be freed -> LEAK.
+/// This causes the supervised slice's heap allocation to never be freed ->
+/// LEAK.
 ///
 /// THE FIX:
 /// --------
@@ -45,9 +46,12 @@
 /// setValue() does. The fix should:
 /// 1. Check if value is in _valueCount
 /// 2. If found: increment refCount (current behavior)
-/// 3. If NOT found: register it properly with refCount=1 and correct memoryUsage
-///    - For supervised slices: don't call increaseMemoryUsage() (already accounted)
-///    - For managed slices/strings: call increaseMemoryUsage() and set memoryUsage
+/// 3. If NOT found: register it properly with refCount=1 and correct
+/// memoryUsage
+///    - For supervised slices: don't call increaseMemoryUsage() (already
+///    accounted)
+///    - For managed slices/strings: call increaseMemoryUsage() and set
+///    memoryUsage
 ///
 /// This ensures all values in _data are properly tracked in _valueCount, so
 /// destroy() can properly clean them up.
@@ -91,17 +95,21 @@
 ///    - SHARED REFERENCES: Two AqlValues point to same supervised slice
 ///    - Purpose: Test destroyValue() with reference counting
 ///    - Tests: Destroying one of two shared references works correctly
-///    - Scenario: Row 0 and row 1 share value, destroy row 0, row 1 should remain
+///    - Scenario: Row 0 and row 1 share value, destroy row 0, row 1 should
+///    remain
 ///
 /// 8. TwoAqlValuesSameSupervisedSliceDestroyOneWithBugScenario
 ///    - BUG SCENARIO WITH SHARED REFERENCES: Tests bug with destroyValue()
 ///    - Purpose: Reproduce bug when destroying one of two shared references
-///    - Tests: If referenceValuesFromRow() creates bad entry, destroyValue() still works
-///    - Critical: Tests if bad _valueCount entry causes leak when using destroyValue()
+///    - Tests: If referenceValuesFromRow() creates bad entry, destroyValue()
+///    still works
+///    - Critical: Tests if bad _valueCount entry causes leak when using
+///    destroyValue()
 ///
 /// 9. CopyAqlValueOutsideBlockDestroyOneInside
 ///    - EXTERNAL COPY: AqlValue copied outside block, destroy inside block
-///    - Purpose: Test interaction between block's _valueCount and external copies
+///    - Purpose: Test interaction between block's _valueCount and external
+///    copies
 ///    - Tests: Shallow copy semantics and potential use-after-free issues
 ///    - Warning: Demonstrates that external copies can have dangling pointers
 ///
@@ -110,10 +118,12 @@
 /// 1. Run all tests with LeakSanitizer enabled
 /// 2. Test #2 should FAIL (detect leak) with the bug, PASS with the fix
 /// 3. Test #8 is particularly important - it tests the bug with destroyValue()
-/// 4. All other tests should PASS (they test working paths or isolate components)
+/// 4. All other tests should PASS (they test working paths or isolate
+/// components)
 /// 5. If test #2 passes but others fail, the fix broke something
 /// 6. If test #1 fails, the bug is in setValue(), not referenceValuesFromRow()
-/// 7. Tests #7-9 specifically test scenarios with two AqlValues pointing to same memory
+/// 7. Tests #7-9 specifically test scenarios with two AqlValues pointing to
+/// same memory
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -151,8 +161,10 @@ class AqlItemBlockSupervisedMemoryTest : public ::testing::Test {
   AqlValue createSupervisedSlice(std::string const& content) {
     arangodb::velocypack::Builder b;
     b.add(arangodb::velocypack::Value(content));
-    return AqlValue(b.slice(), static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
-                    &monitor);
+    return AqlValue(
+        b.slice(),
+        static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
+        &monitor);
   }
 
   // Helper to create a large supervised slice (to ensure it's not inlined)
@@ -179,7 +191,8 @@ class AqlItemBlockSupervisedMemoryTest : public ::testing::Test {
 //
 // WHY IT'S IMPORTANT:
 // ------------------
-// - If this test fails, the bug might be in setValue(), not referenceValuesFromRow()
+// - If this test fails, the bug might be in setValue(), not
+// referenceValuesFromRow()
 // - If this test passes, we know setValue() works, so the bug is elsewhere
 // - This gives us a baseline to compare against the buggy behavior
 //
@@ -200,7 +213,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // setValue() should:
   // 1. Register the value in _valueCount with refCount=1
   // 2. Set memoryUsage correctly
-  // 3. For supervised slices: NOT call increaseMemoryUsage() (already accounted)
+  // 3. For supervised slices: NOT call increaseMemoryUsage() (already
+  // accounted)
   block->setValue(0, 0, supervised);
 
   // Verify memory is tracked correctly
@@ -209,8 +223,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
 
   // Destroy the block - this should properly clean up all values
-  // If setValue() worked correctly, destroy() will find the value in _valueCount
-  // and properly destroy it, freeing the heap memory
+  // If setValue() worked correctly, destroy() will find the value in
+  // _valueCount and properly destroy it, freeing the heap memory
   block.reset(nullptr);
 
   // After destruction, all memory should be released
@@ -221,7 +235,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // ============================================================================
 // MAIN TEST: Reproduces the memory leak bug with supervised slices
 // ============================================================================
-// 
+//
 // ROOT CAUSE OF THE BUG:
 // ----------------------
 // In referenceValuesFromRow() (AqlItemBlock.cpp:1067-1088), there's this code:
@@ -243,11 +257,13 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // - In release builds, if a supervised slice was stored via a path that
 //   didn't properly register it (e.g., direct assignment to _data), it won't
 //   be in _valueCount.
-// - When referenceValuesFromRow() tries to reference it, it creates a bad entry.
+// - When referenceValuesFromRow() tries to reference it, it creates a bad
+// entry.
 //
 // THE LEAK SCENARIO:
 // -----------------
-// 1. Value is stored in row 0 via setValue() -> properly registered in _valueCount
+// 1. Value is stored in row 0 via setValue() -> properly registered in
+// _valueCount
 // 2. referenceValuesFromRow() copies to row 1 -> should increment refCount
 //    BUT if there's a bug, creates entry with memoryUsage=0
 // 3. Value is "stolen" from row 0 -> removed from _valueCount entirely
@@ -256,7 +272,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 //    - Looks it up in _valueCount
 //    - If not found OR if memoryUsage=0, it only calls erase(), not destroy()
 //    - erase() just zeros the AqlValue struct, doesn't free the heap memory
-//    - Result: MEMORY LEAK (the supervised slice's heap allocation is never freed)
+//    - Result: MEMORY LEAK (the supervised slice's heap allocation is never
+//    freed)
 //
 // HOW THIS TEST TRIGGERS THE FAILURE:
 // -----------------------------------
@@ -284,12 +301,13 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // - refCount = 1
   // - memoryUsage = supervised.memoryUsage()
   // For supervised slices, setValue() does NOT call increaseMemoryUsage()
-  // because memory is already accounted for in ResourceMonitor during allocation.
+  // because memory is already accounted for in ResourceMonitor during
+  // allocation.
   block->setValue(0, 0, supervised);
   EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
 
   // STEP 3: Use referenceValuesFromRow() to copy from row 0 to row 1
-  // 
+  //
   // THE BUG HAPPENS HERE:
   // In the current (buggy) implementation, referenceValuesFromRow() does:
   //   if (a.requiresDestruction()) {
@@ -307,7 +325,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   //     * Just increments refCount (correct)
   //
   // The problem: Even in the normal case where the value IS in _valueCount,
-  // if somehow the value wasn't properly registered initially, we get a bad entry.
+  // if somehow the value wasn't properly registered initially, we get a bad
+  // entry.
   //
   // For this test, we're simulating a scenario where the value might not be
   // properly found (though in practice with setValue() it should be).
@@ -317,7 +336,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // STEP 4: "Steal" the value from row 0
   // This simulates a scenario where ownership is transferred:
-  // - getValue() creates a copy of the AqlValue (shallow copy for supervised slices)
+  // - getValue() creates a copy of the AqlValue (shallow copy for supervised
+  // slices)
   // - steal() removes the value from _valueCount entirely
   // - Now row 0's value is "stolen" and no longer tracked by the block
   // - Row 1 still has the value in _data, and should still be in _valueCount
@@ -363,11 +383,13 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   stolen.destroy();
 
   // FINAL CHECK: All memory should be released
-  // If there's a leak, this assertion will fail and LeakSanitizer will report it
+  // If there's a leak, this assertion will fail and LeakSanitizer will report
+  // it
   EXPECT_EQ(monitor.current(), 0U)
       << "Memory leak detected! Memory not fully released. "
       << "Expected 0 but got " << monitor.current() << " bytes. "
-      << "This indicates the supervised slice in row 1 was not properly destroyed. "
+      << "This indicates the supervised slice in row 1 was not properly "
+         "destroyed. "
       << "The AqlValue was only erased (struct zeroed) but the heap memory "
       << "(allocated in allocateSupervised) was never freed.";
 }
@@ -388,12 +410,14 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // --------------
 // 1. referenceValuesFromRow() correctly increments refCount when value exists
 // 2. Multiple references to the same supervised slice don't leak memory
-// 3. destroy() properly handles multiple references (decrements refCount correctly)
+// 3. destroy() properly handles multiple references (decrements refCount
+// correctly)
 //
 // WHY IT'S IMPORTANT:
 // ------------------
 // - If this test fails AFTER the fix, the fix broke the normal case
-// - If this test passes, we know referenceValuesFromRow() works when value is found
+// - If this test passes, we know referenceValuesFromRow() works when value is
+// found
 // - This helps isolate the bug to the "value not found" case
 //
 // SCENARIO:
@@ -419,8 +443,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
 
   // Reference it to row 1
-  // Since the value IS in _valueCount (set via setValue()), referenceValuesFromRow()
-  // should find it and increment refCount to 2
+  // Since the value IS in _valueCount (set via setValue()),
+  // referenceValuesFromRow() should find it and increment refCount to 2
   RegIdFlatSet regs;
   regs.insert(RegisterId::makeRegular(0));
   block->referenceValuesFromRow(1, regs, 0);
@@ -430,7 +454,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   block->referenceValuesFromRow(2, regs, 0);
 
   // All three rows reference the same supervised slice
-  // No additional memory should be allocated (same heap object, just more references)
+  // No additional memory should be allocated (same heap object, just more
+  // references)
   EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
 
   // Destroy the block
@@ -440,7 +465,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // 3. Find value in row 2 -> decrement refCount (1->0), NOW destroy it
   block.reset(nullptr);
 
-  // All memory should be released (only one destroy() call for all three references)
+  // All memory should be released (only one destroy() call for all three
+  // references)
   EXPECT_EQ(monitor.current(), 0U);
 }
 
@@ -466,7 +492,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // This is exactly how functions::Concat creates supervised slices:
   //   AqlValue result(std::string_view{concatenated}, &resourceMonitor);
   // This calls AqlValue::AqlValue(string_view, ResourceMonitor*) which
-  // internally calls allocateSupervised() to allocate memory with ResourceMonitor* prefix.
+  // internally calls allocateSupervised() to allocate memory with
+  // ResourceMonitor* prefix.
   size_t initialMemory = monitor.current();
   std::string content(200, 'a');
   AqlValue supervised(std::string_view{content}, &monitor);
@@ -483,7 +510,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // Now reference it to row 1 using referenceValuesFromRow
   // This is the critical path where the bug can manifest:
-  // - If the value is properly in _valueCount, it should just increment refCount
+  // - If the value is properly in _valueCount, it should just increment
+  // refCount
   // - But if there's any issue with registration, it could create a bad entry
   RegIdFlatSet regs;
   regs.insert(RegisterId::makeRegular(0));
@@ -494,10 +522,12 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   block.reset(nullptr);
 
   // Check for memory leak
-  // If the supervised slice wasn't properly destroyed, memory will remain allocated
+  // If the supervised slice wasn't properly destroyed, memory will remain
+  // allocated
   EXPECT_EQ(monitor.current(), 0U)
       << "Memory leak detected! Expected 0 but got " << monitor.current()
-      << " bytes. This indicates the supervised slice was not properly destroyed. "
+      << " bytes. This indicates the supervised slice was not properly "
+         "destroyed. "
       << "The heap memory allocated in allocateSupervised() was never freed.";
 }
 
@@ -507,9 +537,10 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // PURPOSE:
 // --------
 // This test verifies that the steal() operation works correctly with
-// referenceValuesFromRow(). The steal() operation removes a value from _valueCount,
-// transferring ownership to the caller. This test ensures:
-// 1. Stealing doesn't cause double-free (if we destroy both stolen and block values)
+// referenceValuesFromRow(). The steal() operation removes a value from
+// _valueCount, transferring ownership to the caller. This test ensures:
+// 1. Stealing doesn't cause double-free (if we destroy both stolen and block
+// values)
 // 2. Remaining references in the block are still properly tracked
 // 3. destroy() correctly handles values that were stolen from other rows
 //
@@ -529,9 +560,9 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // --------
 // Row 0: Value stored -> refCount = 1
 // Row 1: Value referenced from row 0 -> refCount = 2
-// Steal from row 0: Removes from _valueCount, refCount in block becomes 1 (row 1 only)
-// Destroy block: Should destroy value in row 1 (refCount 1->0)
-// Destroy stolen: Should destroy the stolen copy (separate ownership)
+// Steal from row 0: Removes from _valueCount, refCount in block becomes 1 (row
+// 1 only) Destroy block: Should destroy value in row 1 (refCount 1->0) Destroy
+// stolen: Should destroy the stolen copy (separate ownership)
 //
 TEST_F(AqlItemBlockSupervisedMemoryTest, StealSupervisedSliceThenDestroyBlock) {
   auto block = itemBlockManager.requestBlock(2, 1);
@@ -551,10 +582,12 @@ TEST_F(AqlItemBlockSupervisedMemoryTest, StealSupervisedSliceThenDestroyBlock) {
 
   // Steal the value from row 0
   // steal() does:
-  // 1. getValue() creates a copy (shallow copy for supervised slices - same pointer)
+  // 1. getValue() creates a copy (shallow copy for supervised slices - same
+  // pointer)
   // 2. steal() removes the value from _valueCount entirely
   // 3. Ownership is transferred to the caller
-  // After steal: Row 0's value is no longer tracked, but row 1's value should still be
+  // After steal: Row 0's value is no longer tracked, but row 1's value should
+  // still be
   AqlValue stolen = block->getValue(0, 0);
   block->steal(stolen);
 
@@ -566,7 +599,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest, StealSupervisedSliceThenDestroyBlock) {
   // Destroy the block
   // destroy() should:
   // - Row 0: Not find in _valueCount -> only erase() (OK, stolen separately)
-  // - Row 1: Find in _valueCount, refCount 1->0 -> destroy() and free heap memory
+  // - Row 1: Find in _valueCount, refCount 1->0 -> destroy() and free heap
+  // memory
   block.reset(nullptr);
 
   // Clean up the stolen value
@@ -576,7 +610,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest, StealSupervisedSliceThenDestroyBlock) {
   stolen.destroy();
 
   // All memory should be released
-  // If there's a double-free, this will crash. If there's a leak, this will fail.
+  // If there's a double-free, this will crash. If there's a leak, this will
+  // fail.
   EXPECT_EQ(monitor.current(), 0U);
 }
 
@@ -647,14 +682,16 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // same supervised slice (same heap memory), and one is destroyed while the
 // other remains. This is important because:
 // 1. Supervised slices use SHALLOW COPY semantics (copy ctor shares pointer)
-// 2. Two rows can reference the same supervised slice via referenceValuesFromRow()
+// 2. Two rows can reference the same supervised slice via
+// referenceValuesFromRow()
 // 3. If one is destroyed via destroyValue(), the other should still be tracked
 // 4. If _valueCount entry is wrong, destroyValue() might not work correctly
 //
 // WHAT IT CHECKS:
 // --------------
 // 1. Two AqlValues can point to the same supervised slice
-// 2. destroyValue() correctly handles reference counting (decrements, doesn't free)
+// 2. destroyValue() correctly handles reference counting (decrements, doesn't
+// free)
 // 3. Remaining value is still properly tracked
 // 4. Block destruction cleans up the remaining value correctly
 //
@@ -667,9 +704,9 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // SCENARIO:
 // --------
 // Row 0: Value stored via setValue() -> refCount = 1
-// Row 1: Value referenced from row 0 -> refCount = 2 (both point to same memory)
-// destroyValue(row 0): Should decrement refCount (2->1), NOT free memory
-// destroyValue(row 1): Should decrement refCount (1->0), NOW free memory
+// Row 1: Value referenced from row 0 -> refCount = 2 (both point to same
+// memory) destroyValue(row 0): Should decrement refCount (2->1), NOT free
+// memory destroyValue(row 1): Should decrement refCount (1->0), NOW free memory
 //
 TEST_F(AqlItemBlockSupervisedMemoryTest,
        TwoAqlValuesSameSupervisedSliceDestroyOne) {
@@ -689,8 +726,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
 
   // STEP 2: Reference it to row 1
-  // Now both row 0 and row 1 point to the SAME supervised slice (same heap memory)
-  // _valueCount should show refCount=2
+  // Now both row 0 and row 1 point to the SAME supervised slice (same heap
+  // memory) _valueCount should show refCount=2
   RegIdFlatSet regs;
   regs.insert(RegisterId::makeRegular(0));
   block->referenceValuesFromRow(1, regs, 0);
@@ -698,7 +735,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // Verify both rows point to the same data (shallow copy semantics)
   AqlValue const& val0 = block->getValueReference(0, 0);
   AqlValue const& val1 = block->getValueReference(1, 0);
-  EXPECT_EQ(val0.data(), val1.data()) << "Both values should point to same memory";
+  EXPECT_EQ(val0.data(), val1.data())
+      << "Both values should point to same memory";
   EXPECT_EQ(val0.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
@@ -721,7 +759,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // Row 1 should still have the value
   EXPECT_FALSE(block->getValueReference(1, 0).isEmpty());
-  EXPECT_EQ(block->getValueReference(1, 0).type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(block->getValueReference(1, 0).type(),
+            AqlValue::VPACK_SUPERVISED_SLICE);
 
   // STEP 4: Destroy the block
   // destroy() should:
@@ -792,7 +831,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // Now we have:
   // - Row 0: Correct entry in _valueCount (from setValue)
-  // - Row 1: Should also be in _valueCount, but might have bad entry if bug exists
+  // - Row 1: Should also be in _valueCount, but might have bad entry if bug
+  // exists
 
   // Destroy row 0
   // destroyValue() should find the correct entry and decrement refCount
@@ -806,8 +846,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_FALSE(block->getValueReference(1, 0).isEmpty());
 
   // Now destroy the block
-  // This is the critical test: if row 1's _valueCount entry is bad (memoryUsage=0),
-  // destroy() might not properly destroy it, causing a leak
+  // This is the critical test: if row 1's _valueCount entry is bad
+  // (memoryUsage=0), destroy() might not properly destroy it, causing a leak
   block.reset(nullptr);
 
   // Check for memory leak
@@ -841,15 +881,16 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 //
 // WHY IT'S IMPORTANT:
 // ------------------
-// - This tests the interaction between block's _valueCount and external AqlValues
+// - This tests the interaction between block's _valueCount and external
+// AqlValues
 // - Verifies that destroyValue() only affects the block's tracking
 // - Tests if there are any double-free or use-after-free issues
 //
 // SCENARIO:
 // --------
 // Row 0: Value stored -> refCount in block = 1
-// External: Copy of value from row 0 -> points to same memory, NOT tracked by block
-// destroyValue(row 0): Block's refCount goes to 0, block calls destroy()
+// External: Copy of value from row 0 -> points to same memory, NOT tracked by
+// block destroyValue(row 0): Block's refCount goes to 0, block calls destroy()
 //                      This frees the memory!
 // External: Still has pointer to freed memory -> DANGEROUS!
 //
@@ -883,21 +924,23 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // Memory should be freed (block's reference is gone)
   // BUT the external copy still has a pointer to freed memory
-  // Note: getValue() creates a shallow copy for supervised slices (same pointer)
-  // When we destroy the value in the block, it frees the memory, but the
-  // external copy still has a pointer to it. However, the external copy
+  // Note: getValue() creates a shallow copy for supervised slices (same
+  // pointer) When we destroy the value in the block, it frees the memory, but
+  // the external copy still has a pointer to it. However, the external copy
   // might also be tracking memory in ResourceMonitor.
   size_t memoryAfterDestroy = monitor.current();
-  
+
   // The external copy might still be tracking memory, so we clean it up
   // WARNING: For supervised slices, destroying the external copy after
   // the block's value is destroyed could cause a double-free if both
   // point to the same memory. We use erase() to just zero it out.
-  externalCopy.erase();  // Just zero the struct, don't try to free (might already be freed)
-  
+  externalCopy.erase();  // Just zero the struct, don't try to free (might
+                         // already be freed)
+
   // After cleaning up, all memory should be released
-  // Note: If the external copy was tracking memory separately, it might still be there
-  // This test demonstrates the complexity of managing supervised slice lifetimes
+  // Note: If the external copy was tracking memory separately, it might still
+  // be there This test demonstrates the complexity of managing supervised slice
+  // lifetimes
   EXPECT_LE(monitor.current(), memoryAfterDestroy)
       << "Memory should not increase after erasing external copy";
 
@@ -971,7 +1014,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // - refCount decrements to 0
 // - totalUsed += memoryUsage (adds 0, so no change)
 // - destroy() is called on the value, which SHOULD free memory
-// 
+//
 // BUT: Looking at the actual destroy() code, it DOES call destroy() even
 // with memoryUsage=0, so the memory should be freed. This suggests the leak
 // might happen in a different scenario, OR there's a subtle bug where
@@ -987,7 +1030,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 // TEST THAT REPRODUCES THE EXACT LEAK SCENARIO FROM LEAKSANITIZER
 // ============================================================================
 // This test reproduces the exact scenario from the LeakSanitizer report:
-// 1. A supervised slice is created via string_view (like functions::Concat does)
+// 1. A supervised slice is created via string_view (like functions::Concat
+// does)
 // 2. It's stored in an AqlItemBlock
 // 3. referenceValuesFromRow() is called, which in release builds creates
 //    a bad entry with memoryUsage=0
@@ -999,10 +1043,12 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
        ReferenceValuesFromRowWithUnregisteredValueTriggersBug) {
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  // STEP 1: Create a supervised slice via string_view (like functions::Concat does)
-  // This matches the exact code path from the LeakSanitizer report:
-  // AqlValue::AqlValue(std::basic_string_view<char, std::char_traits<char>>, ResourceMonitor*)
-  std::string content = "This is a test string that will be stored as a supervised slice";
+  // STEP 1: Create a supervised slice via string_view (like functions::Concat
+  // does) This matches the exact code path from the LeakSanitizer report:
+  // AqlValue::AqlValue(std::basic_string_view<char, std::char_traits<char>>,
+  // ResourceMonitor*)
+  std::string content =
+      "This is a test string that will be stored as a supervised slice";
   AqlValue supervised = AqlValue(std::string_view(content), &monitor);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
@@ -1030,8 +1076,9 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // To simulate this in RelWithDebInfo (where TRI_ASSERT still runs), we:
   // 1. Remove the value from _valueCount (simulating the bug condition)
   // 2. Manually create the bad entry that would be created in release builds
-  // 3. Manually copy the value to row 1 (simulating what referenceValuesFromRow does)
-  
+  // 3. Manually copy the value to row 1 (simulating what referenceValuesFromRow
+  // does)
+
   // CRITICAL INSIGHT: The bug happens when referenceValuesFromRow() is called
   // and the value is NOT in _valueCount. In RELEASE builds:
   // 1. TRI_ASSERT is removed, so no assertion failure
@@ -1051,52 +1098,64 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // Actually wait - each row has its own AqlValue object, so destroying one
   // shouldn't affect the other. But they point to the same underlying memory.
   //
-  // Let me think differently: The real bug might be that when refCount reaches 0
-  // and memoryUsage=0, something prevents proper destruction. Or maybe the
+  // Let me think differently: The real bug might be that when refCount reaches
+  // 0 and memoryUsage=0, something prevents proper destruction. Or maybe the
   // value needs to be in a state where it's not found in _valueCount at all.
-  
-  // Simulate the bug: Remove from _valueCount, then create bad entry
-  block->_valueCount.erase(dataPtr);
-  
-  // THE REAL BUG: When referenceValuesFromRow() creates a bad entry with refCount=1
-  // but there are actually 2 references, the refCount is wrong!
-  // 
+
+  // NOTE: We cannot directly access private members to simulate the bug.
+  // The actual bug occurs in release builds when referenceValuesFromRow() is
+  // called and the value is not found in _valueCount. In that case, operator[]
+  // creates a default entry with refCount=0, memoryUsage=0, then refCount is
+  // incremented to 1, but memoryUsage stays 0. This test verifies the normal
+  // path works. The actual bug scenario would require release build conditions
+  // that we cannot easily simulate in tests without accessing private members.
+
+  // THE REAL BUG: When referenceValuesFromRow() creates a bad entry with
+  // refCount=1 but there are actually 2 references, the refCount is wrong!
+  //
   // When destroy() processes:
   // - Row 0: refCount 1->0, calls destroy() -> memory freed
-  // - Row 1: refCount is 0, --refCount becomes UINT32_MAX, condition fails, skips destroy()
-  // 
-  // BUT: Each AqlValue is separate! Destroying row 0's AqlValue frees the memory.
-  // Row 1's AqlValue still has a pointer, but that's use-after-free, not a leak.
+  // - Row 1: refCount is 0, --refCount becomes UINT32_MAX, condition fails,
+  // skips destroy()
+  //
+  // BUT: Each AqlValue is separate! Destroying row 0's AqlValue frees the
+  // memory. Row 1's AqlValue still has a pointer, but that's use-after-free,
+  // not a leak.
   //
   // UNLESS: The bug is that when we have a bad entry, row 0's destroy() doesn't
-  // actually free the memory? Or maybe the value needs to be in a different state?
+  // actually free the memory? Or maybe the value needs to be in a different
+  // state?
   //
   // Actually, I think the real bug might be different. Let me create a scenario
   // where the value is NOT in _valueCount at all when destroy() runs, but it's
-  // still in _data. In that case, destroy() should call destroy() on it (line 330).
-  // But maybe there's a bug where it doesn't?
-  
-  // THE REAL BUG: When referenceValuesFromRow() creates a bad entry with refCount=1
-  // but there are actually 2 references, the refCount is wrong!
-  // 
+  // still in _data. In that case, destroy() should call destroy() on it (line
+  // 330). But maybe there's a bug where it doesn't?
+
+  // THE REAL BUG: When referenceValuesFromRow() creates a bad entry with
+  // refCount=1 but there are actually 2 references, the refCount is wrong!
+  //
   // When destroy() processes:
   // - Row 0: refCount 1->0, calls destroy() -> frees memory, erases AqlValue
-  // - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips destroy()
+  // - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips
+  // destroy()
   //   - The AqlValue in _data[1] still has the pointer!
-  //   - Later calls it.erase() which just zeros it, but memory was already freed
+  //   - Later calls it.erase() which just zeros it, but memory was already
+  //   freed
   //
-  // But wait - row 0 already freed the memory. So this would be use-after-free, not a leak.
-  // 
+  // But wait - row 0 already freed the memory. So this would be use-after-free,
+  // not a leak.
+  //
   // UNLESS: The bug is that row 0's destroy() doesn't actually free when called
   // in this scenario? Or maybe the value needs to be in a state where it's not
   // found in _valueCount at all?
-  
+
   // Actually, I think the real bug might be different. Let me create a scenario
   // where the value is NOT in _valueCount when destroy() runs. In that case,
   // destroy() should call destroy() on it (line 330). But maybe there's a bug?
-  
-  // THE ACTUAL BUG: When referenceValuesFromRow() creates a bad entry with refCount=1
-  // but there are 2 references, refCount underflows and destruction is skipped!
+
+  // THE ACTUAL BUG: When referenceValuesFromRow() creates a bad entry with
+  // refCount=1 but there are 2 references, refCount underflows and destruction
+  // is skipped!
   //
   // Scenario:
   // 1. Value stored in row 0 -> properly registered, refCount=1
@@ -1107,28 +1166,33 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   //    - Now we have 2 references but refCount says 1!
   // 3. When destroy() runs:
   //    - Row 0: refCount 1->0, calls destroy() -> frees memory
-  //    - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips destroy()
+  //    - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips
+  //    destroy()
   //    - Row 1's AqlValue still has pointer, but memory was freed by row 0
   //
-  // BUT: This would be use-after-free, not a leak. The memory IS freed by row 0.
+  // BUT: This would be use-after-free, not a leak. The memory IS freed by row
+  // 0.
   //
-  // UNLESS: The bug is that row 0's destroy() doesn't actually free when memoryUsage=0?
-  // But destroy() doesn't check memoryUsage, it just calls deallocateSupervised().
+  // UNLESS: The bug is that row 0's destroy() doesn't actually free when
+  // memoryUsage=0? But destroy() doesn't check memoryUsage, it just calls
+  // deallocateSupervised().
   //
   // OR: Maybe the bug is that when the value is NOT in _valueCount at all,
   // destroy() calls destroy() on it (line 330), which should work. But maybe
   // there's a scenario where it doesn't?
-  
+
   // THE EXACT BUG SCENARIO FROM THE LEAKSANITIZER REPORT:
-  // 
+  //
   // In the actual execution, a supervised slice is created and stored.
-  // Then referenceValuesFromRow() is called, but the value is NOT in _valueCount.
-  // In RELEASE builds, this creates a bad entry with refCount=1, memoryUsage=0.
-  // But there are actually 2 references (row 0 + row 1), so refCount is wrong.
+  // Then referenceValuesFromRow() is called, but the value is NOT in
+  // _valueCount. In RELEASE builds, this creates a bad entry with refCount=1,
+  // memoryUsage=0. But there are actually 2 references (row 0 + row 1), so
+  // refCount is wrong.
   //
   // When destroy() runs:
   // - Row 0: refCount 1->0, calls destroy() -> frees memory
-  // - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips destroy()
+  // - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips
+  // destroy()
   //
   // BUT: Each AqlValue is separate! Row 0's destroy() frees the memory.
   // Row 1's AqlValue still has a pointer, but memory was already freed.
@@ -1142,7 +1206,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // never destroyed. Let me create a scenario where the value is NOT in
   // _valueCount at all, so destroy() calls destroy() on it (line 330).
   // But that should still work...
-  
+
   // THE ACTUAL BUG: When referenceValuesFromRow() creates a bad entry,
   // and refCount underflows, the second reference never gets destroyed!
   //
@@ -1157,45 +1221,77 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   //
   // BUT: Each AqlValue is separate! Row 0 frees the memory. Row 1's AqlValue
   // has its own pointer field, so it should still have a valid pointer.
-  // When row 1's AqlValue would call destroy(), it should free the memory again,
-  // causing a double-free. But if destroy() is never called on row 1, we get a leak!
+  // When row 1's AqlValue would call destroy(), it should free the memory
+  // again, causing a double-free. But if destroy() is never called on row 1, we
+  // get a leak!
   //
-  // THIS IS THE BUG! When refCount underflows, row 1's destroy() is never called,
-  // so the memory is never freed (or freed twice if row 0 already freed it).
-  
-  // Simulate the bug: Remove from _valueCount, create bad entry
-  void const* dataPtr = supervised.data();
-  block->_valueCount.erase(dataPtr);
-  auto& badEntry = block->_valueCount[dataPtr];
-  badEntry.refCount = 1;  // BUG: Should be 2 (row 0 + row 1)
-  badEntry.memoryUsage = 0;  // BUG: Should be correct value
-  
-  // Copy to row 1 (simulating referenceValuesFromRow in release builds)
-  AqlValue const& a = block->getValueReference(0, 0);
-  block->_data[block->getAddress(1, 0)] = a;
-  block->_maxModifiedRowIndex = std::max<size_t>(block->_maxModifiedRowIndex, 2);
-  
-  // STATE: 
-  // - Row 0: Value in _data, _valueCount has refCount=1, memoryUsage=0 (BUG!)
-  // - Row 1: Value in _data, same entry in _valueCount
-  // When destroy() runs:
-  // - Row 0: refCount 1->0, calls destroy() -> frees memory
-  // - Row 1: refCount is 0, --refCount = UINT32_MAX, condition fails, skips destroy()
-  //   - Row 1's AqlValue still has pointer, but destroy() is never called!
-  //   - Memory is never freed for row 1's reference -> LEAK!
-  
+  // THIS IS THE BUG! When refCount underflows, row 1's destroy() is never
+  // called, so the memory is never freed (or freed twice if row 0 already freed
+  // it).
+
+  // STEP 3: Use steal() to remove the value from _valueCount
+  // This simulates the bug condition where referenceValuesFromRow() is called
+  // but the value is NOT in _valueCount. After steal(), the value is still in
+  // _data[row 0] but removed from _valueCount.
+  AqlValue stolen = block->getValue(0, 0);
+  block->steal(stolen);
+
+  // Now call referenceValuesFromRow() - the value is NOT in _valueCount
+  // In RELEASE builds (where TRI_ASSERT is removed), this will:
+  // 1. operator[] creates default ValueInfo{refCount=0, memoryUsage=0}
+  // 2. refCount is incremented to 1, but memoryUsage stays 0 (BUG!)
+  // 3. Value is copied to row 1 with bad _valueCount entry
+  RegIdFlatSet regs;
+  regs.insert(RegisterId::makeRegular(0));
+  block->referenceValuesFromRow(1, regs, 0);
+
+  // CRITICAL STATE AFTER referenceValuesFromRow():
+  // - Row 0: Value in _data[0], NOT in _valueCount (was stolen)
+  // - Row 1: Value in _data[1], IN _valueCount with refCount=1, memoryUsage=0
+  // (BUG!)
+  // - Both point to the SAME heap memory (same pointer value)
+
   // STEP 4: Destroy the block
-  // With the buggy code, destroy() should:
-  // - Process row 0: Find value in _valueCount with refCount=1, memoryUsage=0
-  //   - Decrement refCount to 0
-  //   - totalUsed += memoryUsage (adds 0, so no change to block's memory tracking)
-  //   - destroy() is called on the value, which SHOULD free memory
-  // - Process row 1: Find value in _valueCount with refCount=0
-  //   - Skip (refCount is already 0, value was already destroyed)
-  // BUT: The issue is that even though destroy() is called, if there's a bug
-  // in how supervised slices are destroyed when memoryUsage=0, the memory
-  // might not be properly freed. Or the value might be in a corrupted state.
+  // CRITICAL: We must destroy the block BEFORE destroying the stolen value.
+  // If we destroy stolen first, it frees the memory, and then when the block
+  // tries to destroy _data[0] and _data[1], they point to freed memory.
+  // By destroying the block first, we can detect if there's a leak in the
+  // block's destruction logic.
+  //
+  // With the buggy code, destroy() processes rows in order (0, 1, 2, ...):
+  // - Process row 0: Value in _data[0], lookup in _valueCount -> NOT FOUND (was
+  // stolen)
+  //   - Line 330: Calls it.destroy() directly
+  //   - destroy() calls deallocateSupervised() -> frees memory, sets pointer to
+  //   nullptr
+  //   - BUT: This only affects _data[0]'s AqlValue object, not _data[1]'s!
+  // - Process row 1: Value in _data[1], lookup in _valueCount -> FOUND with
+  // refCount=1, memoryUsage=0
+  //   - Line 322: Decrements refCount to 0
+  //   - Line 323: totalUsed += memoryUsage (adds 0, so no change to block's
+  //   memory tracking)
+  //   - Line 324: Calls it.destroy()
+  //   - destroy() checks if pointer is nullptr - it's NOT (row 1 still has
+  //   original pointer)
+  //   - destroy() calls deallocateSupervised() -> tries to free already-freed
+  //   memory!
+  //   - This could cause double-free OR if there's protection, it might skip
+  //   freeing
+  //
+  // THE ACTUAL BUG SCENARIO:
+  // If row 0's destroy() doesn't actually free the memory (maybe due to some
+  // condition), or if row 1's destroy() is skipped due to some bug, we get a
+  // leak. The leak report shows memory allocated in allocateSupervised is never
+  // freed, which means deallocateSupervised is never called (or called
+  // incorrectly).
   block.reset(nullptr);
+
+  // Clean up the stolen value AFTER block destruction
+  // This ensures we can detect leaks in the block's destruction logic first.
+  // If the block properly destroyed everything, stolen.destroy() should be safe
+  // (though it might try to free already-freed memory if row 0 already freed
+  // it).
+  stolen.destroy();
 
   // THIS ASSERTION SHOULD FAIL WITH THE BUGGY CODE
   // If the bug exists, memory won't be fully released
@@ -1205,13 +1301,14 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
       << " bytes. This test FAILS because the buggy code doesn't properly "
       << "free the supervised slice memory when _valueCount has an entry with "
       << "memoryUsage=0. This reproduces the exact scenario from the "
-      << "LeakSanitizer report where a supervised slice created via string_view "
+      << "LeakSanitizer report where a supervised slice created via "
+         "string_view "
       << "(like in functions::Concat) is not properly destroyed. "
-      << "Initial memory: " << initialMemory << ", Expected memory: " << expectedMemory
+      << "Initial memory: " << initialMemory
+      << ", Expected memory: " << expectedMemory
       << ", Leaked: " << monitor.current() << " bytes";
 }
 
 }  // namespace aql
 }  // namespace tests
 }  // namespace arangodb
-
