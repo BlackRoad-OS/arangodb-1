@@ -1654,10 +1654,10 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
       case T::VPACK_SLICE_POINTER:
-        // VPACK_SLICE_POINTER is not owned, so pointer comparison is
-        // appropriate
-        return a._data.slicePointerMeta.pointer ==
-               b._data.slicePointerMeta.pointer;
+        // Use content-based equality to match content-based hashing
+        // This ensures hash-equality consistency for hash-based containers
+        return VPackSlice(a._data.slicePointerMeta.pointer)
+            .binaryEquals(VPackSlice(b._data.slicePointerMeta.pointer));
       case T::VPACK_MANAGED_SLICE:
         return VPackSlice(a._data.managedSliceMeta.pointer)
             .binaryEquals(VPackSlice(b._data.managedSliceMeta.pointer));
@@ -1670,7 +1670,13 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return as.binaryEquals(bs);  // ignore monitor*
       }
       case T::RANGE:
-        return a._data.rangeMeta.range == b._data.rangeMeta.range;
+        // Use content-based equality to match content-based hashing
+        // This ensures hash-equality consistency for hash-based containers
+        // Compare _low and _high values instead of pointer addresses
+        return a._data.rangeMeta.range != nullptr &&
+               b._data.rangeMeta.range != nullptr &&
+               a._data.rangeMeta.range->_low == b._data.rangeMeta.range->_low &&
+               a._data.rangeMeta.range->_high == b._data.rangeMeta.range->_high;
     }
     TRI_ASSERT(false);
     return false;
