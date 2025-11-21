@@ -88,6 +88,9 @@ struct ViewExpressionContextBase : public arangodb::aql::ExpressionContext {
 
   virtual ResourceMonitor* getResourceMonitorPtr()
       const noexcept override final {
+    if (_query == nullptr) {
+      return nullptr;
+    }
     return &_query->resourceMonitor();
   }
 
