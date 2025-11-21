@@ -327,7 +327,13 @@ void AqlItemBlock::destroy() noexcept {
             }
           } else {
             // value not found in _valueCount but requires destruction
-            it.destroy();
+            // This means the value was stolen - ownership was transferred.
+            // We should NOT destroy it here because the owner (who stole it) is
+            // responsible for destruction. Just erase it to clear the slot.
+            // Note: If we called destroy() here, it would free memory that the
+            // owner might still be using, causing use-after-free when the owner
+            // tries to destroy it later.
+            it.erase();
             continue;
           }
         }
@@ -1046,7 +1052,10 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
       }
     } else {
       // value not found in _valueCount but requires destruction
-      element.destroy();
+      // This means the value was stolen - ownership was transferred.
+      // We should NOT destroy it here because the owner (who stole it) is
+      // responsible for destruction. Just erase it to clear the slot.
+      element.erase();
       return;
     }
   }

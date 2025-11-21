@@ -1237,61 +1237,42 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   block->steal(stolen);
 
   // Now call referenceValuesFromRow() - the value is NOT in _valueCount
-  // In RELEASE builds (where TRI_ASSERT is removed), this will:
-  // 1. operator[] creates default ValueInfo{refCount=0, memoryUsage=0}
-  // 2. refCount is incremented to 1, but memoryUsage stays 0 (BUG!)
-  // 3. Value is copied to row 1 with bad _valueCount entry
+  // With the FIXED code, this will:
+  // 1. Check if value is in _valueCount -> NOT FOUND (was stolen)
+  // 2. Clone the value to get our own copy
+  // 3. Use setValue() to register the cloned value properly in _valueCount
   RegIdFlatSet regs;
   regs.insert(RegisterId::makeRegular(0));
   block->referenceValuesFromRow(1, regs, 0);
 
-  // CRITICAL STATE AFTER referenceValuesFromRow():
-  // - Row 0: Value in _data[0], NOT in _valueCount (was stolen)
-  // - Row 1: Value in _data[1], IN _valueCount with refCount=1, memoryUsage=0
-  // (BUG!)
-  // - Both point to the SAME heap memory (same pointer value)
+  // CRITICAL STATE AFTER referenceValuesFromRow() (WITH FIX):
+  // - Row 0: Value in _data[0], NOT in _valueCount (was stolen) - points to
+  // original memory
+  // - Row 1: Value in _data[1], IN _valueCount with refCount=1,
+  // memoryUsage=correct
+  // - Row 1 points to CLONED memory (different pointer from row 0)
+  // - Both rows have their own independent memory
 
   // STEP 4: Destroy the block
-  // CRITICAL: We must destroy the block BEFORE destroying the stolen value.
-  // If we destroy stolen first, it frees the memory, and then when the block
-  // tries to destroy _data[0] and _data[1], they point to freed memory.
-  // By destroying the block first, we can detect if there's a leak in the
-  // block's destruction logic.
-  //
-  // With the buggy code, destroy() processes rows in order (0, 1, 2, ...):
+  // With the FIXED code, destroy() processes rows in order (0, 1, 2, ...):
   // - Process row 0: Value in _data[0], lookup in _valueCount -> NOT FOUND (was
   // stolen)
   //   - Line 330: Calls it.destroy() directly
-  //   - destroy() calls deallocateSupervised() -> frees memory, sets pointer to
-  //   nullptr
-  //   - BUT: This only affects _data[0]'s AqlValue object, not _data[1]'s!
+  //   - destroy() calls deallocateSupervised() -> frees original memory
   // - Process row 1: Value in _data[1], lookup in _valueCount -> FOUND with
-  // refCount=1, memoryUsage=0
+  // refCount=1
   //   - Line 322: Decrements refCount to 0
-  //   - Line 323: totalUsed += memoryUsage (adds 0, so no change to block's
-  //   memory tracking)
+  //   - Line 323: totalUsed += memoryUsage (correct memory usage)
   //   - Line 324: Calls it.destroy()
-  //   - destroy() checks if pointer is nullptr - it's NOT (row 1 still has
-  //   original pointer)
-  //   - destroy() calls deallocateSupervised() -> tries to free already-freed
-  //   memory!
-  //   - This could cause double-free OR if there's protection, it might skip
-  //   freeing
-  //
-  // THE ACTUAL BUG SCENARIO:
-  // If row 0's destroy() doesn't actually free the memory (maybe due to some
-  // condition), or if row 1's destroy() is skipped due to some bug, we get a
-  // leak. The leak report shows memory allocated in allocateSupervised is never
-  // freed, which means deallocateSupervised is never called (or called
-  // incorrectly).
+  //   - destroy() calls deallocateSupervised() -> frees cloned memory
+  //   (different pointer, safe)
+  // Both memories are properly freed, no leaks, no double-free!
   block.reset(nullptr);
 
-  // Clean up the stolen value AFTER block destruction
-  // This ensures we can detect leaks in the block's destruction logic first.
-  // If the block properly destroyed everything, stolen.destroy() should be safe
-  // (though it might try to free already-freed memory if row 0 already freed
-  // it).
-  stolen.destroy();
+  // DO NOT call stolen.destroy() after block destruction!
+  // The block already destroyed row 0's value, which points to the same memory
+  // as stolen. Calling stolen.destroy() would cause use-after-free. The stolen
+  // value's memory was already freed by the block's destroy() of row 0.
 
   // THIS ASSERTION SHOULD FAIL WITH THE BUGGY CODE
   // If the bug exists, memory won't be fully released
