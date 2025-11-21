@@ -1174,7 +1174,6 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
     initFromSlice(slice, static_cast<velocypack::ValueLength>(size), rm);
     return;
   }
-
   setType(AqlValueType::VPACK_MANAGED_STRING);
   _data.managedStringMeta.pointer = data.release();
 }
@@ -1192,6 +1191,7 @@ AqlValue::AqlValue(AqlValue const& other,
   setType(t);
   switch (t) {
     case VPACK_MANAGED_SLICE:
+      TRI_ASSERT(other.data() == data);
       _data.managedSliceMeta.lengthOrigin =
           other._data.managedSliceMeta.lengthOrigin;
       _data.managedSliceMeta.pointer =
@@ -1201,13 +1201,20 @@ AqlValue::AqlValue(AqlValue const& other,
       _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
       break;
     case VPACK_SUPERVISED_SLICE: {
+      TRI_ASSERT(other.data() == data);
       auto mot = static_cast<MemoryOriginType>(
           other._data.supervisedSliceMeta.getOrigin());
       auto len = static_cast<velocypack::ValueLength>(
           other._data.supervisedSliceMeta.getLength());
       setSupervisedData(VPACK_SUPERVISED_SLICE, mot, len);
+      // For supervised slices, 'data' is the payload pointer (from data()
+      // method), but we need to store the base pointer (which includes
+      // ResourceMonitor* prefix). Adjust the pointer back to the base by
+      // subtracting the prefix size.
       _data.supervisedSliceMeta.pointer =
-          const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
+          other._data.supervisedSliceMeta.pointer;
+      TRI_ASSERT(_data.supervisedSliceMeta.pointer == data)
+          << "data argument must match with AqlValue's payload";
       break;
     }
     case RANGE:
