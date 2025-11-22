@@ -1615,28 +1615,24 @@ size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
   switch (t) {
     case AqlValue::VPACK_INLINE:
       return static_cast<size_t>(
-          VPackSlice(x._data.inlineSliceMeta.slice).normalizedHash(0xdeadbeef));
+          VPackSlice(x._data.inlineSliceMeta.slice).volatileHash());
     case AqlValue::VPACK_INLINE_INT64:
     case AqlValue::VPACK_INLINE_UINT64:
     case AqlValue::VPACK_INLINE_DOUBLE:
       return static_cast<size_t>(
-          VPackSlice(x._data.longNumberMeta.data.slice.slice)
-              .normalizedHash(0xdeadbeef));
+          VPackSlice(x._data.longNumberMeta.data.slice.slice).volatileHash());
+      // TODO(MBkkt) these hashes have bad distribution
     case AqlValue::VPACK_SLICE_POINTER:
-      return static_cast<size_t>(VPackSlice(x._data.slicePointerMeta.pointer)
-                                     .normalizedHash(0xdeadbeef));
+      return std::hash<void const*>()(x._data.slicePointerMeta.pointer);
     case AqlValue::VPACK_MANAGED_SLICE:
-      return static_cast<size_t>(VPackSlice(x._data.managedSliceMeta.pointer)
-                                     .normalizedHash(0xdeadbeef));
+      return std::hash<void const*>()(x._data.managedSliceMeta.pointer);
     case AqlValue::VPACK_MANAGED_STRING:
-      return static_cast<size_t>(
-          x._data.managedStringMeta.toSlice().normalizedHash(0xdeadbeef));
+      return std::hash<void const*>()(x._data.managedStringMeta.pointer);
     case AqlValue::VPACK_SUPERVISED_SLICE:
-      return static_cast<size_t>(
-          VPackSlice(x._data.supervisedSliceMeta.getPayloadPtr())
-              .normalizedHash(0xdeadbeef));
+      return std::hash<void const*>()(
+          x._data.supervisedSliceMeta.getPayloadPtr());
     case AqlValue::RANGE:
-      return static_cast<size_t>(x.hash(0xdeadbeef));
+      return std::hash<void const*>()(x._data.rangeMeta.range);
   }
   return 0;
 }
@@ -1658,16 +1654,14 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
       case T::VPACK_SLICE_POINTER:
-        // VPACK_SLICE_POINTER is not owned, so pointer comparison is
-        // appropriate
         return a._data.slicePointerMeta.pointer ==
                b._data.slicePointerMeta.pointer;
       case T::VPACK_MANAGED_SLICE:
-        return VPackSlice(a._data.managedSliceMeta.pointer)
-            .binaryEquals(VPackSlice(b._data.managedSliceMeta.pointer));
+        return a._data.managedSliceMeta.pointer ==
+               b._data.managedSliceMeta.pointer;
       case T::VPACK_MANAGED_STRING:
-        return a._data.managedStringMeta.toSlice().binaryEquals(
-            b._data.managedStringMeta.toSlice());
+        return a._data.managedStringMeta.pointer ==
+               b._data.managedStringMeta.pointer;
       case T::VPACK_SUPERVISED_SLICE: {
         auto as = VPackSlice(a._data.supervisedSliceMeta.getPayloadPtr());
         auto bs = VPackSlice(b._data.supervisedSliceMeta.getPayloadPtr());
@@ -1676,7 +1670,6 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::RANGE:
         return a._data.rangeMeta.range == b._data.rangeMeta.range;
     }
-    TRI_ASSERT(false);
     return false;
   }
 
