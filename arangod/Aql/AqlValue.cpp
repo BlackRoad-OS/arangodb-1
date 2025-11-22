@@ -1185,7 +1185,7 @@ AqlValue::AqlValue(AqlValue const& other,
       setSupervisedData(VPACK_SUPERVISED_SLICE, mot, len);
       _data.supervisedSliceMeta.pointer =
           other._data.supervisedSliceMeta.pointer;
-      TRI_ASSERT(_data.supervisedSliceMeta.pointer == data)
+      TRI_ASSERT(_data.supervisedSliceMeta.getPayloadPtr() == data)
           << "data argument must match with AqlValue's payload";
       break;
     }
