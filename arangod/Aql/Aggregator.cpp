@@ -186,7 +186,12 @@ struct AggregatorMin final : public Aggregator {
          AqlValue::Compare(_vpackOptions, value, cmpValue, true) > 0)) {
       // the value `null` itself will not be used in MIN() to compare lower than
       // e.g. value `false`
-      value.destroy();
+      if (value.requiresDestruction()) {
+        value.destroy();
+      } else {
+        value.erase();  // clears inline values because destroy() doesn't call
+                        // erase() for this case
+      }
       value = cmpValue.clone();
     }
   }
@@ -220,7 +225,12 @@ struct AggregatorMax final : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     if (value.isEmpty() ||
         AqlValue::Compare(_vpackOptions, value, cmpValue, true) < 0) {
-      value.destroy();
+      if (value.requiresDestruction()) {
+        value.destroy();
+      } else {
+        value.erase();  // clears inline values because destroy() doesn't call
+                        // erase() for this case
+      }
       value = cmpValue.clone();
     }
   }
