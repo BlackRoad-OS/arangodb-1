@@ -1636,7 +1636,8 @@ size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
     case AqlValue::VPACK_MANAGED_STRING:
       return std::hash<void const*>()(x._data.managedStringMeta.pointer);
     case AqlValue::VPACK_SUPERVISED_SLICE:
-      return std::hash<void const*>()(x._data.supervisedSliceMeta.pointer);
+      return std::hash<void const*>()(
+          x._data.supervisedSliceMeta.getPayloadPtr());
     case AqlValue::RANGE:
       return std::hash<void const*>()(x._data.rangeMeta.range);
   }
@@ -1668,9 +1669,11 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_MANAGED_STRING:
         return a._data.managedStringMeta.pointer ==
                b._data.managedStringMeta.pointer;
-      case T::VPACK_SUPERVISED_SLICE:
-        return a._data.supervisedSliceMeta.pointer ==
-               b._data.supervisedSliceMeta.pointer;
+      case T::VPACK_SUPERVISED_SLICE: {
+        auto as = VPackSlice(a._data.supervisedSliceMeta.getPayloadPtr());
+        auto bs = VPackSlice(b._data.supervisedSliceMeta.getPayloadPtr());
+        return as.binaryEquals(bs);  // ignore monitor*
+      }
       case T::RANGE:
         return a._data.rangeMeta.range == b._data.rangeMeta.range;
     }
