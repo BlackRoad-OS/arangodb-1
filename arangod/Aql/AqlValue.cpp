@@ -1584,7 +1584,12 @@ uint8_t* AqlValue::allocateSupervised(arangodb::ResourceMonitor& rm,
   }
 
   *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-  rm.increaseMemoryUsage(total);
+  try {
+    rm.increaseMemoryUsage(total);
+  } catch (...) {
+    ::operator delete(base);
+    throw;
+  }
   return reinterpret_cast<uint8_t*>(base);
 }
 
@@ -1593,7 +1598,9 @@ void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
     return;
   }
   auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
-  rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
+  if (rm != nullptr) {
+    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
+  }
   ::operator delete(static_cast<void*>(base));
 }
 
@@ -1629,8 +1636,7 @@ size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
     case AqlValue::VPACK_MANAGED_STRING:
       return std::hash<void const*>()(x._data.managedStringMeta.pointer);
     case AqlValue::VPACK_SUPERVISED_SLICE:
-      return std::hash<void const*>()(
-          x._data.supervisedSliceMeta.getPayloadPtr());
+      return std::hash<void const*>()(x._data.supervisedSliceMeta.pointer);
     case AqlValue::RANGE:
       return std::hash<void const*>()(x._data.rangeMeta.range);
   }
@@ -1662,11 +1668,9 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_MANAGED_STRING:
         return a._data.managedStringMeta.pointer ==
                b._data.managedStringMeta.pointer;
-      case T::VPACK_SUPERVISED_SLICE: {
-        auto as = VPackSlice(a._data.supervisedSliceMeta.getPayloadPtr());
-        auto bs = VPackSlice(b._data.supervisedSliceMeta.getPayloadPtr());
-        return as.binaryEquals(bs);  // ignore monitor*
-      }
+      case T::VPACK_SUPERVISED_SLICE:
+        return a._data.supervisedSliceMeta.pointer ==
+               b._data.supervisedSliceMeta.pointer;
       case T::RANGE:
         return a._data.rangeMeta.range == b._data.rangeMeta.range;
     }
