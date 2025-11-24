@@ -918,7 +918,9 @@ void ExecutionEngine::initializeConstValueBlock(
               TRI_ASSERT(!value.isNone());
               // the constValueBlock takes ownership, so we have to create a
               // copy here.
-              block->emplaceValue(0, reg.value(), AqlValue(value.slice()));
+              block->emplaceValue(
+                  0, reg.value(),
+                  AqlValue(value.slice(), 0, &_query.resourceMonitor()));
             }
           } else if (var->type() == Variable::Type::BindParameter) {
             RegisterId reg = regPlan->variableToOptionalRegisterId(var->id);
@@ -928,7 +930,9 @@ void ExecutionEngine::initializeConstValueBlock(
                 THROW_ARANGO_EXCEPTION(TRI_ERROR_QUERY_BIND_PARAMETER_MISSING);
               }
 
-              block->emplaceValue(0, reg.value(), AqlValue(slice));
+              block->emplaceValue(
+                  0, reg.value(),
+                  AqlValue(slice, 0, &_query.resourceMonitor()));
             }
           }
         });
