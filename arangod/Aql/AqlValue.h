@@ -137,14 +137,14 @@ struct AqlValue final {
     VPACK_MANAGED_STRING,  // contains vpack in std::string*,
                            // std::string always bigger than 15 bytes,
                            // std::string* allocated via new
-    VPACK_SUPERVISED_SLICE,
     RANGE,  // a pointer to a range remembering lower and upper bound, managed
     VPACK_INLINE_INT64,   // contains vpack data, inline and unpacked 64bit int
                           // number value (in little-endian)
     VPACK_INLINE_UINT64,  // contains vpack data, inline and unpacked 64bit uint
                           // number value (in little-endian)
-    VPACK_INLINE_DOUBLE   // contains vpack data, inline and unpacked 64bit
+    VPACK_INLINE_DOUBLE,  // contains vpack data, inline and unpacked 64bit
                           // double number value (in little-endian)
+    VPACK_SUPERVISED_SLICE
   };
 
   static_assert(

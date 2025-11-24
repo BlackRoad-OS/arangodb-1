@@ -959,61 +959,42 @@ void AqlValue::destroy() noexcept {
       delete _data.rangeMeta.range;
       break;
     case VPACK_SUPERVISED_SLICE: {
-      // Fast path: check if pointer is already null
       if (_data.supervisedSliceMeta.pointer == nullptr) {
         erase();
         return;
       }
 
-      // Check if payload pointer is null (safety check)
-      uint8_t* payload = _data.supervisedSliceMeta.getPayloadPtr();
-      if (payload == nullptr) {
-        // Invalid state - pointer is non-null but payload would be null
+      uint8_t* base = _data.supervisedSliceMeta.pointer;
+
+      if (reinterpret_cast<uintptr_t>(base) %
+              alignof(arangodb::ResourceMonitor*) !=
+          0) {
         _data.supervisedSliceMeta.pointer = nullptr;
         _data.supervisedSliceMeta.lengthOrigin = 0;
         erase();
         return;
       }
 
-      // Use the ResourceMonitor pointer slot in the allocated memory as a
-      // sentinel. The first 8 bytes of the allocated memory store the
-      // ResourceMonitor*. During normal operation, this always points to a
-      // valid ResourceMonitor (owned by the Query, which outlives all AqlValue
-      // objects). We repurpose this slot as a sentinel: when we deallocate, we
-      // set it to nullptr to mark the memory as deallocated. This ensures only
-      // one AqlValue actually deallocates the memory, even when multiple share
-      // the same pointer.
-      //
-      // The key difference from the first check:
-      // - First check: _data.supervisedSliceMeta.pointer (each AqlValue has its
-      // own copy)
-      // - This check: *rm_ptr (the ResourceMonitor* slot in the allocated
-      // memory, shared by all) When one AqlValue sets the sentinel (*rm_ptr =
-      // nullptr), all other AqlValues sharing the same memory will see it, even
-      // though their pointer fields are separate.
-      uint8_t* base = _data.supervisedSliceMeta.pointer;
+      constexpr uintptr_t kPageSize = 4096;
+      if (reinterpret_cast<uintptr_t>(base) < kPageSize) {
+        _data.supervisedSliceMeta.pointer = nullptr;
+        _data.supervisedSliceMeta.lengthOrigin = 0;
+        erase();
+        return;
+      }
+
       auto** rm_ptr = reinterpret_cast<arangodb::ResourceMonitor**>(base);
 
-      // Check if sentinel is set (we repurpose the ResourceMonitor* slot as a
-      // sentinel) If it's nullptr, another AqlValue already deallocated this
-      // memory
       arangodb::ResourceMonitor* rm = *rm_ptr;
       if (rm == nullptr) {
-        // Already deallocated by another AqlValue - the sentinel in shared
-        // memory is set
         _data.supervisedSliceMeta.pointer = nullptr;
         _data.supervisedSliceMeta.lengthOrigin = 0;
         erase();
         return;
       }
 
-      // Set sentinel to mark as deallocated (non-atomic is fine for
-      // single-threaded) We repurpose the ResourceMonitor* slot as a sentinel
-      // value (nullptr = deallocated) This prevents other AqlValue objects
-      // sharing the same memory from trying to deallocate it again
       *rm_ptr = nullptr;
 
-      // We successfully claimed ownership - we're responsible for deallocation
       auto len = _data.supervisedSliceMeta.getLength();
       _data.supervisedSliceMeta.pointer = nullptr;
       _data.supervisedSliceMeta.lengthOrigin = 0;
@@ -1413,9 +1394,10 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
         _data.managedSliceMeta.pointer = buffer.steal();
       }
     }
-    TRI_ASSERT(_data.managedSliceMeta.getLength() ==
-               VPackSlice(_data.managedSliceMeta.pointer).byteSize());
   }
+  TRI_ASSERT(_data.managedSliceMeta.getLength() ==
+             VPackSlice(_data.managedSliceMeta.pointer).byteSize());
+}
 }
 
 AqlValue::AqlValue(AqlValueHintSliceNoCopy v) noexcept
@@ -1652,6 +1634,15 @@ void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len,
   // The ResourceMonitor pointer is passed in (read before setting sentinel).
   // decreaseMemoryUsage is noexcept and uses atomic operations, so it
   // should be safe to call even if the ResourceMonitor is being destroyed.
+  // However, if rm is a dangling pointer (pointing to a destroyed
+  // ResourceMonitor), calling methods on it is undefined behavior and can cause
+  // crashes. The ResourceMonitor should outlive all AqlValue objects since it's
+  // managed by a shared_ptr in QueryContext, but during Query destruction there
+  // might be edge cases where the destruction order causes issues.
+  //
+  // NOTE: Supervised slices are not yet used in this branch. If this code path
+  // executes, it indicates type corruption or a bug where an AqlValue is
+  // incorrectly identified as having a supervised slice.
   if (rm != nullptr) {
     rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
   }
