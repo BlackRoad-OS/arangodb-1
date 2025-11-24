@@ -76,19 +76,53 @@ function ClusterDBServerShardMetricsTestSuite() {
     return docsToInsert;
   };
 
-  const getMetricsAndAssert = function(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated) {
+  const getMetricsAndAssert = function(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync = null, expectedShardsNotReplicated = null) {
     const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
     assertEqual(shardsNumMetricValue, expectedShardsNum);
 
     const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
     assertEqual(shardsLeaderNumMetricValue, expectedShardsLeaderNum);
 
-    const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
-    assertEqual(shardsOutOfSyncNumMetricValue, expectedShardsOutOfSync);
+    if (expectedShardsOutOfSync !== null) {
+      const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
+      assertEqual(shardsOutOfSyncNumMetricValue, expectedShardsOutOfSync);
+    }
 
-    const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
-    assertEqual(shardsNotReplicatedNumMetricValue, expectedShardsNotReplicated);
+    if (expectedShardsNotReplicated !== null) {
+      const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
+      assertEqual(shardsNotReplicatedNumMetricValue, expectedShardsNotReplicated);
+    }
   };
+
+  const getMetricsAndEventuallyAssert = function(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated) {
+    for(let i = 0; i < 100; i++) {
+      internal.wait(1);
+      const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
+      if(shardsNumMetricValue !== expectedShardsNum) {
+        print(`The metric ${shardsNumMetric} has value ${shardsNumMetricValue} should have been ${expectedShardsNum}`);
+        continue;
+      }
+      const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
+      if(shardsLeaderNumMetricValue !== expectedShardsLeaderNum) {
+        print(`The metric ${shardsLeaderNumMetric} has value ${shardsLeaderNumMetricValue} should have been ${expectedShardsLeaderNum}`);
+        continue;
+      }
+      const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
+      if(shardsOutOfSyncNumMetricValue !== expectedShardsOutOfSync) {
+        print(`The metric ${shardsOutOfSyncNumMetric} has value ${shardsOutOfSyncNumMetricValue} should have been ${expectedShardsOutOfSync}`);
+        continue;
+      }
+      const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
+      if(shardsNotReplicatedNumMetricValue !== expectedShardsNotReplicated) {
+        print(`The metric ${shardsNotReplicatedNumMetric} has value ${shardsNotReplicatedNumMetricValue} should have been ${expectedShardsNotReplicated}`);
+        continue;
+      }
+
+      break;
+    }
+
+    getMetricsAndAssert(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated);
+  }
 
   return {
     tearDown: function () {
@@ -107,7 +141,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       internal.wait(3);
       // shardsNum: 24 + 16 (2 * 8), 24 shards from old database + 16 shards from new database
       // shardsLeaderNum: 12 + 8 from new database
-      getMetricsAndAssert(dbServers, 40, 20, 0, 0);
+      getMetricsAndEventuallyAssert(dbServers, 40, 20, 0, 0);
 
       db._useDatabase(dbName);
       db._create(collectionName, {
@@ -115,7 +149,6 @@ function ClusterDBServerShardMetricsTestSuite() {
         replicationFactor: 2
       });
 
-      // TODO Eventually
       internal.wait(3);
  
       // Check stability of metrics
@@ -174,40 +207,17 @@ function ClusterDBServerShardMetricsTestSuite() {
       // Get metrics after we kill one db server with follower
       const onlineServers = dbServers.filter(server => server.id !== dbServerWithoutLeader.id);
       // The server we crashed had two followers, so we have 2 out of sync shards
-      getMetricsAndAssert(onlineServers, 44, 22, 2, 0);
+      // also other system shards might also be out of sync
+      const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
+      assertTrue(shardsOutOfSyncNumMetricValue >= 2);
+      getMetricsAndAssert(onlineServers, 44, 22, null, 0);
 
       // Wait for maintenance to update metrics
       dbServerWithoutLeader.resume();
-      internal.wait(2);
+      internal.wait(1);
 
       // Eventually true
-      for(let i = 0; i < 100; i++) {
-        internal.wait(1);
-        const shardsNumMetricValue = getDBServerMetricSum(dbServers, shardsNumMetric);
-        if(shardsNumMetricValue !== 46) {
-          print(`The metric ${shardsNumMetric} has value ${shardsNumMetricValue} should have been 46`);
-          continue;
-        }
-        const shardsLeaderNumMetricValue = getDBServerMetricSum(dbServers, shardsLeaderNumMetric);
-        if(shardsLeaderNumMetricValue !== 22) {
-          print(`The metric ${shardsLeaderNumMetric} has value ${shardsLeaderNumMetricValue} should have been 22`);
-          continue;
-        }
-        const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(dbServers, shardsOutOfSyncNumMetric);
-        if(shardsOutOfSyncNumMetricValue !== 0) {
-          print(`The metric ${shardsOutOfSyncNumMetric} has value ${shardsOutOfSyncNumMetricValue} should have been 0`);
-          continue;
-        }
-        const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(dbServers, shardsNotReplicatedNumMetric);
-        if(shardsNotReplicatedNumMetricValue !== 0) {
-          print(`The metric ${shardsNotReplicatedNumMetric} has value ${shardsNotReplicatedNumMetricValue} should have been 0`);
-          continue;
-        }
-
-        break;
-      }
-
-      getMetricsAndAssert(dbServers, 46, 22, 0, 0);
+      getMetricsAndEventuallyAssert(dbServers, 46, 22, 0, 0);
     },
 
     testShardNotReplicatedMetricChange: function () {
@@ -242,9 +252,10 @@ function ClusterDBServerShardMetricsTestSuite() {
       // and we cannot assert precisely the values since we do not know the
       // shards distribution of internal collections from _system and $dbName databases, but we can assert that
       // the shardsOutOfSync and shardsNotReplicated are the same
+      getMetricsAndEventuallyAssert(onlineServers, null, null, 21, 21);
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(onlineServers, shardsNotReplicatedNumMetric);
-      assertTrue(shardsOutOfSyncNumMetricValue > 0);
+      assertTrue(shardsOutOfSyncNumMetricValue >= 1);
       assertEqual(shardsNotReplicatedNumMetricValue, shardsOutOfSyncNumMetricValue);
 
       // Bring back the followers
@@ -254,33 +265,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       internal.wait(2);
 
       // Eventually true
-      for(let i = 0; i < 100; i++) {
-        internal.wait(1);
-        const shardsNumMetricValue = getDBServerMetricSum(dbServers, shardsNumMetric);
-        if(shardsNumMetricValue !== 43) {
-          print(`The metric ${shardsNumMetric} has value ${shardsNumMetricValue} should have been 43`);
-          continue;
-        }
-        const shardsLeaderNumMetricValue = getDBServerMetricSum(dbServers, shardsLeaderNumMetric);
-        if(shardsLeaderNumMetricValue !== 21) {
-          print(`The metric ${shardsLeaderNumMetric} has value ${shardsLeaderNumMetricValue} should have been 21`);
-          continue;
-        }
-        const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(dbServers, shardsOutOfSyncNumMetric);
-        if(shardsOutOfSyncNumMetricValue !== 0) {
-          print(`The metric ${shardsOutOfSyncNumMetric} has value ${shardsOutOfSyncNumMetricValue} should have been 0`);
-          continue;
-        }
-        const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(dbServers, shardsNotReplicatedNumMetric);
-        if(shardsNotReplicatedNumMetricValue !== 0) {
-          print(`The metric ${shardsNotReplicatedNumMetric} has value ${shardsNotReplicatedNumMetricValue} should have been 0`);
-          continue;
-        }
-
-        break;
-      }
-
-      getMetricsAndAssert(dbServers, 43, 21, 0, 0);
+      getMetricsAndEventuallyAssert(dbServers, 43, 21, 0, 0);
     },
 
     testShardMetricsDuringMoveLeader: function () {
@@ -307,6 +292,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       // Move the shard (swap leader and follower) and wait for completion
       const moveResult = moveShard(dbName, collectionName, shardId, 
                                    fromServer, toServer, false);
+      assertTrue(moveResult);
 
       // The metrics should remain the same
       getMetricsAndAssert(dbServers, 46, 22, 0, 0);
@@ -333,15 +319,14 @@ function ClusterDBServerShardMetricsTestSuite() {
       const fromServer = shards[shardId][1]; // follower server
 
       const dbFreeDBServer = dbServers.filter(server => server.id != leaderServer && server.id != fromServer);
-      print(dbFreeDBServer);
       const toServer = dbFreeDBServer[0].id;
-      print(toServer);
       assertEqual(dbFreeDBServer.length, 1);
       assertNotEqual(fromServer, dbFreeDBServer);
 
       // Move the shard (swap leader and follower) and wait for completion
       const moveResult = moveShard(dbName, collectionName, shardId, 
                                    fromServer, toServer, false);
+      assertTrue(moveResult);
 
       // The metrics should remain the same
       getMetricsAndAssert(dbServers, 42, 21, 0, 0);
