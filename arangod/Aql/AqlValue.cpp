@@ -1621,7 +1621,7 @@ void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
     rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
     *rmPtr = nullptr;
   }
-  .::operator delete(static_cast<void*>(base));
+  ::operator delete(static_cast<void*>(base));
 }
 
 bool operator==(AqlValue const& a, AqlValue const& b) noexcept {
