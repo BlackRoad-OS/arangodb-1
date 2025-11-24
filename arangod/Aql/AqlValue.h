@@ -137,14 +137,14 @@ struct AqlValue final {
     VPACK_MANAGED_STRING,  // contains vpack in std::string*,
                            // std::string always bigger than 15 bytes,
                            // std::string* allocated via new
-    VPACK_SUPERVISED_SLICE,
     RANGE,  // a pointer to a range remembering lower and upper bound, managed
     VPACK_INLINE_INT64,   // contains vpack data, inline and unpacked 64bit int
                           // number value (in little-endian)
     VPACK_INLINE_UINT64,  // contains vpack data, inline and unpacked 64bit uint
                           // number value (in little-endian)
-    VPACK_INLINE_DOUBLE   // contains vpack data, inline and unpacked 64bit
+    VPACK_INLINE_DOUBLE,  // contains vpack data, inline and unpacked 64bit
                           // double number value (in little-endian)
+    VPACK_SUPERVISED_SLICE
   };
 
   static_assert(
@@ -343,8 +343,7 @@ struct AqlValue final {
   // note: this is the default constructor and should be as cheap as possible
   AqlValue() noexcept;
 
-  explicit AqlValue(DocumentData& data,
-                    arangodb::ResourceMonitor* rm = nullptr) noexcept;
+  explicit AqlValue(DocumentData& data) noexcept;
 
   // construct from pointer, not copying!
   explicit AqlValue(uint8_t const* pointer) noexcept;
@@ -561,44 +560,18 @@ struct AqlValue final {
   void setSupervisedData(AqlValueType, MemoryOriginType,
                          velocypack::ValueLength);
 
-  inline void swap(AqlValue& other) noexcept;
+  static uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
+                                     std::uint64_t len);
 
-  static inline uint8_t* allocateSupervised(
-      arangodb::ResourceMonitor& rm, std::uint64_t len,
-      MemoryOriginType mot = MemoryOriginType::New) {
-    std::size_t total = kPrefix + static_cast<std::size_t>(len);
-    void* base = nullptr;
+  static void deallocateSupervised(uint8_t* base, std::uint64_t len,
+                                   arangodb::ResourceMonitor* rm) noexcept;
 
-    // choose allocator based on MemoryOriginType
-    if (mot == MemoryOriginType::Malloc) {
-      base = std::malloc(total);
-    } else {
-      base = ::operator new(total);  // default (New)
+  /// @brief get the ResourceMonitor pointer if this is a VPACK_SUPERVISED_SLICE
+  arangodb::ResourceMonitor* getResourceMonitor() const noexcept {
+    if (type() == VPACK_SUPERVISED_SLICE) {
+      return _data.supervisedSliceMeta.getResourceMonitor();
     }
-
-    if (ADB_UNLIKELY(base == nullptr)) {
-      THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
-    }
-
-    *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-    rm.increaseMemoryUsage(total);
-    return reinterpret_cast<uint8_t*>(base);
-  }
-
-  static inline void deallocateSupervised(
-      uint8_t* base, std::uint64_t len,
-      MemoryOriginType mot = MemoryOriginType::New) noexcept {
-    if (base == nullptr) {
-      return;
-    }
-    auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
-    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
-
-    if (mot == MemoryOriginType::Malloc) {
-      std::free(base);
-    } else {  // MemoryOriginType::New
-      ::operator delete(static_cast<void*>(base));
-    }
+    return nullptr;
   }
 };
 
