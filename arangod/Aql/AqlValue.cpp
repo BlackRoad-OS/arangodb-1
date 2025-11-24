@@ -1215,14 +1215,10 @@ AqlValue::AqlValue(AqlValue const& other,
       auto len = static_cast<velocypack::ValueLength>(
           other._data.supervisedSliceMeta.getLength());
       setSupervisedData(VPACK_SUPERVISED_SLICE, mot, len);
-
-      auto size = other._data.supervisedSliceMeta.getLength();
-      uint8_t* p = allocateSupervised(*other.getResourceMonitor(), size);
-      memcpy(p + kPrefix, data, size);
-      _data.supervisedSliceMeta.pointer = p;
-      TRI_ASSERT(
-          _data.supervisedSliceMeta.getLength() ==
-          VPackSlice(_data.supervisedSliceMeta.getPayloadPtr()).byteSize());
+      _data.supervisedSliceMeta.pointer =
+          other._data.supervisedSliceMeta.pointer;
+      TRI_ASSERT(_data.supervisedSliceMeta.getPayloadPtr() == data)
+          << "data argument must match with AqlValue's payload";
       break;
     }
     case RANGE:
