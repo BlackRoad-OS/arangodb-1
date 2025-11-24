@@ -1395,8 +1395,13 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
       }
     }
   }
-  TRI_ASSERT(_data.managedSliceMeta.getLength() ==
-             VPackSlice(_data.managedSliceMeta.pointer).byteSize());
+  // Only verify managed slices. Inline or supervised values set no managed
+  // slice pointer.
+  if (type() == VPACK_MANAGED_SLICE) {
+    TRI_ASSERT(_data.managedSliceMeta.getLength() ==
+               VPackSlice(_data.managedSliceMeta.pointer).byteSize());
+  }
+  // The function ends here. Do not close the namespace prematurely.
 }
 
 AqlValue::AqlValue(AqlValueHintSliceNoCopy v) noexcept
