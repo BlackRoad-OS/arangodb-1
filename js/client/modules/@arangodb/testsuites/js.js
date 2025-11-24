@@ -95,7 +95,7 @@ function jsDriver (options) {
         "--require",
         "source-map-support/register",
         "--timeout",
-        this.options.isInstrumented ? "100000" : "10000",
+        this.options.isInstrumented ? "120000" : "10000",
         "build/esm/test"
       ];
       if (this.options.testCase) {
