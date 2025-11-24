@@ -1398,7 +1398,6 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   TRI_ASSERT(_data.managedSliceMeta.getLength() ==
              VPackSlice(_data.managedSliceMeta.pointer).byteSize());
 }
-}
 
 AqlValue::AqlValue(AqlValueHintSliceNoCopy v) noexcept
     : AqlValue{v.slice.start()} {}
