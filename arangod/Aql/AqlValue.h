@@ -563,8 +563,7 @@ struct AqlValue final {
   static uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
                                      std::uint64_t len);
 
-  static void deallocateSupervised(uint8_t* base, std::uint64_t len,
-                                   arangodb::ResourceMonitor* rm) noexcept;
+  static void deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept;
 
   /// @brief get the ResourceMonitor pointer if this is a VPACK_SUPERVISED_SLICE
   arangodb::ResourceMonitor* getResourceMonitor() const noexcept {

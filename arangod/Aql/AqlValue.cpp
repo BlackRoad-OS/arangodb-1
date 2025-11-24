@@ -966,22 +966,10 @@ void AqlValue::destroy() noexcept {
 
       uint8_t* base = _data.supervisedSliceMeta.pointer;
 
-      if (reinterpret_cast<uintptr_t>(base) %
-              alignof(arangodb::ResourceMonitor*) !=
-          0) {
-        _data.supervisedSliceMeta.pointer = nullptr;
-        _data.supervisedSliceMeta.lengthOrigin = 0;
-        erase();
-        return;
-      }
-
-      constexpr uintptr_t kPageSize = 4096;
-      if (reinterpret_cast<uintptr_t>(base) < kPageSize) {
-        _data.supervisedSliceMeta.pointer = nullptr;
-        _data.supervisedSliceMeta.lengthOrigin = 0;
-        erase();
-        return;
-      }
+      // sanity test for corruption of the rm*
+      TRI_ASSERT(reinterpret_cast<uintptr_t>(base) %
+                     alignof(arangodb::ResourceMonitor*) ==
+                 0);
 
       auto** rm_ptr = reinterpret_cast<arangodb::ResourceMonitor**>(base);
 
@@ -998,7 +986,7 @@ void AqlValue::destroy() noexcept {
       auto len = _data.supervisedSliceMeta.getLength();
       _data.supervisedSliceMeta.pointer = nullptr;
       _data.supervisedSliceMeta.lengthOrigin = 0;
-      deallocateSupervised(base, len, rm);
+      deallocateSupervised(base, len);
       break;
     }
     default:
@@ -1630,26 +1618,14 @@ uint8_t* AqlValue::allocateSupervised(arangodb::ResourceMonitor& rm,
   return reinterpret_cast<uint8_t*>(base);
 }
 
-void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len,
-                                    arangodb::ResourceMonitor* rm) noexcept {
+void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
   if (base == nullptr) {
     return;
   }
-  // The ResourceMonitor pointer is passed in (read before setting sentinel).
-  // decreaseMemoryUsage is noexcept and uses atomic operations, so it
-  // should be safe to call even if the ResourceMonitor is being destroyed.
-  // However, if rm is a dangling pointer (pointing to a destroyed
-  // ResourceMonitor), calling methods on it is undefined behavior and can cause
-  // crashes. The ResourceMonitor should outlive all AqlValue objects since it's
-  // managed by a shared_ptr in QueryContext, but during Query destruction there
-  // might be edge cases where the destruction order causes issues.
-  //
-  // NOTE: Supervised slices are not yet used in this branch. If this code path
-  // executes, it indicates type corruption or a bug where an AqlValue is
-  // incorrectly identified as having a supervised slice.
-  if (rm != nullptr) {
-    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
-  }
+
+  auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
+  ADB_PROD_ASSERT(rm != nullptr);
+  rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
   ::operator delete(static_cast<void*>(base));
 }
 
