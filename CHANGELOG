@@ -3,8 +3,9 @@ devel
 
 * COR-8: Improved performance of shard statistics on DBservers by updating only
   metrics for databases with changes, rather than recalculating all metrics.
-  Added new metric `arangodb_shards_follower_number` to track the number of
-  follower shards on each DBserver.
+  Added new metrics `arangodb_shards_follower_number` to track the number of
+  follower shards on each DBserver and `arangodb_followers_out_of_sync_number`
+  to track follower shards that are out of sync with their leader.
 
 * COR-8: Added new metrics to track deployment metadata:
   - `arangodb_metadata_number_of_databases`: Total number of databases
