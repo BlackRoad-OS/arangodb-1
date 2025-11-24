@@ -228,8 +228,9 @@ OperationOptions ModificationExecutorHelpers::convertOptions(
   return out;
 }
 
-AqlValue ModificationExecutorHelpers::getDocumentOrNull(
-    velocypack::Slice elm, std::string const& key, ResourceMonitor* rm) {
+AqlValue ModificationExecutorHelpers::getDocumentOrNull(velocypack::Slice elm,
+                                                        std::string const& key,
+                                                        ResourceMonitor* rm) {
   if (velocypack::Slice s = elm.get(key); !s.isNone()) {
     return AqlValue{s, 0, rm};
   }

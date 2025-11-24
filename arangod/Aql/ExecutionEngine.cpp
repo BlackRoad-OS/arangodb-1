@@ -920,7 +920,8 @@ void ExecutionEngine::initializeConstValueBlock(
               // copy here.
               block->emplaceValue(
                   0, reg.value(),
-                  AqlValue(value.slice(), 0, &_query.resourceMonitor()));
+                  AqlValue(value.slice(), 0,
+                           &plan.getAst()->query().resourceMonitor()));
             }
           } else if (var->type() == Variable::Type::BindParameter) {
             RegisterId reg = regPlan->variableToOptionalRegisterId(var->id);
@@ -932,7 +933,8 @@ void ExecutionEngine::initializeConstValueBlock(
 
               block->emplaceValue(
                   0, reg.value(),
-                  AqlValue(slice, 0, &_query.resourceMonitor()));
+                  AqlValue(slice, 0,
+                           &plan.getAst()->query().resourceMonitor()));
             }
           }
         });
