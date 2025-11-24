@@ -27,7 +27,7 @@
 const jsunity = require("jsunity");
 const db = require("@arangodb").db;
 const internal = require("internal");
-const { getMetric, getDBServers } = require("@arangodb/test-helper");
+const { getMetric, getDBServers, moveShard } = require("@arangodb/test-helper");
 
 function ClusterDBServerShardMetricsTestSuite() {
   'use strict';
@@ -93,17 +93,17 @@ function ClusterDBServerShardMetricsTestSuite() {
   return {
     tearDown: function () {
       db._useDatabase("_system");
-      db._drop(collectionName);
       db._dropDatabase(dbName);
     },
 
     testShardCountMetricStability: function () {
       const dbServers = getDBServers();
-      // shardsNum: 12 * 2 (since the replciation factor for _system collections is 2)
+      // shardsNum: 12 * 2 (since the replication factor for _system collections is 2)
       // shardsLeaderNum: 12
       getMetricsAndAssert(dbServers, 24, 12, 0, 0);
 
       db._createDatabase(dbName);
+      // TODO Eventually
       internal.wait(3);
       // shardsNum: 24 + 16 (2 * 8), 24 shards from old database + 16 shards from new database
       // shardsLeaderNum: 12 + 8 from new database
@@ -112,8 +112,10 @@ function ClusterDBServerShardMetricsTestSuite() {
       db._useDatabase(dbName);
       db._create(collectionName, {
         numberOfShards: 6,
-        replicationFactor: 2 // does not matter for the test
+        replicationFactor: 2
       });
+
+      // TODO Eventually
       internal.wait(3);
  
       // Check stability of metrics
@@ -146,6 +148,7 @@ function ClusterDBServerShardMetricsTestSuite() {
 
     testShardOutOfSyncMetricChange: function () {
       const dbServers = getDBServers();
+      getMetricsAndAssert(dbServers, 24, 12, 0, 0);
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
@@ -155,8 +158,8 @@ function ClusterDBServerShardMetricsTestSuite() {
       });
 
       // Assert initial state
-      // shardsNum: 40 (from 2 databases) + (2 * 3) (from new collection)
-      // shardsLeaderNum: 12 (_system) + 8 (from new database) + 2 (from new collection)
+      // shardsNum: 40 (12 * 2 + 8 * 2) (from two databases) + 2 * 3 (from new collection)
+      // shardsLeaderNum: 12 + 8 + 2
       getMetricsAndAssert(dbServers, 46, 22, 0, 0);
 
       const shards = db[collectionName].shards(true);
@@ -216,7 +219,6 @@ function ClusterDBServerShardMetricsTestSuite() {
         numberOfShards: 1,
         replicationFactor: 3,
       });
-      internal.wait(3);
       getMetricsAndAssert(dbServers, 43, 21, 0, 0);
 
       const shards = db[collectionName].shards(true);
@@ -228,24 +230,24 @@ function ClusterDBServerShardMetricsTestSuite() {
       });
       internal.wait(2);
 
-      // Data is neccecary to trigger replication
+      // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
 
       // Get metrics after collection creation to see if they change
-      // THere should be only one dbserver alive
-      const onlineServers = dbServers.filter(server => !dbServerFollowersId.includes(server.id));
+      // There should be only one dbserver alive
+      const onlineServers =
+      dbServers.filter(server => !dbServerFollowersId.includes(server.id));
       assertEqual(onlineServers.length, 1);
-      print(onlineServers.map(server => server.id));
       // Everything is out of sync and not replicated
       // and we cannot assert precisely the values since we do not know the
-      // distribution of internal collections from _system and $dbName databases, but we can assert that
-      // the number of replicated shards and out of sync are the same
+      // shards distribution of internal collections from _system and $dbName databases, but we can assert that
+      // the shardsOutOfSync and shardsNotReplicated are the same
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(onlineServers, shardsNotReplicatedNumMetric);
       assertTrue(shardsOutOfSyncNumMetricValue > 0);
       assertEqual(shardsNotReplicatedNumMetricValue, shardsOutOfSyncNumMetricValue);
 
-      // Brining back the followers
+      // Bring back the followers
       dbServerFollowers.forEach(server => {
         server.resume();
       });
@@ -280,6 +282,71 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       getMetricsAndAssert(dbServers, 43, 21, 0, 0);
     },
+
+    testShardMetricsDuringMoveLeader: function () {
+      const dbServers = getDBServers();
+
+      db._createDatabase(dbName);
+      db._useDatabase(dbName);
+      let col = db._create(collectionName, {
+        numberOfShards: 2,
+        replicationFactor: 3,
+      });
+      // Data is necessary to trigger replication
+      db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
+
+      getMetricsAndAssert(dbServers, 46, 22, 0, 0);
+
+      // Get shard information - shards(true) returns server IDs
+      const shards = col.shards(true);
+      const shardId = Object.keys(shards)[0];
+      const fromServer = shards[shardId][0]; // leader server
+      const toServer = shards[shardId][1]; // follower server
+      assertNotEqual(fromServer, toServer);
+
+      // Move the shard (swap leader and follower) and wait for completion
+      const moveResult = moveShard(dbName, collectionName, shardId, 
+                                   fromServer, toServer, false);
+
+      // The metrics should remain the same
+      getMetricsAndAssert(dbServers, 46, 22, 0, 0);
+    },
+
+    testShardMetricsDuringMoveFollower: function () {
+      const dbServers = getDBServers();
+
+      db._createDatabase(dbName);
+      db._useDatabase(dbName);
+      let col = db._create(collectionName, {
+        numberOfShards: 1,
+        replicationFactor: 2,
+      });
+      // Data is necessary to trigger replication
+      db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
+
+      getMetricsAndAssert(dbServers, 42, 21, 0, 0);
+
+      // Get shard information - shards(true) returns server IDs
+      const shards = col.shards(true);
+      const shardId = Object.keys(shards)[0];
+      const leaderServer = shards[shardId][0]; // leader server
+      const fromServer = shards[shardId][1]; // follower server
+
+      const dbFreeDBServer = dbServers.filter(server => server.id != leaderServer && server.id != fromServer);
+      print(dbFreeDBServer);
+      const toServer = dbFreeDBServer[0].id;
+      print(toServer);
+      assertEqual(dbFreeDBServer.length, 1);
+      assertNotEqual(fromServer, dbFreeDBServer);
+
+      // Move the shard (swap leader and follower) and wait for completion
+      const moveResult = moveShard(dbName, collectionName, shardId, 
+                                   fromServer, toServer, false);
+
+      // The metrics should remain the same
+      getMetricsAndAssert(dbServers, 42, 21, 0, 0);
+    },
+
   };
 }
 
