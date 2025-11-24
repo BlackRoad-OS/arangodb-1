@@ -53,6 +53,7 @@ const MetricNames = {
   SHARD_LEADER_COUNT: "arangodb_shards_leader_number",
   SHARD_FOLLOWER_COUNT: "arangodb_shards_follower_number",
   SHARD_OUT_OF_SYNC_COUNT: "arangodb_shards_out_of_sync",
+  FOLLOWERS_OUT_OF_SYNC_COUNT: "arangodb_followers_out_of_sync_number",
   SHARD_NOT_REPLICATED_COUNT: "arangodb_shards_not_replicated",
   SYNC_TIMEOUTS_TOTAL: "arangodb_sync_timeouts_total",
   HEARTBEAT_BUCKET: "arangodb_heartbeat_send_time_msec_bucket",
@@ -472,6 +473,7 @@ describe('_admin/metrics', () => {
             leaderCount: dbMetrics[MetricNames.SHARD_LEADER_COUNT],
             followerCount: dbMetrics[MetricNames.SHARD_FOLLOWER_COUNT],
             outOfSyncCount: dbMetrics[MetricNames.SHARD_OUT_OF_SYNC_COUNT],
+            followersOutOfSyncCount: dbMetrics[MetricNames.FOLLOWERS_OUT_OF_SYNC_COUNT],
             notReplicatedCount: dbMetrics[MetricNames.SHARD_NOT_REPLICATED_COUNT]
           });
           require("internal").wait(0.5); // Small delay between readings
@@ -488,6 +490,8 @@ describe('_admin/metrics', () => {
             `Follower count inconsistent at reading ${i}: expected ${firstReading.followerCount}, got ${readings[i].followerCount}`);
           expect(readings[i].outOfSyncCount).to.equal(firstReading.outOfSyncCount,
             `Out-of-sync count inconsistent at reading ${i}: expected ${firstReading.outOfSyncCount}, got ${readings[i].outOfSyncCount}`);
+          expect(readings[i].followersOutOfSyncCount).to.equal(firstReading.followersOutOfSyncCount,
+            `Followers out-of-sync count inconsistent at reading ${i}: expected ${firstReading.followersOutOfSyncCount}, got ${readings[i].followersOutOfSyncCount}`);
           expect(readings[i].notReplicatedCount).to.equal(firstReading.notReplicatedCount,
             `Not-replicated count inconsistent at reading ${i}: expected ${firstReading.notReplicatedCount}, got ${readings[i].notReplicatedCount}`);
         }
@@ -501,6 +505,7 @@ describe('_admin/metrics', () => {
           'Follower count should equal total shards minus leader shards');
         // Since we wait for sync replication, out-of-sync and not-replicated should be 0
         expect(firstReading.outOfSyncCount).to.equal(0, 'Expected 0 out-of-sync shards after waitForSyncReplication');
+        expect(firstReading.followersOutOfSyncCount).to.equal(0, 'Expected 0 followers out-of-sync after waitForSyncReplication');
         expect(firstReading.notReplicatedCount).to.equal(0, 'Expected 0 not-replicated shards after waitForSyncReplication');
       } finally {
         db._drop("ConsistencyTestCollection");
