@@ -1,6 +1,9 @@
 devel
 -----
 
+* COR-8: Improved performance of shard statistics on DBservers by updating only
+  metrics for databases with changes, rather than recalculating all metrics.
+
 * COR-8: Added new metrics to track deployment metadata:
   - `arangodb_metadata_number_of_databases`: Total number of databases
   - `arangodb_metadata_number_of_collections`: Total number of collections
