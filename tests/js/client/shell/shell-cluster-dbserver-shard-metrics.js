@@ -1,5 +1,5 @@
 /*jshint globalstrict:false, strict:false, maxlen: 500 */
-/*global assertEqual, assertTrue, assertFalse, assertNotEqual, print */
+/*global assertEqual, assertTrue, assertFalse, assertNotEqual, print, */
 
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
@@ -78,12 +78,15 @@ function ClusterDBServerShardMetricsTestSuite() {
 
   const getMetricsAndAssert = function(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated) {
     const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
-    const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
-    const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
-    const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
     assertEqual(shardsNumMetricValue, expectedShardsNum);
+
+    const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
     assertEqual(shardsLeaderNumMetricValue, expectedShardsLeaderNum);
+
+    const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
     assertEqual(shardsOutOfSyncNumMetricValue, expectedShardsOutOfSync);
+
+    const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
     assertEqual(shardsNotReplicatedNumMetricValue, expectedShardsNotReplicated);
   };
 
