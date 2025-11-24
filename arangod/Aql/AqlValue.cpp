@@ -975,6 +975,14 @@ void AqlValue::destroy() noexcept {
         return;
       }
 
+      constexpr uintptr_t kPageSize = 4096;
+      if (reinterpret_cast<uintptr_t>(base) < kPageSize) {
+        _data.supervisedSliceMeta.pointer = nullptr;
+        _data.supervisedSliceMeta.lengthOrigin = 0;
+        erase();
+        return;
+      }
+
       auto** rm_ptr = reinterpret_cast<arangodb::ResourceMonitor**>(base);
 
       arangodb::ResourceMonitor* rm = *rm_ptr;
