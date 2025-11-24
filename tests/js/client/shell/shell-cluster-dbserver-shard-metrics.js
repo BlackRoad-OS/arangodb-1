@@ -122,7 +122,7 @@ function ClusterDBServerShardMetricsTestSuite() {
     }
 
     getMetricsAndAssert(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated);
-  }
+  };
 
   return {
     tearDown: function () {
@@ -318,7 +318,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       const leaderServer = shards[shardId][0]; // leader server
       const fromServer = shards[shardId][1]; // follower server
 
-      const dbFreeDBServer = dbServers.filter(server => server.id != leaderServer && server.id != fromServer);
+      const dbFreeDBServer = dbServers.filter(server => server.id !== leaderServer && server.id !== fromServer);
       const toServer = dbFreeDBServer[0].id;
       assertEqual(dbFreeDBServer.length, 1);
       assertNotEqual(fromServer, dbFreeDBServer);
