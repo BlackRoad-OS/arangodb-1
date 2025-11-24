@@ -971,21 +971,11 @@ void AqlValue::destroy() noexcept {
                      alignof(arangodb::ResourceMonitor*) ==
                  0);
 
-      auto** rm_ptr = reinterpret_cast<arangodb::ResourceMonitor**>(base);
+      std::uint64_t len = _data.supervisedSliceMeta.getLength();
 
-      arangodb::ResourceMonitor* rm = *rm_ptr;
-      if (rm == nullptr) {
-        _data.supervisedSliceMeta.pointer = nullptr;
-        _data.supervisedSliceMeta.lengthOrigin = 0;
-        erase();
-        return;
-      }
-
-      *rm_ptr = nullptr;
-
-      auto len = _data.supervisedSliceMeta.getLength();
       _data.supervisedSliceMeta.pointer = nullptr;
       _data.supervisedSliceMeta.lengthOrigin = 0;
+
       deallocateSupervised(base, len);
       break;
     }
@@ -1623,10 +1613,15 @@ void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
     return;
   }
 
-  auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
+  auto rmPtr = reinterpret_cast<arangodb::ResourceMonitor**>(base);
+  arangodb::ResourceMonitor* rm = *rmPtr;
   ADB_PROD_ASSERT(rm != nullptr);
-  rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
-  ::operator delete(static_cast<void*>(base));
+
+  if (rm != nullptr) {
+    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
+    *rmPtr = nullptr;
+  }
+  .::operator delete(static_cast<void*>(base));
 }
 
 bool operator==(AqlValue const& a, AqlValue const& b) noexcept {
