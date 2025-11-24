@@ -106,6 +106,8 @@ DECLARE_GAUGE(arangodb_shards_number, uint64_t,
               "Number of shards on this machine");
 DECLARE_GAUGE(arangodb_shards_leader_number, uint64_t,
               "Number of leader shards on this machine");
+DECLARE_GAUGE(arangodb_shards_follower_number, uint64_t,
+              "Number of follower shards on this machine");
 DECLARE_GAUGE(arangodb_shards_not_replicated, uint64_t,
               "Number of shards not replicated at all");
 DECLARE_COUNTER(arangodb_sync_timeouts_total,
@@ -323,6 +325,8 @@ void MaintenanceFeature::initializeMetrics() {
   _shards_out_of_sync = &metricsFeature.add(arangodb_shards_out_of_sync{});
   _shards_total_count = &metricsFeature.add(arangodb_shards_number{});
   _shards_leader_count = &metricsFeature.add(arangodb_shards_leader_number{});
+  _shards_follower_count =
+      &metricsFeature.add(arangodb_shards_follower_number{});
   _shards_not_replicated_count =
       &metricsFeature.add(arangodb_shards_not_replicated{});
   _sync_timeouts_total = &metricsFeature.add(arangodb_sync_timeouts_total{});
@@ -1324,6 +1328,9 @@ void MaintenanceFeature::updateDatabaseStatistics() {
   TRI_ASSERT(_shards_leader_count != nullptr);
   _shards_leader_count->store(totalStats.leaderShards,
                               std::memory_order_relaxed);
+  TRI_ASSERT(_shards_follower_count != nullptr);
+  _shards_follower_count->store(totalStats.shards - totalStats.leaderShards,
+                                std::memory_order_relaxed);
   TRI_ASSERT(_shards_out_of_sync != nullptr);
   _shards_out_of_sync->store(totalStats.outOfSyncShards,
                              std::memory_order_relaxed);

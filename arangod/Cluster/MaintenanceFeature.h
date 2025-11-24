@@ -639,6 +639,7 @@ class MaintenanceFeature : public ArangodFeature {
 
   metrics::Gauge<uint64_t>* _shards_total_count = nullptr;
   metrics::Gauge<uint64_t>* _shards_leader_count = nullptr;
+  metrics::Gauge<uint64_t>* _shards_follower_count = nullptr;
   metrics::Gauge<uint64_t>* _shards_out_of_sync = nullptr;
   metrics::Gauge<uint64_t>* _shards_not_replicated_count = nullptr;
   metrics::Counter* _sync_timeouts_total = nullptr;
