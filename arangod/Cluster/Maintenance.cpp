@@ -2213,6 +2213,36 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
             throw;
           }
         } else {  // Follower
+          // Check if this follower is out of sync with its leader
+          // A follower is out of sync if it's not in the failoverCandidates
+          // list in Current
+          if (cur.isObject()) {
+            auto failoverCandidatesPath =
+                std::vector<std::string>{AgencyCommHelper::path(),
+                                         CURRENT,
+                                         COLLECTIONS,
+                                         dbName,
+                                         colName,
+                                         shName,
+                                         "failoverCandidates"};
+            auto failoverCandidates = cur.get(failoverCandidatesPath);
+            bool followerInSync = false;
+            if (failoverCandidates.isArray()) {
+              for (auto const& candidate :
+                   VPackArrayIterator(failoverCandidates)) {
+                if (candidate.isString() &&
+                    candidate.copyString() == serverId) {
+                  followerInSync = true;
+                  break;
+                }
+              }
+            }
+            if (!followerInSync) {
+              feature._databaseShardsStats[dbName]
+                  .increaseNumberOfFollowersOutOfSync();
+            }
+          }
+
           // Skip this update for replication2 databases
           if (cur.isObject() &&
               replicationVersion != replication::Version::TWO) {

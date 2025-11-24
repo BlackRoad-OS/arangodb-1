@@ -50,11 +50,13 @@ struct ShardStatistics {
   uint64_t shards{0};
   uint64_t leaderShards{0};
   uint64_t outOfSyncShards{0};
+  uint64_t followersOutOfSync{0};
   uint64_t notReplicated{0};
 
   void increaseNumberOfShards() noexcept { ++shards; }
   void increaseNumberOfLeaderShards() noexcept { ++leaderShards; }
   void increaseNumberOfOutOfSyncShards() noexcept { ++outOfSyncShards; }
+  void increaseNumberOfFollowersOutOfSync() noexcept { ++followersOutOfSync; }
   void increaseNumberOfNotReplicatedShards() noexcept { ++notReplicated; }
 };
 
@@ -641,6 +643,7 @@ class MaintenanceFeature : public ArangodFeature {
   metrics::Gauge<uint64_t>* _shards_leader_count = nullptr;
   metrics::Gauge<uint64_t>* _shards_follower_count = nullptr;
   metrics::Gauge<uint64_t>* _shards_out_of_sync = nullptr;
+  metrics::Gauge<uint64_t>* _followers_out_of_sync_count = nullptr;
   metrics::Gauge<uint64_t>* _shards_not_replicated_count = nullptr;
   metrics::Counter* _sync_timeouts_total = nullptr;
 

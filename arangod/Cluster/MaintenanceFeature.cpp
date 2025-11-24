@@ -108,6 +108,9 @@ DECLARE_GAUGE(arangodb_shards_leader_number, uint64_t,
               "Number of leader shards on this machine");
 DECLARE_GAUGE(arangodb_shards_follower_number, uint64_t,
               "Number of follower shards on this machine");
+DECLARE_GAUGE(arangodb_followers_out_of_sync_number, uint64_t,
+              "Number of follower shards on this machine that are out of sync "
+              "with their leader");
 DECLARE_GAUGE(arangodb_shards_not_replicated, uint64_t,
               "Number of shards not replicated at all");
 DECLARE_COUNTER(arangodb_sync_timeouts_total,
@@ -327,6 +330,8 @@ void MaintenanceFeature::initializeMetrics() {
   _shards_leader_count = &metricsFeature.add(arangodb_shards_leader_number{});
   _shards_follower_count =
       &metricsFeature.add(arangodb_shards_follower_number{});
+  _followers_out_of_sync_count =
+      &metricsFeature.add(arangodb_followers_out_of_sync_number{});
   _shards_not_replicated_count =
       &metricsFeature.add(arangodb_shards_not_replicated{});
   _sync_timeouts_total = &metricsFeature.add(arangodb_sync_timeouts_total{});
@@ -1320,6 +1325,7 @@ void MaintenanceFeature::updateDatabaseStatistics() {
     totalStats.shards += dbStats.shards;
     totalStats.leaderShards += dbStats.leaderShards;
     totalStats.outOfSyncShards += dbStats.outOfSyncShards;
+    totalStats.followersOutOfSync += dbStats.followersOutOfSync;
     totalStats.notReplicated += dbStats.notReplicated;
   }
 
@@ -1334,6 +1340,9 @@ void MaintenanceFeature::updateDatabaseStatistics() {
   TRI_ASSERT(_shards_out_of_sync != nullptr);
   _shards_out_of_sync->store(totalStats.outOfSyncShards,
                              std::memory_order_relaxed);
+  TRI_ASSERT(_followers_out_of_sync_count != nullptr);
+  _followers_out_of_sync_count->store(totalStats.followersOutOfSync,
+                                      std::memory_order_relaxed);
   TRI_ASSERT(_shards_not_replicated_count != nullptr);
   _shards_not_replicated_count->store(totalStats.notReplicated,
                                       std::memory_order_relaxed);
