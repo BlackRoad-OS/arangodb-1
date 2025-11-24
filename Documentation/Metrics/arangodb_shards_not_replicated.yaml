@@ -11,7 +11,7 @@ exposedBy:
 description: |
   Number of shards not replicated at all. This is counted for all shards
   for which this server is currently the leader. The number is increased
-  by one for every shards for which no follower is in sync.
+  by one for every shard for which no follower is in sync.
 troubleshoot: |
   Needless to say, such a situation is very bad for resilience, since it
   indicates a single point of failure. So, if this number is greater than 0,
