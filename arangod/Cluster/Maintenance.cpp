@@ -26,6 +26,7 @@
 
 #include "Agency/AgencyPaths.h"
 #include "Agency/AgencyStrings.h"
+#include "Agency/Job.h"
 #include "ApplicationFeatures/ApplicationServer.h"
 #include "Basics/StaticStrings.h"
 #include "Basics/StringUtils.h"
@@ -1928,6 +1929,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
     VPackBuilder& report, ReplicatedLogStatusMapByDatabase const& localLogs,
     ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
   for (auto const& dbName : dirty) {
+    // LOG_DEVEL << "############ DATABASE: " << dbName;
     // initialize database statistics for this database, resetting whatever was
     // previously
     feature._databaseShardsStats[dbName] = ShardStatistics{};
@@ -2073,6 +2075,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
 
         VPackBuilder error;
         if (shSlice.get(THE_LEADER).copyString().empty()) {  // Leader
+          // LOG_DEVEL << "LEADER IS: " << shName;
           try {
             // Check that we are the leader of this shard in the Plan, together
             // with the precondition below that the Plan is unchanged, this
@@ -2213,36 +2216,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
             throw;
           }
         } else {  // Follower
-          // Check if this follower is out of sync with its leader
-          // A follower is out of sync if it's not in the failoverCandidates
-          // list in Current
-          if (cur.isObject()) {
-            auto failoverCandidatesPath =
-                std::vector<std::string>{AgencyCommHelper::path(),
-                                         CURRENT,
-                                         COLLECTIONS,
-                                         dbName,
-                                         colName,
-                                         shName,
-                                         "failoverCandidates"};
-            auto failoverCandidates = cur.get(failoverCandidatesPath);
-            bool followerInSync = false;
-            if (failoverCandidates.isArray()) {
-              for (auto const& candidate :
-                   VPackArrayIterator(failoverCandidates)) {
-                if (candidate.isString() &&
-                    candidate.copyString() == serverId) {
-                  followerInSync = true;
-                  break;
-                }
-              }
-            }
-            if (!followerInSync) {
-              feature._databaseShardsStats[dbName]
-                  .increaseNumberOfFollowersOutOfSync();
-            }
-          }
-
           // Skip this update for replication2 databases
           if (cur.isObject() &&
               replicationVersion != replication::Version::TWO) {
@@ -2299,7 +2272,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                   // server might not be aware of its own previous writes. We
                   // have to be careful not to override Current with outdated
                   // information. The most up-to-date list of followers can be
-                  // obtained from the the local collection information. In this
+                  // obtained from the local collection information. In this
                   // case, it is safe to rely on it, because we are the leader
                   // and we have just resigned. No other server has been able to
                   // take over yet.
@@ -2330,6 +2303,23 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                                      "/shards/" + shName,
                                  thePlanList);
                     }
+                  }
+                }
+              } else {
+                // We are the follower
+                if (s.isArray()) {
+                  bool shardInSync{false};
+                  auto const plannedServers = shardMap.at(shName);
+                    for (const auto& it: VPackArrayIterator(s)) {
+                      if (it.stringView() == serverId) {
+                        shardInSync = true;
+                        break;
+                      }
+                    }
+                  if (!shardInSync) {
+                    //LOG_DEVEL << "INCREASING followerersOutOfSync for " << shName;
+                    feature._databaseShardsStats[dbName]
+                        .increaseNumberOfFollowersOutOfSync();
                   }
                 }
               }

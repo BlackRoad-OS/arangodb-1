@@ -50,14 +50,14 @@ struct ShardStatistics {
   uint64_t shards{0};
   uint64_t leaderShards{0};
   uint64_t outOfSyncShards{0};
-  uint64_t followersOutOfSync{0};
   uint64_t notReplicated{0};
+  uint64_t followersOutOfSync{0};
 
   void increaseNumberOfShards() noexcept { ++shards; }
   void increaseNumberOfLeaderShards() noexcept { ++leaderShards; }
   void increaseNumberOfOutOfSyncShards() noexcept { ++outOfSyncShards; }
-  void increaseNumberOfFollowersOutOfSync() noexcept { ++followersOutOfSync; }
   void increaseNumberOfNotReplicatedShards() noexcept { ++notReplicated; }
+  void increaseNumberOfFollowersOutOfSync() noexcept { ++followersOutOfSync; }
 };
 
 // The following is used in multiple Maintenance actions and therefore

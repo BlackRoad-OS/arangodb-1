@@ -321,6 +321,51 @@ function ClusterDBServerShardMetricsTestSuite() {
       getMetricsAndEventuallyAssert(dbServers, 43, 21, 0, 0);
     },
 
+    testShardFollowerOutOfSync: function () {
+      const dbServers = getDBServers();
+
+      db._createDatabase(dbName);
+      db._useDatabase(dbName);
+      db._create(collectionName, {
+        numberOfShards: 1,
+        replicationFactor: 2,
+      });
+      getMetricsAndAssert(dbServers, 42, 21, 0, 0);
+
+      // Get the db servers which do not have the leader
+      const shards = db[collectionName].shards(true);
+      const dbServerLeaderId = Object.values(shards).flatMap(servers => servers[0])[0];
+      const dbServersWithoutLeader = dbServers.filter(server => server.id !== dbServerLeaderId);
+      assertEqual(dbServersWithoutLeader.length, 2);
+
+      // Shutdown followers
+      dbServersWithoutLeader.forEach(server => {
+        server.suspend();
+      });
+
+      // Insert some data to trigger replication
+      db._query(`FOR i IN 0..1000 INSERT {val: i} INTO ${collectionName}`)
+      print("AFTER insert");
+
+      const dbServerWithouLeader = dbServersWithoutLeader[0];
+      dbServerWithouLeader.resume(); 
+
+      let followersOutOfSyncNumMetricValue;
+      for(let i = 0; i < 200; i++) {
+        followersOutOfSyncNumMetricValue = getDBServerMetricSum([dbServersWithoutLeader], followersOutOfSyncNumMetric);
+        if (followersOutOfSyncNumMetricValue === 0) {
+          print(`The metric ${followersOutOfSyncNumMetric} has value ${followersOutOfSyncNumMetricValue} should be at least 1`);
+          //internal.wait(1);
+          continue;
+        }
+
+        break;
+      }
+
+      print(followersOutOfSyncNumMetricValue);
+      assertTrue(followersOutOfSyncNumMetricValue >= 1);
+    },
+
     testShardMetricsDuringMoveLeader: function () {
       const dbServers = getDBServers();
 
