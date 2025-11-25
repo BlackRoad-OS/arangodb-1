@@ -1372,11 +1372,7 @@ using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
   using T = AqlValue::AqlValueType;
-  auto aqlValueType = x.type();
-  // as this is non owning, we hash by the pointer
-  if (aqlValueType == T::VPACK_SLICE_POINTER) {
-    return std::hash<void const*>()(x._data.slicePointerMeta.pointer);
-  }
+
   auto hash64 = x.hash(0);  // make a normalized hash, for the semantics of the
                             // value regardless of the storae stype
   size_t h = static_cast<size_t>(hash64);
@@ -1398,33 +1394,23 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_INLINE:
         return VPackSlice(a._data.inlineSliceMeta.slice)
             .binaryEquals(VPackSlice(b._data.inlineSliceMeta.slice));
+
       case T::VPACK_INLINE_INT64:
       case T::VPACK_INLINE_UINT64:
       case T::VPACK_INLINE_DOUBLE:
+        // long numbers are stored in little-endian form; compare raw bits
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
-      case T::VPACK_SLICE_POINTER:
-        return a._data.slicePointerMeta.pointer ==
-               b._data.slicePointerMeta.pointer;
+
       case T::RANGE: {
         auto const* ra = a._data.rangeMeta.range;
         auto const* rb = b._data.rangeMeta.range;
         return ra->_low == rb->_low && ra->_high == rb->_high;
       }
+
       default:
         return a.slice(ta).binaryEquals(b.slice(tb));
     }
   }
-
-  if (ta == T::RANGE || tb == T::RANGE) {
-    return false;
-  }
-
-  if (ta == T::VPACK_SLICE_POINTER || tb == T::VPACK_SLICE_POINTER) {
-    return false;
-  }
-
-  return a.slice(ta).binaryEquals(b.slice(tb));
-}
 
 }  // namespace std
