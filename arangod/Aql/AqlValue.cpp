@@ -1412,5 +1412,6 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return a.slice(ta).binaryEquals(b.slice(tb));
     }
   }
+}
 
 }  // namespace std
