@@ -1371,39 +1371,28 @@ namespace std {
 using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
-  auto t = x.type();
-  switch (t) {
-    case AqlValue::VPACK_INLINE:
-      return static_cast<size_t>(
-          VPackSlice(x._data.inlineSliceMeta.slice).volatileHash());
-    case AqlValue::VPACK_INLINE_INT64:
-    case AqlValue::VPACK_INLINE_UINT64:
-    case AqlValue::VPACK_INLINE_DOUBLE:
-      return static_cast<size_t>(
-          VPackSlice(x._data.longNumberMeta.data.slice.slice).volatileHash());
-    case AqlValue::VPACK_SLICE_POINTER:
-      return static_cast<size_t>(
-          VPackSlice(x._data.slicePointerMeta.pointer).volatileHash());
-    case AqlValue::VPACK_MANAGED_SLICE:
-      return static_cast<size_t>(
-          VPackSlice(x._data.managedSliceMeta.pointer).volatileHash());
-    case AqlValue::VPACK_MANAGED_STRING:
-      return static_cast<size_t>(
-          x._data.managedStringMeta.toSlice().volatileHash());
-    case AqlValue::RANGE:
-      return static_cast<size_t>(x.hash(0));
+  using T = AqlValue::AqlValueType;
+  auto aqlValueType = x.type();
+  // as this is non owning, we hash by the pointer
+  if (aqlValueType == T::VPACK_SLICE_POINTER) {
+    return std::hash<void const*>()(x._data.slicePointerMeta.pointer);
   }
-  return 0;
+  auto hash64 = x.hash(0);  // make a normalized hash, for the semantics of the
+                            // value regardless of the storae stype
+  size_t h = static_cast<size_t>(hash64);
+  if (h == 0) {  // fallback to avoid collision with the marker that uses h ==
+                 // 0, very unlikely to happen
+    h = 1;
+  }
+  return h;
 }
 
 bool equal_to<AqlValue>::operator()(AqlValue const& a,
                                     AqlValue const& b) const noexcept {
-  // TODO(MBkkt) can be just compare two uint64_t?
   using T = AqlValue::AqlValueType;
   auto ta = a.type();
   auto tb = b.type();
 
-  // Fast path: same type
   if (ta == tb) {
     switch (ta) {
       case T::VPACK_INLINE:
@@ -1412,28 +1401,26 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_INLINE_INT64:
       case T::VPACK_INLINE_UINT64:
       case T::VPACK_INLINE_DOUBLE:
-        // equal is equal. sign/endianess does not matter
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
       case T::VPACK_SLICE_POINTER:
-        // Compare the payload bytes, not the pointer (matches hash function)
-        return a.slice(ta).binaryEquals(b.slice(tb));
+        return a._data.slicePointerMeta.pointer ==
+               b._data.slicePointerMeta.pointer;
       case T::RANGE: {
-        // two ranges are equal if they have the same lower and upper bounds
         auto const* ra = a._data.rangeMeta.range;
         auto const* rb = b._data.rangeMeta.range;
         return ra->_low == rb->_low && ra->_high == rb->_high;
       }
       default:
-        // for all VelocyPack-based types (managed slice, managed string,
-        // supervised slice), compare the underlying VelocyPack slices by value
         return a.slice(ta).binaryEquals(b.slice(tb));
     }
   }
 
-  // If one or both values are ranges, they cannot be equal unless both are
-  // ranges.  Do not attempt to materialize ranges as VelocyPack values.
   if (ta == T::RANGE || tb == T::RANGE) {
+    return false;
+  }
+
+  if (ta == T::VPACK_SLICE_POINTER || tb == T::VPACK_SLICE_POINTER) {
     return false;
   }
 
