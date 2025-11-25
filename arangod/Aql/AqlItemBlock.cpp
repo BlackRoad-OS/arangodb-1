@@ -508,6 +508,10 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
         for (RegisterId::value_t col = 0; col < numRegs; col++) {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
+            if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+              res->setValue(row, col, a);
+              continue;
+            }
             AqlValueGuard guard{a, true};
             auto [it, inserted] = cache.emplace(a.data());
             res->setValue(row, col, AqlValue(a, (*it)));
