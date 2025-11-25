@@ -79,6 +79,12 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 
+[[tool.mypy.overrides]]
+module = "framework_tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disable_error_code = ["assignment", "method-assign"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

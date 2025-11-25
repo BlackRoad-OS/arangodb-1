@@ -17,6 +17,30 @@ from .value_objects import ServerId
 Server = TypeVar("Server")
 
 
+class ClusterBootstrapperProtocol(Protocol):
+    """Protocol for cluster bootstrapper to enable dependency injection.
+
+    Handles cluster-specific bootstrap sequencing and agency initialization.
+    """
+
+    def bootstrap_cluster(
+        self,
+        servers: Dict[ServerId, Any],
+        timeout: float = 300.0,
+    ) -> None:
+        """Bootstrap a cluster deployment in proper sequence."""
+
+    def wait_for_agency_ready(
+        self, servers: Dict[ServerId, Any], timeout: float = 30.0
+    ) -> None:
+        """Wait for agency to achieve consensus and elect a leader."""
+
+    def wait_for_cluster_ready(
+        self, servers: Dict[ServerId, Any], timeout: float = 60.0
+    ) -> None:
+        """Wait for all cluster servers to be ready and responding."""
+
+
 class ServerFactory(Protocol):
     """Protocol for server factories to enable dependency injection.
 

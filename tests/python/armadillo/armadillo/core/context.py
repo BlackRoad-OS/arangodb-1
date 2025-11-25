@@ -15,30 +15,26 @@ Usage:
     app_context = ApplicationContext.create(config)
 
     # Pass context explicitly to components
-    server = ArangoServer.create_single_server("test-server", app_context)
-    manager = InstanceManager("deployment-1", app_context)
+    controller = DeploymentController.create_single_server(deployment_id, app_context)
+    controller.start()
 
     # For testing
     test_context = ApplicationContext.for_testing()
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any
 from pathlib import Path
-
-from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 
 from .types import ArmadilloConfig
 from .log import Logger
-from .protocols import ServerFactory
+from .protocols import ServerFactory, ClusterBootstrapperProtocol
 from ..utils.ports import PortAllocator
 from ..utils.auth import AuthProvider
 from ..utils.filesystem import FilesystemService
 from .process import ProcessSupervisor
 from ..results.collector import ResultCollector
-
-# Import DeploymentPlanner - it doesn't create circular dependency
-from ..instances.deployment_planner import DeploymentPlanner
 
 
 @dataclass(frozen=True)
@@ -70,7 +66,7 @@ class ApplicationContext:
     process_supervisor: ProcessSupervisor
     result_collector: ResultCollector
     server_factory: ServerFactory
-    deployment_planner: DeploymentPlanner
+    cluster_bootstrapper: ClusterBootstrapperProtocol
 
     @classmethod
     def create(
@@ -154,21 +150,25 @@ class ApplicationContext:
 
         # Import server-related dependencies here to avoid circular imports
         # (core.context -> instances.server_factory -> instances.server -> core.context)
-        # This lazy import pattern breaks the cycle at runtime.
         from ..instances.server_factory import StandardServerFactory
-        from ..instances.deployment_planner import DeploymentPlanner
+        from ..instances.cluster_bootstrapper import ClusterBootstrapper
 
         # Create server factory
         # Note: We pass None here to break circular dependency
         # The actual context will be set via set_app_context() after creation
         server_factory = StandardServerFactory(app_context=None)
 
-        # Create deployment planner
-        deployment_planner = DeploymentPlanner(
-            port_allocator=port_allocator,
+        # Create thread pool executor for parallel operations
+        executor = ThreadPoolExecutor(
+            max_workers=config.infrastructure.manager_max_workers,
+            thread_name_prefix="ClusterBootstrap",
+        )
+
+        # Create cluster bootstrapper
+        cluster_bootstrapper = ClusterBootstrapper(
             logger=logger,
-            config_provider=config,
-            filesystem=filesystem,
+            executor=executor,
+            timeout_config=config.timeouts,
         )
 
         ctx = cls(
@@ -180,7 +180,7 @@ class ApplicationContext:
             process_supervisor=process_supervisor,
             result_collector=result_collector,
             server_factory=server_factory,
-            deployment_planner=deployment_planner,
+            cluster_bootstrapper=cluster_bootstrapper,
         )
 
         # Set circular reference using public method

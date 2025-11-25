@@ -141,6 +141,9 @@ class ProcessSupervisor:
         self._stop_monitoring = threading.Event()
         self._crash_state: Dict[ServerId, CrashInfo] = {}
         self._exit_codes: Dict[ServerId, int] = {}  # Track exit codes for health checks
+        self._crash_callbacks: Dict[ServerId, Callable[[CrashInfo], None]] = (
+            {}
+        )  # Crash notification callbacks
         self._lock = threading.Lock()
 
     def _stream_output(self, server_id: ServerId, process: subprocess.Popen) -> None:
@@ -490,6 +493,32 @@ class ProcessSupervisor:
         """List all supervised process IDs."""
         return list(self._processes.keys())
 
+    def register_crash_callback(
+        self, server_id: ServerId, callback: Callable[[CrashInfo], None]
+    ) -> None:
+        """Register callback for instant crash notification.
+
+        When a server crashes (non-zero exit), the callback will be invoked immediately
+        from the monitoring thread with crash information.
+
+        Args:
+            server_id: Server to monitor
+            callback: Function to call with CrashInfo when crash detected
+        """
+        with self._lock:
+            self._crash_callbacks[server_id] = callback
+        logger.debug("Registered crash callback for server %s", server_id)
+
+    def unregister_crash_callback(self, server_id: ServerId) -> None:
+        """Unregister crash callback for a server.
+
+        Args:
+            server_id: Server to stop monitoring
+        """
+        with self._lock:
+            self._crash_callbacks.pop(server_id, None)
+        logger.debug("Unregistered crash callback for server %s", server_id)
+
     def stop_all(self, graceful: bool = True, timeout: float = 30.0) -> None:
         """Stop all supervised processes."""
         server_ids = list(self._processes.keys())
@@ -575,20 +604,43 @@ class ProcessSupervisor:
         monitor_thread.start()
 
     def _monitor_process(self, server_id: ServerId) -> None:
-        """Monitor process for crashes and health."""
+        """Monitor process for crashes - instant notification via blocking wait.
+
+        This method blocks until the process exits, providing instant crash detection
+        without polling delays. When the process exits, registered callbacks are
+        invoked immediately if it's a crash (non-zero exit).
+        """
         process = self._processes.get(server_id)
         if not process:
             return
-        while not self._stop_monitoring.is_set():
-            try:
-                poll_result = process.poll()
-                if poll_result is not None:
-                    self._handle_process_exit(server_id, poll_result)
-                    break
-                time.sleep(1.0)
-            except (OSError, ProcessLookupError, AttributeError) as e:
-                logger.error("Error monitoring process %s: %s", server_id, e)
-                break
+
+        try:
+            # Block until process exits - instant notification!
+            exit_code = process.wait()
+
+            # Only handle if not shutting down
+            if not self._stop_monitoring.is_set():
+                self._handle_process_exit(server_id, exit_code)
+
+                # Call registered callback immediately if crash detected
+                if exit_code != 0:
+                    with self._lock:
+                        callback = self._crash_callbacks.get(server_id)
+                        crash_info = self._crash_state.get(server_id)
+
+                    if callback and crash_info:
+                        try:
+                            callback(crash_info)
+                        except Exception as e:
+                            # Callback errors should not crash monitoring
+                            logger.error(
+                                "Crash callback error for %s: %s",
+                                server_id,
+                                e,
+                                exc_info=True,
+                            )
+        except (OSError, ProcessLookupError, AttributeError) as e:
+            logger.error("Error monitoring process %s: %s", server_id, e)
 
     def _handle_process_exit(self, server_id: ServerId, exit_code: int) -> None:
         """Handle unexpected process exit."""
@@ -633,6 +685,10 @@ class ProcessSupervisor:
         monitor_thread = self._monitoring_threads.pop(server_id, None)
         if monitor_thread:
             logger.debug("Cleaned up monitoring thread for %s", server_id)
+        # Also remove crash callback
+        with self._lock:
+            if self._crash_callbacks.pop(server_id, None):
+                logger.debug("Cleaned up crash callback for %s", server_id)
 
     def get_crash_state(self) -> Dict[ServerId, CrashInfo]:
         """Get crash state for all servers."""
@@ -886,7 +942,9 @@ def kill_all_supervised_processes() -> None:
                         server_id,
                         pid,
                     )
-                    if pid is not None and not kill_process_tree(pid, signal.SIGTERM, timeout=2.0):
+                    if pid is not None and not kill_process_tree(
+                        pid, signal.SIGTERM, timeout=2.0
+                    ):
                         failed_trees.append((server_id, pid))
                 except (
                     OSError,

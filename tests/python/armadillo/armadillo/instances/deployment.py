@@ -1,16 +1,20 @@
-"""Deployment domain types representing complete deployments."""
+"""Deployment domain types representing complete deployments.
+
+Deployments are passive data objects that hold:
+- Servers (ArangoServer instances)
+- Status (deployed, healthy)
+- Timing (startup, shutdown)
+
+They provide query methods but no lifecycle logic.
+Lifecycle logic belongs in DeploymentController.
+"""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
-from ..core.value_objects import ServerId
+from ..core.value_objects import ServerId, DeploymentId
 from ..core.types import ServerRole
 from .server import ArangoServer
-from .deployment_plan import (
-    DeploymentPlan,
-    SingleServerDeploymentPlan,
-    ClusterDeploymentPlan,
-)
 
 
 @dataclass
@@ -37,6 +41,8 @@ class Deployment(ABC):
     The abstract get_servers() method provides a unified interface, eliminating
     the need for special cases in calling code.
     """
+
+    deployment_id: "DeploymentId"
 
     @abstractmethod
     def get_servers(self) -> Dict[ServerId, ArangoServer]:
@@ -154,15 +160,6 @@ class Deployment(ABC):
         """
         pass
 
-    @abstractmethod
-    def get_plan(self) -> DeploymentPlan:
-        """Get the deployment plan used to create this deployment.
-
-        Returns:
-            The deployment plan (SingleServerDeploymentPlan or ClusterDeploymentPlan)
-        """
-        pass
-
 
 @dataclass
 class SingleServerDeployment(Deployment):
@@ -172,7 +169,6 @@ class SingleServerDeployment(Deployment):
     This provides type safety: you cannot accidentally have multiple servers.
     """
 
-    plan: SingleServerDeploymentPlan
     server: ArangoServer  # Single server object, not dict - enforces constraint
     status: DeploymentStatus = field(default_factory=DeploymentStatus)
     timing: DeploymentTiming = field(default_factory=DeploymentTiming)
@@ -192,10 +188,6 @@ class SingleServerDeployment(Deployment):
     def get_agency_endpoints(self) -> List[str]:
         """Get agency endpoints (empty for single server)."""
         return []
-
-    def get_plan(self) -> SingleServerDeploymentPlan:
-        """Get the deployment plan."""
-        return self.plan
 
     def mark_deployed(self, startup_time: float) -> None:
         """Mark deployment as deployed with startup time."""
@@ -225,7 +217,6 @@ class SingleServerDeployment(Deployment):
 class ClusterDeployment(Deployment):
     """Cluster deployment with multiple servers."""
 
-    plan: ClusterDeploymentPlan
     servers: Dict[ServerId, ArangoServer] = field(default_factory=dict)
     status: DeploymentStatus = field(default_factory=DeploymentStatus)
     timing: DeploymentTiming = field(default_factory=DeploymentTiming)
@@ -235,20 +226,24 @@ class ClusterDeployment(Deployment):
         return self.servers
 
     def get_coordination_endpoints(self) -> List[str]:
-        """Get coordinator endpoints."""
-        return self.plan.coordination_endpoints
+        """Get coordinator endpoints (derived from servers)."""
+        return [
+            server.endpoint
+            for server in self.servers.values()
+            if server.role == ServerRole.COORDINATOR
+        ]
 
     def get_deployment_mode(self) -> str:
         """Get deployment mode identifier."""
         return "cluster"
 
     def get_agency_endpoints(self) -> List[str]:
-        """Get agency endpoints."""
-        return self.plan.agency_endpoints
-
-    def get_plan(self) -> ClusterDeploymentPlan:
-        """Get the deployment plan."""
-        return self.plan
+        """Get agency endpoints (derived from servers)."""
+        return [
+            server.endpoint
+            for server in self.servers.values()
+            if server.role == ServerRole.AGENT
+        ]
 
     def mark_deployed(self, startup_time: float) -> None:
         """Mark deployment as deployed with startup time."""

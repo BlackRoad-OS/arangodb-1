@@ -167,6 +167,7 @@ class ArangoServer:
         server_id: ServerId,
         app_context: ApplicationContext,
         port: Optional[int] = None,
+        config: Optional[ServerConfig] = None,
     ) -> "ArangoServer":
         """Create a single server instance with sensible defaults.
 
@@ -176,6 +177,7 @@ class ArangoServer:
             server_id: Unique server identifier
             app_context: Application context with all dependencies
             port: Optional port number (auto-allocated if None)
+            config: Optional server configuration with custom args
 
         Returns:
             Configured ArangoServer instance ready to start
@@ -186,7 +188,7 @@ class ArangoServer:
             >>> server.start()
         """
         actual_port = port or app_context.port_allocator.allocate_port()
-        paths = ServerPaths.from_config(server_id, None, app_context.filesystem)
+        paths = ServerPaths.from_config(server_id, config, app_context.filesystem)
         return cls(
             server_id,
             role=ServerRole.SINGLE,

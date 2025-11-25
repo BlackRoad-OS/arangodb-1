@@ -39,7 +39,7 @@ from ..core.types import (
 from ..core.value_objects import DeploymentId
 from ..core.process import has_any_crash, get_crash_state, clear_crash_state
 from ..core.errors import ResultProcessingError
-from ..instances.manager import InstanceManager
+from ..instances.deployment_controller import DeploymentController
 from .reporter import ArmadilloReporter
 from ..utils.crypto import random_id
 
@@ -138,7 +138,7 @@ class ArmadilloPlugin:
     """Main pytest plugin for Armadillo framework."""
 
     def __init__(self) -> None:
-        self._package_deployments: Dict[DeploymentId, InstanceManager] = {}
+        self._package_deployments: Dict[DeploymentId, DeploymentController] = {}
         self._server_health: Dict[DeploymentId, ServerHealthInfo] = (
             {}
         )  # deployment_id -> health info
@@ -219,14 +219,14 @@ class ArmadilloPlugin:
         """Clean up after pytest run."""
         logger.debug("Starting pytest plugin cleanup")
         deployments_to_clean = list(self._package_deployments.items())
-        for deployment_id, manager in deployments_to_clean:
+        for deployment_id, controller in deployments_to_clean:
             try:
-                if manager.is_deployed():
+                if controller.deployment.is_deployed():
                     logger.info(
                         "Plugin safety cleanup: shutting down deployment %s",
                         deployment_id,
                     )
-                    manager.shutdown_deployment()
+                    controller.stop()
                 else:
                     logger.debug("Deployment %s already stopped", deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
@@ -266,10 +266,10 @@ class ArmadilloPlugin:
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
         logger.debug("ArmadilloPlugin: Session finish with exit status %s", exitstatus)
-        for deployment_id, manager in list(self._package_deployments.items()):
+        for deployment_id, controller in list(self._package_deployments.items()):
             try:
                 logger.debug("Stopping session deployment %s", deployment_id)
-                manager.shutdown_deployment(timeout=60.0)
+                controller.stop(timeout=60.0)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping session deployment %s: %s", deployment_id, e
@@ -877,14 +877,14 @@ def _cleanup_all_deployments(emergency: bool = True) -> None:
         )
         if emergency:
             logger.warning("Emergency cleanup of %s deployments", len(deployments))
-        for deployment_id, manager in deployments:
+        for deployment_id, controller in deployments:
             try:
                 if emergency:
                     logger.info("Emergency shutdown of deployment: %s", deployment_id)
-                manager.shutdown_deployment(timeout=15.0)
+                controller.stop(timeout=15.0)
                 logger.debug("Deployment %s shutdown completed", deployment_id)
                 # Always capture health, even in emergency cleanup
-                _capture_deployment_health(manager, str(deployment_id))
+                _capture_deployment_health(controller, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Failed emergency cleanup of deployment %s: %s",
@@ -893,7 +893,7 @@ def _cleanup_all_deployments(emergency: bool = True) -> None:
                 )
                 # Even if shutdown failed, try to capture health
                 try:
-                    _capture_deployment_health(manager, str(deployment_id))
+                    _capture_deployment_health(controller, deployment_id)
                 except Exception as health_err:
                     logger.debug(
                         "Could not capture health for %s: %s", deployment_id, health_err
@@ -905,10 +905,10 @@ def _cleanup_all_deployments(emergency: bool = True) -> None:
                     )
                     # Try to get servers using the public API for force cleanup
                     try:
-                        servers = manager.get_all_servers()
+                        servers = controller.deployment.get_servers()
                     except (AttributeError, RuntimeError) as get_e:
                         logger.warning(
-                            "Could not get servers from manager %s: %s",
+                            "Could not get servers from controller %s: %s",
                             deployment_id,
                             get_e,
                         )
@@ -1142,12 +1142,14 @@ def _emergency_cleanup(session: Optional[Session] = None) -> None:
         logger.error("Emergency cleanup stack trace: %s", traceback.format_exc())
 
 
-def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> None:
+def _capture_deployment_health(
+    controller: DeploymentController, deployment_id: DeploymentId
+) -> None:
     """Capture and store server health after deployment shutdown.
 
     Args:
-        manager: The instance manager that was shut down
-        deployment_id: Identifier for this deployment (string)
+        controller: The deployment controller that was shut down
+        deployment_id: Identifier for this deployment
     """
     global _current_session
     if not _current_session:
@@ -1155,13 +1157,13 @@ def _capture_deployment_health(manager: InstanceManager, deployment_id: str) -> 
     plugin = _get_plugin(_current_session)
     if not plugin:
         return
-    health = manager.get_server_health()
+    health = controller.get_health_info()
     if health.has_issues():
         # Convert string to DeploymentId value object
-        plugin._server_health[DeploymentId(deployment_id)] = health
+        plugin._server_health[deployment_id] = health
         logger.warning(
             "Server health issues detected in %s: %s",
-            deployment_id,
+            str(deployment_id),
             health.get_failure_summary(),
         )
 
@@ -1204,8 +1206,9 @@ def create_package_deployment(package_name: str) -> Any:
             raise RuntimeError(
                 "Cannot create deployment: no session app context available"
             )
-        manager = InstanceManager(
-            deployment_id, app_context=plugin._session_app_context
+        cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
+        controller = DeploymentController.create_cluster(
+            deployment_id, plugin._session_app_context, cluster_config
         )
         try:
             logger.info(
@@ -1213,22 +1216,22 @@ def create_package_deployment(package_name: str) -> Any:
                 deployment_id,
                 package_name,
             )
-            cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
-            plan = manager.create_cluster_deployment_plan(cluster_config)
-            manager.deploy_servers(plan, timeout=300.0)
+            controller.start(timeout=300.0)
             logger.info("Package cluster deployment %s ready", deployment_id)
-            plugin._package_deployments[deployment_id] = manager
+            plugin._package_deployments[deployment_id] = controller
 
-            coordinators = manager.get_servers_by_role(ServerRole.COORDINATOR)
+            coordinators = controller.deployment.get_servers_by_role(
+                ServerRole.COORDINATOR
+            )
             if not coordinators:
                 raise RuntimeError("No coordinators available in cluster")
             yield coordinators[0]
         finally:
             logger.info("Stopping package cluster deployment %s", deployment_id)
             try:
-                manager.shutdown_deployment(timeout=120.0)
+                controller.stop(timeout=120.0)
                 # Capture server health for post-test validation
-                _capture_deployment_health(manager, str(deployment_id))
+                _capture_deployment_health(controller, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping cluster deployment %s: %s", deployment_id, e
@@ -1242,16 +1245,15 @@ def create_package_deployment(package_name: str) -> Any:
             raise RuntimeError(
                 "Cannot create deployment: no session app context available"
             )
-        manager = InstanceManager(
-            deployment_id, app_context=plugin._session_app_context
+        controller = DeploymentController.create_single_server(
+            deployment_id, plugin._session_app_context
         )
         try:
             logger.info("Starting package single server for %s", package_name)
-            plan = manager.create_single_server_plan()
-            manager.deploy_servers(plan, timeout=60.0)
-            plugin._package_deployments[deployment_id] = manager
+            controller.start(timeout=60.0)
+            plugin._package_deployments[deployment_id] = controller
 
-            servers = manager.get_all_servers()
+            servers = controller.deployment.get_servers()
             if not servers:
                 raise RuntimeError(f"No servers deployed for package {package_name}")
             server = next(iter(servers.values()))
@@ -1264,9 +1266,9 @@ def create_package_deployment(package_name: str) -> Any:
         finally:
             logger.info("Stopping package single server for %s", package_name)
             try:
-                manager.shutdown_deployment(timeout=30.0)
+                controller.stop(timeout=30.0)
                 # Capture server health for post-test validation
-                _capture_deployment_health(manager, str(deployment_id))
+                _capture_deployment_health(controller, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error("Error stopping package server: %s", e)
             finally:
