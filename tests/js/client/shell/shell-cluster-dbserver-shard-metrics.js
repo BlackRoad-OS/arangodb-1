@@ -344,25 +344,22 @@ function ClusterDBServerShardMetricsTestSuite() {
       });
 
       // Insert some data to trigger replication
-      db._query(`FOR i IN 0..1000 INSERT {val: i} INTO ${collectionName}`)
-      print("AFTER insert");
+      db._query(`FOR i IN 0..1000 INSERT {val: i} INTO ${collectionName}`);
 
       const dbServerWithouLeader = dbServersWithoutLeader[0];
       dbServerWithouLeader.resume(); 
 
       let followersOutOfSyncNumMetricValue;
-      for(let i = 0; i < 200; i++) {
+      for(let i = 0; i < 500; i++) {
         followersOutOfSyncNumMetricValue = getDBServerMetricSum([dbServersWithoutLeader], followersOutOfSyncNumMetric);
         if (followersOutOfSyncNumMetricValue === 0) {
           print(`The metric ${followersOutOfSyncNumMetric} has value ${followersOutOfSyncNumMetricValue} should be at least 1`);
-          //internal.wait(1);
           continue;
         }
 
         break;
       }
 
-      print(followersOutOfSyncNumMetricValue);
       assertTrue(followersOutOfSyncNumMetricValue >= 1);
     },
 

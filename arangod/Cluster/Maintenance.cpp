@@ -2310,14 +2310,15 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                 if (s.isArray()) {
                   bool shardInSync{false};
                   auto const plannedServers = shardMap.at(shName);
-                    for (const auto& it: VPackArrayIterator(s)) {
-                      if (it.stringView() == serverId) {
-                        shardInSync = true;
-                        break;
-                      }
+                  for (const auto& it : VPackArrayIterator(s)) {
+                    if (it.stringView() == serverId) {
+                      shardInSync = true;
+                      break;
                     }
+                  }
                   if (!shardInSync) {
-                    //LOG_DEVEL << "INCREASING followerersOutOfSync for " << shName;
+                    // LOG_DEVEL << "INCREASING followerersOutOfSync for " <<
+                    // shName;
                     feature._databaseShardsStats[dbName]
                         .increaseNumberOfFollowersOutOfSync();
                   }
