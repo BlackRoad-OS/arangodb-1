@@ -270,10 +270,19 @@ class ArmadilloPlugin:
             try:
                 logger.debug("Stopping session deployment %s", deployment_id)
                 controller.stop(timeout=60.0)
+                # Capture server health (exit codes, crashes) after shutdown
+                _capture_deployment_health(controller, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
                     "Error stopping session deployment %s: %s", deployment_id, e
                 )
+                # Try to capture health even if shutdown failed
+                try:
+                    _capture_deployment_health(controller, deployment_id)
+                except Exception as health_err:
+                    logger.debug(
+                        "Could not capture health for %s: %s", deployment_id, health_err
+                    )
         # Note: Automatic cleanup not currently enabled
         # (would require ApplicationContext integration in pytest fixtures)
         stop_watchdog()
