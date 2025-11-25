@@ -1412,6 +1412,11 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return a.slice(ta).binaryEquals(b.slice(tb));
     }
   }
+  if (ta == T::RANGE || tb == T::RANGE) {
+    return false;
+  }
+
+  return a.slice(ta).binaryEquals(b.slice(tb));
 }
 
 }  // namespace std
