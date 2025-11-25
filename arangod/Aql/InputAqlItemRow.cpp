@@ -166,6 +166,10 @@ AqlValue InputAqlItemRow::stealValue(RegisterId registerId) {
       return a.clone();
     }
 
+    if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+      return block().stealAndEraseValue(_baseIndex, registerId);
+    }
+
     // Now no one is responsible for AqlValue a
     block().steal(a);
   }
