@@ -7,6 +7,10 @@ devel
   follower shards on each DBserver and `arangodb_shard_followers_out_of_sync_number`
   to track follower shards that are out of sync with their leader.
 
+* FE-636: bump webpack-dev-middleware from 5.3.3 to 5.3.4.
+
+* FE-636: bump braces from 3.0.2 to 3.0.3.
+
 * COR-8: Added new metrics to track deployment metadata:
   - `arangodb_metadata_number_of_databases`: Total number of databases
   - `arangodb_metadata_number_of_collections`: Total number of collections
