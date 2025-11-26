@@ -509,12 +509,8 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
             AqlValueGuard guard{a, true};
-            auto [it, inserted] = cache.emplace(a.data());
-            res->setValue(row, col, AqlValue(a, (*it)));
-            if (inserted) {
-              // otherwise, destroy this; we used a cached value.
-              guard.steal();
-            }
+            res->setValue(row, col, a);
+            guard.steal();
           } else {
             res->setValue(row, col, a);
           }
