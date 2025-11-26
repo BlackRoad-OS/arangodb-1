@@ -1372,8 +1372,6 @@ namespace std {
 using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
-  using T = AqlValue::AqlValueType;
-
   auto hash64 = x.hash(0);  // make a normalized hash, for the semantics of the
                             // value regardless of the storae stype
   size_t h = static_cast<size_t>(hash64);
