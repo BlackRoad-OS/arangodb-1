@@ -1043,6 +1043,8 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
     }
   }
 
+  // if value not found in _valueCount, assume ownership has been transferred
+  // and simply erase the AqlValue without destroying its data
   element.erase();
 }
 
