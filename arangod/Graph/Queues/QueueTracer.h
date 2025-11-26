@@ -44,7 +44,8 @@ class QueueTracer {
 
   bool isBatched() { return false; }
   void clear();
-  void append(QueueEntry<Step> step);
+  void append(Step step);
+  void append(Expansion expansion) { TRI_ASSERT(false); }
   void setStartContent(std::vector<Step> startSteps);
   bool firstIsVertexFetched() const;
   bool hasProcessableElement() const;
