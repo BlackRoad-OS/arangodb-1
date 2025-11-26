@@ -108,7 +108,7 @@ DECLARE_GAUGE(arangodb_shards_leader_number, uint64_t,
               "Number of leader shards on this machine");
 DECLARE_GAUGE(arangodb_shards_follower_number, uint64_t,
               "Number of follower shards on this machine");
-DECLARE_GAUGE(arangodb_followers_out_of_sync_number, uint64_t,
+DECLARE_GAUGE(arangodb_shard_followers_out_of_sync_number, uint64_t,
               "Number of follower shards on this machine that are out of sync "
               "with their leader");
 DECLARE_GAUGE(arangodb_shards_not_replicated, uint64_t,
@@ -331,7 +331,7 @@ void MaintenanceFeature::initializeMetrics() {
   _shards_follower_count =
       &metricsFeature.add(arangodb_shards_follower_number{});
   _followers_out_of_sync_count =
-      &metricsFeature.add(arangodb_followers_out_of_sync_number{});
+      &metricsFeature.add(arangodb_shard_followers_out_of_sync_number{});
   _shards_not_replicated_count =
       &metricsFeature.add(arangodb_shards_not_replicated{});
   _sync_timeouts_total = &metricsFeature.add(arangodb_sync_timeouts_total{});

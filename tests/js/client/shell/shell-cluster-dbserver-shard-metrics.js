@@ -39,7 +39,7 @@ function ClusterDBServerShardMetricsTestSuite() {
   const shardsLeaderNumMetric = "arangodb_shards_leader_number";
   const shardsFollowerNumMetric = "arangodb_shards_follower_number";
   const shardsOutOfSyncNumMetric = "arangodb_shards_out_of_sync";
-  const followersOutOfSyncNumMetric = "arangodb_followers_out_of_sync_number";
+  const followersOutOfSyncNumMetric = "arangodb_shard_followers_out_of_sync_number";
   const shardsNotReplicatedNumMetric = "arangodb_shards_not_replicated";
 
   // Helper function to get sum of a metric across all DB servers

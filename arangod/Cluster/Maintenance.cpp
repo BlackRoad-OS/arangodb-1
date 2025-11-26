@@ -2307,7 +2307,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                 }
               } else {
                 // We are the follower
-                if (s.isArray() && shardMap.contains(shName)) {
+                if (s.isArray()) {
                   bool shardInSync{false};
                   TRI_ASSERT(shardMap.contains(shName)) << shardMap;
                   auto const plannedServers = shardMap.at(shName);

@@ -53,7 +53,7 @@ const MetricNames = {
   SHARD_LEADER_COUNT: "arangodb_shards_leader_number",
   SHARD_FOLLOWER_COUNT: "arangodb_shards_follower_number",
   SHARD_OUT_OF_SYNC_COUNT: "arangodb_shards_out_of_sync",
-  FOLLOWERS_OUT_OF_SYNC_COUNT: "arangodb_followers_out_of_sync_number",
+  FOLLOWERS_OUT_OF_SYNC_COUNT: "arangodb_shard_followers_out_of_sync_number",
   SHARD_NOT_REPLICATED_COUNT: "arangodb_shards_not_replicated",
   SYNC_TIMEOUTS_TOTAL: "arangodb_sync_timeouts_total",
   HEARTBEAT_BUCKET: "arangodb_heartbeat_send_time_msec_bucket",
