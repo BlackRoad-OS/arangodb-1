@@ -2307,8 +2307,9 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                 }
               } else {
                 // We are the follower
-                if (s.isArray()) {
+                if (s.isArray() && shardMap.contains(shName)) {
                   bool shardInSync{false};
+                  TRI_ASSERT(shardMap.contains(shName)) << shardMap;
                   auto const plannedServers = shardMap.at(shName);
                   for (const auto& it : VPackArrayIterator(s)) {
                     if (it.stringView() == serverId) {
@@ -2317,8 +2318,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                     }
                   }
                   if (!shardInSync) {
-                    // LOG_DEVEL << "INCREASING followerersOutOfSync for " <<
-                    // shName;
                     feature._databaseShardsStats[dbName]
                         .increaseNumberOfFollowersOutOfSync();
                   }
