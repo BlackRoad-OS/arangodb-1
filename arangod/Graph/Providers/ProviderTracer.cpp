@@ -107,6 +107,26 @@ auto ProviderTracer<ProviderImpl>::expand(Step const& from, size_t previous,
 }
 
 template<class ProviderImpl>
+auto ProviderTracer<ProviderImpl>::addExpansionIterator(
+    CursorId id, Step const& from, std::function<void()> const& callback)
+    -> void {
+  double start = TRI_microtime();
+  auto sg = arangodb::scopeGuard(
+      [&]() noexcept { _stats["expand"].addTiming(TRI_microtime() - start); });
+  _impl.addExpansionIterator(id, from, std::move(callback));
+}
+
+template<class ProviderImpl>
+auto ProviderTracer<ProviderImpl>::expandToNextBatch(
+    CursorId id, Step const& step, size_t previous,
+    std::function<void(Step)> const& callback) -> bool {
+  double start = TRI_microtime();
+  auto sg = arangodb::scopeGuard(
+      [&]() noexcept { _stats["expand"].addTiming(TRI_microtime() - start); });
+  return _impl.expandToNextBatch(id, step, previous, std::move(callback));
+}
+
+template<class ProviderImpl>
 auto ProviderTracer<ProviderImpl>::clear() -> void {
   double start = TRI_microtime();
   auto sg = arangodb::scopeGuard(
