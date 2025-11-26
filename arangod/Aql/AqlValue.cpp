@@ -1400,11 +1400,9 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         bool aIsCustom = sa.isCustom();
         bool bIsCustom = sb.isCustom();
         if (aIsCustom || bIsCustom) {
-          // normalized comparison throws for custom types, so we use the binary
-          // comparison
-          If both are Custom,
-              compare binary representation return aIsCustom == bIsCustom &&
-                  sa.binaryEquals(sb);
+          // Normalized comparison throws for custom types, so we use binary
+          // comparison. If both are Custom, compare binary representation.
+          return aIsCustom == bIsCustom && sa.binaryEquals(sb);
         }
 
         // Use normalized comparison for semantic equality
