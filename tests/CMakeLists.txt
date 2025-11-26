@@ -100,6 +100,7 @@ set(ARANGODB_TESTS_SOURCES
   Aql/AqlItemBlockStressTest.cpp
   Aql/AqlItemBlockSupervisedMemoryTest.cpp
   Aql/AqlItemBlockTest.cpp
+  Aql/AqlItemBlockInputRangeTest.cpp
   Aql/AqlItemRowPrinter.cpp
   Aql/AqlItemRowTest.cpp
   Aql/AqlMergeTest.cpp
