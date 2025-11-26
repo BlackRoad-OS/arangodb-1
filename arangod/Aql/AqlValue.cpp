@@ -1373,7 +1373,7 @@ using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
   auto hash64 = x.hash(0);  // make a normalized hash, for the semantics of the
-                            // value regardless of the storae stype
+                            // value regardless of the storage type
   size_t h = static_cast<size_t>(hash64);
   if (h == 0) {  // fallback to avoid collision with the marker that uses h ==
                  // 0, very unlikely to happen
@@ -1391,14 +1391,30 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
   if (ta == tb) {
     switch (ta) {
       case T::VPACK_INLINE:
-        return VPackNormalizedCompare::equals(
-            VPackSlice(a._data.inlineSliceMeta.slice),
-            VPackSlice(b._data.inlineSliceMeta.slice));
+      case T::VPACK_SLICE_POINTER:
+      case T::VPACK_MANAGED_SLICE:
+      case T::VPACK_MANAGED_STRING: {
+        auto sa = a.slice(ta);
+        auto sb = b.slice(tb);
+
+        bool aIsCustom = sa.isCustom();
+        bool bIsCustom = sb.isCustom();
+        if (aIsCustom || bIsCustom) {
+          // normalized comparison throws for custom types, so we use the binary
+          // comparison
+          If both are Custom,
+              compare binary representation return aIsCustom == bIsCustom &&
+                  sa.binaryEquals(sb);
+        }
+
+        // Use normalized comparison for semantic equality
+        return VPackNormalizedCompare::equals(sa, sb);
+      }
 
       case T::VPACK_INLINE_INT64:
       case T::VPACK_INLINE_UINT64:
       case T::VPACK_INLINE_DOUBLE:
-        // long numbers are stored in little-endian form; compare raw bits
+        // long numbers are stored in the same form, so we can compare raw bits
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
 
@@ -1409,14 +1425,25 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       }
 
       default:
-        return VPackNormalizedCompare::equals(a.slice(ta), b.slice(tb));
+        // Should not happen
+        TRI_ASSERT(false);
+        return false;
     }
   }
   if (ta == T::RANGE || tb == T::RANGE) {
     return false;
   }
 
-  return VPackNormalizedCompare::equals(a.slice(ta), b.slice(tb));
+  auto sa = a.slice(ta);
+  auto sb = b.slice(tb);
+
+  bool aIsCustom = sa.isCustom();
+  bool bIsCustom = sb.isCustom();
+  if (aIsCustom || bIsCustom) {
+    return aIsCustom == bIsCustom && sa.binaryEquals(sb);
+  }
+
+  return VPackNormalizedCompare::equals(sa, sb);
 }
 
 }  // namespace std
