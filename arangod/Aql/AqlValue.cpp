@@ -38,6 +38,7 @@
 #include <absl/strings/numbers.h>
 
 #include <velocypack/Buffer.h>
+#include <velocypack/Compare.h>
 #include <velocypack/Slice.h>
 
 #include <bit>
@@ -1392,8 +1393,9 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
   if (ta == tb) {
     switch (ta) {
       case T::VPACK_INLINE:
-        return VPackSlice(a._data.inlineSliceMeta.slice)
-            .binaryEquals(VPackSlice(b._data.inlineSliceMeta.slice));
+        return VPackNormalizedCompare::equals(
+            VPackSlice(a._data.inlineSliceMeta.slice),
+            VPackSlice(b._data.inlineSliceMeta.slice));
 
       case T::VPACK_INLINE_INT64:
       case T::VPACK_INLINE_UINT64:
@@ -1409,14 +1411,14 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       }
 
       default:
-        return a.slice(ta).binaryEquals(b.slice(tb));
+        return VPackNormalizedCompare::equals(a.slice(ta), b.slice(tb));
     }
   }
   if (ta == T::RANGE || tb == T::RANGE) {
     return false;
   }
 
-  return a.slice(ta).binaryEquals(b.slice(tb));
+  return VPackNormalizedCompare::equals(a.slice(ta), b.slice(tb));
 }
 
 }  // namespace std
