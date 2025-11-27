@@ -36,7 +36,7 @@ namespace arangodb {
 namespace graph {
 
 template<class StepType>
-class BatchedLifoQueue {
+class BatchedFifoQueue {
  public:
   static constexpr bool RequiresWeight = false;
   using Step = StepType;
@@ -44,9 +44,9 @@ class BatchedLifoQueue {
   // cluster relevant)
   // -> loose ends to the end
 
-  explicit BatchedLifoQueue(arangodb::ResourceMonitor& resourceMonitor)
+  explicit BatchedFifoQueue(arangodb::ResourceMonitor& resourceMonitor)
       : _resourceMonitor{resourceMonitor} {}
-  ~BatchedLifoQueue() { this->clear(); }
+  ~BatchedFifoQueue() { this->clear(); }
 
   bool isBatched() { return true; }
 
@@ -65,9 +65,9 @@ class BatchedLifoQueue {
 
   void append(Step step) {
     arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Step));
-    // if push_front() throws, no harm is done, and the memory usage increase
+    // if push_back() throws, no harm is done, and the memory usage increase
     // will be rolled back
-    _queue.push_front({std::move(step)});
+    _queue.push_back({std::move(step)});
     guard.steal();  // now we are responsible for tracking the memory
   }
 
@@ -75,7 +75,7 @@ class BatchedLifoQueue {
     arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Expansion));
     // if push_front() throws, no harm is done, and the memory usage increase
     // will be rolled back
-    _queue.push_front({std::move(expansion)});
+    _queue.push_back({std::move(expansion)});
     guard.steal();  // now we are responsible for tracking the memory
   }
 
@@ -84,7 +84,7 @@ class BatchedLifoQueue {
                                        sizeof(Step) * startSteps.size());
     TRI_ASSERT(_queue.empty());
     for (auto& s : startSteps) {
-      // For LIFO just append to the back,
+      // For FIFO just append to the back,
       // The handed in vector will then be processed from start to end.
       // And appending would queue BEFORE items in the queue.
       _queue.push_back({std::move(s)});
@@ -146,7 +146,7 @@ class BatchedLifoQueue {
     TRI_ASSERT(!isEmpty());
     auto first = std::move(_queue.front());
     LOG_TOPIC("9cda4", TRACE, Logger::GRAPHS)
-        << "<BatchedLifoQueue> Pop: "
+        << "<BatchedFifoQueue> Pop: "
         << (std::holds_alternative<Step>(first)
                 ? std::get<Step>(first).toString()
                 : "next batch");
@@ -183,7 +183,7 @@ class BatchedLifoQueue {
     }
   }
   template<class S, typename Inspector>
-  friend auto inspect(Inspector& f, BatchedLifoQueue<S>& x);
+  friend auto inspect(Inspector& f, BatchedFifoQueue<S>& x);
 
  private:
   /// @brief queue datastore
@@ -193,7 +193,7 @@ class BatchedLifoQueue {
   arangodb::ResourceMonitor& _resourceMonitor;
 };
 template<class StepType, typename Inspector>
-auto inspect(Inspector& f, BatchedLifoQueue<StepType>& x) {
+auto inspect(Inspector& f, BatchedFifoQueue<StepType>& x) {
   return f.object(x).fields(f.field("queue", x._queue));
 }
 
