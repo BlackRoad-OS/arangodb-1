@@ -458,15 +458,16 @@ class DeploymentController:
         # Filter to this deployment's servers
         deployment_server_ids = set(self.deployment.get_servers().keys())
 
+        filtered_exit_codes = {
+            str(k): v for k, v in all_exit_codes.items() if k in deployment_server_ids
+        }
+        filtered_crashes = {
+            str(k): v for k, v in all_crashes.items() if k in deployment_server_ids
+        }
+
         return ServerHealthInfo(
-            crashes={
-                str(k): v for k, v in all_crashes.items() if k in deployment_server_ids
-            },
-            exit_codes={
-                str(k): v
-                for k, v in all_exit_codes.items()
-                if k in deployment_server_ids
-            },
+            crashes=filtered_crashes,
+            exit_codes=filtered_exit_codes,
         )
 
     # Properties

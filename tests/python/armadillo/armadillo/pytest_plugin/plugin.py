@@ -611,13 +611,28 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
 
     logger.debug("Starting pytest plugin cleanup")
 
-    # If deployment failed, set exit status to failure
+    # Get plugin instance
     plugin = _get_plugin(session)
+
+    # Check if deployment already failed
     if plugin._deployment_failed:
         logger.error("Setting exit status to 1 due to deployment failure")
         session.exitstatus = 1
 
-    # Check for server health issues (e.g., sanitizer failures)
+    # Stop servers FIRST to capture exit codes
+    try:
+        logger.debug("Starting pytest session cleanup")
+        _cleanup_all_deployments(emergency=False)
+        _cleanup_all_processes(emergency=False)
+        logger.debug("Armadillo pytest plugin cleanup completed")
+
+        # Cleanup session work directory AFTER servers are shut down
+        # Only runs if cleanup was successful (we're still in try block)
+        _cleanup_temp_dir_if_needed(session, exitstatus)
+    except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
+        logger.error("Error during pytest plugin cleanup: %s", e)
+
+    # NOW check for server health issues (AFTER servers stopped and exit codes captured)
     if plugin._server_health:
         logger.error(
             "Server health issues detected in %d deployment(s)",
@@ -630,12 +645,14 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
         logger.error("Setting exit status to 1 due to server health issues")
         session.exitstatus = 1
 
-    # Capture the test end time BEFORE server shutdown begins
+    # Print summary and export results AFTER we know final health status
     if not _is_compact_mode_enabled() and plugin.reporter:
         plugin.reporter.session_finish_time = time.time()
-        # Set deployment failed flag on reporter so it shows FAILED status
-        plugin.reporter.deployment_failed = plugin._deployment_failed
-        # Print the final summary immediately, before any server cleanup
+        # Set deployment failed flag on reporter if either deployment or health failed
+        plugin.reporter.deployment_failed = plugin._deployment_failed or bool(
+            plugin._server_health
+        )
+        # Print the final summary with correct status
         plugin.reporter.print_final_summary()
         plugin.reporter.pytest_sessionfinish(session, exitstatus)
 
@@ -649,25 +666,15 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
             plugin.reporter.export_results(
                 output_dir, formats=["json"], server_health=plugin._server_health
             )
-        except (ResultProcessingError, OSError, IOError) as e:
+        except (OSError, IOError) as e:
             logger.error("Failed to export test results: %s", e, exc_info=True)
 
+    # Final cleanup: stop watchdog and clear session
     try:
-        logger.debug("Starting pytest session cleanup")
-        _cleanup_all_deployments(emergency=False)
-        _cleanup_all_processes(emergency=False)
-        logger.debug("Armadillo pytest plugin cleanup completed")
-
-        # Cleanup session work directory AFTER servers are shut down
-        # Only runs if cleanup was successful (we're still in try block)
-        _cleanup_temp_dir_if_needed(session, exitstatus)
-    except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-        logger.error("Error during pytest plugin cleanup: %s", e)
+        stop_watchdog()
+    except (OSError, RuntimeError, AttributeError) as e:
+        logger.debug("Error stopping watchdog: %s", e)
     finally:
-        try:
-            stop_watchdog()
-        except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
-            logger.debug("Error stopping watchdog: %s", e)
         # Clear session reference
         _current_session = None
 
@@ -1162,9 +1169,11 @@ def _capture_deployment_health(
     """
     global _current_session
     if not _current_session:
+        logger.debug("_capture_deployment_health: no current session")
         return
     plugin = _get_plugin(_current_session)
     if not plugin:
+        logger.debug("_capture_deployment_health: no plugin")
         return
     health = controller.get_health_info()
     if health.has_issues():

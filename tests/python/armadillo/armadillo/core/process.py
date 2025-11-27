@@ -645,6 +645,13 @@ class ProcessSupervisor:
     def _handle_process_exit(self, server_id: ServerId, exit_code: int) -> None:
         """Handle unexpected process exit."""
         _ = self._process_info.get(server_id)  # For future crash analysis
+
+        # IMPORTANT: Capture exit code for health checking
+        # This ensures non-zero exit codes are detected even when process
+        # exits on its own (e.g., sanitizer failures) before we call stop()
+        with self._lock:
+            self._exit_codes[server_id] = exit_code
+
         if exit_code == 0:
             log_process_event(
                 logger, "supervisor.exited", server_id=server_id, exit_code=exit_code
@@ -1001,6 +1008,3 @@ def kill_all_supervised_processes() -> None:
     ) as e:
         logger.error("Error in emergency process tree kill: %s", e)
         logger.error("Stack trace: %s", traceback.format_exc())
-
-
-_process_supervisor = ProcessSupervisor()
