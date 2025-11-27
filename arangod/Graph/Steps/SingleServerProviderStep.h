@@ -76,7 +76,7 @@ class SingleServerProviderStep : public arangodb::graph::BaseStep {
   SingleServerProviderStep(VertexType v);
   SingleServerProviderStep(VertexType v, EdgeDocumentToken edge, size_t prev);
   SingleServerProviderStep(VertexType v, EdgeDocumentToken edge, size_t prev,
-                           size_t depth, double weight, size_t);
+                           size_t depth, double weight);
   SingleServerProviderStep(VertexType v, size_t depth, double weight = 0.0);
   ~SingleServerProviderStep();
 

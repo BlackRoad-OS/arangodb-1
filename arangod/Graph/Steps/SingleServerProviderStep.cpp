@@ -56,7 +56,7 @@ SingleServerProviderStep::SingleServerProviderStep(VertexType v,
 SingleServerProviderStep::SingleServerProviderStep(VertexType v,
                                                    EdgeDocumentToken edge,
                                                    size_t prev, size_t depth,
-                                                   double weight, size_t)
+                                                   double weight)
     : BaseStep(prev, depth, weight), _vertex(v), _edge(std::move(edge)) {}
 
 SingleServerProviderStep::~SingleServerProviderStep() = default;
