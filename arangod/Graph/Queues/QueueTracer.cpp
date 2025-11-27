@@ -25,6 +25,7 @@
 
 #include "Basics/ScopeGuard.h"
 #include "Basics/system-functions.h"
+#include "Graph/Queues/BatchedFifoQueue.h"
 #include "Graph/Queues/BatchedLifoQueue.h"
 #include "Graph/Queues/FifoQueue.h"
 #include "Graph/Queues/LifoQueue.h"
@@ -183,6 +184,8 @@ using SingleServerProviderStep = ::arangodb::graph::SingleServerProviderStep;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::FifoQueue<SingleServerProviderStep>>;
 template class ::arangodb::graph::QueueTracer<
+    arangodb::graph::BatchedFifoQueue<SingleServerProviderStep>>;
+template class ::arangodb::graph::QueueTracer<
     arangodb::graph::LifoQueue<SingleServerProviderStep>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::BatchedLifoQueue<SingleServerProviderStep>>;
@@ -191,6 +194,8 @@ template class ::arangodb::graph::QueueTracer<
 
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::FifoQueue<ClusterProviderStep>>;
+template class ::arangodb::graph::QueueTracer<
+    arangodb::graph::BatchedFifoQueue<ClusterProviderStep>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::LifoQueue<ClusterProviderStep>>;
 template class ::arangodb::graph::QueueTracer<
@@ -201,6 +206,8 @@ template class ::arangodb::graph::QueueTracer<
 #ifdef USE_ENTERPRISE
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::FifoQueue<enterprise::SmartGraphStep>>;
+template class ::arangodb::graph::QueueTracer<
+    arangodb::graph::BatchedFifoQueue<enterprise::SmartGraphStep>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::LifoQueue<enterprise::SmartGraphStep>>;
 template class ::arangodb::graph::QueueTracer<

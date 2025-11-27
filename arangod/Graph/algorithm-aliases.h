@@ -30,6 +30,7 @@
 #include "Graph/Enumerators/YenEnumerator.h"
 
 #include "Graph/Queues/BatchedLifoQueue.h"
+#include "Graph/Queues/BatchedFifoQueue.h"
 #include "Graph/Queues/FifoQueue.h"
 #include "Graph/Queues/LifoQueue.h"
 #include "Graph/Queues/QueueTracer.h"
@@ -211,9 +212,16 @@ struct BFSConfiguration {
       typename std::conditional<useTracing, ProviderTracer<ProviderType>,
                                 ProviderType>::type;
   using Step = typename Provider::Step;
-  using Queue =
-      typename std::conditional<useTracing, QueueTracer<FifoQueue<Step>>,
-                                FifoQueue<Step>>::type;
+
+  // smart traversal queue on coordinator needs to be non-batched
+  // for that, SmartGraphProvider fns addExpansionIterator and expandToNextBatch
+  // need to be implemented
+  using batched = typename std::conditional<
+      std::is_same_v<ProviderType,
+                     enterprise::SmartGraphProvider<ClusterProviderStep>>,
+      FifoQueue<Step>, BatchedFifoQueue<Step>>::type;
+  using Queue = typename std::conditional<useTracing, QueueTracer<batched>,
+                                          batched>::type;
   using Store =
       typename std::conditional<useTracing, PathStoreTracer<PathStore<Step>>,
                                 PathStore<Step>>::type;
