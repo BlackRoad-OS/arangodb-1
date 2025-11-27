@@ -1929,7 +1929,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
     VPackBuilder& report, ReplicatedLogStatusMapByDatabase const& localLogs,
     ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
   for (auto const& dbName : dirty) {
-    // LOG_DEVEL << "############ DATABASE: " << dbName;
     // initialize database statistics for this database, resetting whatever was
     // previously
     feature._databaseShardsStats[dbName] = ShardStatistics{};
@@ -2075,7 +2074,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
 
         VPackBuilder error;
         if (shSlice.get(THE_LEADER).copyString().empty()) {  // Leader
-          // LOG_DEVEL << "LEADER IS: " << shName;
           try {
             // Check that we are the leader of this shard in the Plan, together
             // with the precondition below that the Plan is unchanged, this
