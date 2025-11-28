@@ -189,13 +189,13 @@ auto SingleServerProvider<Step>::clear() -> void {
 
 template<class Step>
 void SingleServerProvider<Step>::insertEdgeIntoResult(
-    EdgeDocumentToken edge, arangodb::velocypack::Builder& builder) {
+    typename Step::EdgeType edge, arangodb::velocypack::Builder& builder) {
   _edgeLookup.insertEdgeIntoResult(edge, builder);
 }
 
 template<class Step>
 void SingleServerProvider<Step>::insertEdgeIdIntoResult(
-    EdgeDocumentToken edge, arangodb::velocypack::Builder& builder) {
+    typename Step::EdgeType edge, arangodb::velocypack::Builder& builder) {
   _edgeLookup.insertEdgeIdIntoResult(edge, builder);
 }
 

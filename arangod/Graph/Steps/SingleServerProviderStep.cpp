@@ -48,13 +48,11 @@ SingleServerProviderStep::SingleServerProviderStep(VertexType v, size_t depth,
       _vertex(v),
       _edge() {}
 
-SingleServerProviderStep::SingleServerProviderStep(VertexType v,
-                                                   EdgeDocumentToken edge,
+SingleServerProviderStep::SingleServerProviderStep(VertexType v, EdgeType edge,
                                                    size_t prev)
     : BaseStep(prev), _vertex(v), _edge(std::move(edge)) {}
 
-SingleServerProviderStep::SingleServerProviderStep(VertexType v,
-                                                   EdgeDocumentToken edge,
+SingleServerProviderStep::SingleServerProviderStep(VertexType v, EdgeType edge,
                                                    size_t prev, size_t depth,
                                                    double weight)
     : BaseStep(prev, depth, weight), _vertex(v), _edge(std::move(edge)) {}
@@ -70,12 +68,4 @@ SingleServerProviderStep::Edge::getID() const noexcept {
   return _token;
 }
 
-bool SingleServerProviderStep::Edge::isValid() const noexcept {
-  return getID().isValid();
-}
-
-void SingleServerProviderStep::Edge::addToBuilder(
-    SingleServerProvider<SingleServerProviderStep>& provider,
-    arangodb::velocypack::Builder& builder) const {
-  provider.insertEdgeIntoResult(getID(), builder);
-}
+bool SingleServerProviderStep::Edge::isValid() const noexcept { return true; }

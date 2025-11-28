@@ -88,9 +88,9 @@ class SingleServerProvider {
               std::function<void(Step)> const& callback) -> void;  // index
   auto clear() -> void;
 
-  void insertEdgeIntoResult(EdgeDocumentToken edge,
+  void insertEdgeIntoResult(typename Step::EdgeType edge,
                             arangodb::velocypack::Builder& builder);
-  void insertEdgeIdIntoResult(EdgeDocumentToken edge,
+  void insertEdgeIdIntoResult(typename Step::EdgeType edge,
                               arangodb::velocypack::Builder& builder);
 
   std::string getEdgeId(typename Step::Edge const& edge);

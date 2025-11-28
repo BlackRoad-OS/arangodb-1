@@ -22,15 +22,16 @@
 /// @author Heiko Kernbach
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "Transaction/Methods.h"
+#include <velocypack/HashedStringRef.h>
 #include "Graph/EdgeDocumentToken.h"
+#include "Transaction/Methods.h"
 #include "Graph/Providers/BaseStep.h"
 #include "Graph/Providers/TypeAliases.h"
+#include "Graph/EdgeDocumentToken.h"
 
 #pragma once
 
-namespace arangodb {
-namespace graph {
+namespace arangodb::graph {
 
 template<class EdgeType>
 class SingleServerProvider;
@@ -61,21 +62,19 @@ class SingleServerProviderStep : public arangodb::graph::BaseStep {
 
   class Edge {
    public:
-    explicit Edge(EdgeDocumentToken tkn) noexcept : _token(std::move(tkn)) {}
+    explicit Edge(EdgeType tkn) noexcept : _token(std::move(tkn)) {}
     Edge() noexcept : _token() {}
 
-    void addToBuilder(SingleServerProvider<SingleServerProviderStep>& provider,
-                      arangodb::velocypack::Builder& builder) const;
     EdgeType const& getID() const noexcept;
     bool isValid() const noexcept;
 
    private:
-    EdgeDocumentToken _token;
+    EdgeType _token;
   };
 
   SingleServerProviderStep(VertexType v);
-  SingleServerProviderStep(VertexType v, EdgeDocumentToken edge, size_t prev);
-  SingleServerProviderStep(VertexType v, EdgeDocumentToken edge, size_t prev,
+  SingleServerProviderStep(VertexType v, EdgeType edge, size_t prev);
+  SingleServerProviderStep(VertexType v, EdgeType edge, size_t prev,
                            size_t depth, double weight);
   SingleServerProviderStep(VertexType v, size_t depth, double weight = 0.0);
   ~SingleServerProviderStep();
@@ -89,7 +88,7 @@ class SingleServerProviderStep : public arangodb::graph::BaseStep {
 
   std::string toString() const {
     return "<Step><Vertex>: " + _vertex.getID().toString() +
-           ", <Edge>: " + std::to_string(_edge.getID().localDocumentId().id());
+           ", <Edge>: " + _edge.getID().toString();
   }
   bool isProcessable() const { return !isLooseEnd(); }
   bool isLooseEnd() const { return false; }
@@ -125,5 +124,4 @@ class SingleServerProviderStep : public arangodb::graph::BaseStep {
   Vertex _vertex;
   Edge _edge;
 };
-}  // namespace graph
-}  // namespace arangodb
+}  // namespace arangodb::graph
