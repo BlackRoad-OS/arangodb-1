@@ -323,29 +323,38 @@ TEST_F(AqlValueHashTest, AqlValueHash_UsageInToVelocyPack_SamePointer) {
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_RangeValues) {
-  // Range values: hash and compare by pointer
-  // This is CORRECT: Range values are compared by pointer, so hashing by
-  // pointer is correct
+  // Range values: hash and compare by CONTENT (low and high values)
+  // NEW APPROACH: Range values are compared by content, so hashing by
+  // content is correct
   AqlValue r1(1, 10);
-  AqlValue r2(1, 10);  // Different Range object
+  AqlValue r2(1, 10);  // Different Range object, same content
   AqlValue r3(1, 10);
   AqlValue r3_copy = r3;  // Same pointer
+  AqlValue r4(2, 20);     // Different content
 
   std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
 
-  // Different Range objects -> different pointers -> different hashes
-  // This is CORRECT: Range values compare by pointer
-  EXPECT_NE(hasher(r1), hasher(r2));
-  EXPECT_FALSE(equal(r1, r2));
+  // Same content -> same hash and equal (NEW APPROACH: content-based)
+  EXPECT_EQ(hasher(r1), hasher(r2))
+      << "Range values with same content should have same hash (content-based)";
+  EXPECT_TRUE(equal(r1, r2))
+      << "Range values with same content should be equal (content-based)";
 
-  // Same pointer -> same hash
+  // Same pointer -> same hash and equal
   EXPECT_EQ(hasher(r3), hasher(r3_copy));
   EXPECT_TRUE(equal(r3, r3_copy));
+
+  // Different content -> different hash
+  EXPECT_NE(hasher(r1), hasher(r4))
+      << "Range values with different content should have different hashes";
+  EXPECT_FALSE(equal(r1, r4))
+      << "Range values with different content should not be equal";
 
   r1.destroy();
   r2.destroy();
   r3.destroy();
+  r4.destroy();
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_InlineTypes_Consistency) {
@@ -565,14 +574,17 @@ TEST_F(AqlValueHashTest, AqlValueHash_VerifyPointerVsPayload_Hashing) {
     s2.destroy();
   }
 
-  // RANGE: equal_to() compares by pointer
-  // -> Hashing by pointer is CORRECT
+  // RANGE: equal_to() compares by CONTENT (low and high values)
+  // -> Hashing by content is CORRECT (NEW APPROACH)
   {
     AqlValue r1(1, 10);
     AqlValue r2(1, 10);
-    // Different Range objects -> not equal -> different hashes is CORRECT
-    EXPECT_FALSE(equal(r1, r2));
-    EXPECT_NE(hasher(r1), hasher(r2));
+    // Same content -> equal -> same hash is CORRECT (NEW APPROACH)
+    EXPECT_TRUE(equal(r1, r2))
+        << "Range values with same content should be equal (content-based)";
+    EXPECT_EQ(hasher(r1), hasher(r2))
+        << "Range values with same content should have same hash "
+           "(content-based)";
 
     r1.destroy();
     r2.destroy();
