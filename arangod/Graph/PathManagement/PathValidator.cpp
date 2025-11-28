@@ -119,7 +119,7 @@ auto PathValidator<ProviderType, PathStore, vertexUniqueness, edgeUniqueness>::
             }
 
             auto const& [unusedE, addedEdge] =
-                _uniqueEdges.emplace(step.getEdgeIdentifier());
+                _uniqueEdges.emplace(step.getEdge().getID());
             // If this add fails, we need to exclude this path
             return addedEdge;
           });
