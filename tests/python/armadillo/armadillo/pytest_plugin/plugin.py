@@ -527,8 +527,8 @@ def pytest_sessionstart(session: Session) -> None:
     if not framework_config.compact_mode:
         # Create reporter with result collector and process supervisor from context
         plugin.reporter = ArmadilloReporter(
-            result_collector=plugin._session_app_context.result_collector,
             process_supervisor=plugin._process_supervisor,
+            result_collector=plugin._session_app_context.result_collector,
         )
         plugin.reporter.pytest_sessionstart(session)
         # Set the actual test start time AFTER server deployment is complete

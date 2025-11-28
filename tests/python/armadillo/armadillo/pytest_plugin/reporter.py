@@ -48,8 +48,8 @@ class ArmadilloReporter:
 
     def __init__(
         self,
+        process_supervisor: ProcessSupervisor,
         result_collector: Optional[ResultCollector] = None,
-        process_supervisor: Optional[ProcessSupervisor] = None,
     ):
         self.test_times: Dict[str, Dict[str, float]] = {}
         self.test_reports: Dict[str, TestReport] = (
@@ -275,7 +275,7 @@ class ArmadilloReporter:
             # Check if test passed (not skipped, not crashed, report outcome is passed)
             if (
                 not self.test_skipped.get(report.nodeid, False)
-                and not (self.process_supervisor and self.process_supervisor.has_any_crash())
+                and not self.process_supervisor.has_any_crash()
                 and report.outcome == "passed"
             ):
 
@@ -316,9 +316,9 @@ class ArmadilloReporter:
                 outcome = "skipped"
             # Check if there's crash info attached to the report (from makereport hook)
             # or check crash state directly
-            elif (hasattr(report, "crash_info") and report.crash_info) or (
-                self.process_supervisor and self.process_supervisor.has_any_crash()
-            ):
+            elif (
+                hasattr(report, "crash_info") and report.crash_info
+            ) or self.process_supervisor.has_any_crash():
                 outcome = "failed"  # Crashed tests should show as failed
             else:
                 outcome = report.outcome

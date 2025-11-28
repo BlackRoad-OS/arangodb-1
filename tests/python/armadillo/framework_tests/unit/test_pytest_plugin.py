@@ -264,7 +264,8 @@ class TestArmadilloReporter:
 
     def test_reporter_can_be_created(self) -> None:
         """Test ArmadilloReporter can be instantiated."""
-        reporter = ArmadilloReporter()
+        mock_process_supervisor = Mock()
+        reporter = ArmadilloReporter(process_supervisor=mock_process_supervisor)
 
         assert reporter is not None
         assert isinstance(reporter.test_times, dict)
@@ -276,7 +277,8 @@ class TestArmadilloReporter:
         self, mock_open: Any, mock_flush: Any, mock_write: Any
     ) -> None:
         """Test reporter outputs RUN header when test starts."""
-        reporter = ArmadilloReporter()
+        mock_process_supervisor = Mock()
+        reporter = ArmadilloReporter(process_supervisor=mock_process_supervisor)
 
         # Simulate test start
         nodeid = "test_file.py::TestClass::test_method"
@@ -299,7 +301,8 @@ class TestArmadilloReporter:
 
     def test_reporter_tracks_test_timing(self) -> None:
         """Test reporter accurately tracks test execution timing."""
-        reporter = ArmadilloReporter()
+        mock_process_supervisor = Mock()
+        reporter = ArmadilloReporter(process_supervisor=mock_process_supervisor)
         nodeid = "test_file.py::TestClass::test_method"
 
         # Start test
@@ -315,7 +318,8 @@ class TestArmadilloReporter:
 
     def test_reporter_extracts_test_name_correctly(self) -> None:
         """Test reporter extracts test name from nodeid correctly."""
-        reporter = ArmadilloReporter()
+        mock_process_supervisor = Mock()
+        reporter = ArmadilloReporter(process_supervisor=mock_process_supervisor)
 
         test_cases = [
             ("test_file.py::TestClass::test_method", "test_method"),
@@ -555,7 +559,8 @@ class TestArmadilloReporterRegressionTests:
 
         This is a regression test for timing not being tracked.
         """
-        reporter = ArmadilloReporter()
+        mock_process_supervisor = Mock()
+        reporter = ArmadilloReporter(process_supervisor=mock_process_supervisor)
         nodeid = "test_file.py::TestClass::test_method"
 
         # This should initialize timing structure
@@ -579,7 +584,8 @@ class TestArmadilloReporterRegressionTests:
 
         This is a regression test for missing RUN headers.
         """
-        reporter = ArmadilloReporter()
+        mock_process_supervisor = Mock()
+        reporter = ArmadilloReporter(process_supervisor=mock_process_supervisor)
         nodeid = "test_file.py::TestClass::test_method"
 
         # Create a mock item with nodeid
