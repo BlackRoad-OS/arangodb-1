@@ -22,14 +22,12 @@
 /// @author Heiko Kernbach
 ////////////////////////////////////////////////////////////////////////////////
 
+#pragma once
+
 #include <velocypack/HashedStringRef.h>
 #include "Graph/EdgeDocumentToken.h"
-#include "Transaction/Methods.h"
 #include "Graph/Providers/BaseStep.h"
-#include "Graph/Providers/TypeAliases.h"
 #include "Graph/EdgeDocumentToken.h"
-
-#pragma once
 
 namespace arangodb::graph {
 
