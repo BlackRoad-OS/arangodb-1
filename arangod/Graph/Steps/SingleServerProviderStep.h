@@ -92,9 +92,6 @@ class SingleServerProviderStep : public arangodb::graph::BaseStep {
   bool isLooseEnd() const { return false; }
   bool isUnknown() const { return false; }
 
-  // beware: will return a *copy* of the vertex id
-  VertexType getVertexIdentifier() const { return _vertex.getID(); }
-
   // beware: will return a *copy* of the edge id
   EdgeType getEdgeIdentifier() const { return _edge.getID(); }
 

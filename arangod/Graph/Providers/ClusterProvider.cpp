@@ -500,9 +500,9 @@ auto ClusterProvider<StepImpl>::fetchVertices(
       // in that case we do not have to fetch the actual vertex data
 
       for (auto& lE : looseEnds) {
-        if (!_opts.getCache()->isVertexCached(lE->getVertexIdentifier())) {
+        if (!_opts.getCache()->isVertexCached(lE->getVertex().getID())) {
           // we'll only cache the vertex id, we do not need the data
-          _opts.getCache()->cacheVertex(lE->getVertexIdentifier(),
+          _opts.getCache()->cacheVertex(lE->getVertex().getID(),
                                         VPackSlice::nullSlice());
         }
         result.emplace_back(lE);

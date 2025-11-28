@@ -121,11 +121,6 @@ class ClusterProviderStep : public arangodb::graph::BaseStep {
   }
   bool isUnknown() const noexcept { return _validationStatus.isUnknown(); }
 
-  // beware: returns a *copy* of the vertex id
-  [[nodiscard]] VertexType getVertexIdentifier() const {
-    return _vertex.getID();
-  }
-
   // beware: returns a *copy* of the edge id
   [[nodiscard]] EdgeType getEdgeIdentifier() const { return _edge.getID(); }
 
