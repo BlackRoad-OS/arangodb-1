@@ -37,7 +37,7 @@ from ..core.types import (
     ServerHealthInfo,
 )
 from ..core.value_objects import DeploymentId
-from ..core.process import has_any_crash, get_crash_state, clear_crash_state
+from ..core.process import ProcessSupervisor, kill_all_supervised_processes
 from ..core.errors import ResultProcessingError
 from ..instances.deployment_controller import DeploymentController
 from .reporter import ArmadilloReporter
@@ -150,6 +150,9 @@ class ArmadilloPlugin:
         )
         self.reporter: Optional["ArmadilloReporter"] = None  # Created in sessionstart
 
+        # Session-wide ProcessSupervisor for crash tracking across all deployments
+        self._process_supervisor: Optional[ProcessSupervisor] = None
+
         # Session execution state - encapsulates test abortion logic
         self.execution_state = SessionExecutionState()
 
@@ -259,9 +262,13 @@ class ArmadilloPlugin:
         configure_logging()
         # Note: Session-level directory isolation not currently enabled
         # (would require ApplicationContext integration in pytest fixtures)
+
+        # Create session-wide ProcessSupervisor for crash tracking
+        self._process_supervisor = ProcessSupervisor()
+
         # Clear any crash/timeout state from previous runs
         self.execution_state.reset()
-        clear_crash_state()
+        self._process_supervisor.clear_crash_state()
 
     def pytest_sessionfinish(self, _session: pytest.Session, exitstatus: int) -> None:
         """Called at the end of the pytest session."""
@@ -432,8 +439,13 @@ def pytest_sessionstart(session: Session) -> None:
 
     # Get plugin and reset execution state for new session
     plugin = _get_plugin(session)
+
+    # Create session-wide ProcessSupervisor (if not already created by pytest_sessionstart)
+    if plugin._process_supervisor is None:
+        plugin._process_supervisor = ProcessSupervisor()
+
     plugin.execution_state.reset()
-    clear_crash_state()
+    plugin._process_supervisor.clear_crash_state()
 
     # Register cleanup handlers for both normal and abnormal exits
     atexit.register(_emergency_cleanup, session)
@@ -456,17 +468,17 @@ def pytest_sessionstart(session: Session) -> None:
 
         # Check if processes are still running
         try:
-            from ..core.process import _process_supervisor
-
-            while (time.time() - start_time) < cleanup_timeout:
-                if not _process_supervisor._processes:
-                    logger.info("All supervised processes terminated successfully")
-                    break
-                time.sleep(0.5)  # Check every 500ms
-            else:
-                logger.warning(
-                    "Cleanup timeout reached, some processes may still be running"
-                )
+            plugin = _get_plugin(session)
+            if plugin._process_supervisor:
+                while (time.time() - start_time) < cleanup_timeout:
+                    if not plugin._process_supervisor._processes:
+                        logger.info("All supervised processes terminated successfully")
+                        break
+                    time.sleep(0.5)  # Check every 500ms
+                else:
+                    logger.warning(
+                        "Cleanup timeout reached, some processes may still be running"
+                    )
         except Exception as e:
             # Signal handler must not crash - catch everything
             logger.error("Error during cleanup monitoring: %s", e, exc_info=True)
@@ -484,8 +496,11 @@ def pytest_sessionstart(session: Session) -> None:
 
     # Create shared ApplicationContext for the entire pytest session
     # This ensures all deployments share the same context (port allocator, filesystem, etc.)
+    # Pass the session-wide ProcessSupervisor for crash tracking across all deployments
     session_id = random_id(8)
-    plugin._session_app_context = ApplicationContext.create(framework_config)
+    plugin._session_app_context = ApplicationContext.create(
+        framework_config, process_supervisor=plugin._process_supervisor
+    )
     plugin._session_app_context.filesystem.set_test_session_id(session_id)
 
     # Note: With package-scoped fixtures, deployments are created lazily per-package,
@@ -510,9 +525,10 @@ def pytest_sessionstart(session: Session) -> None:
     logger.info("Framework debug logging enabled: %s", framework_log_file)
 
     if not framework_config.compact_mode:
-        # Create reporter with result collector from context
+        # Create reporter with result collector and process supervisor from context
         plugin.reporter = ArmadilloReporter(
-            result_collector=plugin._session_app_context.result_collector
+            result_collector=plugin._session_app_context.result_collector,
+            process_supervisor=plugin._process_supervisor,
         )
         plugin.reporter.pytest_sessionstart(session)
         # Set the actual test start time AFTER server deployment is complete
@@ -770,8 +786,12 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
                 )
 
     # Check for crashes after the test phase completes
-    if call.when == "call" and has_any_crash():
-        crash_states = get_crash_state()
+    if (
+        call.when == "call"
+        and plugin._process_supervisor
+        and plugin._process_supervisor.has_any_crash()
+    ):
+        crash_states = plugin._process_supervisor.get_crash_state()
 
         # Mark this test as failed due to crash
         report.outcome = "failed"
@@ -961,9 +981,17 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
     """Cleanup all supervised processes with bulletproof termination."""
     try:
         logger.info("Starting _cleanup_all_processes")
-        from ..core.process import _process_supervisor
+        global _current_session
+        if not _current_session:
+            logger.debug("No session available - cannot cleanup processes")
+            return
+        plugin = _get_plugin(_current_session)
+        if not plugin or not plugin._process_supervisor:
+            logger.debug("No process supervisor available - cannot cleanup processes")
+            return
 
-        server_ids = list(_process_supervisor._processes.keys())
+        process_supervisor = plugin._process_supervisor
+        server_ids = list(process_supervisor._processes.keys())
         if server_ids:
             logger.info(
                 "Found %d processes to cleanup: %s", len(server_ids), server_ids
@@ -982,8 +1010,8 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
                 for server_id in server_ids:
                     try:
                         # Check if process is already dead before trying to stop it
-                        if server_id in _process_supervisor._processes:
-                            process = _process_supervisor._processes[server_id]
+                        if server_id in process_supervisor._processes:
+                            process = process_supervisor._processes[server_id]
                             if process.poll() is not None:
                                 logger.debug(
                                     "Process %s already dead (exit code: %s), skipping",
@@ -991,11 +1019,11 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
                                     process.returncode,
                                 )
                                 # Remove it from tracking since it's already dead
-                                _process_supervisor._cleanup_process(server_id)
+                                process_supervisor._cleanup_process(server_id)
                                 continue
 
                         logger.debug("Sending SIGTERM to process group %s", server_id)
-                        _process_supervisor.stop(server_id, graceful=True, timeout=3.0)
+                        process_supervisor.stop(server_id, graceful=True, timeout=3.0)
                         logger.debug("Process %s terminated gracefully", server_id)
                     except (OSError, ProcessLookupError) as e:
                         logger.warning(
@@ -1020,8 +1048,8 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
                     for server_id in graceful_failed:
                         try:
                             # Check if process is already dead before trying to force kill it
-                            if server_id in _process_supervisor._processes:
-                                process = _process_supervisor._processes[server_id]
+                            if server_id in process_supervisor._processes:
+                                process = process_supervisor._processes[server_id]
                                 if process.poll() is not None:
                                     logger.debug(
                                         "Process %s already dead (exit code: %s), skipping force kill",
@@ -1029,13 +1057,13 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
                                         process.returncode,
                                     )
                                     # Remove it from tracking since it's already dead
-                                    _process_supervisor._cleanup_process(server_id)
+                                    process_supervisor._cleanup_process(server_id)
                                     continue
 
                             logger.debug(
                                 "Sending SIGKILL to process group %s", server_id
                             )
-                            _process_supervisor.stop(
+                            process_supervisor.stop(
                                 server_id, graceful=False, timeout=2.0
                             )
                             logger.debug("Process %s force killed", server_id)
@@ -1059,8 +1087,8 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
                 try:
                     remaining_processes = []
                     for server_id in server_ids:
-                        if server_id in _process_supervisor._processes:
-                            process = _process_supervisor._processes[server_id]
+                        if server_id in process_supervisor._processes:
+                            process = process_supervisor._processes[server_id]
                             try:
                                 # Check if process is still alive
                                 if process.poll() is None:  # None means still running
@@ -1113,12 +1141,9 @@ def _emergency_cleanup(session: Optional[Session] = None) -> None:
         return
     has_deployments = bool(plugin._package_deployments)
 
-    try:
-        from ..core.process import _process_supervisor
-
-        has_processes = bool(_process_supervisor._processes)
-    except (ImportError, AttributeError):
-        has_processes = False
+    has_processes = False
+    if plugin._process_supervisor:
+        has_processes = bool(plugin._process_supervisor._processes)
 
     # Only print emergency message if there's actually something left to clean up
     if has_deployments or has_processes:
@@ -1142,13 +1167,9 @@ def _emergency_cleanup(session: Optional[Session] = None) -> None:
 
         # Only use nuclear option if processes still remain after normal emergency cleanup
         try:
-            from ..core.process import _process_supervisor
-
-            if _process_supervisor._processes:
+            if plugin._process_supervisor and plugin._process_supervisor._processes:
                 logger.warning("Some processes still running, using nuclear cleanup...")
-                from ..core.process import kill_all_supervised_processes
-
-                kill_all_supervised_processes()
+                kill_all_supervised_processes(plugin._process_supervisor)
             else:
                 logger.info("All processes cleaned up successfully")
         except (OSError, ProcessLookupError, AttributeError, RuntimeError) as nuclear_e:

@@ -24,13 +24,20 @@ class TestServerHealthChecker:
             "Authorization": "Bearer test-token"
         }
 
+        # Create mock process supervisor
+        self.mock_process_supervisor = Mock()
+
         self.health_checker = ServerHealthChecker(
-            logger=self.mock_logger, auth_provider=self.mock_auth_provider
+            logger=self.mock_logger,
+            auth_provider=self.mock_auth_provider,
+            process_supervisor=self.mock_process_supervisor,
         )
 
-    @patch("armadillo.instances.health_checker.is_process_running", return_value=True)
-    def test_check_readiness_success(self, mock_is_running: Any) -> None:
+    def test_check_readiness_success(self) -> None:
         """Test successful readiness check."""
+        # Mock process supervisor
+        self.mock_process_supervisor.is_running.return_value = True
+
         # Mock successful health check
         with patch.object(self.health_checker, "check_health") as mock_check_health:
             mock_check_health.return_value = HealthStatus(
@@ -42,14 +49,18 @@ class TestServerHealthChecker:
             )
 
             assert result is True
-            mock_is_running.assert_called_once_with(ServerId("test_server"))
+            self.mock_process_supervisor.is_running.assert_called_once_with(
+                ServerId("test_server")
+            )
             mock_check_health.assert_called_once_with(
                 "http://localhost:8529", timeout=2.0
             )
 
-    @patch("armadillo.instances.health_checker.is_process_running", return_value=False)
-    def test_check_readiness_process_not_running(self, mock_is_running: Any) -> None:
+    def test_check_readiness_process_not_running(self) -> None:
         """Test readiness check when process is not running."""
+        # Mock process supervisor
+        self.mock_process_supervisor.is_running.return_value = False
+
         result = self.health_checker.check_readiness(
             ServerId("test_server"), "http://localhost:8529"
         )
@@ -59,9 +70,11 @@ class TestServerHealthChecker:
             "Readiness check failed for %s: Process not running", "test_server"
         )
 
-    @patch("armadillo.instances.health_checker.is_process_running", return_value=True)
-    def test_check_readiness_health_check_fails(self, mock_is_running: Any) -> None:
+    def test_check_readiness_health_check_fails(self) -> None:
         """Test readiness check when health check fails."""
+        # Mock process supervisor
+        self.mock_process_supervisor.is_running.return_value = True
+
         with patch.object(self.health_checker, "check_health") as mock_check_health:
             mock_check_health.return_value = HealthStatus(
                 is_healthy=False, response_time=1.0, error_message="Connection failed"
@@ -76,12 +89,13 @@ class TestServerHealthChecker:
                 "Readiness check failed for %s: %s", "test_server", "Connection failed"
             )
 
-    @patch(
-        "armadillo.instances.health_checker.is_process_running",
-        side_effect=Exception("Process check error"),
-    )
-    def test_check_readiness_exception_handling(self, mock_is_running: Any) -> None:
+    def test_check_readiness_exception_handling(self) -> None:
         """Test readiness check exception handling."""
+        # Mock process supervisor to raise exception
+        self.mock_process_supervisor.is_running.side_effect = Exception(
+            "Process check error"
+        )
+
         result = self.health_checker.check_readiness(
             ServerId("test_server"), "http://localhost:8529"
         )
@@ -141,7 +155,9 @@ class TestServerHealthChecker:
         self, mock_asyncio_run: Any
     ) -> None:
         """Test health checker integration with injected dependencies."""
-        # Test logger integration
+        # Test logger integration - Mock process supervisor to return False (not running)
+        self.mock_process_supervisor.is_running.return_value = False
+
         readiness_result = self.health_checker.check_readiness(
             ServerId("test_server"), "http://localhost:8529"
         )

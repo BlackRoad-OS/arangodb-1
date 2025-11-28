@@ -164,32 +164,35 @@ class TestArangoServerLifecycle:
             port=8529,
         )
 
-    @patch("armadillo.instances.server.start_supervised_process")
-    @patch("armadillo.instances.server.is_process_running", return_value=True)
     @patch("pathlib.Path.exists", return_value=True)
-    def test_start_server_calls_process(
-        self, mock_exists: Any, mock_is_running: Any, mock_start: Any
-    ) -> None:
+    def test_start_server_calls_process(self, mock_exists: Any) -> None:
         """Test server start calls process supervisor."""
-        mock_start.return_value = Mock(pid=12345)
+        # Mock the process supervisor methods
+        mock_process_info = Mock(pid=12345)
+        self.server._app_context.process_supervisor.start = Mock(
+            return_value=mock_process_info
+        )
+        self.server._app_context.process_supervisor.is_running = Mock(return_value=True)
 
         self.server.start()
 
         # Server should be running after successful start
         assert self.server.is_running() is True
-        mock_start.assert_called_once()
+        self.server._app_context.process_supervisor.start.assert_called_once()
 
         # Check process ID was set
-        call_args = mock_start.call_args
+        call_args = self.server._app_context.process_supervisor.start.call_args
         process_id = call_args[0][0]
         assert process_id == ServerId("test_server")
 
-    @patch("armadillo.instances.server.stop_supervised_process")
-    def test_stop_server_calls_process(self, mock_stop: Any) -> None:
+    def test_stop_server_calls_process(self) -> None:
         """Test server stop calls process supervisor."""
         # Set up server as if it was started
         from armadillo.core.process import ProcessInfo
         from pathlib import Path
+
+        # Mock the process supervisor
+        self.server._app_context.process_supervisor.stop = Mock()
 
         self.server._runtime.process_info = ProcessInfo(
             pid=12345,
@@ -202,7 +205,7 @@ class TestArangoServerLifecycle:
 
         self.server.stop()
 
-        mock_stop.assert_called_once_with(
+        self.server._app_context.process_supervisor.stop.assert_called_once_with(
             ServerId("test_server"), graceful=True, timeout=30.0
         )
 
@@ -212,10 +215,9 @@ class TestArangoServerLifecycle:
         # Should not crash
         assert self.server._runtime.process_info is None
 
-    @patch("armadillo.instances.server.is_process_running")
-    def test_is_running_with_process_id(self, mock_is_running: Any) -> None:
+    def test_is_running_with_process_id(self) -> None:
         """Test is_running delegates to process supervisor."""
-        mock_is_running.return_value = True
+        self.server._app_context.process_supervisor.is_running = Mock(return_value=True)
         self.server._runtime.is_running = True
 
         assert self.server.is_running() is True
@@ -277,22 +279,24 @@ class TestArangoServerErrorHandling:
             port=8529,
         )
 
-    @patch("armadillo.instances.server.start_supervised_process")
-    def test_start_process_failure(self, mock_start: Any) -> None:
+    def test_start_process_failure(self) -> None:
         """Test handling of process start failure."""
         from armadillo.core.errors import ProcessStartupError, ServerStartupError
 
-        mock_start.side_effect = OSError("Failed to start")
+        self.server._app_context.process_supervisor.start = Mock(
+            side_effect=OSError("Failed to start")
+        )
 
         with pytest.raises(ServerStartupError):
             self.server.start()
 
-    @patch("armadillo.instances.server.stop_supervised_process")
-    def test_stop_process_failure_handled_gracefully(self, mock_stop: Any) -> None:
+    def test_stop_process_failure_handled_gracefully(self) -> None:
         """Test stop handles process failure gracefully."""
         from armadillo.core.errors import ProcessError, ServerShutdownError
 
-        mock_stop.side_effect = OSError("Failed to stop")
+        self.server._app_context.process_supervisor.stop = Mock(
+            side_effect=OSError("Failed to stop")
+        )
 
         from armadillo.core.process import ProcessInfo
         from pathlib import Path
@@ -343,13 +347,8 @@ class TestArangoServerErrorHandling:
 class TestArangoServerIntegration:
     """Test basic integration scenarios."""
 
-    @patch("armadillo.instances.server.start_supervised_process")
-    @patch("armadillo.instances.server.stop_supervised_process")
-    @patch("armadillo.instances.server.is_process_running")
     @patch("pathlib.Path.exists", return_value=True)
-    def test_full_lifecycle_workflow(
-        self, mock_exists: Any, mock_is_running: Any, mock_stop: Any, mock_start: Any
-    ) -> None:
+    def test_full_lifecycle_workflow(self, mock_exists: Any) -> None:
         """Test complete start->check->stop workflow."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
@@ -359,8 +358,9 @@ class TestArangoServerIntegration:
         )
 
         # Mock successful start
-        mock_start.return_value = Mock(pid=12345)
-        mock_is_running.return_value = True
+        app_context.process_supervisor.start = Mock(return_value=Mock(pid=12345))
+        app_context.process_supervisor.is_running = Mock(return_value=True)
+        app_context.process_supervisor.stop = Mock()
 
         # Start server
         server.start()
@@ -370,39 +370,38 @@ class TestArangoServerIntegration:
 
         # Stop server
         server.stop()
-        mock_stop.assert_called_once()
+        app_context.process_supervisor.stop.assert_called_once()
 
-    @patch("armadillo.instances.server.start_supervised_process")
     @patch("pathlib.Path.exists", return_value=True)
-    def test_start_attempts_process_creation(
-        self, mock_exists: Any, mock_start_process: Any
-    ) -> None:
+    def test_start_attempts_process_creation(self, mock_exists: Any) -> None:
         """Test start attempts to create a process."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
             server_id=ServerId("mock_test"), app_context=app_context, port=8529
         )
-        mock_start_process.return_value = Mock(pid=12345)
+        app_context.process_supervisor.start = Mock(return_value=Mock(pid=12345))
 
         try:
             server.start()
             # If successful, process should have been called
-            mock_start_process.assert_called()
+            app_context.process_supervisor.start.assert_called()
         except Exception:
             # If it fails due to other reasons, at least verify the attempt was made
-            if mock_start_process.called:
+            if app_context.process_supervisor.start.called:
                 pass  # Good enough
             else:
                 # Re-raise if process creation wasn't even attempted
                 raise
 
-    @patch("armadillo.instances.server.stop_supervised_process")
-    def test_stop_attempts_process_termination(self, mock_stop_process: Any) -> None:
+    def test_stop_attempts_process_termination(self) -> None:
         """Test stop attempts to terminate process."""
         app_context = ApplicationContext.for_testing()
         server = ArangoServer.create_single_server(
             server_id=ServerId("mock_test"), app_context=app_context, port=8529
         )
+
+        # Mock process supervisor
+        app_context.process_supervisor.stop = Mock()
 
         # Set server as if it's running
         server._runtime.is_running = True
@@ -410,9 +409,9 @@ class TestArangoServerIntegration:
         try:
             server.stop()
             # Should have attempted to stop the process
-            mock_stop_process.assert_called_once_with(
+            app_context.process_supervisor.stop.assert_called_once_with(
                 ServerId("mock_test"), graceful=True, timeout=30.0
             )
         except Exception:
             # Even if it fails, the attempt should have been made
-            assert mock_stop_process.called
+            assert app_context.process_supervisor.stop.called

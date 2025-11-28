@@ -2,14 +2,16 @@
 
 import time
 import asyncio
-from typing import Protocol, Optional
+from typing import Protocol, Optional, TYPE_CHECKING
 import aiohttp
 from ..core.log import Logger
 from ..core.value_objects import ServerId
-from ..core.process import is_process_running
 from ..core.types import HealthStatus, TimeoutConfig
 from ..core.errors import HealthCheckError, NetworkError
 from ..utils.auth import AuthProvider
+
+if TYPE_CHECKING:
+    from ..core.process import ProcessSupervisor
 
 
 class HealthChecker(Protocol):
@@ -29,16 +31,18 @@ class ServerHealthChecker:
         self,
         logger: Logger,
         auth_provider: AuthProvider,
+        process_supervisor: "ProcessSupervisor",
         timeout_config: Optional[TimeoutConfig] = None,
     ) -> None:
         self._logger = logger
         self._auth_provider = auth_provider
+        self._process_supervisor = process_supervisor
         self._timeout_config = timeout_config or TimeoutConfig()
 
     def check_readiness(self, server_id: ServerId, endpoint: str) -> bool:
         """Check if server is ready to accept connections during startup."""
         try:
-            if not is_process_running(server_id):
+            if not self._process_supervisor.is_running(server_id):
                 self._logger.debug(
                     "Readiness check failed for %s: Process not running", str(server_id)
                 )

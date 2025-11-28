@@ -109,7 +109,7 @@ class ApplicationContext:
         from ..utils.auth import AuthProvider as AuthProviderImpl
         from ..utils.filesystem import FilesystemService as FilesystemServiceImpl
         from ..utils.crypto import generate_secret
-        from .process import _process_supervisor
+        from .process import ProcessSupervisor as ProcessSupervisorImpl
 
         # Create logger if not provided
         if logger is None:
@@ -140,9 +140,9 @@ class ApplicationContext:
         if filesystem is None:
             filesystem = FilesystemServiceImpl(config)
 
-        # Use global process supervisor singleton if not provided
+        # Create process supervisor if not provided
         if process_supervisor is None:
-            process_supervisor = _process_supervisor
+            process_supervisor = ProcessSupervisorImpl()
 
         # Create result collector if not provided
         if result_collector is None:

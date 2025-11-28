@@ -16,7 +16,7 @@ from _pytest.nodes import Item
 from ..core.log import get_logger
 from ..core.types import ExecutionOutcome, ServerHealthInfo
 from ..core.value_objects import DeploymentId
-from ..core.process import has_any_crash
+from ..core.process import ProcessSupervisor
 from ..results.collector import ResultCollector
 from ..utils.output import write_stdout
 
@@ -46,7 +46,11 @@ class Colors:
 class ArmadilloReporter:
     """Custom test reporter that provides detailed verbose output with timing and phases."""
 
-    def __init__(self, result_collector: Optional[ResultCollector] = None):
+    def __init__(
+        self,
+        result_collector: Optional[ResultCollector] = None,
+        process_supervisor: Optional[ProcessSupervisor] = None,
+    ):
         self.test_times: Dict[str, Dict[str, float]] = {}
         self.test_reports: Dict[str, TestReport] = (
             {}
@@ -72,6 +76,7 @@ class ArmadilloReporter:
         self.file_expected_counts: Dict[str, int] = {}  # Expected test count per file
         self.files_completed: set[str] = set()  # Track which files have been completed
         self.result_collector = result_collector or ResultCollector()
+        self.process_supervisor = process_supervisor  # For crash detection
 
     def _colorize(self, text: str, color: str) -> str:
         """Apply color to text if colors are supported."""
@@ -270,7 +275,7 @@ class ArmadilloReporter:
             # Check if test passed (not skipped, not crashed, report outcome is passed)
             if (
                 not self.test_skipped.get(report.nodeid, False)
-                and not has_any_crash()
+                and not (self.process_supervisor and self.process_supervisor.has_any_crash())
                 and report.outcome == "passed"
             ):
 
@@ -311,9 +316,9 @@ class ArmadilloReporter:
                 outcome = "skipped"
             # Check if there's crash info attached to the report (from makereport hook)
             # or check crash state directly
-            elif (
-                hasattr(report, "crash_info") and report.crash_info
-            ) or has_any_crash():
+            elif (hasattr(report, "crash_info") and report.crash_info) or (
+                self.process_supervisor and self.process_supervisor.has_any_crash()
+            ):
                 outcome = "failed"  # Crashed tests should show as failed
             else:
                 outcome = report.outcome

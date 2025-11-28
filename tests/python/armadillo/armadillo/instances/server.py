@@ -18,13 +18,7 @@ from ..core.types import (
 from ..core.errors import ServerStartupError, ServerShutdownError
 from ..core.context import ApplicationContext
 from ..core.value_objects import ServerId, ServerContext
-from ..core.process import (
-    start_supervised_process,
-    stop_supervised_process,
-    is_process_running,
-    ProcessInfo,
-    get_process_stats,
-)
+from ..core.process import ProcessInfo
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import FilesystemService
@@ -268,6 +262,7 @@ class ArangoServer:
         return ServerHealthChecker(
             logger=self._logger,
             auth_provider=self._auth,
+            process_supervisor=self._app_context.process_supervisor,
             timeout_config=self._config.timeouts,
         )
 
@@ -297,7 +292,7 @@ class ArangoServer:
 
                 # Start supervised process from repository root (like old framework)
                 repository_root = self._get_command_builder().get_repository_root()
-                process_info = start_supervised_process(
+                process_info = self._app_context.process_supervisor.start(
                     self.server_id,
                     command,
                     cwd=repository_root,
@@ -360,7 +355,9 @@ class ArangoServer:
         )
 
         try:
-            stop_supervised_process(self.server_id, graceful=graceful, timeout=timeout)
+            self._app_context.process_supervisor.stop(
+                self.server_id, graceful=graceful, timeout=timeout
+            )
             log_server_event(self._logger, "stopped", server_id=self.server_id)
             self._logger.debug("Server %s stopped successfully", self.server_id)
         except (OSError, ProcessLookupError, TimeoutError) as e:
@@ -392,7 +389,9 @@ class ArangoServer:
             self._logger.debug("is_running(%s): _is_running=False", self.server_id)
             return False
 
-        supervisor_result = is_process_running(self.server_id)
+        supervisor_result = self._app_context.process_supervisor.is_running(
+            self.server_id
+        )
         self._logger.debug(
             "is_running(%s): _is_running=True, supervisor=%s",
             self.server_id,
@@ -438,7 +437,9 @@ class ArangoServer:
                         stats_data = await response.json()
 
                         # Get process info for additional metrics
-                        process_stats = get_process_stats(self.server_id)
+                        process_stats = self._app_context.process_supervisor.get_stats(
+                            self.server_id
+                        )
 
                         return ServerStats(
                             pid=process_stats.pid if process_stats else 0,
@@ -517,9 +518,13 @@ class ArangoServer:
     def _cleanup_on_failure(self) -> None:
         """Clean up resources on startup failure."""
         try:
-            if self.server_id and is_process_running(self.server_id):
+            if self.server_id and self._app_context.process_supervisor.is_running(
+                self.server_id
+            ):
                 timeout = self._config.timeouts.process_force_kill
-                stop_supervised_process(self.server_id, graceful=False, timeout=timeout)
+                self._app_context.process_supervisor.stop(
+                    self.server_id, graceful=False, timeout=timeout
+                )
         except (ProcessLookupError, OSError, TimeoutError) as e:
             logger.debug("Cleanup error for %s: %s", self.server_id, e)
 

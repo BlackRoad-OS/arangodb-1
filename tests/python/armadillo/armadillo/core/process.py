@@ -744,62 +744,6 @@ class ProcessSupervisor:
         )
 
 
-_process_executor = ProcessExecutor()
-_process_supervisor = ProcessSupervisor()
-
-
-def execute_command(command: List[str], **kwargs: Any) -> ProcessResult:
-    """Execute a one-shot command."""
-    return _process_executor.run(command, **kwargs)
-
-
-def start_supervised_process(
-    server_id: ServerId, command: List[str], **kwargs: Any
-) -> ProcessInfo:
-    """Start a supervised process."""
-    return _process_supervisor.start(server_id, command, **kwargs)
-
-
-def stop_supervised_process(server_id: ServerId, **kwargs: Any) -> None:
-    """Stop a supervised process."""
-    _process_supervisor.stop(server_id, **kwargs)
-
-
-def is_process_running(server_id: ServerId) -> bool:
-    """Check if supervised process is running."""
-    return _process_supervisor.is_running(server_id)
-
-
-def get_process_info(server_id: ServerId) -> Optional[ProcessInfo]:
-    """Get supervised process information."""
-    return _process_supervisor.get_process_info(server_id)
-
-
-def get_process_stats(server_id: ServerId) -> Optional[ProcessStats]:
-    """Get supervised process statistics."""
-    return _process_supervisor.get_stats(server_id)
-
-
-def get_crash_state() -> Dict[ServerId, CrashInfo]:
-    """Get crash state for all supervised servers."""
-    return _process_supervisor.get_crash_state()
-
-
-def has_any_crash() -> bool:
-    """Check if any supervised process has crashed."""
-    return _process_supervisor.has_any_crash()
-
-
-def clear_crash_state() -> None:
-    """Clear crash state for all supervised servers."""
-    _process_supervisor.clear_crash_state()
-
-
-def stop_all_processes(**kwargs: Any) -> None:
-    """Stop all supervised processes."""
-    _process_supervisor.stop_all(**kwargs)
-
-
 def get_child_pids(parent_pid: int) -> List[int]:
     """Get all child process PIDs for a given parent PID.
 
@@ -924,15 +868,18 @@ def force_kill_by_pid(pid: int, timeout: float = 5.0) -> bool:
         return False
 
 
-def kill_all_supervised_processes() -> None:
+def kill_all_supervised_processes(process_supervisor: ProcessSupervisor) -> None:
     """Emergency function to kill all processes tracked by the supervisor.
 
     This bypasses normal cleanup and kills entire process trees immediately.
     Use only when normal shutdown has failed completely.
+
+    Args:
+        process_supervisor: The ProcessSupervisor instance to clean up
     """
     logger.warning("Emergency kill of all supervised processes (including children)")
     try:
-        processes = dict(_process_supervisor._processes)
+        processes = dict(process_supervisor._processes)
         if processes:
             logger.warning(
                 "Emergency killing %s supervised processes and their children",
@@ -993,9 +940,9 @@ def kill_all_supervised_processes() -> None:
                                 server_id,
                                 e,
                             )
-            _process_supervisor._processes.clear()
-            _process_supervisor._process_info.clear()
-            _process_supervisor._streaming_threads.clear()
+            process_supervisor._processes.clear()
+            process_supervisor._process_info.clear()
+            process_supervisor._streaming_threads.clear()
             logger.warning("Emergency process tree kill completed")
         else:
             logger.debug("No supervised processes to kill")
