@@ -68,4 +68,6 @@ SingleServerProviderStep::Edge::getID() const noexcept {
   return _token;
 }
 
-bool SingleServerProviderStep::Edge::isValid() const noexcept { return true; }
+bool SingleServerProviderStep::Edge::isValid() const noexcept {
+  return getID().isValid();
+}
