@@ -44,6 +44,27 @@
 #endif
 
 #include "Basics/Exceptions.h"
+#include "Basics/Result.h"
+#include "Basics/ResultT.h"
+
+namespace {
+[[nodiscard]] arangodb::ResultT<std::pair<std::string, size_t>>
+extractCollectionName(arangodb::velocypack::HashedStringRef const& idHashed) {
+  size_t pos = idHashed.find('/');
+  if (pos == std::string::npos) {
+    // Invalid input. If we get here somehow we managed to store invalid
+    // _from/_to values or the traverser did a let an illegal start through
+    TRI_ASSERT(false);
+    return arangodb::Result{
+        TRI_ERROR_GRAPH_INVALID_EDGE,
+        "edge contains invalid value " + idHashed.toString()};
+  }
+
+  std::string colName = idHashed.substr(0, pos).toString();
+  return std::make_pair(std::move(colName), pos);
+}
+
+}  // namespace
 
 namespace arangodb::graph {
 
@@ -256,7 +277,12 @@ auto PathValidator<ProviderType, PathStore, vertexUniqueness, edgeUniqueness>::
     return true;
   }
 
-  auto collectionName = step.getCollectionName();
+  auto collectionNameResult = extractCollectionName(step.getVertex().getID());
+  if (collectionNameResult.fail()) {
+    THROW_ARANGO_EXCEPTION(collectionNameResult.result());
+  }
+  auto collectionName = collectionNameResult.get().first;
+
   if (std::find(allowedCollections.begin(), allowedCollections.end(),
                 collectionName) != allowedCollections.end()) {
     // found in allowed collections => allowed

@@ -121,14 +121,6 @@ class ClusterProviderStep : public arangodb::graph::BaseStep {
   }
   bool isUnknown() const noexcept { return _validationStatus.isUnknown(); }
 
-  [[nodiscard]] std::string getCollectionName() const {
-    auto collectionNameResult = extractCollectionName(_vertex.getID());
-    if (collectionNameResult.fail()) {
-      THROW_ARANGO_EXCEPTION(collectionNameResult.result());
-    }
-    return collectionNameResult.get().first;
-  }
-
   friend auto operator<<(std::ostream& out, ClusterProviderStep const& step)
       -> std::ostream&;
 
