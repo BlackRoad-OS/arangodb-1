@@ -233,7 +233,7 @@ TYPED_TEST(PathValidatorTest,
   for (size_t i = 0; i < 3; ++i) {
     auto neighbors = this->expandPath(s);
     ASSERT_EQ(neighbors.size(), 1U)
-        << "Not enough connections after step " << s.getVertexIdentifier();
+        << "Not enough connections after step " << s.getVertex().getID();
     s = neighbors.at(0);
     auto res = validator.validatePath(s);
     EXPECT_FALSE(res.isFiltered());
@@ -276,7 +276,7 @@ TYPED_TEST(PathValidatorTest,
   for (size_t i = 0; i < 3; ++i) {
     auto neighbors = this->expandPath(s);
     ASSERT_EQ(neighbors.size(), 1U)
-        << "Not enough connections after step " << s.getVertexIdentifier();
+        << "Not enough connections after step " << s.getVertex().getID();
     s = neighbors.at(0);
     auto res = validator.validatePath(s);
     EXPECT_FALSE(res.isFiltered());
@@ -319,7 +319,7 @@ TYPED_TEST(PathValidatorTest,
   for (size_t i = 0; i < 3; ++i) {
     auto neighbors = this->expandPath(s);
     ASSERT_EQ(neighbors.size(), 1U)
-        << "Not enough connections after step " << s.getVertexIdentifier();
+        << "Not enough connections after step " << s.getVertex().getID();
     s = neighbors.at(0);
     auto res = validator.validatePath(s);
     EXPECT_FALSE(res.isFiltered());
@@ -376,7 +376,7 @@ TYPED_TEST(PathValidatorTest,
     for (size_t i = 0; i < 2; ++i) {
       auto neighbors = this->expandPath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       s = neighbors.at(0);
       auto res = validator.validatePath(s);
       EXPECT_FALSE(res.isFiltered());
@@ -395,7 +395,7 @@ TYPED_TEST(PathValidatorTest,
     for (size_t i = 0; i < 1; ++i) {
       auto neighbors = this->expandPath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       s = neighbors.at(0);
       auto res = validator.validatePath(s);
       EXPECT_FALSE(res.isFiltered());
@@ -457,7 +457,7 @@ TYPED_TEST(PathValidatorTest,
     for (size_t i = 0; i < 2; ++i) {
       auto neighbors = this->expandPath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       s = neighbors.at(0);
       auto res = validator.validatePath(s);
       EXPECT_FALSE(res.isFiltered());
@@ -476,7 +476,7 @@ TYPED_TEST(PathValidatorTest,
     for (size_t i = 0; i < 1; ++i) {
       auto neighbors = this->expandPath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       s = neighbors.at(0);
       auto res = validator.validatePath(s);
       EXPECT_FALSE(res.isFiltered());
@@ -527,7 +527,7 @@ TYPED_TEST(PathValidatorTest,
     for (size_t i = 0; i < 2; ++i) {
       auto neighbors = this->expandPath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       s = neighbors.at(0);  //  s == 1, s == 2
       auto res = validator.validatePath(s);
       EXPECT_FALSE(res.isFiltered());
@@ -538,7 +538,7 @@ TYPED_TEST(PathValidatorTest,
     // depends only on VertexUniqueness, the edge (2,1) is new
     auto neighbors = this->expandPath(s);  // {1}
     ASSERT_EQ(neighbors.size(), 1U)
-        << "Not enough connections after step " << s.getVertexIdentifier();
+        << "Not enough connections after step " << s.getVertex().getID();
     s = neighbors.at(0);  // s == 1 (second time)
     auto res = validator.validatePath(s);
     if (this->getVertexUniqueness() == VertexUniquenessLevel::PATH ||
@@ -552,7 +552,7 @@ TYPED_TEST(PathValidatorTest,
       neighbors = this->expandPath(s);  // {2} (second time)
       s = neighbors.at(0);              // 2
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       res = validator.validatePath(s);
       if (this->getEdgeUniqueness() == EdgeUniquenessLevel::NONE) {
         EXPECT_FALSE(res.isFiltered());
@@ -603,7 +603,7 @@ TYPED_TEST(PathValidatorTest,
     for (size_t i = 0; i < 2; ++i) {  // vertices 2 and 3
       auto neighbors = this->expandPath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       s = neighbors.at(0);
       auto res = validator.validatePath(s);
       EXPECT_FALSE(res.isFiltered());
@@ -623,7 +623,7 @@ TYPED_TEST(PathValidatorTest,
       auto neighbors = this->expandPath(s);  // {2}
       res = validator.validatePath(s);
       ASSERT_EQ(neighbors.size(), 1U)
-          << "Not enough connections after step " << s.getVertexIdentifier();
+          << "Not enough connections after step " << s.getVertex().getID();
       if (this->getVertexUniqueness() == VertexUniquenessLevel::GLOBAL) {
         EXPECT_TRUE(res.isFiltered());
         EXPECT_TRUE(res.isPruned());
@@ -633,7 +633,7 @@ TYPED_TEST(PathValidatorTest,
         // extend to vertex 3
         neighbors = this->expandPath(s);
         ASSERT_EQ(neighbors.size(), 1U)
-            << "Not enough connections after step " << s.getVertexIdentifier();
+            << "Not enough connections after step " << s.getVertex().getID();
         res = validator.validatePath(s);
         if (this->getEdgeUniqueness() == EdgeUniquenessLevel::NONE ||
             this->getEdgeUniqueness() == EdgeUniquenessLevel::PATH) {
