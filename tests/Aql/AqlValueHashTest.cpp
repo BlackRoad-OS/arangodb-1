@@ -18,7 +18,8 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Comprehensive tests for std::hash<AqlValue> and std::equal_to<AqlValue>
+/// @author Comprehensive tests for std::hash<AqlValue> and
+/// std::equal_to<AqlValue>
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "AqlItemBlockHelper.h"
@@ -29,6 +30,7 @@
 #include "Aql/AqlValue.h"
 #include "Aql/RegIdFlatSet.h"
 #include "Basics/GlobalResourceMonitor.h"
+#include <boost/container/flat_set.hpp>
 #include "Basics/ResourceUsage.h"
 #include "Containers/FlatHashMap.h"
 
@@ -59,8 +61,10 @@ class AqlValueHashTest : public ::testing::Test {
 // especially the hash/equality contract: if a == b, then hash(a) == hash(b)
 //
 // USAGE LOCATIONS:
-// 1. AqlItemBlock::toVelocyPack() - uses FlatHashMap<AqlValue, size_t> for deduplication
-// 2. This is the ONLY place that uses std::hash<AqlValue> and std::equal_to<AqlValue>
+// 1. AqlItemBlock::toVelocyPack() - uses FlatHashMap<AqlValue, size_t> for
+// deduplication
+// 2. This is the ONLY place that uses std::hash<AqlValue> and
+// std::equal_to<AqlValue>
 //
 // PURPOSE:
 // - Verify if the old hash (in current branch) is wrong
@@ -70,7 +74,8 @@ class AqlValueHashTest : public ::testing::Test {
 //
 // KNOWN ISSUE (old hash):
 // - Supervised slices: hash by pointer address, but compare by content
-//   This violates the hash/equality contract for content-equal supervised slices
+//   This violates the hash/equality contract for content-equal supervised
+//   slices
 // ============================================================================
 
 TEST_F(AqlValueHashTest, AqlValueHash_InlineValues) {
@@ -92,8 +97,9 @@ TEST_F(AqlValueHashTest, AqlValueHash_InlineValues) {
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_ManagedSlices) {
-  // Managed slices: hash and compare by pointer address
-  // This is CORRECT: managed slices are compared by pointer, so hashing by pointer is correct
+  // Managed slices: hash and compare by content (semantic equality)
+  // The new implementation uses VelocyPackHelper::equal() which performs
+  // content-based comparison
   arangodb::velocypack::Builder b1, b2, b3;
   b1.add(arangodb::velocypack::Value("same content"));
   b2.add(arangodb::velocypack::Value("same content"));
@@ -106,15 +112,25 @@ TEST_F(AqlValueHashTest, AqlValueHash_ManagedSlices) {
   std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
 
-  // Different allocations, different pointers -> different hashes
-  // This is CORRECT: managed slices compare by pointer, so different pointers = different values
-  EXPECT_NE(hasher(v1), hasher(v2));
-  EXPECT_FALSE(equal(v1, v2));  // Pointer comparison
+  // Same content -> same hash and equal (content-based comparison)
+  // This is CORRECT: managed slices with same content are semantically equal
+  EXPECT_EQ(hasher(v1), hasher(v2)) << "Same content should have same hash";
+  EXPECT_TRUE(equal(v1, v2)) << "Same content should be equal";
+
+  // Different content -> different hash and not equal
+  EXPECT_FALSE(equal(v1, v3));
+  EXPECT_FALSE(equal(v2, v3));
 
   // Same pointer should have same hash
   AqlValue v1_copy = v1.clone();
   EXPECT_EQ(hasher(v1), hasher(v1_copy));
   EXPECT_TRUE(equal(v1, v1_copy));
+
+  v1.destroy();
+  v2.destroy();
+  v3.destroy();
+  v1_copy.destroy();
+  EXPECT_EQ(monitor.current(), 0U);
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_SupervisedSlices_SameContent) {
@@ -122,28 +138,28 @@ TEST_F(AqlValueHashTest, AqlValueHash_SupervisedSlices_SameContent) {
   // This tests if the new hash implementation fixes the issue where
   // hash uses pointer address but equality uses content comparison
   //
-  // OLD HASH (BUG): Different pointers -> different hashes, but equal() returns true
-  // NEW HASH (FIX): Same content -> same hash, equal() returns true
+  // OLD HASH (BUG): Different pointers -> different hashes, but equal() returns
+  // true NEW HASH (FIX): Same content -> same hash, equal() returns true
   std::string content = "same supervised content";
   arangodb::velocypack::Builder b1, b2;
   b1.add(arangodb::velocypack::Value(content));
   b2.add(arangodb::velocypack::Value(content));
 
-  AqlValue v1(b1.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b1.slice().byteSize()));
-  AqlValue v2(b2.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b2.slice().byteSize()));
+  AqlValue v1(b1.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b1.slice().byteSize()));
+  AqlValue v2(b2.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b2.slice().byteSize()));
 
   std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
 
   // Verify they have different pointers (different allocations)
-  EXPECT_NE(v1.data(), v2.data()) << "Supervised slices should have different pointers";
+  EXPECT_NE(v1.data(), v2.data())
+      << "Supervised slices should have different pointers";
 
   // Verify they are equal by content
-  EXPECT_TRUE(equal(v1, v2)) << "Supervised slices with same content should be equal";
+  EXPECT_TRUE(equal(v1, v2))
+      << "Supervised slices with same content should be equal";
 
   // CRITICAL: Hash/equality contract
   // If equal() returns true, hash() MUST return the same value
@@ -165,14 +181,11 @@ TEST_F(AqlValueHashTest, AqlValueHash_SupervisedSlices_DifferentContent) {
   b1.add(arangodb::velocypack::Value(content1));
   b2.add(arangodb::velocypack::Value(content2));
 
-  AqlValue v1(b1.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b1.slice().byteSize()));
-  AqlValue v2(b2.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b2.slice().byteSize()));
+  AqlValue v1(b1.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b1.slice().byteSize()));
+  AqlValue v2(b2.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b2.slice().byteSize()));
 
-  std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
 
   // Different content -> not equal
@@ -195,12 +208,11 @@ TEST_F(AqlValueHashTest, AqlValueHash_SupervisedVsManaged_ContentEqual) {
   b1.add(arangodb::velocypack::Value(content));
   b2.add(arangodb::velocypack::Value(content));
 
-  AqlValue supervised(b1.slice(),
-                      static_cast<arangodb::velocypack::ValueLength>(
-                          b1.slice().byteSize()));
+  AqlValue supervised(
+      b1.slice(),
+      static_cast<arangodb::velocypack::ValueLength>(b1.slice().byteSize()));
   AqlValue managed(b2.slice(), b2.slice().byteSize());
 
-  std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
 
   // Different types may have different hashes (expected)
@@ -223,12 +235,10 @@ TEST_F(AqlValueHashTest, AqlValueHash_UsageInToVelocyPack_Deduplication) {
   b1.add(arangodb::velocypack::Value(content));
   b2.add(arangodb::velocypack::Value(content));
 
-  AqlValue v1(b1.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b1.slice().byteSize()));
-  AqlValue v2(b2.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b2.slice().byteSize()));
+  AqlValue v1(b1.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b1.slice().byteSize()));
+  AqlValue v2(b2.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b2.slice().byteSize()));
 
   // Verify different pointers
   EXPECT_NE(v1.data(), v2.data());
@@ -238,8 +248,9 @@ TEST_F(AqlValueHashTest, AqlValueHash_UsageInToVelocyPack_Deduplication) {
   block->setValue(1, 0, v2);  // Same content, different pointer
 
   // Serialize - this uses FlatHashMap<AqlValue, size_t>
-  // OLD HASH: Equal supervised slices may NOT be deduplicated (different hashes -> different buckets)
-  // NEW HASH: Equal supervised slices SHOULD be deduplicated (same hash -> same bucket)
+  // OLD HASH: Equal supervised slices may NOT be deduplicated (different hashes
+  // -> different buckets) NEW HASH: Equal supervised slices SHOULD be
+  // deduplicated (same hash -> same bucket)
   velocypack::Builder result;
   result.openObject();
   block->toVelocyPack(0, block->numRows(), options, result);
@@ -253,28 +264,28 @@ TEST_F(AqlValueHashTest, AqlValueHash_UsageInToVelocyPack_Deduplication) {
   VPackSlice raw = slice.get("raw");
   ASSERT_TRUE(raw.isArray());
 
-  // With correct hash/equality contract, equal supervised slices should be deduplicated
-  // This test verifies that the fix works in practice
-  // The raw array should contain fewer entries if deduplication works correctly
+  // With correct hash/equality contract, equal supervised slices should be
+  // deduplicated This test verifies that the fix works in practice The raw
+  // array should contain fewer entries if deduplication works correctly
 
-  v1.destroy();
-  v2.destroy();
+  // Note: v1 and v2 are owned by the block, so we should NOT destroy them
+  // manually The block will destroy them when reset
   block.reset(nullptr);
   EXPECT_EQ(monitor.current(), 0U);
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_UsageInToVelocyPack_SamePointer) {
   // Test deduplication when same pointer is used (should always work)
-  // This tests the case where referenceValuesFromRow() creates shared references
+  // This tests the case where referenceValuesFromRow() creates shared
+  // references
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create one supervised slice
   std::string content = "single supervised slice";
   arangodb::velocypack::Builder b;
   b.add(arangodb::velocypack::Value(content));
-  AqlValue v(b.slice(),
-             static_cast<arangodb::velocypack::ValueLength>(
-                 b.slice().byteSize()));
+  AqlValue v(b.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                            b.slice().byteSize()));
 
   // Reference the same value in multiple rows (same pointer)
   RegIdFlatSet regs;
@@ -305,14 +316,16 @@ TEST_F(AqlValueHashTest, AqlValueHash_UsageInToVelocyPack_SamePointer) {
   // Same pointer -> same hash -> should be deduplicated
   // This should work correctly even with current implementation
 
-  v.destroy();
+  // Note: v is owned by the block after setValue(), so we should NOT destroy it
+  // The block will destroy it when reset
   block.reset(nullptr);
   EXPECT_EQ(monitor.current(), 0U);
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_RangeValues) {
   // Range values: hash and compare by pointer
-  // This is CORRECT: Range values are compared by pointer, so hashing by pointer is correct
+  // This is CORRECT: Range values are compared by pointer, so hashing by
+  // pointer is correct
   AqlValue r1(1, 10);
   AqlValue r2(1, 10);  // Different Range object
   AqlValue r3(1, 10);
@@ -367,8 +380,8 @@ TEST_F(AqlValueHashTest, AqlValueHash_InlineTypes_Consistency) {
   EXPECT_TRUE(equal(b1, b2));
 
   // Null
-  AqlValue n1(AqlValueHintNull());
-  AqlValue n2(AqlValueHintNull());
+  AqlValue n1{AqlValueHintNull{}};
+  AqlValue n2{AqlValueHintNull{}};
   EXPECT_EQ(hasher(n1), hasher(n2));
   EXPECT_TRUE(equal(n1, n2));
 }
@@ -394,12 +407,10 @@ TEST_F(AqlValueHashTest, AqlValueHash_EdgeCase_LargeSupervisedSlices) {
   b1.add(arangodb::velocypack::Value(largeContent));
   b2.add(arangodb::velocypack::Value(largeContent));
 
-  AqlValue v1(b1.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b1.slice().byteSize()));
-  AqlValue v2(b2.slice(),
-              static_cast<arangodb::velocypack::ValueLength>(
-                  b2.slice().byteSize()));
+  AqlValue v1(b1.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b1.slice().byteSize()));
+  AqlValue v2(b2.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                              b2.slice().byteSize()));
 
   std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
@@ -427,9 +438,9 @@ TEST_F(AqlValueHashTest, AqlValueHash_EdgeCase_ManySupervisedSlices) {
   for (size_t i = 0; i < numSlices; ++i) {
     arangodb::velocypack::Builder b;
     b.add(arangodb::velocypack::Value(content));
-    slices.emplace_back(b.slice(),
-                        static_cast<arangodb::velocypack::ValueLength>(
-                            b.slice().byteSize()));
+    slices.emplace_back(
+        b.slice(),
+        static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()));
   }
 
   std::hash<AqlValue> hasher;
@@ -455,8 +466,8 @@ TEST_F(AqlValueHashTest, AqlValueHash_EdgeCase_ManySupervisedSlices) {
     } else {
       // With correct hash: should find existing entry
       // With old hash: might insert new entry (wrong!)
-      // We can't assert this without knowing which hash is used, but we can verify
-      // that all entries in the table are equal
+      // We can't assert this without knowing which hash is used, but we can
+      // verify that all entries in the table are equal
       if (!inserted) {
         EXPECT_TRUE(equal(slices[0], slices[i]))
             << "Found entry should equal original";
@@ -479,9 +490,8 @@ TEST_F(AqlValueHashTest, AqlValueHash_ASAN_PotentialUseAfterFree) {
   std::string content = "test content for ASAN test";
   arangodb::velocypack::Builder b;
   b.add(arangodb::velocypack::Value(content));
-  AqlValue v(b.slice(),
-             static_cast<arangodb::velocypack::ValueLength>(
-                 b.slice().byteSize()));
+  AqlValue v(b.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                            b.slice().byteSize()));
 
   block->setValue(0, 0, v);
 
@@ -541,12 +551,10 @@ TEST_F(AqlValueHashTest, AqlValueHash_VerifyPointerVsPayload_Hashing) {
     arangodb::velocypack::Builder b1, b2;
     b1.add(arangodb::velocypack::Value(content));
     b2.add(arangodb::velocypack::Value(content));
-    AqlValue s1(b1.slice(),
-                static_cast<arangodb::velocypack::ValueLength>(
-                    b1.slice().byteSize()));
-    AqlValue s2(b2.slice(),
-                static_cast<arangodb::velocypack::ValueLength>(
-                    b2.slice().byteSize()));
+    AqlValue s1(b1.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                                b1.slice().byteSize()));
+    AqlValue s2(b2.slice(), static_cast<arangodb::velocypack::ValueLength>(
+                                b2.slice().byteSize()));
 
     // Same content -> equal -> same hash is REQUIRED
     EXPECT_TRUE(equal(s1, s2));
@@ -586,4 +594,3 @@ TEST_F(AqlValueHashTest, AqlValueHash_VerifyPointerVsPayload_Hashing) {
 }  // namespace aql
 }  // namespace tests
 }  // namespace arangodb
-

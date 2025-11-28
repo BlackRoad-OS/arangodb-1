@@ -38,7 +38,6 @@
 #include <absl/strings/numbers.h>
 
 #include <velocypack/Buffer.h>
-#include <velocypack/Compare.h>
 #include <velocypack/Slice.h>
 
 #include <bit>
@@ -1396,17 +1395,13 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_MANAGED_STRING: {
         auto sa = a.slice(ta);
         auto sb = b.slice(tb);
-
-        bool aIsCustom = sa.isCustom();
-        bool bIsCustom = sb.isCustom();
-        if (aIsCustom || bIsCustom) {
-          // Normalized comparison throws for custom types, so we use binary
-          // comparison. If both are Custom, compare binary representation.
-          return aIsCustom == bIsCustom && sa.binaryEquals(sb);
-        }
-
-        // Use normalized comparison for semantic equality
-        return VPackNormalizedCompare::equals(sa, sb);
+        TRI_ASSERT(arangodb::velocypack::Options::Defaults.customTypeHandler !=
+                   nullptr)
+            << "VelocyPackHelper must be initialized before AqlValue "
+               "comparison";
+        // handles Custom types and normalized comparison
+        return arangodb::basics::VelocyPackHelper::equal(
+            sa, sb, false, &arangodb::velocypack::Options::Defaults, &sa, &sb);
       }
 
       case T::VPACK_INLINE_INT64:
@@ -1434,14 +1429,12 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
 
   auto sa = a.slice(ta);
   auto sb = b.slice(tb);
-
-  bool aIsCustom = sa.isCustom();
-  bool bIsCustom = sb.isCustom();
-  if (aIsCustom || bIsCustom) {
-    return aIsCustom == bIsCustom && sa.binaryEquals(sb);
-  }
-
-  return VPackNormalizedCompare::equals(sa, sb);
+  // handles Custom types and normalized comparison for different storage types
+  TRI_ASSERT(arangodb::velocypack::Options::Defaults.customTypeHandler !=
+             nullptr)
+      << "VelocyPackHelper must be initialized before AqlValue comparison";
+  return arangodb::basics::VelocyPackHelper::equal(
+      sa, sb, false, &arangodb::velocypack::Options::Defaults, &sa, &sb);
 }
 
 }  // namespace std
