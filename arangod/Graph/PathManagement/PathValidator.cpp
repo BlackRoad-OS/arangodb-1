@@ -86,7 +86,7 @@ auto PathValidator<ProviderType, PathStore, vertexUniqueness, edgeUniqueness>::
     bool success = _store.visitReversePath(
         step, [&](typename PathStore::Step const& step) -> bool {
           auto const& [unusedV, addedVertex] =
-              _uniqueVertices.emplace(step.getVertexIdentifier());
+              _uniqueVertices.emplace(step.getVertex().getID());
 
           // If this add fails, we need to exclude this path
           return addedVertex;
@@ -101,7 +101,7 @@ auto PathValidator<ProviderType, PathStore, vertexUniqueness, edgeUniqueness>::
     // In case we have VertexUniquenessLevel::GLOBAL, we do not have to take
     // care about the EdgeUniquenessLevel.
     auto const& [unusedV, addedVertex] =
-        _uniqueVertices.emplace(step.getVertexIdentifier());
+        _uniqueVertices.emplace(step.getVertex().getID());
     // If this add fails, we need to exclude this path
     if (!addedVertex) {
       return ValidationResult::Type::FILTER_AND_PRUNE;
@@ -186,7 +186,7 @@ auto PathValidator<ProviderType, PathStore, vertexUniqueness, edgeUniqueness>::
           // If otherUniqueVertices has our step, we will return false and
           // abort. Otherwise we'll return true here. This guarantees we have no
           // vertex on both sides of the path twice.
-          return otherUniqueVertices.find(innerStep.getVertexIdentifier()) ==
+          return otherUniqueVertices.find(innerStep.getVertex().getID()) ==
                  otherUniqueVertices.end();
         });
     if (!success) {
