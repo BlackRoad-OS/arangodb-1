@@ -533,14 +533,15 @@ TEST_F(AqlValueHashTest, AqlValueHash_ASAN_PotentialUseAfterFree) {
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_VerifyPointerVsPayload_Hashing) {
-  // This test verifies whether hashing by pointer or payload makes sense
-  // for each AqlValue type, based on how equal_to() compares them
+  // This test verifies that hashing and comparison use content-based approach
+  // for all AqlValue types, not pointer-based
 
   std::hash<AqlValue> hasher;
   std::equal_to<AqlValue> equal;
 
-  // MANAGED SLICES: equal_to() compares by pointer
-  // -> Hashing by pointer is CORRECT
+  // MANAGED SLICES: equal_to() compares by content (via
+  // VelocyPackHelper::equal)
+  // -> Hashing by content is CORRECT (not by pointer)
   {
     arangodb::velocypack::Builder b1, b2;
     b1.add(arangodb::velocypack::Value("same"));
@@ -548,9 +549,13 @@ TEST_F(AqlValueHashTest, AqlValueHash_VerifyPointerVsPayload_Hashing) {
     AqlValue m1(b1.slice(), b1.slice().byteSize());
     AqlValue m2(b2.slice(), b2.slice().byteSize());
 
-    // Different pointers -> not equal -> different hashes is CORRECT
-    EXPECT_FALSE(equal(m1, m2));
-    EXPECT_NE(hasher(m1), hasher(m2));
+    // Same content -> equal -> same hash is CORRECT (content-based)
+    EXPECT_TRUE(equal(m1, m2));
+    EXPECT_EQ(hasher(m1), hasher(m2));
+
+    // Cleanup
+    m1.destroy();
+    m2.destroy();
   }
 
   // SUPERVISED SLICES: equal_to() compares by content

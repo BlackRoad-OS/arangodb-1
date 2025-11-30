@@ -675,6 +675,11 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
       << "OLD APPROACH (pointer-based) would have 100 entries -> massive waste "
          "of space. "
       << "NEW APPROACH (content-based) has 1 entry -> efficient serialization.";
+
+  // Cleanup: original is not owned by block, so we need to destroy it
+  // The val objects in the loop are owned by block after setValue(), so block
+  // will destroy them
+  original.destroy();
 }
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
@@ -1186,22 +1191,29 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   auto clonedBlock1 = sourceRow1.cloneToBlock(itemBlockManager, registers, 2);
 
   // Now transfer cloned values to destination block
-  destBlock->setValue(0, 0, clonedBlock0->getValueReference(0, 0));
-  destBlock->setValue(0, 1, clonedBlock0->getValueReference(0, 1));
-  destBlock->setValue(1, 0, clonedBlock1->getValueReference(0, 0));
-  destBlock->setValue(1, 1, clonedBlock1->getValueReference(0, 1));
+  // CRITICAL: We must clone the values because setValue() doesn't clone them,
+  // and we need independent copies so destBlock can own them independently
+  AqlValue dest00 = clonedBlock0->getValueReference(0, 0).clone();
+  AqlValue dest01 = clonedBlock0->getValueReference(0, 1).clone();
+  AqlValue dest10 = clonedBlock1->getValueReference(0, 0).clone();
+  AqlValue dest11 = clonedBlock1->getValueReference(0, 1).clone();
+
+  destBlock->setValue(0, 0, dest00);
+  destBlock->setValue(0, 1, dest01);
+  destBlock->setValue(1, 0, dest10);
+  destBlock->setValue(1, 1, dest11);
 
   // CRITICAL: Verify destBlock has valid, accessible values
   // We verify this BEFORE destroying source blocks to avoid use-after-free
-  AqlValue const& dest00 = destBlock->getValueReference(0, 0);
-  AqlValue const& dest01 = destBlock->getValueReference(0, 1);
-  AqlValue const& dest10 = destBlock->getValueReference(1, 0);
-  AqlValue const& dest11 = destBlock->getValueReference(1, 1);
+  AqlValue const& dest00_ref = destBlock->getValueReference(0, 0);
+  AqlValue const& dest01_ref = destBlock->getValueReference(0, 1);
+  AqlValue const& dest10_ref = destBlock->getValueReference(1, 0);
+  AqlValue const& dest11_ref = destBlock->getValueReference(1, 1);
 
-  EXPECT_FALSE(dest00.isEmpty()) << "CRITICAL: Value should be accessible";
-  EXPECT_FALSE(dest01.isEmpty()) << "CRITICAL: Value should be accessible";
-  EXPECT_FALSE(dest10.isEmpty()) << "CRITICAL: Value should be accessible";
-  EXPECT_FALSE(dest11.isEmpty()) << "CRITICAL: Value should be accessible";
+  EXPECT_FALSE(dest00_ref.isEmpty()) << "CRITICAL: Value should be accessible";
+  EXPECT_FALSE(dest01_ref.isEmpty()) << "CRITICAL: Value should be accessible";
+  EXPECT_FALSE(dest10_ref.isEmpty()) << "CRITICAL: Value should be accessible";
+  EXPECT_FALSE(dest11_ref.isEmpty()) << "CRITICAL: Value should be accessible";
 
   // CRITICAL: Verify we can serialize the dest block
   // This proves the values are valid and properly cloned

@@ -1371,12 +1371,18 @@ namespace std {
 using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
-  auto hash64 = x.hash(0);  // make a normalized hash, for the semantics of the
-                            // value regardless of the storage type
+  // Use a non-zero seed to minimize the chance of hash returning 0
+  // 0xdeadbeef is a common "magic number" used as a non-zero seed
+  auto hash64 =
+      x.hash(0xdeadbeef);  // make a normalized hash, for the semantics of the
+                           // value regardless of the storage type
   size_t h = static_cast<size_t>(hash64);
-  if (h == 0) {  // fallback to avoid collision with the marker that uses h ==
-                 // 0, very unlikely to happen
-    h = 1;
+  // If hash is 0 (very unlikely with non-zero seed), remap to a large prime
+  // to avoid collision with the marker that uses h == 0. Using a large prime
+  // minimizes collision probability with other hash values.
+  if (h == 0) {
+    // Large prime number, unlikely to collide with other hash values
+    h = 0x9e3779b97f4a7c15ULL;
   }
   return h;
 }
