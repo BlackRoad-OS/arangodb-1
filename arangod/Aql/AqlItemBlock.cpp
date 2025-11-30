@@ -34,6 +34,7 @@
 #include "Basics/VelocyPackHelper.h"
 #include "Containers/FlatHashMap.h"
 #include "Containers/HashSet.h"
+#include "Logger/LogMacros.h"
 #include "Transaction/Context.h"
 #include "Transaction/Methods.h"
 
@@ -43,6 +44,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 
 using namespace arangodb;
 using namespace arangodb::aql;
@@ -483,6 +485,8 @@ void AqlItemBlock::clearRegisters(RegIdFlatSet const& toClear) {
 }
 
 SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
+  LOG_DEVEL << "[ENTRY] cloneDataAndMoveShadow() called, numRows=" << _numRows;
+
   auto const numRows = _numRows;
   auto const numRegs = _numRegisters;
 
@@ -502,19 +506,78 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
         std::is_same_v<decltype(type), WithShadowRows>;
     cache.reserve(_valueCount.size());
 
+    // DEBUG: Track which row had which pointer before stealing
+    std::map<void const*, size_t>
+        pointerToRow;  // Maps pointer to first row that had it
+
+    // DEBUG: Log original block state - which shadow rows share pointers BEFORE
+    // cloneDataAndMoveShadow
+    if (checkShadowRows) {
+      LOG_DEVEL << "[DEBUG] cloneDataAndMoveShadow: Original block has "
+                << numModifiedRows << " rows, checking shadow row pointers...";
+      for (size_t row = 0; row < numModifiedRows; row++) {
+        if (isShadowRow(row)) {
+          for (RegisterId::value_t col = 0; col < numRegs; col++) {
+            AqlValue const& val = getValueReference(row, col);
+            if (!val.isEmpty() && val.requiresDestruction()) {
+              void const* ptr = val.data();
+              LOG_DEVEL << "[DEBUG] Original block: Shadow row " << row
+                        << " col " << col << " pointer=" << ptr;
+            } else {
+              LOG_DEVEL << "[DEBUG] Original block: Shadow row " << row
+                        << " col " << col
+                        << " (empty or no destruction required)";
+            }
+          }
+        }
+      }
+    }
+
     for (size_t row = 0; row < numModifiedRows; row++) {
       if (checkShadowRows && isShadowRow(row)) {
         // this is a shadow row. needs special handling
         for (RegisterId::value_t col = 0; col < numRegs; col++) {
+          // DEBUG: Check pointer BEFORE stealing
+          AqlValue const& originalVal = getValueReference(row, col);
+          void const* originalPtr = nullptr;
+          if (!originalVal.isEmpty() && originalVal.requiresDestruction()) {
+            originalPtr = originalVal.data();
+          }
+
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
             AqlValueGuard guard{a, true};
-            auto [it, inserted] = cache.emplace(a.data());
-            res->setValue(row, col, AqlValue(a, (*it)));
-            if (inserted) {
-              // otherwise, destroy this; we used a cached value.
-              guard.steal();
+            void const* dataPtr = a.data();
+
+            // DEBUG: Log all shadow row processing
+            LOG_DEVEL
+                << "[DEBUG] cloneDataAndMoveShadow: Processing shadow row "
+                << row << " col " << col << " originalPtr=" << originalPtr
+                << " dataPtr=" << dataPtr;
+            if (originalPtr != dataPtr) {
+              LOG_DEVEL << " [POINTER_CHANGED]";
             }
+            LOG_DEVEL << " cache_size=" << cache.size();
+
+            auto [it, inserted] = cache.emplace(dataPtr);
+
+            // DEBUG: Log when inserted=false to understand why shadow rows
+            // share pointers
+            if (!inserted) {
+              LOG_DEVEL << " [ALREADY_IN_CACHE] inserted=false - another "
+                           "shadow row has this pointer!";
+              // Find which row(s) already have this pointer
+              auto foundIt = pointerToRow.find(dataPtr);
+              if (foundIt != pointerToRow.end()) {
+                LOG_DEVEL << " Found in row " << foundIt->second;
+              }
+            } else {
+              LOG_DEVEL << " [NEW] inserted=true";
+              pointerToRow[dataPtr] = row;  // Track this pointer
+            }
+
+            res->setValue(row, col, AqlValue(a, (*it)));
+            guard.steal();
           } else {
             res->setValue(row, col, a);
           }
