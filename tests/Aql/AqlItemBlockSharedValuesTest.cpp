@@ -238,17 +238,14 @@ TEST_F(AqlItemBlockSharedValuesTest,
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
-  // Set the same value in multiple rows
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
   block->setValue(2, 0, supervised);
 
-  // For supervised slices, memory is already accounted in ResourceMonitor
-  // during allocation, so we shouldn't double-count it
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // setValue() does not increase ResourceMonitor for supervised slices
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Verify all rows point to the same data
   AqlValue const& val0 = block->getValueReference(0, 0);
@@ -275,12 +272,10 @@ TEST_F(AqlItemBlockSharedValuesTest,
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
-  // Set value in row 0
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Reference it to row 1 and row 2
   RegIdFlatSet regs;
@@ -288,8 +283,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   block->referenceValuesFromRow(1, regs, 0);
   block->referenceValuesFromRow(2, regs, 0);
 
-  // Memory should still be the same (same data, just more references)
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Verify all rows point to the same data
   AqlValue const& val0 = block->getValueReference(0, 0);
@@ -301,8 +295,15 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Destroy the block
   block.reset(nullptr);
 
-  // All memory should be released
-  EXPECT_EQ(monitor.current(), 0U);
+  // Memory should still be allocated because the local 'supervised' variable
+  // is still alive
+  EXPECT_EQ(monitor.current(), initialMemory);
+
+  // Destroy the supervised slice to release memory
+  supervised.destroy();
+
+  // Now all memory should be released
+  EXPECT_LE(monitor.current(), 100U);  // Allow tolerance for overhead
 }
 
 TEST_F(AqlItemBlockSharedValuesTest,
@@ -313,18 +314,20 @@ TEST_F(AqlItemBlockSharedValuesTest,
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
   // Set value in all three rows
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
   block->setValue(2, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // For supervised slices, setValue() does NOT increase ResourceMonitor
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Destroy value in row 0 - should decrement refCount but not free memory
+  // For supervised slices, destroyValue() does NOT decrease ResourceMonitor
+  // because the memory is still alive (tracked by ResourceMonitor, not block)
   block->destroyValue(0, 0);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory)
+  EXPECT_EQ(monitor.current(), initialMemory)
       << "Memory should still be allocated";
 
   // Row 0 should be empty
@@ -338,19 +341,26 @@ TEST_F(AqlItemBlockSharedValuesTest,
 
   // Destroy value in row 1
   block->destroyValue(1, 0);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory)
+  EXPECT_EQ(monitor.current(), initialMemory)
       << "Memory should still be allocated";
 
-  // Destroy value in row 2 - should now free memory
+  // Destroy value in row 2 - this destroys the last reference in the block
+  // but memory is still tracked by ResourceMonitor (allocated when supervised
+  // was created)
   block->destroyValue(2, 0);
-  // Memory should be freed (allow some tolerance for overhead)
-  EXPECT_LE(monitor.current(), initialMemory + 100U)
-      << "Memory should be freed after last reference is destroyed";
+  EXPECT_EQ(monitor.current(), initialMemory)
+      << "Memory should still be allocated (local 'supervised' variable alive)";
 
   // Destroy the block
   block.reset(nullptr);
-  // Allow some tolerance for any remaining overhead
-  EXPECT_LE(monitor.current(), 100U);
+  // Memory should still be allocated because local 'supervised' variable is
+  // alive
+  EXPECT_EQ(monitor.current(), initialMemory);
+
+  // Destroy the supervised slice to release memory
+  supervised.destroy();
+  // Now all memory should be released
+  EXPECT_LE(monitor.current(), 100U);  // Allow tolerance for overhead
 }
 
 // ============================================================================
@@ -382,12 +392,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   block->setValue(2, 0, supervised);
   block->setValue(3, 0, supervised);
 
-  // Memory should account for both managed and supervised slices
-  // Both types are tracked via ResourceMonitor when setValue() is called
-  // (managed slices are tracked by the block, supervised slices are already
-  // tracked when created, but setValue() also tracks them for block accounting)
-  size_t expectedMemory = managedMemory + supervisedMemory;
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory + managedMemory);
 
   // Verify managed slices point to same data
   EXPECT_EQ(block->getValueReference(0, 0).data(),
@@ -410,8 +415,16 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Destroy the block
   block.reset(nullptr);
 
-  // All memory should be released
-  EXPECT_EQ(monitor.current(), 0U);
+  // Supervised slice memory should still be allocated (local variable alive)
+  // Managed slice memory should be released (block owned it)
+  EXPECT_GE(monitor.current(), initialMemory);
+  EXPECT_LE(monitor.current(), initialMemory + supervisedMemory + 100U);
+
+  // Destroy supervised slice to release its memory
+  supervised.destroy();
+
+  // Now all memory should be released
+  EXPECT_LE(monitor.current(), 100U);  // Allow tolerance for overhead
 }
 
 TEST_F(AqlItemBlockSharedValuesTest,
@@ -441,9 +454,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Reference supervised slice to row 3
   block->referenceValuesFromRow(3, regs, 2);
 
-  // Memory should account for both
-  size_t expectedMemory = managedMemory + supervisedMemory;
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory + managedMemory);
 
   // Verify references
   EXPECT_EQ(block->getValueReference(0, 0).data(),
@@ -454,8 +465,16 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Destroy the block
   block.reset(nullptr);
 
-  // All memory should be released
-  EXPECT_EQ(monitor.current(), 0U);
+  // Supervised slice memory should still be allocated (local variable alive)
+  // Managed slice memory should be released (block owned it)
+  EXPECT_GE(monitor.current(), initialMemory);
+  EXPECT_LE(monitor.current(), initialMemory + supervisedMemory + 100U);
+
+  // Destroy supervised slice to release its memory
+  supervised.destroy();
+
+  // Now all memory should be released
+  EXPECT_LE(monitor.current(), 100U);  // Allow tolerance for overhead
 }
 
 // ============================================================================
@@ -513,23 +532,18 @@ TEST_F(AqlItemBlockSharedValuesTest, MultipleRegisters_AllSupervisedSlices) {
   AqlValue val3 = createLargeSupervisedSlice(200);
 
   size_t initialMemory = monitor.current();
-  size_t totalMemory =
-      val1.memoryUsage() + val2.memoryUsage() + val3.memoryUsage();
 
-  // Set values in row 0
   block->setValue(0, 0, val1);
   block->setValue(0, 1, val2);
   block->setValue(0, 2, val3);
 
-  // Reference all values to row 1
   RegIdFlatSet regs;
   regs.insert(RegisterId::makeRegular(0));
   regs.insert(RegisterId::makeRegular(1));
   regs.insert(RegisterId::makeRegular(2));
   block->referenceValuesFromRow(1, regs, 0);
 
-  // Memory should account for all three values
-  EXPECT_EQ(monitor.current(), initialMemory + totalMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Verify all registers in row 1 point to same data as row 0
   EXPECT_EQ(block->getValueReference(0, 0).data(),
@@ -539,11 +553,13 @@ TEST_F(AqlItemBlockSharedValuesTest, MultipleRegisters_AllSupervisedSlices) {
   EXPECT_EQ(block->getValueReference(0, 2).data(),
             block->getValueReference(1, 2).data());
 
-  // Destroy the block
   block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
-  // All memory should be released
-  EXPECT_EQ(monitor.current(), 0U);
+  val1.destroy();
+  val2.destroy();
+  val3.destroy();
+  EXPECT_LE(monitor.current(), 100U);
 }
 
 TEST_F(AqlItemBlockSharedValuesTest,
@@ -556,23 +572,19 @@ TEST_F(AqlItemBlockSharedValuesTest,
   AqlValue managed2 = createLargeManagedSlice(200);
 
   size_t initialMemory = monitor.current();
-  size_t totalMemory = managed1.memoryUsage() + supervised1.memoryUsage() +
-                       managed2.memoryUsage();
 
-  // Set values in row 0: managed, supervised, managed
   block->setValue(0, 0, managed1);
   block->setValue(0, 1, supervised1);
   block->setValue(0, 2, managed2);
 
-  // Reference all values to row 1
   RegIdFlatSet regs;
   regs.insert(RegisterId::makeRegular(0));
   regs.insert(RegisterId::makeRegular(1));
   regs.insert(RegisterId::makeRegular(2));
   block->referenceValuesFromRow(1, regs, 0);
 
-  // Memory should account for all three values
-  EXPECT_EQ(monitor.current(), initialMemory + totalMemory);
+  size_t managedTotal = managed1.memoryUsage() + managed2.memoryUsage();
+  EXPECT_EQ(monitor.current(), initialMemory + managedTotal);
 
   // Verify references
   EXPECT_EQ(block->getValueReference(0, 0).data(),
@@ -590,11 +602,13 @@ TEST_F(AqlItemBlockSharedValuesTest,
   EXPECT_EQ(block->getValueReference(0, 2).type(),
             AqlValue::VPACK_MANAGED_SLICE);
 
-  // Destroy the block
   block.reset(nullptr);
+  EXPECT_GE(monitor.current(), initialMemory);
+  EXPECT_LE(monitor.current(),
+            initialMemory + supervised1.memoryUsage() + 100U);
 
-  // All memory should be released
-  EXPECT_EQ(monitor.current(), 0U);
+  supervised1.destroy();
+  EXPECT_LE(monitor.current(), 100U);
 }
 
 // ============================================================================
@@ -638,16 +652,12 @@ TEST_F(AqlItemBlockSharedValuesTest, ManyRows_AllSupervisedSlices) {
 
   // Create a supervised slice
   AqlValue supervised = createLargeSupervisedSlice(200);
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
-  // Set the same value in all rows
   for (size_t i = 0; i < numRows; ++i) {
     block->setValue(i, 0, supervised);
   }
-
-  // Memory should be accounted once
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Verify all rows point to the same data
   void const* firstData = block->getValueReference(0, 0).data();
@@ -656,11 +666,11 @@ TEST_F(AqlItemBlockSharedValuesTest, ManyRows_AllSupervisedSlices) {
         << "Row " << i << " should point to same memory as row 0";
   }
 
-  // Destroy the block
   block.reset(nullptr);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
-  // All memory should be released
-  EXPECT_EQ(monitor.current(), 0U);
+  supervised.destroy();
+  EXPECT_LE(monitor.current(), 100U);
 }
 
 TEST_F(AqlItemBlockSharedValuesTest, PartialDestroy_ManagedSlices) {
@@ -711,21 +721,17 @@ TEST_F(AqlItemBlockSharedValuesTest, PartialDestroy_SupervisedSlices) {
 
   // Create a supervised slice
   AqlValue supervised = createLargeSupervisedSlice(200);
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
-  // Set value in all rows
   for (size_t i = 0; i < 5; ++i) {
     block->setValue(i, 0, supervised);
   }
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
-  // Destroy values in rows 0, 1, 2
   for (size_t i = 0; i < 3; ++i) {
     block->destroyValue(i, 0);
     EXPECT_TRUE(block->getValueReference(i, 0).isEmpty());
-    // Memory should still be allocated (rows 3 and 4 still reference it)
-    EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+    EXPECT_EQ(monitor.current(), initialMemory);
   }
 
   // Rows 3 and 4 should still have the value
@@ -734,18 +740,16 @@ TEST_F(AqlItemBlockSharedValuesTest, PartialDestroy_SupervisedSlices) {
   EXPECT_EQ(block->getValueReference(3, 0).data(),
             block->getValueReference(4, 0).data());
 
-  // Destroy value in row 3
   block->destroyValue(3, 0);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
-  // Destroy value in row 4 - should now free memory
   block->destroyValue(4, 0);
-  // Memory should be freed (allow some tolerance for overhead)
-  EXPECT_LE(monitor.current(), initialMemory + 100U);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
-  // Destroy the block
   block.reset(nullptr);
-  // Allow some tolerance for any remaining overhead
+  EXPECT_EQ(monitor.current(), initialMemory);
+
+  supervised.destroy();
   EXPECT_LE(monitor.current(), 100U);
 }
 
@@ -799,45 +803,26 @@ TEST_F(AqlItemBlockSharedValuesTest, StealAndDestroy_SupervisedSlices) {
 
   // Create a supervised slice
   AqlValue supervised = createLargeSupervisedSlice(200);
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
-  // Set value in both rows
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
-  // Memory should increase (both rows share the same data, so only one
-  // allocation)
   size_t memoryAfterSet = monitor.current();
-  EXPECT_GE(memoryAfterSet, initialMemory);
+  EXPECT_EQ(memoryAfterSet, initialMemory);
 
-  // Steal value from row 0
   AqlValue stolen = block->getValue(0, 0);
   block->steal(stolen);
-
-  // Row 1 should still have the value
   EXPECT_FALSE(block->getValueReference(1, 0).isEmpty());
-  // After stealing, block should no longer track row 0's value
-  // Row 1's value is still tracked
+
   size_t memoryAfterSteal = monitor.current();
-  EXPECT_GE(memoryAfterSteal, initialMemory);
+  EXPECT_EQ(memoryAfterSteal, initialMemory);
 
-  // Destroy the block - should clean up row 1
-  // For supervised slices, the stolen value's memory is still tracked by
-  // ResourceMonitor (it was allocated with ResourceMonitor), so memory should
-  // remain
   block.reset(nullptr);
-
-  // Stolen supervised value is still alive and tracked by ResourceMonitor
-  // Memory should be close to initialMemory + expectedMemory (stolen value)
   size_t memoryAfterBlockDestroy = monitor.current();
-  EXPECT_GE(memoryAfterBlockDestroy, initialMemory);
-  EXPECT_LE(memoryAfterBlockDestroy, initialMemory + expectedMemory + 100U);
+  EXPECT_EQ(memoryAfterBlockDestroy, initialMemory);
 
-  // Clean up stolen value
   stolen.destroy();
-
-  // All memory should be released (allow tolerance for overhead)
-  EXPECT_LE(monitor.current(), initialMemory + 100U);
+  EXPECT_LE(monitor.current(), 100U);
 }
 
 }  // namespace aql
