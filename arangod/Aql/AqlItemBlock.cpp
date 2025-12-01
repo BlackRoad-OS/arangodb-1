@@ -508,10 +508,22 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
         for (RegisterId::value_t col = 0; col < numRegs; col++) {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
-            AqlValueGuard guard{a, true};
-            auto [it, inserted] = cache.emplace(a.data());
-            res->setValue(row, col, AqlValue(a, (*it)));
-            guard.steal();
+            // VPACK_SUPERVISED_SLICE must be cloned, not shared, because it
+            // contains ResourceMonitor tracking that would be corrupted if
+            // multiple AqlValues share the same base pointer.
+            if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+              AqlValue cloned = a.clone();
+              AqlValueGuard guard{cloned, true};
+              res->setValue(row, col, cloned);
+              guard.steal();
+            } else {
+              AqlValueGuard guard{a, true};
+              auto [it, inserted] = cache.emplace(a.data());
+              res->setValue(row, col, AqlValue(a, (*it)));
+              // Always steal the guard since ownership has been transferred to
+              // the new block.
+              guard.steal();
+            }
           } else {
             res->setValue(row, col, a);
           }
