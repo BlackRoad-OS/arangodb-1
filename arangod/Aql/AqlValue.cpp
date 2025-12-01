@@ -1420,6 +1420,9 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::RANGE: {
         auto const* ra = a._data.rangeMeta.range;
         auto const* rb = b._data.rangeMeta.range;
+        if (ra == nullptr || rb == nullptr) {
+          return ra == rb;  // both null -> equal, one null -> not equal
+        }
         return ra->_low == rb->_low && ra->_high == rb->_high;
       }
 
@@ -1429,6 +1432,7 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
         return false;
     }
   }
+
   if (ta == T::RANGE || tb == T::RANGE) {
     return false;
   }
