@@ -247,14 +247,17 @@ TEST_F(AqlItemBlockSharedValuesTest,
        MultipleSupervisedSlicesSameData_ReferenceValuesFromRow) {
   auto block = itemBlockManager.requestBlock(3, 1);
 
+  size_t initialMemory = monitor.current();
+
   // Create a supervised slice
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  size_t initialMemory = monitor.current();
+  size_t memoryAfterCreation = monitor.current();
+  EXPECT_GT(memoryAfterCreation, initialMemory);
 
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory);
+  EXPECT_EQ(monitor.current(), memoryAfterCreation);
 
   // Reference it to row 1 and row 2 using referenceValuesFromRow()
   // This makes rows 1 and 2 share the same pointer as row 0
@@ -263,7 +266,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   block->referenceValuesFromRow(1, regs, 0);
   block->referenceValuesFromRow(2, regs, 0);
 
-  EXPECT_EQ(monitor.current(), initialMemory);
+  EXPECT_EQ(monitor.current(), memoryAfterCreation);
 
   // Verify all rows point to the same data
   {
@@ -289,6 +292,9 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // pointers between rows, which is the scenario that triggers the bug
   // in cloneDataAndMoveShadow() when shadow rows share pointers.
   block.reset(nullptr);
+
+  // After destroying the block, memory should be freed
+  EXPECT_EQ(monitor.current(), initialMemory);
 }
 
 TEST_F(AqlItemBlockSharedValuesTest,
