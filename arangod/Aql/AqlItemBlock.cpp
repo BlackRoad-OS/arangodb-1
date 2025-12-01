@@ -532,6 +532,10 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
             AqlValueGuard guard{a, true};
             auto [it, inserted] = cache.emplace(a.data());
             res->setValue(row, col, AqlValue(a, (*it)));
+            // Always call guard.steal() because ownership is always transferred
+            // via setValue(), regardless of whether the pointer was already in
+            // the cache. The cache is used for deduplication, but ownership
+            // transfer happens regardless.
             guard.steal();
           } else {
             res->setValue(row, col, a);
