@@ -23,6 +23,8 @@
 
 #include "Basics/operating-system.h"
 
+#include "CrashHandler.h"
+
 #ifdef TRI_HAVE_SIGNAL_H
 #include <signal.h>
 #endif
@@ -43,8 +45,11 @@
 #include <thread>
 
 #include <boost/core/demangle.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
-#include "CrashHandler.h"
+#include "SystemMonitor/AsyncRegistry/Feature.h"
 #include "BuildId/BuildId.h"
 #include "Basics/FileUtils.h"
 #include "Basics/PhysicalMemory.h"
@@ -55,7 +60,6 @@
 #include "Basics/operating-system.h"
 #include "Basics/process-utils.h"
 #include "Basics/signals.h"
-#include "Logger/LoggerFeature.h"
 #include "Logger/LogMacros.h"
 #include "Logger/Logger.h"
 #include "Logger/LoggerStream.h"
@@ -141,7 +145,8 @@ siginfo_t* crashSiginfo = nullptr;
 void* crashUcontext = nullptr;
 
 /// @brief stores the database directory
-std::string databaseDirectory;
+std::string databaseDirectoryPath;
+
 /// @brief stores crash data for later use by the crash handler thread
 void storeCrashData(std::string_view context, int signal, uint64_t threadId,
                     uint64_t threadNumber, siginfo_t* info, void* ucontext) {
@@ -518,6 +523,16 @@ void logProcessInfo() {
   LOG_TOPIC("ded81", INFO, arangodb::Logger::CRASH) << buffer.view();
 }
 
+void dumpDatabaseAsyncRegistry(std::string const& crashesDirectory) {
+  LOG_DEVEL << ADB_HERE;
+
+  std::string filename = arangodb::basics::FileUtils::buildFilename(
+      crashesDirectory, "async-registry.json");
+
+  auto data = arangodb::async_registry::collectAsyncRegistryData();
+  arangodb::basics::FileUtils::spit(filename, data.toJson());
+}
+
 void actuallyDumpCrashInfo() {
   // Handle the crash logging in this dedicated thread
   // We can safely do all the work here since we're not in a signal
@@ -546,6 +561,22 @@ void actuallyDumpCrashInfo() {
     // Flush logs
     arangodb::Logger::flush();
 
+    // Now we try to dump as much as information as we can about the database
+    // state Create a crashes directory path which is _database_directory +
+    // /crashes
+    if (!databaseDirectoryPath.empty()) {
+      LOG_DEVEL << ADB_HERE;
+      auto const uuid = to_string(boost::uuids::random_generator()());
+      auto const crashDirectory = arangodb::basics::FileUtils::buildFilename(
+          databaseDirectoryPath, uuid);
+      LOG_DEVEL << ADB_HERE
+                << "Creating crashes directory at: " << crashDirectory;
+      arangodb::basics::FileUtils::createDirectory(crashDirectory);
+
+      dumpDatabaseAsyncRegistry(crashDirectory);
+    } else {
+      LOG_DEVEL << ADB_HERE << "Database directory is empty";
+    }
   } catch (...) {
     // Ignore exceptions in crash handling
   }
@@ -692,8 +723,9 @@ void CrashHandler::waitForCrashHandlerCompletion() {
 }
 
 /// @brief sets the database directory
-void CrashHandler::setDatabaseDirectory(std::string_view path) {
-  ::databaseDirectory = path;
+void CrashHandler::setDatabaseDirectory(std::string path) {
+  ::databaseDirectoryPath =
+      arangodb::basics::FileUtils::buildFilename(path, "crashes");
 }
 
 void CrashHandler::logBacktrace() {

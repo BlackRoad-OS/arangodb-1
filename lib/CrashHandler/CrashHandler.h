@@ -101,6 +101,9 @@ class CrashHandler {
   /// for assertion failures.
   static void waitForCrashHandlerCompletion();
 
+  /// @brief sets the database directory
+  static void setDatabaseDirectory(std::string path);
+
  private:
   /// @brief installs the crash handler globally
   static void installCrashHandler();

@@ -155,6 +155,7 @@ target_link_libraries(arango_basic_utils
          arango_inspection
          arango_futures
          arango_basic_errors
+         arango_async_monitoring
          absl::flat_hash_set
          fuerte
          s2
