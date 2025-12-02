@@ -29,6 +29,8 @@
 #include "Basics/SupervisedBuffer.h"
 #include "Basics/GlobalResourceMonitor.h"
 #include "Basics/VelocyPackHelper.h"
+#include "Logger/LogMacros.h"
+#include "Logger/Logger.h"
 #include "Transaction/Context.h"
 #include "Transaction/Helpers.h"
 #ifdef USE_V8

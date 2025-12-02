@@ -34,6 +34,8 @@
 #include "Basics/VelocyPackHelper.h"
 #include "Containers/FlatHashMap.h"
 #include "Containers/HashSet.h"
+#include "Logger/LogMacros.h"
+#include "Logger/Logger.h"
 #include "Transaction/Context.h"
 #include "Transaction/Methods.h"
 
@@ -510,9 +512,24 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
           if (a.requiresDestruction()) {
             AqlValueGuard guard{a, true};
             auto [it, inserted] = cache.emplace(a.data());
-            res->setValue(row, col, AqlValue(a, (*it)));
             if (inserted) {
-              // otherwise, destroy this; we used a cached value.
+              // First time seeing this pointer - we can reuse it
+              res->setValue(row, col, AqlValue(a, (*it)));
+              // Transfer ownership to res - guard won't destroy it
+              guard.steal();
+            } else {
+              // Value was already cached. This means a previous row/column
+              // already processed a value pointing to this same memory and
+              // called guard.steal(), so the memory is now owned by res
+              // (tracked via _valueCount). We can safely reuse the cached
+              // pointer - setValue will increment the refCount. We MUST call
+              // guard.steal() to prevent a.destroy() from freeing memory that
+              // res already owns.
+              res->setValue(row, col, AqlValue(a, (*it)));
+              // CRITICAL: Call guard.steal() to prevent a.destroy() from
+              // freeing memory that res already owns. Without this, the guard
+              // would free the memory when it goes out of scope, even though
+              // res has other AqlValues pointing to it.
               guard.steal();
             }
           } else {
@@ -805,12 +822,7 @@ void AqlItemBlock::toVelocyPack(size_t from, size_t to,
         currentState = Range;
       } else {
         TRI_ASSERT(pos >= 2);
-        // attempt an insert into the map without checking if the
-        // target element already exists. if it already exists,
-        // then the try_emplace does nothing, but we will get an
-        // iterator to the existing element.
-        // in case we inserted the value, we can simply go on and
-        // increase the global position counter.
+
         auto [it, inserted] = table.try_emplace(a, pos);
 
         if (inserted) {
