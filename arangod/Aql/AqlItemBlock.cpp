@@ -54,10 +54,9 @@ inline void copyValueOver(arangodb::containers::HashSet<void const*>& cache,
                           AqlValue const& a, size_t rowNumber,
                           RegisterId::value_t col, SharedAqlItemBlockPtr& res) {
   if (a.requiresDestruction()) {
-    // For supervised slices, we must always clone to avoid use-after-free.
-    // AqlValue(a, (*it)) shares the base pointer, and when one block is
-    // destroyed, it frees memory the other block still uses.
-    if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+    auto it = cache.find(a.data());
+
+    if (it == cache.end()) {
       AqlValue b = a.clone();
       try {
         res->setValue(rowNumber, col, b);
@@ -67,20 +66,7 @@ inline void copyValueOver(arangodb::containers::HashSet<void const*>& cache,
       }
       cache.emplace(b.data());
     } else {
-      auto it = cache.find(a.data());
-
-      if (it == cache.end()) {
-        AqlValue b = a.clone();
-        try {
-          res->setValue(rowNumber, col, b);
-        } catch (...) {
-          b.destroy();
-          throw;
-        }
-        cache.emplace(b.data());
-      } else {
-        res->setValue(rowNumber, col, AqlValue(a, (*it)));
-      }
+      res->setValue(rowNumber, col, AqlValue(a, (*it)));
     }
   } else {
     res->setValue(rowNumber, col, a);
@@ -337,10 +323,16 @@ void AqlItemBlock::destroy() noexcept {
             if (--valueInfo.refCount == 0) {
               if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
                 totalSupervisedUsed += valueInfo.memoryUsage;
+                // For supervised slices, we should NEVER destroy them - only erase.
+                // The memory is always managed by the ResourceMonitor that created it,
+                // not by the block. The block only tracks references via refCount.
+                // Destroying them would cause use-after-free if external AqlValue
+                // objects still reference the same memory.
+                it.erase();
               } else {
                 totalUsed += valueInfo.memoryUsage;
+                it.destroy();
               }
-              it.destroy();
               // destroy() calls erase, so no need to call erase() again later
               continue;
             }
@@ -415,13 +407,18 @@ void AqlItemBlock::shrink(size_t numRows) {
         if (--valueInfo.refCount == 0) {
           if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
             totalSupervisedUsed += valueInfo.memoryUsage;
+            // For supervised slices, we should NEVER destroy them - only erase.
+            // The memory is always managed by the ResourceMonitor that created it,
+            // not by the block. The block only tracks references via refCount.
+            _valueCount.erase(it);
+            a.erase();
           } else {
             totalUsed += valueInfo.memoryUsage;
+            // destroy calls erase() for AqlValues with dynamic memory,
+            // no need for an extra a.erase() here
+            a.destroy();
+            _valueCount.erase(it);
           }
-          // destroy calls erase() for AqlValues with dynamic memory,
-          // no need for an extra a.erase() here
-          a.destroy();
-          _valueCount.erase(it);
           continue;
         }
       }
@@ -497,13 +494,18 @@ void AqlItemBlock::clearRegisters(RegIdFlatSet const& toClear) {
           if (--valueInfo.refCount == 0) {
             if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
               totalSupervisedUsed += valueInfo.memoryUsage;
+              // For supervised slices, we should NEVER destroy them - only erase.
+              // The memory is always managed by the ResourceMonitor that created it,
+              // not by the block. The block only tracks references via refCount.
+              _valueCount.erase(it);
+              a.erase();
             } else {
               totalUsed += valueInfo.memoryUsage;
+              // destroy calls erase() for AqlValues with dynamic memory,
+              // no need for an extra a.erase() here
+              a.destroy();
+              _valueCount.erase(it);
             }
-            // destroy calls erase() for AqlValues with dynamic memory,
-            // no need for an extra a.erase() here
-            a.destroy();
-            _valueCount.erase(it);
             continue;
           }
         }
@@ -543,27 +545,10 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
         for (RegisterId::value_t col = 0; col < numRegs; col++) {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
-            // For supervised slices, we must always clone to avoid
-            // use-after-free. AqlValue(a, (*it)) shares the base pointer, and
-            // when one block is destroyed, it frees memory the other block
-            // still uses.
-            if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
-              AqlValueGuard guard{a, true};
-              AqlValue b = a.clone();
-              try {
-                res->setValue(row, col, b);
-              } catch (...) {
-                b.destroy();
-                throw;
-              }
-              cache.emplace(b.data());
-              guard.steal();
-            } else {
-              AqlValueGuard guard{a, true};
-              auto [it, inserted] = cache.emplace(a.data());
-              res->setValue(row, col, AqlValue(a, (*it)));
-              guard.steal();
-            }
+            AqlValueGuard guard{a, true};
+            auto [it, inserted] = cache.emplace(a.data());
+            res->setValue(row, col, AqlValue(a, (*it)));
+            guard.steal();
           } else {
             res->setValue(row, col, a);
           }
@@ -1052,32 +1037,14 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
                             AqlValue const& value) {
   TRI_ASSERT(_data[getAddress(index, column)].isEmpty());
 
-  // For supervised slices, we must always clone to avoid use-after-free.
-  // When setValue() is called with a supervised slice, the caller may still
-  // hold a reference to the original value. If we share the same memory block,
-  // destroying the last reference in the block will free memory the caller
-  // still uses.
-  AqlValue valueToSet = value;
-  if (value.requiresDestruction() &&
-      value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
-    // Check if this value is already in the block (shared by other rows)
-    auto it = _valueCount.find(value.data());
-    if (it == _valueCount.end()) {
-      // First time inserting this supervised slice - clone it
-      valueToSet = value.clone();
-    }
-    // If it's already in the block, we can share it (it was already cloned
-    // when first inserted), so use value as-is
-  }
-
   // First update the reference count, if this fails, the value is empty
-  if (valueToSet.requiresDestruction()) {
+  if (value.requiresDestruction()) {
     // note: this may create a new entry in _valueCount, which is fine
-    auto& valueInfo = _valueCount[valueToSet.data()];
+    auto& valueInfo = _valueCount[value.data()];
     if (++valueInfo.refCount == 1) {
       // we just inserted the item
-      size_t memoryUsage = valueToSet.memoryUsage();
-      if (valueToSet.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+      size_t memoryUsage = value.memoryUsage();
+      if (value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
         _memoryUsage += memoryUsage;
       } else {
         increaseMemoryUsage(memoryUsage);
@@ -1086,7 +1053,7 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
     }
   }
 
-  _data[getAddress(index, column)] = valueToSet;
+  _data[getAddress(index, column)] = value;
   _maxModifiedRowIndex = std::max<size_t>(_maxModifiedRowIndex, index + 1);
 }
 
@@ -1108,13 +1075,18 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
           size_t memoryUsage = valueInfo.memoryUsage;
           TRI_ASSERT(_memoryUsage >= memoryUsage);
           _memoryUsage -= memoryUsage;
+          // For supervised slices, we should NEVER destroy them - only erase.
+          // The memory is always managed by the ResourceMonitor that created it,
+          // not by the block. The block only tracks references via refCount.
+          _valueCount.erase(it);
+          element.erase();
         } else {
           decreaseMemoryUsage(valueInfo.memoryUsage);
+          _valueCount.erase(it);
+          element.destroy();
+          // no need for an extra element.erase() in this case, as
+          // destroy() calls erase() for AqlValues with dynamic memory
         }
-        _valueCount.erase(it);
-        element.destroy();
-        // no need for an extra element.erase() in this case, as
-        // destroy() calls erase() for AqlValues with dynamic memory
         return;
       }
     }
