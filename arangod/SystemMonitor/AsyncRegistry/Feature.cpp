@@ -20,7 +20,7 @@
 ///
 /// @author Julia Volmer
 ////////////////////////////////////////////////////////////////////////////////
-#include "Feature.h"
+#include "SystemMonitor/AsyncRegistry/Feature.h"
 
 #include "Basics/FutureSharedLock.h"
 #include "Metrics/CounterBuilder.h"
@@ -28,7 +28,20 @@
 #include "Metrics/MetricsFeature.h"
 #include "ProgramOptions/Parameters.h"
 
+#include "Async/Registry/promise.h"
+#include "Containers/Forest/depth_first.h"
+#include "Containers/Forest/forest.h"
+#include "Inspection/VPack.h"
+
+using namespace arangodb;
 using namespace arangodb::async_registry;
+using namespace arangodb::containers;
+
+// Forward declarations from RestHandler.cpp
+auto all_undeleted_promises() -> ForestWithRoots<PromiseSnapshot>;
+
+auto getStacktraceData(IndexedForestWithRoots<PromiseSnapshot> const& promises)
+    -> velocypack::Builder;
 
 DECLARE_COUNTER(
     arangodb_async_promises_total,
@@ -48,6 +61,15 @@ DECLARE_COUNTER(arangodb_async_thread_registries_total,
 DECLARE_GAUGE(arangodb_async_existing_thread_registries, std::uint64_t,
               "Number of threads that started currently existing asynchronous "
               "operations");
+
+namespace arangodb::async_registry {
+velocypack::Builder collectAsyncRegistryData() {
+  // Collect all undeleted promises and index them by awaitee
+  auto promises = all_undeleted_promises().index_by_awaitee();
+  // Convert to stacktrace data
+  return getStacktraceData(promises);
+}
+}  // namespace arangodb::async_registry
 
 Feature::Feature(Server& server)
     : ArangodFeature{server, *this}, _async_mutex{_schedulerWrapper} {

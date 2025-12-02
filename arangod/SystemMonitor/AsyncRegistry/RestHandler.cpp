@@ -59,7 +59,6 @@ RestHandler::RestHandler(ArangodServer& server, GeneralRequest* request,
     : RestVocbaseBaseHandler(server, request, response),
       _feature(server.getFeature<Feature>()) {}
 
-namespace {
 /**
    Creates a forest of all promises in the async registry
 
@@ -122,7 +121,6 @@ auto getStacktraceData(IndexedForestWithRoots<PromiseSnapshot> const& promises)
   builder.close();
   return builder;
 }
-}  // namespace
 
 auto RestHandler::executeAsync() -> futures::Future<futures::Unit> {
   if (!ExecContext::current().isSuperuser()) {

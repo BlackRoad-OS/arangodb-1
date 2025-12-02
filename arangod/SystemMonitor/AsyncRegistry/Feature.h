@@ -30,6 +30,8 @@
 
 namespace arangodb::async_registry {
 
+auto collectAsyncRegistryData() -> velocypack::Builder;
+
 class Feature final : public ArangodFeature {
  private:
   static auto create_metrics(arangodb::metrics::MetricsFeature& metrics_feature)
