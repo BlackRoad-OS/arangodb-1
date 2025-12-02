@@ -54,9 +54,10 @@ inline void copyValueOver(arangodb::containers::HashSet<void const*>& cache,
                           AqlValue const& a, size_t rowNumber,
                           RegisterId::value_t col, SharedAqlItemBlockPtr& res) {
   if (a.requiresDestruction()) {
-    auto it = cache.find(a.data());
-
-    if (it == cache.end()) {
+    // For supervised slices, we must always clone to avoid use-after-free.
+    // AqlValue(a, (*it)) shares the base pointer, and when one block is
+    // destroyed, it frees memory the other block still uses.
+    if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
       AqlValue b = a.clone();
       try {
         res->setValue(rowNumber, col, b);
@@ -66,7 +67,20 @@ inline void copyValueOver(arangodb::containers::HashSet<void const*>& cache,
       }
       cache.emplace(b.data());
     } else {
-      res->setValue(rowNumber, col, AqlValue(a, (*it)));
+      auto it = cache.find(a.data());
+
+      if (it == cache.end()) {
+        AqlValue b = a.clone();
+        try {
+          res->setValue(rowNumber, col, b);
+        } catch (...) {
+          b.destroy();
+          throw;
+        }
+        cache.emplace(b.data());
+      } else {
+        res->setValue(rowNumber, col, AqlValue(a, (*it)));
+      }
     }
   } else {
     res->setValue(rowNumber, col, a);
@@ -529,10 +543,27 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
         for (RegisterId::value_t col = 0; col < numRegs; col++) {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
-            AqlValueGuard guard{a, true};
-            auto [it, inserted] = cache.emplace(a.data());
-            res->setValue(row, col, AqlValue(a, (*it)));
-            guard.steal();
+            // For supervised slices, we must always clone to avoid
+            // use-after-free. AqlValue(a, (*it)) shares the base pointer, and
+            // when one block is destroyed, it frees memory the other block
+            // still uses.
+            if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+              AqlValueGuard guard{a, true};
+              AqlValue b = a.clone();
+              try {
+                res->setValue(row, col, b);
+              } catch (...) {
+                b.destroy();
+                throw;
+              }
+              cache.emplace(b.data());
+              guard.steal();
+            } else {
+              AqlValueGuard guard{a, true};
+              auto [it, inserted] = cache.emplace(a.data());
+              res->setValue(row, col, AqlValue(a, (*it)));
+              guard.steal();
+            }
           } else {
             res->setValue(row, col, a);
           }
