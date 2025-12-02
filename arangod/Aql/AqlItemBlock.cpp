@@ -34,8 +34,6 @@
 #include "Basics/VelocyPackHelper.h"
 #include "Containers/FlatHashMap.h"
 #include "Containers/HashSet.h"
-#include "Logger/LogMacros.h"
-#include "Logger/Logger.h"
 #include "Transaction/Context.h"
 #include "Transaction/Methods.h"
 
@@ -511,27 +509,10 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
             AqlValueGuard guard{a, true};
-            auto [it, inserted] = cache.emplace(a.data());
-            if (inserted) {
-              // First time seeing this pointer - we can reuse it
-              res->setValue(row, col, AqlValue(a, (*it)));
-              // Transfer ownership to res - guard won't destroy it
-              guard.steal();
-            } else {
-              // Value was already cached. This means a previous row/column
-              // already processed a value pointing to this same memory and
-              // called guard.steal(), so the memory is now owned by res
-              // (tracked via _valueCount). We can safely reuse the cached
-              // pointer - setValue will increment the refCount. We MUST call
-              // guard.steal() to prevent a.destroy() from freeing memory that
-              // res already owns.
-              res->setValue(row, col, AqlValue(a, (*it)));
-              // CRITICAL: Call guard.steal() to prevent a.destroy() from
-              // freeing memory that res already owns. Without this, the guard
-              // would free the memory when it goes out of scope, even though
-              // res has other AqlValues pointing to it.
-              guard.steal();
-            }
+            cache.emplace(a.data());
+            res->setValue(row, col, a);
+            // Transfer ownership to res - guard won't destroy it
+            guard.steal();
           } else {
             res->setValue(row, col, a);
           }
