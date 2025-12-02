@@ -46,6 +46,7 @@
 
 #include "CrashHandler.h"
 #include "BuildId/BuildId.h"
+#include "Basics/FileUtils.h"
 #include "Basics/PhysicalMemory.h"
 #include "Basics/SizeLimitedString.h"
 #include "Basics/StringUtils.h"
@@ -139,6 +140,8 @@ siginfo_t* crashSiginfo = nullptr;
 /// @brief stores a pointer to the user context
 void* crashUcontext = nullptr;
 
+/// @brief stores the database directory
+std::string databaseDirectory;
 /// @brief stores crash data for later use by the crash handler thread
 void storeCrashData(std::string_view context, int signal, uint64_t threadId,
                     uint64_t threadNumber, siginfo_t* info, void* ucontext) {
@@ -686,6 +689,11 @@ void CrashHandler::waitForCrashHandlerCompletion() {
       return;
     }
   }
+}
+
+/// @brief sets the database directory
+void CrashHandler::setDatabaseDirectory(std::string_view path) {
+  ::databaseDirectory = path;
 }
 
 void CrashHandler::logBacktrace() {
