@@ -74,7 +74,6 @@ SharedAqlItemBlockPtr InputAqlItemRow::cloneToBlock(
               throw;
             }
             cache.emplace(b);
-            b.erase();
           } else {
             block->setValue(0, col, (*it));
           }
