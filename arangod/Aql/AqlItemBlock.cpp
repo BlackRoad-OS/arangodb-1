@@ -1052,14 +1052,32 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
                             AqlValue const& value) {
   TRI_ASSERT(_data[getAddress(index, column)].isEmpty());
 
+  // For supervised slices, we must always clone to avoid use-after-free.
+  // When setValue() is called with a supervised slice, the caller may still
+  // hold a reference to the original value. If we share the same memory block,
+  // destroying the last reference in the block will free memory the caller
+  // still uses.
+  AqlValue valueToSet = value;
+  if (value.requiresDestruction() &&
+      value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+    // Check if this value is already in the block (shared by other rows)
+    auto it = _valueCount.find(value.data());
+    if (it == _valueCount.end()) {
+      // First time inserting this supervised slice - clone it
+      valueToSet = value.clone();
+    }
+    // If it's already in the block, we can share it (it was already cloned
+    // when first inserted), so use value as-is
+  }
+
   // First update the reference count, if this fails, the value is empty
-  if (value.requiresDestruction()) {
+  if (valueToSet.requiresDestruction()) {
     // note: this may create a new entry in _valueCount, which is fine
-    auto& valueInfo = _valueCount[value.data()];
+    auto& valueInfo = _valueCount[valueToSet.data()];
     if (++valueInfo.refCount == 1) {
       // we just inserted the item
-      size_t memoryUsage = value.memoryUsage();
-      if (value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+      size_t memoryUsage = valueToSet.memoryUsage();
+      if (valueToSet.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
         _memoryUsage += memoryUsage;
       } else {
         increaseMemoryUsage(memoryUsage);
@@ -1068,7 +1086,7 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
     }
   }
 
-  _data[getAddress(index, column)] = value;
+  _data[getAddress(index, column)] = valueToSet;
   _maxModifiedRowIndex = std::max<size_t>(_maxModifiedRowIndex, index + 1);
 }
 
