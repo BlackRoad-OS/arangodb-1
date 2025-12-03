@@ -265,7 +265,7 @@ void ApiRecordingFeature::cleanupLoop() {
 
 velocypack::SharedSlice ApiRecordingFeature::getCrashData() const {
   velocypack::Builder builder;
-  
+
   builder.openObject();
 
   // Serialize API call records
@@ -283,7 +283,7 @@ velocypack::SharedSlice ApiRecordingFeature::getCrashData() const {
   builder.close();  // close aqlQueries array
 
   builder.close();  // close root object
-  
+
   // Return a SharedSlice that steals the builder's buffer
   return std::move(builder).sharedSlice();
 }
