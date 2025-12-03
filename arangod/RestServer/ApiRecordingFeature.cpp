@@ -24,11 +24,14 @@
 #include "ApiRecordingFeature.h"
 
 #include "ApplicationFeatures/ApplicationServer.h"
-#include "ProgramOptions/ProgramOptions.h"
-#include "ProgramOptions/Parameters.h"
+#include "Inspection/VPack.h"
 #include "Logger/Logger.h"
 #include "Logger/LogMacros.h"
 #include "Metrics/MetricsFeature.h"
+#include "ProgramOptions/Parameters.h"
+#include "ProgramOptions/ProgramOptions.h"
+
+#include <velocypack/Builder.h>
 
 using namespace arangodb::options;
 
@@ -258,6 +261,35 @@ void ApiRecordingFeature::cleanupLoop() {
     // Sleep using the calculated delay
     std::this_thread::sleep_for(currentDelay);
   }
+}
+
+velocypack::SharedSlice ApiRecordingFeature::getCrashData() const {
+  velocypack::Builder builder;
+  
+  builder.openObject();
+
+  // Serialize API call records
+  builder.add("apiCalls", velocypack::Value(velocypack::ValueType::Array));
+  doForApiCallRecords([&builder](ApiCallRecord const& record) {
+    velocypack::serialize(builder, record);
+  });
+  builder.close();  // close apiCalls array
+
+  // Serialize AQL query records
+  builder.add("aqlQueries", velocypack::Value(velocypack::ValueType::Array));
+  doForAqlQueryRecords([&builder](AqlQueryRecord const& record) {
+    velocypack::serialize(builder, record);
+  });
+  builder.close();  // close aqlQueries array
+
+  builder.close();  // close root object
+  
+  // Return a SharedSlice that steals the builder's buffer
+  return std::move(builder).sharedSlice();
+}
+
+std::string_view ApiRecordingFeature::getDataSourceName() const {
+  return name();
 }
 
 }  // namespace arangodb
