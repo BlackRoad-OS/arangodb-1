@@ -24,6 +24,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -108,7 +109,7 @@ class CrashHandler {
   static void setDatabaseDirectory(std::string path);
 
   /// @brief adds a data source to the crash handler
-  void addDataSource(CrashHandlerDataSource const* dataSource);
+  void addDataSource(std::shared_ptr<CrashHandlerDataSource const> dataSource);
 
  private:
   /// @brief installs the crash handler globally

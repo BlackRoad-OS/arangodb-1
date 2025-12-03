@@ -27,9 +27,13 @@
 
 namespace arangodb {
 
-class CrashHandlerDataSource {
+class CrashHandlerDataSource: public std::enable_shared_from_this<CrashHandlerDataSource> {
  public:
   virtual ~CrashHandlerDataSource() = default;
+
+  std::shared_ptr<CrashHandlerDataSource> getSharedFromThis() {
+    return shared_from_this();
+  }
 
   virtual velocypack::SharedSlice getCrashData() const = 0;
 

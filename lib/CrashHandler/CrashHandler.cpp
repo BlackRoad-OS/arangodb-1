@@ -149,7 +149,7 @@ void* crashUcontext = nullptr;
 std::string databaseDirectoryPath;
 
 /// @brief stores the data sources
-std::vector<arangodb::CrashHandlerDataSource const*> dataSources;
+std::vector<std::shared_ptr<arangodb::CrashHandlerDataSource const>> dataSources;
 
 /// @brief stores crash data for later use by the crash handler thread
 void storeCrashData(std::string_view context, int signal, uint64_t threadId,
@@ -742,8 +742,8 @@ void CrashHandler::setDatabaseDirectory(std::string path) {
       arangodb::basics::FileUtils::buildFilename(path, "crashes");
 }
 
-void CrashHandler::addDataSource(const CrashHandlerDataSource* dataSource) {
-  ::dataSources.push_back(dataSource);
+void CrashHandler::addDataSource(std::shared_ptr<CrashHandlerDataSource const> dataSource) {
+  ::dataSources.push_back(std::move(dataSource));
 }
 
 void CrashHandler::logBacktrace() {
