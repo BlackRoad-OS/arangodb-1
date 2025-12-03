@@ -529,11 +529,15 @@ class ArangoServer:
         Returns:
             Environment variables dict, or None if no special env needed
         """
+        # Get explicit sanitizer from config if present
+        explicit_sanitizer = getattr(self._config, "sanitizer", None)
+
         # Create sanitizer handler
         sanitizer_handler = create_sanitizer_handler(
             binary_path=Path(binary_path),
             log_dir=self.paths.base_dir,
             repo_root=repository_root,
+            explicit_sanitizer=explicit_sanitizer,
         )
 
         # Get sanitizer environment variables

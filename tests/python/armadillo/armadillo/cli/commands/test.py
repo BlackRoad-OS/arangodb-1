@@ -35,6 +35,7 @@ _HELP = {
     "extra_args": "Additional arguments to pass to pytest",
     "show_server_logs": "Show ArangoDB server log output",
     "compact": "Use compact pytest-style output instead of detailed verbose output",
+    "sanitizer": "Enable sanitizer: 'tsan' or 'alubsan'",
 }
 
 
@@ -67,6 +68,15 @@ class TestRunOptions(BaseModel):
     )
     show_server_logs: bool = Field(False, description=_HELP["show_server_logs"])
     compact: bool = Field(False, description=_HELP["compact"])
+    sanitizer: Optional[str] = Field(None, description=_HELP["sanitizer"])
+
+    @field_validator("sanitizer")
+    @classmethod
+    def validate_sanitizer(cls, v: Optional[str]) -> Optional[str]:
+        """Validate that only supported sanitizers are specified."""
+        if v is not None and v not in {"tsan", "alubsan"}:
+            raise ValueError(f"Invalid sanitizer '{v}'. Must be 'tsan' or 'alubsan'")
+        return v
 
     @field_validator("formats")
     @classmethod
@@ -149,6 +159,9 @@ def run(
         False, "--show-server-logs", help=_HELP["show_server_logs"]
     ),
     compact: bool = typer.Option(False, "--compact", "-c", help=_HELP["compact"]),
+    sanitizer: Optional[str] = typer.Option(
+        None, "--sanitizer", help=_HELP["sanitizer"]
+    ),
 ) -> None:
     """Run tests with ArangoDB instances."""
     try:
@@ -178,6 +191,7 @@ def run(
             log_level=log_level,
             show_server_logs=show_server_logs,
             compact=compact,
+            sanitizer=sanitizer,
         )
 
         # Use the validated options for the rest of the function
@@ -266,6 +280,13 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Configure compact mode for pytest subprocess
     os.environ["ARMADILLO_COMPACT_MODE"] = str(int(options.compact))
 
+    # Configure sanitizer for pytest subprocess
+    if options.sanitizer:
+        os.environ["ARMADILLO_SANITIZER"] = options.sanitizer
+        console.print(f"[cyan]Using sanitizer: {options.sanitizer}[/cyan]")
+    else:
+        os.environ.pop("ARMADILLO_SANITIZER", None)
+
     # Configure instance retention on failure
     if options.keep_instances_on_failure:
         os.environ["ARMADILLO_KEEP_INSTANCES_ON_FAILURE"] = "1"
@@ -314,13 +335,15 @@ def _execute_test_run(options: TestRunOptions) -> None:
     # Start pytest subprocess (with or without output monitoring)
     if options.output_idle_timeout:
         # Enable output idle timeout monitoring - requires stdout/stderr capture
-        process: Union[subprocess.Popen[str], subprocess.Popen[bytes]] = subprocess.Popen(
-            pytest_args,
-            cwd=Path.cwd(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            bufsize=1,  # Line buffered
-            universal_newlines=True,
+        process: Union[subprocess.Popen[str], subprocess.Popen[bytes]] = (
+            subprocess.Popen(
+                pytest_args,
+                cwd=Path.cwd(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,  # Line buffered
+                universal_newlines=True,
+            )
         )
     else:
         # No idle timeout monitoring - simple execution

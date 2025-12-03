@@ -291,6 +291,186 @@ class TestSanitizerHandler:
             assert "log_path=" in env_vars["LSAN_OPTIONS"]
 
 
+class TestExplicitSanitizer:
+    """Test explicit sanitizer from CLI flag."""
+
+    def test_explicit_tsan_sanitizer(self, tmp_path: Path) -> None:
+        """Test explicit TSAN sanitizer from CLI."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="tsan",
+            )
+            assert handler.is_sanitizer_build()
+            assert "TSAN_OPTIONS" in handler._detected_sanitizers
+
+    def test_explicit_alubsan_sanitizer(self, tmp_path: Path) -> None:
+        """Test explicit ALUBSAN sanitizer from CLI."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="alubsan",
+            )
+            assert handler.is_sanitizer_build()
+            assert "ASAN_OPTIONS" in handler._detected_sanitizers
+            assert "LSAN_OPTIONS" in handler._detected_sanitizers
+            assert "UBSAN_OPTIONS" in handler._detected_sanitizers
+
+    def test_explicit_tsan_applies_defaults(self, tmp_path: Path) -> None:
+        """Test TSAN defaults applied when explicitly requested."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="tsan",
+            )
+            env_vars = handler.get_env_vars()
+            assert "TSAN_OPTIONS" in env_vars
+            assert "halt_on_error=0" in env_vars["TSAN_OPTIONS"]
+            assert "history_size=7" in env_vars["TSAN_OPTIONS"]
+
+    def test_explicit_alubsan_applies_defaults(self, tmp_path: Path) -> None:
+        """Test ALUBSAN defaults applied when explicitly requested."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="alubsan",
+            )
+            env_vars = handler.get_env_vars()
+
+            # ASAN defaults
+            assert "ASAN_OPTIONS" in env_vars
+            assert "halt_on_error=0" in env_vars["ASAN_OPTIONS"]
+            assert "detect_leaks=1" in env_vars["ASAN_OPTIONS"]
+
+            # LSAN defaults
+            assert "LSAN_OPTIONS" in env_vars
+            assert "halt_on_error=0" in env_vars["LSAN_OPTIONS"]
+
+            # UBSAN defaults
+            assert "UBSAN_OPTIONS" in env_vars
+            assert "halt_on_error=0" in env_vars["UBSAN_OPTIONS"]
+            assert "print_stacktrace=1" in env_vars["UBSAN_OPTIONS"]
+
+    def test_user_env_overrides_defaults(self, tmp_path: Path) -> None:
+        """Test user environment variables override CLI defaults."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {"TSAN_OPTIONS": "verbosity=2"}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="tsan",
+            )
+            env_vars = handler.get_env_vars()
+            # Should have both defaults and user override
+            assert "halt_on_error=0" in env_vars["TSAN_OPTIONS"]
+            assert "history_size=7" in env_vars["TSAN_OPTIONS"]
+            assert "verbosity=2" in env_vars["TSAN_OPTIONS"]
+
+    def test_explicit_takes_priority_over_binary_name(self, tmp_path: Path) -> None:
+        """Test explicit sanitizer takes priority over binary name detection."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        # Binary name suggests ASAN, but we explicitly request TSAN
+        asan_binary = binary_dir / "arangod-asan"
+        asan_binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=asan_binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="tsan",
+            )
+            assert handler.is_sanitizer_build()
+            # Should only detect TSAN, not ASAN
+            assert "TSAN_OPTIONS" in handler._detected_sanitizers
+            assert "ASAN_OPTIONS" not in handler._detected_sanitizers
+
+    def test_explicit_takes_priority_over_env_vars(self, tmp_path: Path) -> None:
+        """Test explicit sanitizer takes priority over environment variables."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        # Environment suggests ASAN, but we explicitly request TSAN
+        with patch.dict(os.environ, {"ASAN_OPTIONS": "detect_leaks=1"}, clear=True):
+            handler = SanitizerHandler(
+                binary_path=binary,
+                log_dir=log_dir,
+                repo_root=tmp_path,
+                explicit_sanitizer="tsan",
+            )
+            assert handler.is_sanitizer_build()
+            # Should only detect TSAN, not ASAN
+            assert "TSAN_OPTIONS" in handler._detected_sanitizers
+            assert "ASAN_OPTIONS" not in handler._detected_sanitizers
+
+    def test_no_defaults_when_auto_detected(
+        self, mock_binary: Path, temp_dirs: tuple[Path, Path, Path]
+    ) -> None:
+        """Test no defaults applied when sanitizer is auto-detected (not explicit)."""
+        _, log_dir, repo_root = temp_dirs
+
+        # Auto-detect via env var (not explicit)
+        with patch.dict(os.environ, {"TSAN_OPTIONS": "verbosity=1"}, clear=True):
+            handler = SanitizerHandler(mock_binary, log_dir, repo_root)
+            env_vars = handler.get_env_vars()
+
+            # Should have user options but NOT defaults
+            assert "verbosity=1" in env_vars["TSAN_OPTIONS"]
+            # Defaults should NOT be present (no explicit sanitizer)
+            assert "halt_on_error=0" not in env_vars["TSAN_OPTIONS"]
+            assert "history_size=7" not in env_vars["TSAN_OPTIONS"]
+
+
 class TestCreateSanitizerHandler:
     """Test create_sanitizer_handler factory function."""
 
@@ -319,3 +499,20 @@ class TestCreateSanitizerHandler:
 
         assert isinstance(handler, SanitizerHandler)
         assert handler.repo_root == Path.cwd()
+
+    def test_factory_function_with_explicit_sanitizer(
+        self, temp_dirs: tuple[Path, Path, Path]
+    ) -> None:
+        """Test factory function passes through explicit sanitizer."""
+        binary_dir, log_dir, repo_root = temp_dirs
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        handler = create_sanitizer_handler(
+            binary, log_dir, repo_root, explicit_sanitizer="tsan"
+        )
+
+        assert isinstance(handler, SanitizerHandler)
+        assert handler._explicit_sanitizer == "tsan"
+        assert handler.is_sanitizer_build()
+        assert "TSAN_OPTIONS" in handler._detected_sanitizers

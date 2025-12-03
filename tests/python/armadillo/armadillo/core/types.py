@@ -141,7 +141,9 @@ class ServerConfig(BaseModel):
     port: int
     data_dir: Path
     log_file: Path
-    args: Dict[str, Union[str, List[str], int, float, bool]] = Field(default_factory=dict)
+    args: Dict[str, Union[str, List[str], int, float, bool]] = Field(
+        default_factory=dict
+    )
     memory_limit_mb: Optional[int] = None
     startup_timeout: float = 30.0
 
@@ -223,6 +225,7 @@ class ArmadilloConfig(BaseModel):
     log_level: str = "INFO"
     compact_mode: bool = False
     show_server_logs: bool = False
+    sanitizer: Optional[str] = None  # "tsan" or "alubsan"
 
     # Test mode flag - explicit instead of stack inspection
     is_test_mode: bool = False

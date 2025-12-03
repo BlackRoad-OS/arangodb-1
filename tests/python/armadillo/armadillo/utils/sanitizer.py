@@ -19,38 +19,60 @@ class SanitizerHandler:
     TSAN_SANITIZERS = {"TSAN_OPTIONS"}
     ALL_SANITIZERS = ALUBSAN_SANITIZERS | TSAN_SANITIZERS
 
-    def __init__(self, binary_path: Path, log_dir: Path, repo_root: Path) -> None:
+    def __init__(
+        self,
+        binary_path: Path,
+        log_dir: Path,
+        repo_root: Path,
+        explicit_sanitizer: Optional[str] = None,
+    ) -> None:
         """Initialize sanitizer handler.
 
         Args:
             binary_path: Path to the binary being executed
             log_dir: Directory where sanitizer logs should be written
             repo_root: Repository root for finding suppression files
+            explicit_sanitizer: Explicit sanitizer from CLI ("tsan" or "alubsan")
         """
         self.binary_path = binary_path
         self.log_dir = log_dir
         self.repo_root = repo_root
+        self._explicit_sanitizer = explicit_sanitizer
         self._detected_sanitizers = self._detect_sanitizers()
 
     def _detect_sanitizers(self) -> Set[str]:
         """Detect which sanitizers are active.
+
+        Priority:
+        1. Explicit CLI flag (highest)
+        2. Environment variables
+        3. Binary name detection (lowest)
 
         Returns:
             Set of sanitizer environment variable names (e.g., 'ASAN_OPTIONS')
         """
         detected = set()
 
-        # Check environment variables
+        # Priority 1: Explicit sanitizer from CLI flag
+        if self._explicit_sanitizer:
+            if self._explicit_sanitizer == "tsan":
+                detected.update(self.TSAN_SANITIZERS)
+            elif self._explicit_sanitizer == "alubsan":
+                detected.update(self.ALUBSAN_SANITIZERS)
+            return detected
+
+        # Priority 2: Check environment variables
         for san_var in self.ALL_SANITIZERS:
             if san_var in os.environ:
                 detected.add(san_var)
 
-        # Check binary name for hints
-        binary_name_lower = self.binary_path.name.lower()
-        if "asan" in binary_name_lower:
-            detected.update(self.ALUBSAN_SANITIZERS)
-        if "tsan" in binary_name_lower:
-            detected.update(self.TSAN_SANITIZERS)
+        # Priority 3: Check binary name (only if no env vars set)
+        if not detected:
+            binary_name_lower = self.binary_path.name.lower()
+            if "asan" in binary_name_lower:
+                detected.update(self.ALUBSAN_SANITIZERS)
+            if "tsan" in binary_name_lower:
+                detected.update(self.TSAN_SANITIZERS)
 
         return detected
 
@@ -85,8 +107,35 @@ class SanitizerHandler:
 
         return env_vars
 
+    def _get_default_options(self, san_var: str) -> Dict[str, str]:
+        """Get default options for a sanitizer type when explicitly requested.
+
+        Args:
+            san_var: Sanitizer variable name (e.g., 'ASAN_OPTIONS')
+
+        Returns:
+            Dictionary of default option key-value pairs
+        """
+        if not self._explicit_sanitizer:
+            return {}
+
+        defaults: Dict[str, str] = {}
+
+        if san_var == "ASAN_OPTIONS":
+            defaults = {"halt_on_error": "0", "detect_leaks": "1"}
+        elif san_var == "LSAN_OPTIONS":
+            defaults = {"halt_on_error": "0"}
+        elif san_var == "UBSAN_OPTIONS":
+            defaults = {"halt_on_error": "0", "print_stacktrace": "1"}
+        elif san_var == "TSAN_OPTIONS":
+            defaults = {"halt_on_error": "0", "history_size": "7"}
+
+        return defaults
+
     def _parse_existing_options(self, san_var: str) -> Dict[str, str]:
         """Parse existing sanitizer options from environment.
+
+        Starts with defaults (if explicit sanitizer), then overlays user env vars.
 
         Args:
             san_var: Sanitizer variable name (e.g., 'ASAN_OPTIONS')
@@ -94,15 +143,16 @@ class SanitizerHandler:
         Returns:
             Dictionary of option key-value pairs
         """
-        existing = os.environ.get(san_var, "")
-        if not existing:
-            return {}
+        # Start with defaults if explicitly requested
+        options = self._get_default_options(san_var)
 
-        options = {}
-        for item in existing.split(":"):
-            if "=" in item:
-                key, value = item.split("=", 1)
-                options[key] = value
+        # Overlay user-specified environment variables (they win)
+        existing = os.environ.get(san_var, "")
+        if existing:
+            for item in existing.split(":"):
+                if "=" in item:
+                    key, value = item.split("=", 1)
+                    options[key] = value
 
         return options
 
@@ -184,7 +234,10 @@ class SanitizerHandler:
 
 
 def create_sanitizer_handler(
-    binary_path: Path, log_dir: Path, repo_root: Optional[Path] = None
+    binary_path: Path,
+    log_dir: Path,
+    repo_root: Optional[Path] = None,
+    explicit_sanitizer: Optional[str] = None,
 ) -> SanitizerHandler:
     """Factory function to create sanitizer handler with default repo root.
 
@@ -192,6 +245,7 @@ def create_sanitizer_handler(
         binary_path: Path to the binary being executed
         log_dir: Directory where sanitizer logs should be written
         repo_root: Repository root (defaults to current directory)
+        explicit_sanitizer: Explicit sanitizer from CLI ("tsan" or "alubsan")
 
     Returns:
         Configured SanitizerHandler instance
@@ -199,4 +253,4 @@ def create_sanitizer_handler(
     if repo_root is None:
         repo_root = Path.cwd()
 
-    return SanitizerHandler(binary_path, log_dir, repo_root)
+    return SanitizerHandler(binary_path, log_dir, repo_root, explicit_sanitizer)
