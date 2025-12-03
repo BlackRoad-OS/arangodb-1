@@ -72,14 +72,14 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
     ServerState state{server};
 
     server.addReporter(
-        {[&server, &crashHandler](ArangodServer::State state) {
+        {[&server](ArangodServer::State state) {
            CrashHandler::setState(ArangodServer::stringifyState(state));
 
            if (state == ArangodServer::State::IN_START) {
-             // drop priveleges before starting features
+             // drop privileges before starting features
              server.getFeature<PrivilegeFeature>().dropPrivilegesPermanently();
-             // set all data source for the crash handler
-             crashHandler.addDataSource(&server.getFeature<ApiRecordingFeature>());
+             CrashHandler::addDataSource(
+                 &server.getFeature<ApiRecordingFeature>());
            }
          },
          {}});
