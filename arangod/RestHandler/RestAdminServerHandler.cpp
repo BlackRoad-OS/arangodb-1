@@ -29,6 +29,7 @@
 #include "Auth/UserManager.h"
 #include "Basics/StaticStrings.h"
 #include "Cluster/ClusterFeature.h"
+#include "CrashHandler/CrashHandler.h"
 #include "GeneralServer/AuthenticationFeature.h"
 #include "GeneralServer/GeneralServerFeature.h"
 #include "GeneralServer/SslServerFeature.h"
@@ -74,6 +75,9 @@ RestStatus RestAdminServerHandler::execute() {
     handleApiCalls();
   } else if (suffixes.size() == 1 && suffixes[0] == "aql-queries") {
     handleAqlRecordedQueries();
+  } else if ((suffixes.size() == 1 || suffixes.size() == 2) &&
+             suffixes[0] == "crashes") {
+    handleCrashes();
   } else {
     generateError(rest::ResponseCode::NOT_FOUND, TRI_ERROR_HTTP_NOT_FOUND);
   }
@@ -407,4 +411,90 @@ void RestAdminServerHandler::handleAqlRecordedQueries() {
     }
   }
   generateOk(rest::ResponseCode::OK, builder.slice());
+}
+
+void RestAdminServerHandler::handleCrashes() {
+  // Require admin access
+  if (!ExecContext::current().isAdminUser()) {
+    generateError(rest::ResponseCode::FORBIDDEN, TRI_ERROR_HTTP_FORBIDDEN,
+                  "you need admin rights for crash management operations");
+    return;
+  }
+
+  std::vector<std::string> const& suffixes = _request->suffixes();
+
+  if (suffixes.size() == 1) {
+    // /_admin/server/crashes - list all crashes
+    if (_request->requestType() != rest::RequestType::GET) {
+      generateError(rest::ResponseCode::METHOD_NOT_ALLOWED,
+                    TRI_ERROR_HTTP_METHOD_NOT_ALLOWED);
+      return;
+    }
+
+    auto crashes = CrashHandler::listCrashes();
+
+    VPackBuilder builder;
+    {
+      VPackObjectBuilder guard(&builder);
+      builder.add(VPackValue("crashes"));
+      {
+        VPackArrayBuilder guard2(&builder);
+        for (auto const& crashId : crashes) {
+          builder.add(VPackValue(crashId));
+        }
+      }
+    }
+    generateOk(rest::ResponseCode::OK, builder.slice());
+
+  } else if (suffixes.size() == 2) {
+    // /_admin/server/crashes/{id}
+    std::string const& crashId = suffixes[1];
+
+    if (_request->requestType() == rest::RequestType::GET) {
+      // Get crash contents
+      auto contents = CrashHandler::getCrashContents(crashId);
+
+      if (contents.empty()) {
+        generateError(rest::ResponseCode::NOT_FOUND, TRI_ERROR_HTTP_NOT_FOUND,
+                      "crash directory not found");
+        return;
+      }
+
+      VPackBuilder builder;
+      {
+        VPackObjectBuilder guard(&builder);
+        builder.add("crashId", VPackValue(crashId));
+        builder.add(VPackValue("files"));
+        {
+          VPackObjectBuilder guard2(&builder);
+          for (auto const& [filename, content] : contents) {
+            builder.add(filename, VPackValue(content));
+          }
+        }
+      }
+      generateOk(rest::ResponseCode::OK, builder.slice());
+
+    } else if (_request->requestType() == rest::RequestType::DELETE_REQ) {
+      // Delete crash
+      bool deleted = CrashHandler::deleteCrash(crashId);
+
+      if (!deleted) {
+        generateError(rest::ResponseCode::NOT_FOUND, TRI_ERROR_HTTP_NOT_FOUND,
+                      "crash directory not found");
+        return;
+      }
+
+      VPackBuilder builder;
+      {
+        VPackObjectBuilder guard(&builder);
+        builder.add("deleted", VPackValue(true));
+        builder.add("crashId", VPackValue(crashId));
+      }
+      generateOk(rest::ResponseCode::OK, builder.slice());
+
+    } else {
+      generateError(rest::ResponseCode::METHOD_NOT_ALLOWED,
+                    TRI_ERROR_HTTP_METHOD_NOT_ALLOWED);
+    }
+  }
 }
