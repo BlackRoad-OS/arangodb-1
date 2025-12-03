@@ -1,11 +1,27 @@
 devel
 -----
 
-* COR-8: Improved performance of shard statistics on DBservers by updating only
+* COR-8: Improved shard statistics on DBservers by updating only
   metrics for databases with changes, rather than recalculating all metrics.
   Added new metrics `arangodb_shards_follower_number` to track the number of
   follower shards on each DBserver and `arangodb_shard_followers_out_of_sync_number`
   to track follower shards that are out of sync with their leader.
+
+* Fix a potential integer overflow in shortest path estimation.
+
+* Fix BTS-2268: Fixed an issue where query plan for queries with subquery
+  is causing a crash when being stored in query plan cache. The issue
+  is a missing invalidateCost from the splice-subqueries rule.
+
+* FE-905: Update tooltip text for maxSkewThreshold  & minDeletionRatio. 
+
+* COR-45: Added support for index hints in vector search queries.
+
+* COR-13: New ArangoSearch consolidation policy
+  - new algorithm that uses maxSkewThreshold and minDeletionRatio
+  - Bumped ArangoSearch
+
+* The query explainer now displays the vector index used by EnumerateNearVectorNode.
 
 * FE-636: bump webpack-dev-middleware from 5.3.3 to 5.3.4.
 
