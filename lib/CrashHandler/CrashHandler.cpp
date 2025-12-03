@@ -51,6 +51,7 @@
 
 #include "SystemMonitor/AsyncRegistry/Feature.h"
 #include "BuildId/BuildId.h"
+#include "CrashHandler/CrashHandlerDataSource.h"
 #include "Basics/FileUtils.h"
 #include "Basics/PhysicalMemory.h"
 #include "Basics/SizeLimitedString.h"
@@ -146,6 +147,9 @@ void* crashUcontext = nullptr;
 
 /// @brief stores the database directory
 std::string databaseDirectoryPath;
+
+/// @brief stores the data sources
+std::vector<arangodb::CrashHandlerDataSource const*> dataSources;
 
 /// @brief stores crash data for later use by the crash handler thread
 void storeCrashData(std::string_view context, int signal, uint64_t threadId,
@@ -523,7 +527,7 @@ void logProcessInfo() {
   LOG_TOPIC("ded81", INFO, arangodb::Logger::CRASH) << buffer.view();
 }
 
-void dumpDatabaseAsyncRegistry(std::string const& crashesDirectory) {
+void dumpAsyncRegistry(std::string const& crashesDirectory) {
   LOG_DEVEL << ADB_HERE;
 
   std::string filename = arangodb::basics::FileUtils::buildFilename(
@@ -564,7 +568,10 @@ void actuallyDumpCrashInfo() {
     // Now we try to dump as much as information as we can about the database
     // state Create a crashes directory path which is _database_directory +
     // /crashes
-    if (!databaseDirectoryPath.empty()) {
+    if(!databaseDirectoryPath.empty()) {
+      if (!arangodb::basics::FileUtils::exists(databaseDirectoryPath)) {
+        arangodb::basics::FileUtils::createDirectory(databaseDirectoryPath);
+      }
       LOG_DEVEL << ADB_HERE;
       auto const uuid = to_string(boost::uuids::random_generator()());
       auto const crashDirectory = arangodb::basics::FileUtils::buildFilename(
@@ -573,9 +580,16 @@ void actuallyDumpCrashInfo() {
                 << "Creating crashes directory at: " << crashDirectory;
       arangodb::basics::FileUtils::createDirectory(crashDirectory);
 
-      dumpDatabaseAsyncRegistry(crashDirectory);
-    } else {
-      LOG_DEVEL << ADB_HERE << "Database directory is empty";
+      // Async registry is singleton
+      dumpAsyncRegistry(crashDirectory);
+
+      for (auto const& dataSource : dataSources) {
+        std::string filename = arangodb::basics::FileUtils::buildFilename(
+          crashDirectory, std::format("{}.json", dataSource->getDataSourceName()));
+
+        auto data = dataSource->getCrashData();
+        arangodb::basics::FileUtils::spit(filename, data.toJson());
+      }
     }
   } catch (...) {
     // Ignore exceptions in crash handling
@@ -726,6 +740,10 @@ void CrashHandler::waitForCrashHandlerCompletion() {
 void CrashHandler::setDatabaseDirectory(std::string path) {
   ::databaseDirectoryPath =
       arangodb::basics::FileUtils::buildFilename(path, "crashes");
+}
+
+void CrashHandler::addDataSource(const CrashHandlerDataSource* dataSource) {
+  ::dataSources.push_back(dataSource);
 }
 
 void CrashHandler::logBacktrace() {

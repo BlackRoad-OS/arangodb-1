@@ -25,8 +25,11 @@
 
 #include <atomic>
 #include <string_view>
+#include <vector>
 
 namespace arangodb {
+
+class CrashHandlerDataSource;
 
 /// @brief States for the crash handler thread coordination.
 /// The state of the dedicated crash handler starts with IDLE
@@ -44,8 +47,8 @@ enum class CrashHandlerState : int {
 
 class CrashHandler {
   std::atomic<bool> _threadRunning{false};
-  static std::atomic<CrashHandler*> _theCrashHandler;
   // This needs to be static for the signal handlers to reach!
+  static std::atomic<CrashHandler*> _theCrashHandler;
 
  public:
   CrashHandler() {
@@ -103,6 +106,9 @@ class CrashHandler {
 
   /// @brief sets the database directory
   static void setDatabaseDirectory(std::string path);
+
+  /// @brief adds a data source to the crash handler
+  void addDataSource(CrashHandlerDataSource const* dataSource);
 
  private:
   /// @brief installs the crash handler globally
