@@ -1,10 +1,11 @@
 """ArangoDB server instance wrapper with lifecycle management and health monitoring."""
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import aiohttp
 
@@ -23,6 +24,7 @@ from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
 from ..utils.filesystem import FilesystemService
 from ..utils.auth import AuthProvider
+from ..utils.sanitizer import create_sanitizer_handler
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
 from .command_builder import ServerCommandParams
@@ -290,12 +292,16 @@ class ArangoServer:
                 # Build command line
                 command = self._build_command()
 
-                # Start supervised process from repository root (like old framework)
+                # Prepare environment with sanitizer support
                 repository_root = self._get_command_builder().get_repository_root()
+                env = self._prepare_environment(command[0], repository_root)
+
+                # Start supervised process from repository root (like old framework)
                 process_info = self._app_context.process_supervisor.start(
                     self.server_id,
                     command,
                     cwd=repository_root,
+                    env=env,
                     startup_timeout=effective_timeout,
                     readiness_check=self._check_readiness,
                     # ArangoDB writes directly to console - no buffering delays
@@ -510,6 +516,43 @@ class ArangoServer:
             config=self.paths.config,
         )
         return self._get_command_builder().build_command(params)
+
+    def _prepare_environment(
+        self, binary_path: str, repository_root: Path
+    ) -> Optional[Dict[str, str]]:
+        """Prepare environment variables including sanitizer support.
+
+        Args:
+            binary_path: Path to the binary being executed
+            repository_root: Repository root directory
+
+        Returns:
+            Environment variables dict, or None if no special env needed
+        """
+        # Create sanitizer handler
+        sanitizer_handler = create_sanitizer_handler(
+            binary_path=Path(binary_path),
+            log_dir=self.paths.base_dir,
+            repo_root=repository_root,
+        )
+
+        # Get sanitizer environment variables
+        sanitizer_env = sanitizer_handler.get_env_vars()
+
+        if not sanitizer_env:
+            # No sanitizer active, return None (process will inherit parent env)
+            return None
+
+        # Log sanitizer configuration
+        self._logger.info("Sanitizer build detected for %s", self.server_id)
+        for san_var, san_value in sanitizer_env.items():
+            self._logger.debug("  %s=%s", san_var, san_value)
+
+        # Merge with current environment
+        env = dict(os.environ)
+        env.update(sanitizer_env)
+
+        return env
 
     def _check_readiness(self) -> bool:
         """Check if server is ready to accept connections using injected health checker."""
