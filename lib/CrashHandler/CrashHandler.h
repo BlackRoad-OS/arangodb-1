@@ -24,8 +24,9 @@
 #pragma once
 
 #include <atomic>
-#include <memory>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace arangodb {
@@ -108,8 +109,26 @@ class CrashHandler {
   /// @brief sets the database directory
   static void setDatabaseDirectory(std::string path);
 
+  /// @brief gets the crashes directory path
+  static std::string getCrashesDirectory();
+
+  /// @brief lists all crash directories (returns UUIDs)
+  static std::vector<std::string> listCrashes();
+
+  /// @brief gets the contents of a specific crash directory
+  /// Returns a map of filename -> file contents
+  static std::unordered_map<std::string, std::string> getCrashContents(
+      std::string_view crashId);
+
+  /// @brief deletes a specific crash directory
+  /// Returns true if successful, false if not found
+  static bool deleteCrash(std::string_view crashId);
+
   /// @brief adds a data source to the crash handler
-  void addDataSource(std::shared_ptr<CrashHandlerDataSource const> dataSource);
+  static void addDataSource(CrashHandlerDataSource const* dataSource);
+
+  /// @brief removes a data source from the crash handler
+  static void removeDataSource(CrashHandlerDataSource const* dataSource);
 
  private:
   /// @brief installs the crash handler globally

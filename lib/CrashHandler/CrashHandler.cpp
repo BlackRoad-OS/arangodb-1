@@ -149,7 +149,7 @@ void* crashUcontext = nullptr;
 std::string databaseDirectoryPath;
 
 /// @brief stores the data sources
-std::vector<std::shared_ptr<arangodb::CrashHandlerDataSource const>> dataSources;
+std::vector<arangodb::CrashHandlerDataSource const*> dataSources;
 
 /// @brief stores crash data for later use by the crash handler thread
 void storeCrashData(std::string_view context, int signal, uint64_t threadId,
@@ -568,7 +568,7 @@ void actuallyDumpCrashInfo() {
     // Now we try to dump as much as information as we can about the database
     // state Create a crashes directory path which is _database_directory +
     // /crashes
-    if(!databaseDirectoryPath.empty()) {
+    if (!databaseDirectoryPath.empty()) {
       if (!arangodb::basics::FileUtils::exists(databaseDirectoryPath)) {
         arangodb::basics::FileUtils::createDirectory(databaseDirectoryPath);
       }
@@ -583,9 +583,10 @@ void actuallyDumpCrashInfo() {
       // Async registry is singleton
       dumpAsyncRegistry(crashDirectory);
 
-      for (auto const& dataSource : dataSources) {
+      for (auto const* dataSource : dataSources) {
         std::string filename = arangodb::basics::FileUtils::buildFilename(
-          crashDirectory, std::format("{}.json", dataSource->getDataSourceName()));
+            crashDirectory,
+            std::format("{}.json", dataSource->getDataSourceName()));
 
         auto data = dataSource->getCrashData();
         arangodb::basics::FileUtils::spit(filename, data.toJson());
@@ -742,8 +743,87 @@ void CrashHandler::setDatabaseDirectory(std::string path) {
       arangodb::basics::FileUtils::buildFilename(path, "crashes");
 }
 
-void CrashHandler::addDataSource(std::shared_ptr<CrashHandlerDataSource const> dataSource) {
-  ::dataSources.push_back(std::move(dataSource));
+std::string CrashHandler::getCrashesDirectory() {
+  return ::databaseDirectoryPath;
+}
+
+std::vector<std::string> CrashHandler::listCrashes() {
+  std::vector<std::string> crashes;
+
+  if (::databaseDirectoryPath.empty() ||
+      !arangodb::basics::FileUtils::isDirectory(::databaseDirectoryPath)) {
+    return crashes;
+  }
+
+  auto entries =
+      arangodb::basics::FileUtils::listFiles(::databaseDirectoryPath);
+  for (auto const& entry : entries) {
+    auto fullPath = arangodb::basics::FileUtils::buildFilename(
+        ::databaseDirectoryPath, entry);
+    if (arangodb::basics::FileUtils::isDirectory(fullPath)) {
+      crashes.push_back(entry);
+    }
+  }
+
+  return crashes;
+}
+
+std::unordered_map<std::string, std::string> CrashHandler::getCrashContents(
+    std::string_view crashId) {
+  std::unordered_map<std::string, std::string> contents;
+
+  if (::databaseDirectoryPath.empty()) {
+    return contents;
+  }
+
+  auto crashDir = arangodb::basics::FileUtils::buildFilename(
+      ::databaseDirectoryPath, std::string(crashId));
+
+  if (!arangodb::basics::FileUtils::isDirectory(crashDir)) {
+    return contents;
+  }
+
+  auto files = arangodb::basics::FileUtils::listFiles(crashDir);
+  for (auto const& file : files) {
+    auto filePath = arangodb::basics::FileUtils::buildFilename(crashDir, file);
+    if (arangodb::basics::FileUtils::isRegularFile(filePath)) {
+      try {
+        contents[file] = arangodb::basics::FileUtils::slurp(filePath);
+      } catch (...) {
+        // Skip files that can't be read
+      }
+    }
+  }
+
+  return contents;
+}
+
+bool CrashHandler::deleteCrash(std::string_view crashId) {
+  if (::databaseDirectoryPath.empty()) {
+    return false;
+  }
+
+  auto crashDir = arangodb::basics::FileUtils::buildFilename(
+      ::databaseDirectoryPath, std::string(crashId));
+
+  if (!arangodb::basics::FileUtils::isDirectory(crashDir)) {
+    return false;
+  }
+
+  // Remove the directory and all its contents
+  auto res = TRI_RemoveDirectory(crashDir.c_str());
+  return res == TRI_ERROR_NO_ERROR;
+}
+
+void CrashHandler::addDataSource(CrashHandlerDataSource const* dataSource) {
+  ::dataSources.push_back(dataSource);
+}
+
+void CrashHandler::removeDataSource(CrashHandlerDataSource const* dataSource) {
+  auto it = std::find(::dataSources.begin(), ::dataSources.end(), dataSource);
+  if (it != ::dataSources.end()) {
+    ::dataSources.erase(it);
+  }
 }
 
 void CrashHandler::logBacktrace() {

@@ -23,16 +23,17 @@
 
 #pragma once
 
+#include "CrashHandler/CrashHandler.h"
+
 #include <velocypack/SharedSlice.h>
 
 namespace arangodb {
 
-class CrashHandlerDataSource: public std::enable_shared_from_this<CrashHandlerDataSource> {
+class CrashHandlerDataSource {
  public:
-  virtual ~CrashHandlerDataSource() = default;
-
-  std::shared_ptr<CrashHandlerDataSource> getSharedFromThis() {
-    return shared_from_this();
+  virtual ~CrashHandlerDataSource() {
+    // Automatically unregister from crash handler when destroyed
+    CrashHandler::removeDataSource(this);
   }
 
   virtual velocypack::SharedSlice getCrashData() const = 0;
