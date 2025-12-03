@@ -34,6 +34,8 @@
 #include "Basics/VelocyPackHelper.h"
 #include "Containers/FlatHashMap.h"
 #include "Containers/HashSet.h"
+#include "Logger/LogMacros.h"
+#include "Logger/Logger.h"
 #include "Transaction/Context.h"
 #include "Transaction/Methods.h"
 
@@ -322,24 +324,63 @@ void AqlItemBlock::destroy() noexcept {
 
             if (--valueInfo.refCount == 0) {
               if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+                LOG_TOPIC("a1b2g", DEBUG, Logger::AQL)
+                    << "[DEBUG] destroy: Destroying supervised slice, data="
+                    << it.data() << ", memoryUsage=" << valueInfo.memoryUsage
+                    << ", entry=" << i;
                 totalSupervisedUsed += valueInfo.memoryUsage;
                 // For supervised slices, we should NEVER destroy them - only erase.
                 // The memory is always managed by the ResourceMonitor that created it,
                 // not by the block. The block only tracks references via refCount.
                 // Destroying them would cause use-after-free if external AqlValue
                 // objects still reference the same memory.
-                it.erase();
+                it.destroy();  // Still need to destroy to decrement ResourceMonitor
               } else {
                 totalUsed += valueInfo.memoryUsage;
                 it.destroy();
               }
               // destroy() calls erase, so no need to call erase() again later
               continue;
+            } else {
+              if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+                LOG_TOPIC("a1b2h", DEBUG, Logger::AQL)
+                    << "[DEBUG] destroy: Decrementing refCount for supervised "
+                       "slice, "
+                    << "data=" << it.data()
+                    << ", refCount=" << (valueInfo.refCount + 1) << "->"
+                    << valueInfo.refCount << ", entry=" << i;
+              }
+            }
+          } else {
+            // Value not found in _valueCount
+            // This should only happen if the value was stolen (ownership transferred).
+            // If a value was never properly registered, that's a bug that should
+            // be fixed at the registration point (e.g., in referenceValuesFromRow()).
+            // However, for supervised slices, we must still destroy them to decrement
+            // the ResourceMonitor, even if they're not tracked. This handles the case
+            // where supervised slices are created in initFromSlice() but not added via
+            // setValue() (e.g., when used for shadow rows).
+            if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+              LOG_TOPIC("a1b2i", ERR, Logger::AQL)
+                  << "[DEBUG] destroy: SUPERVISED SLICE NOT FOUND IN "
+                     "_valueCount! "
+                  << "data=" << it.data() << ", entry=" << i
+                  << " (value was stolen or never tracked). "
+                  << "Destroying to decrement ResourceMonitor.";
+              // Destroy the supervised slice to decrement ResourceMonitor
+              // This handles the case where supervised slices are created but not
+              // properly tracked (e.g., in initFromSlice() for shadow rows)
+              it.destroy();
+            } else {
+              // For non-supervised slices, if not found in _valueCount, assume
+              // ownership has been transferred and just erase
+              it.erase();
             }
           }
+        } else {
+          // Note that if we do not know it the thing it has been stolen from us!
+          it.erase();
         }
-        // Note that if we do not know it the thing it has been stolen from us!
-        it.erase();
       }
       _valueCount.clear();
       decreaseMemoryUsage(totalUsed);
@@ -406,12 +447,13 @@ void AqlItemBlock::shrink(size_t numRows) {
 
         if (--valueInfo.refCount == 0) {
           if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+            LOG_TOPIC("a1b2o", DEBUG, Logger::AQL)
+                << "[DEBUG] shrink: Destroying supervised slice, data="
+                << a.data() << ", memoryUsage=" << valueInfo.memoryUsage
+                << ", entry=" << i;
             totalSupervisedUsed += valueInfo.memoryUsage;
-            // For supervised slices, we should NEVER destroy them - only erase.
-            // The memory is always managed by the ResourceMonitor that created it,
-            // not by the block. The block only tracks references via refCount.
             _valueCount.erase(it);
-            a.erase();
+            a.destroy();
           } else {
             totalUsed += valueInfo.memoryUsage;
             // destroy calls erase() for AqlValues with dynamic memory,
@@ -420,6 +462,21 @@ void AqlItemBlock::shrink(size_t numRows) {
             _valueCount.erase(it);
           }
           continue;
+        } else {
+          if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+            LOG_TOPIC("a1b2p", DEBUG, Logger::AQL)
+                << "[DEBUG] shrink: Decrementing refCount for supervised "
+                   "slice, "
+                << "data=" << a.data()
+                << ", refCount=" << (valueInfo.refCount + 1) << "->"
+                << valueInfo.refCount << ", entry=" << i;
+          }
+        }
+      } else {
+        if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+          LOG_TOPIC("a1b2q", ERR, Logger::AQL)
+              << "[DEBUG] shrink: SUPERVISED SLICE NOT FOUND IN _valueCount! "
+              << "data=" << a.data() << ", entry=" << i;
         }
       }
     }
@@ -493,12 +550,14 @@ void AqlItemBlock::clearRegisters(RegIdFlatSet const& toClear) {
 
           if (--valueInfo.refCount == 0) {
             if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+              LOG_TOPIC("a1b2r", DEBUG, Logger::AQL)
+                  << "[DEBUG] clearRegisters: Destroying supervised slice, "
+                     "data="
+                  << a.data() << ", memoryUsage=" << valueInfo.memoryUsage
+                  << ", row=" << i << ", reg=" << reg.value();
               totalSupervisedUsed += valueInfo.memoryUsage;
-              // For supervised slices, we should NEVER destroy them - only erase.
-              // The memory is always managed by the ResourceMonitor that created it,
-              // not by the block. The block only tracks references via refCount.
               _valueCount.erase(it);
-              a.erase();
+              a.destroy();
             } else {
               totalUsed += valueInfo.memoryUsage;
               // destroy calls erase() for AqlValues with dynamic memory,
@@ -507,6 +566,23 @@ void AqlItemBlock::clearRegisters(RegIdFlatSet const& toClear) {
               _valueCount.erase(it);
             }
             continue;
+          } else {
+            if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+              LOG_TOPIC("a1b2s", DEBUG, Logger::AQL)
+                  << "[DEBUG] clearRegisters: Decrementing refCount for "
+                     "supervised "
+                  << "slice, data=" << a.data()
+                  << ", refCount=" << (valueInfo.refCount + 1) << "->"
+                  << valueInfo.refCount << ", row=" << i
+                  << ", reg=" << reg.value();
+            }
+          }
+        } else {
+          if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+            LOG_TOPIC("a1b2t", ERR, Logger::AQL)
+                << "[DEBUG] clearRegisters: SUPERVISED SLICE NOT FOUND IN "
+                << "_valueCount! data=" << a.data() << ", row=" << i
+                << ", reg=" << reg.value();
           }
         }
       }
@@ -1045,11 +1121,23 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
       // we just inserted the item
       size_t memoryUsage = value.memoryUsage();
       if (value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+        LOG_TOPIC("a1b2c", DEBUG, Logger::AQL)
+            << "[DEBUG] setValue: Adding supervised slice, data="
+            << value.data() << ", memoryUsage=" << memoryUsage
+            << ", row=" << index << ", col=" << column;
         _memoryUsage += memoryUsage;
       } else {
         increaseMemoryUsage(memoryUsage);
       }
       valueInfo.setMemoryUsage(memoryUsage);
+    } else {
+      if (value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+        LOG_TOPIC("a1b2d", DEBUG, Logger::AQL)
+            << "[DEBUG] setValue: Incrementing refCount for supervised slice, "
+               "data="
+            << value.data() << ", refCount=" << valueInfo.refCount
+            << ", row=" << index << ", col=" << column;
+      }
     }
   }
 
@@ -1073,13 +1161,14 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
       if (--valueInfo.refCount == 0) {
         if (element.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
           size_t memoryUsage = valueInfo.memoryUsage;
+          LOG_TOPIC("a1b2j", DEBUG, Logger::AQL)
+              << "[DEBUG] destroyValue: Destroying supervised slice, data="
+              << element.data() << ", memoryUsage=" << memoryUsage
+              << ", row=" << index << ", col=" << column;
           TRI_ASSERT(_memoryUsage >= memoryUsage);
           _memoryUsage -= memoryUsage;
-          // For supervised slices, we should NEVER destroy them - only erase.
-          // The memory is always managed by the ResourceMonitor that created it,
-          // not by the block. The block only tracks references via refCount.
           _valueCount.erase(it);
-          element.erase();
+          element.destroy();
         } else {
           decreaseMemoryUsage(valueInfo.memoryUsage);
           _valueCount.erase(it);
@@ -1088,6 +1177,24 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
           // destroy() calls erase() for AqlValues with dynamic memory
         }
         return;
+      } else {
+        if (element.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+          LOG_TOPIC("a1b2k", DEBUG, Logger::AQL)
+              << "[DEBUG] destroyValue: Decrementing refCount for supervised "
+                 "slice, "
+              << "data=" << element.data()
+              << ", refCount=" << (valueInfo.refCount + 1) << "->"
+              << valueInfo.refCount << ", row=" << index << ", col=" << column;
+        }
+      }
+    } else {
+      // Value not found in _valueCount
+      if (element.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+        LOG_TOPIC("a1b2l", ERR, Logger::AQL)
+            << "[DEBUG] destroyValue: SUPERVISED SLICE NOT FOUND IN "
+               "_valueCount! "
+            << "data=" << element.data() << ", row=" << index
+            << ", col=" << column << " (value was stolen or never tracked)";
       }
     }
   }
@@ -1110,6 +1217,7 @@ void AqlItemBlock::eraseAll() {
       totalUsed += it.second.memoryUsage;
     }
   }
+
   decreaseMemoryUsage(totalUsed);
   _valueCount.clear();
   _shadowRows.clear();
@@ -1123,11 +1231,57 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
   for (auto const& reg : regs) {
     TRI_ASSERT(reg < numRegisters());
     if (getValueReference(currentRow, reg).isEmpty()) {
-      // First update the reference count, if this fails, the value is empty
       AqlValue const& a = getValueReference(fromRow, reg);
       if (a.requiresDestruction()) {
-        TRI_ASSERT(_valueCount.find(a.data()) != _valueCount.end());
-        ++_valueCount[a.data()].refCount;
+        // We need to update the reference counter for this value. However, it is
+        // possible that the value is not yet present in _valueCount (e.g., in
+        // release builds, the assertion that guards this is removed). In this
+        // case we must insert an entry with the correct memory usage, similar
+        // to what setValue() does. Otherwise we end up with a ValueInfo with
+        // memoryUsage == 0 and refCount == 1, which will prevent the value
+        // from being destroyed later and cause a memory leak.
+        auto it = _valueCount.find(a.data());
+        if (it != _valueCount.end()) {
+          // Value already registered, just increment refCount
+          if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+            LOG_TOPIC("a1b2f", DEBUG, Logger::AQL)
+                << "[DEBUG] referenceValuesFromRow: Referencing supervised "
+                   "slice, "
+                << "data=" << a.data() << ", refCount=" << it->second.refCount
+                << "->" << (it->second.refCount + 1)
+                << ", currentRow=" << currentRow << ", fromRow=" << fromRow
+                << ", reg=" << reg.value();
+          }
+          ++it->second.refCount;
+        } else {
+          // Value not found in _valueCount - need to register it properly
+          // This can happen in release builds where TRI_ASSERT is removed
+          LOG_TOPIC("a1b2e", ERR, Logger::AQL)
+              << "[DEBUG] referenceValuesFromRow: VALUE NOT FOUND IN "
+                 "_valueCount! Registering it now. "
+              << "data=" << a.data() << ", type=" << static_cast<int>(a.type())
+              << ", requiresDestruction=" << a.requiresDestruction()
+              << ", currentRow=" << currentRow << ", fromRow=" << fromRow
+              << ", reg=" << reg.value() << ", isSupervisedSlice="
+              << (a.type() == AqlValue::VPACK_SUPERVISED_SLICE);
+          
+          // Register the value similar to what setValue() does
+          ValueInfo& valueInfo = _valueCount[a.data()];
+          valueInfo.refCount = 1;
+          size_t memoryUsage = a.memoryUsage();
+          valueInfo.setMemoryUsage(memoryUsage);
+          if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+            LOG_TOPIC("a1b2g", DEBUG, Logger::AQL)
+                << "[DEBUG] referenceValuesFromRow: Registering supervised "
+                   "slice, "
+                << "data=" << a.data() << ", memoryUsage=" << memoryUsage
+                << ", currentRow=" << currentRow << ", fromRow=" << fromRow
+                << ", reg=" << reg.value();
+            _memoryUsage += memoryUsage;
+          } else {
+            increaseMemoryUsage(memoryUsage);
+          }
+        }
       }
       _data[getAddress(currentRow, reg.value())] = a;
       _maxModifiedRowIndex =
@@ -1144,12 +1298,22 @@ void AqlItemBlock::steal(AqlValue const& value) {
     if (it != _valueCount.end()) {
       size_t memoryUsage = (*it).second.memoryUsage;
       if (value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+        LOG_TOPIC("a1b2m", DEBUG, Logger::AQL)
+            << "[DEBUG] steal: Stealing supervised slice, data=" << value.data()
+            << ", memoryUsage=" << memoryUsage
+            << ", refCount=" << it->second.refCount;
         TRI_ASSERT(_memoryUsage >= memoryUsage);
         _memoryUsage -= memoryUsage;
       } else {
         decreaseMemoryUsage(memoryUsage);
       }
       _valueCount.erase(it);
+    } else {
+      if (value.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+        LOG_TOPIC("a1b2n", WARN, Logger::AQL)
+            << "[DEBUG] steal: Attempting to steal supervised slice not in "
+            << "_valueCount, data=" << value.data();
+      }
     }
   }
 }
