@@ -1,6 +1,14 @@
 devel
 -----
 
+* COR-22: Improved crash dumps with additional diagnostic data. Added
+  `ApiRecordingFeature` as a data source to include recent API calls
+  and AQL queries in crash dumps. New REST API endpoints for crash dump
+  management:
+  - `GET /_admin/server/crashes`: List all crash dumps
+  - `GET /_admin/server/crashes/{id}`: Get contents of a specific crash dump
+  - `DELETE /_admin/server/crashes/{id}`: Delete a specific crash dump
+
 * Fix a potential integer overflow in shortest path estimation.
 
 * Fix BTS-2268: Fixed an issue where query plan for queries with subquery
