@@ -555,29 +555,29 @@ function hotBackup_el_cheapo (options) {
 
   let which = "hot_backup_el_cheapo";
   return hotBackup_load_backend(options, which, {
-    noiseScript: `
-const errors = require('internal').errors;
-let collections = ${JSON.stringify(collections)};
-let i = 0;
-while (true) {
-  try {
-    let txn = db._createTransaction({collections: { write: collections}});
-    collections.forEach(col => {
-      let trx_col = txn.collection(col);
-      trx_col.insert({"trd": idx, "i": i});
-    });
-    txn.commit();
-    i += 1;
-  } catch (ex) {
-    if (ex.errorNum === errors.ERROR_SHUTTING_DOWN.code ||
-        ex.errorNum === errors.ERROR_SIMPLE_CLIENT_COULD_NOT_CONNECT.code) {
-  // todo: write i
-      break;
-    }
-  }
-}
-
-`,
+    noiseScript: function () {
+      const errors = require('internal').errors;
+      let collections = args.collections;
+      let i = 0;
+      while (true) {
+        try {
+          let txn = db._createTransaction({collections: { write: collections}});
+          collections.forEach(col => {
+            let trx_col = txn.collection(col);
+            trx_col.insert({"trd": idx, "i": i});
+          });
+          txn.commit();
+          i += 1;
+        } catch (ex) {
+          if (ex.errorNum === errors.ERROR_SHUTTING_DOWN.code ||
+              ex.errorNum === errors.ERROR_SIMPLE_CLIENT_COULD_NOT_CONNECT.code) {
+            // todo: write i
+            break;
+          }
+        }
+      }
+      return 0;
+    },
     noiseVolume: 10,
     noiseDuration: 1,
     args: args,
