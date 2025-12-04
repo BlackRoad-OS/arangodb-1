@@ -68,14 +68,22 @@ bool findMatchedField(Fields const& fields, Slot& tmpSlot, Node& nodeAttr) {
   size_t fieldNum = 0;
   typename latematerialized::ColumnVariant<indexDataOnly>::PostfixType
       postfix{};
+  //  fields = vector< arangodb::basics::AttributeName >
+  //  tmpSlot = vector< arangodb::aql::latematerialized::ColumnVariant >
+  //  nodeAttr = latematerialized::AttributeAndField::AstAndColumnFieldData
+  LOG_DEVEL << "KKDBG: findMatchedField: Types: " << typeid(fields).name() << ", " << typeid(tmpSlot).name() << ", "
+    << typeid(nodeAttr).name();
+
   for (auto const& field : fields) {
     std::vector<arangodb::basics::AttributeName> const* fieldValue;
     if constexpr (std::is_same_v<
-                      std::vector<arangodb::basics::AttributeName> const&,
-                      decltype(field)>) {
-      fieldValue = &field;
+      std::vector<arangodb::basics::AttributeName> const&,
+      decltype(field)>) {
+        fieldValue = &field;
+        // LOG_DEVEL << "KKDBG: findMatchedField: field.name: " << field.name;
     } else {
       fieldValue = &field.second;
+      LOG_DEVEL << "KKDBG: findMatchedField: field.first: " << field.first << " -> field.second: " << field.second;
     }
     if (latematerialized::isPrefix<indexDataOnly>(*fieldValue, nodeAttr.attr,
                                                   false, postfix)) {
@@ -271,19 +279,37 @@ bool isPrefix(std::vector<basics::AttributeName> const& prefix,
     TRI_ASSERT(postfix == 0);
   }
   if (prefix.size() > attrs.size()) {
+    LOG_DEVEL << "KKDBG: isPrefix: return false";
     return false;
+  }
+
+  {
+    std::ostringstream oss;
+    for (const auto& p : prefix)
+      oss << p.name << "(" << p.shouldExpand << ")" << ", ";
+    LOG_DEVEL << "KKDBG: isPrefix: Prefix [" << oss.str() << "]";
+  }
+
+  {
+    std::ostringstream oss;
+    for (const auto& p : attrs)
+      oss << p.name << "(" << p.shouldExpand << ", ";
+    LOG_DEVEL << "KKDBG: isPrefix: Attrs [" << oss.str() << "]";
   }
 
   size_t i = 0;
   for (; i < prefix.size(); ++i) {
     if (prefix[i].name != attrs[i].name) {
+      LOG_DEVEL << "KKDBG: isPrefix: return false";
       return false;
     }
     if (prefix[i].shouldExpand != attrs[i].shouldExpand) {
       if (!ignoreExpansionInLast) {
+        LOG_DEVEL << "KKDBG: isPrefix: return false";
         return false;
       }
       if (i != prefix.size() - 1) {
+        LOG_DEVEL << "KKDBG: isPrefix: return false";
         return false;
       }
     }
@@ -298,6 +324,7 @@ bool isPrefix(std::vector<basics::AttributeName> const& prefix,
                      [](auto const& attr) { return attr.name; });
     }
   }
+  LOG_DEVEL << "KKDBG: isPrefix: return true";
   return true;
 }
 

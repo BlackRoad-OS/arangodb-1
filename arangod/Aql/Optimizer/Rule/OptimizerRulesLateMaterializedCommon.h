@@ -60,12 +60,42 @@ struct AstAndFieldData {
   std::vector<std::string> postfix;
 };
 
+class SIZE_T {
+  public:
+  SIZE_T(size_t val) : _val(val) {}
+
+    operator size_t() const {
+      return _val;
+    }
+
+    SIZE_T& operator =(size_t val) {
+      _val = val;
+      return *this;
+    }
+
+  private:
+    size_t _val;
+};
+
 struct IndexFieldData {
+  IndexFieldData() {
+    ;
+  }
+
   std::vector<arangodb::basics::AttributeName> const* field{nullptr};
-  size_t fieldNumber{0};
+  SIZE_T fieldNumber{0};
   ptrdiff_t columnNumber{0};
   size_t postfix{0};
 };
+
+inline std::ostream& operator <<(std::ostream& out, const latematerialized::IndexFieldData& afData) {
+  if (afData.field)
+    out << "fieldNo: " << afData.fieldNumber << ", postFix: " << afData.postfix << ", fields: " << *afData.field;
+  else
+    out << "fieldNo: " << afData.fieldNumber << ", postFix: " << afData.postfix << ", fields: []";
+
+  return out;
+}
 
 struct AstAndColumnFieldData : AstAndFieldData {
   ptrdiff_t columnNumber{0};

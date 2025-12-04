@@ -101,6 +101,12 @@ struct HeapSortElement {
   auto operator<=>(HeapSortElement const&) const noexcept = default;
 #endif
 
+  std::string toString() const {
+    std::ostringstream oss;
+    oss << "(" << postfix << "), fieldNo: " << fieldNumber << ", asc: " << std::boolalpha << ascending;
+    return oss.str();
+  }
+
   std::string postfix;
   ptrdiff_t source{0};
   size_t fieldNumber{std::numeric_limits<size_t>::max()};

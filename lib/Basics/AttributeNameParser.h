@@ -89,7 +89,13 @@ struct AttributeName {
 
   static bool namesMatch(std::vector<AttributeName> const&,
                          std::vector<AttributeName> const&);
+
 };
+
+// std::ostream& operator <<(std::ostream& out, const AttributeName& obj) {
+//   out << obj.name << "(" << std::boolalpha << obj.shouldExpand << ")";
+//   return out;
+// }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Parse an input string into attribute names and expansion flags

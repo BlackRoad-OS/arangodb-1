@@ -59,6 +59,7 @@
 #include "IResearch/IResearchViewCoordinator.h"
 #include "IResearch/Search.h"
 #include "VocBase/LogicalCollection.h"
+#include "Logger/LogMacros.h"
 
 #include <utils/misc.hpp>
 #include <absl/strings/str_cat.h>
@@ -259,7 +260,22 @@ bool optimizeSearchCondition(IResearchViewNode& viewNode,
   return true;
 }
 
+class LogFunctionCalls {
+  public:
+    explicit LogFunctionCalls(const char* funcName) {
+      _funcName = funcName;
+      LOG_DEVEL << "KKDBG: " << _funcName << ": start.";
+    }
+    ~LogFunctionCalls() {
+      LOG_DEVEL << "KKDBG: " << _funcName << ": end.";
+    }
+  private:
+    std::string _funcName;
+};
+
 bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
+  LogFunctionCalls lfc(__FUNCTION__);
+
   auto current = static_cast<ExecutionNode*>(&viewNode);
   auto const& viewVariable = viewNode.outVariable();
   auto& scorers = viewNode.scorers();
@@ -268,6 +284,7 @@ bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
   QueryContext ctx{
       .ast = plan->getAst(), .ref = &viewVariable, .isSearchQuery = true};
   while ((current = current->getFirstParent())) {
+    LOG_DEVEL << "KKDBG: " << __FUNCTION__ << "NodeType: " << current->getType();
     switch (current->getType()) {
       case ExecutionNode::SORT:
         sortNode = ExecutionNode::castTo<SortNode*>(current);
@@ -275,6 +292,7 @@ bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
       case ExecutionNode::LIMIT:
         if (sortNode == nullptr) {
           return false;
+
         }
         limitNode = ExecutionNode::castTo<LimitNode*>(current);
         break;
@@ -301,11 +319,23 @@ bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
 
   // we've found all we need
   auto const& sortElements = sortNode->elements();
+  LOG_DEVEL << "";
+  for (const auto& elem : sortElements) {
+    LOG_DEVEL << "KKDBG: sortElem: " << elem.toString();
+  }
+
   TRI_ASSERT(!sortElements.empty());
   std::vector<HeapSortElement> heapSort;
   std::vector<std::vector<latematerialized::ColumnVariant<true>>> usedColumns;
   auto const& primarySort = getPrimarySort(viewNode.meta(), viewNode.view());
   auto const& storedValues = getStoredValues(viewNode.meta(), viewNode.view());
+  {
+    LOG_DEVEL << "";
+    velocypack::Builder builder;
+    storedValues.toVelocyPack(builder);
+    LOG_DEVEL << "KKDBG: storedValues: " << builder.toJson();
+  }
+
   auto const columnsCount = storedValues.columns().size() + 1;
   usedColumns.resize(columnsCount);
   std::vector<
@@ -416,6 +446,56 @@ bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
         return false;
     }
   }
+
+  LOG_DEVEL << "";
+
+  auto logHeapSort = [&]() {
+    for (const auto& hs : heapSort) {
+      LOG_DEVEL << "KKDBG: heapSort item: " << hs.toString(); 
+    }
+    LOG_DEVEL << "";
+  };
+
+  logHeapSort();
+
+  auto logAttrs = [&]() {
+
+    for (size_t i = 0; i < attrs.size(); i++) {
+
+      std::ostringstream oss;
+
+      LOG_DEVEL << "KKDBG: attr #" << i;
+
+      //  Attributes
+      const auto& attr = attrs[i];
+      const auto& afData = attrs[i].afData;
+
+      oss.str("");
+      for (const auto& a : attr.attr) {
+        oss << a.name << ", ";
+      }
+      LOG_DEVEL << "KKDBG:     attr: (" << oss.str() << ")";
+      LOG_DEVEL << "KKDBG:     afdata.fields:";
+
+      //  afdata
+      for (size_t j = 0; afData.field && j < afData.field->size(); j++) {
+
+        oss.str("");
+        const auto& field = afData.field->at(j);
+
+        oss << field.name << ", " << afData.fieldNumber << ", " <<
+        afData.columnNumber << ", " << afData.postfix << ")";
+
+        LOG_DEVEL << "KKDBG:         " << oss.str();
+      }
+    }
+  };
+
+  LOG_DEVEL << "KKDBG: Before: ";
+  logAttrs();
+  LOG_DEVEL << " ";
+
+  LOG_DEVEL << "KKDBG: After: ";
   if (!attrs.empty()) {
     if (latematerialized::attributesMatch<true>(
             primarySort, storedValues, attrs, usedColumns, columnsCount)) {
@@ -430,19 +510,29 @@ bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
         sortBucket.fieldNumber = a.afData.fieldNumber;
         TRI_ASSERT(sortBucket.postfix.empty());
         TRI_ASSERT(a.afData.field);
+
+        LOG_DEVEL << "KKDBG: a.afData: " << a.afData;
         auto const fieldSize = a.afData.field->size();
-        TRI_ASSERT(fieldSize > a.afData.postfix);
-        for (size_t i = a.afData.postfix + 1; i < fieldSize; ++i) {
+        // TRI_ASSERT(fieldSize > a.afData.postfix);
+        LOG_DEVEL << "KKDBG: TRI_ASSERT(fieldSize: " << fieldSize << ")(a.afData.postfix: " << a.afData.postfix << ")";
+        for (size_t i = fieldSize - a.afData.postfix; i < fieldSize; ++i) {
           if (i != a.afData.postfix + 1) {
             sortBucket.postfix += ".";
           }
           sortBucket.postfix += a.afData.field->at(i).name;
         }
+        LOG_DEVEL << "KKDBG: sortBucket.postFix: " << sortBucket.postfix;
       }
+      logAttrs();
     } else {
+      LOG_DEVEL << "KKDBG: Attributes mismatched: ";
+
       return false;
     }
   }
+
+  logHeapSort();
+
   if (auto& front = heapSort.front(); front.isScore() && front.source != 0) {
     auto idx = front.source;
     std::swap(scorers.front(), scorers[idx]);
