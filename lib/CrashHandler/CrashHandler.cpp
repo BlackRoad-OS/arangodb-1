@@ -572,12 +572,9 @@ void actuallyDumpCrashInfo() {
       if (!arangodb::basics::FileUtils::exists(databaseDirectoryPath)) {
         arangodb::basics::FileUtils::createDirectory(databaseDirectoryPath);
       }
-      LOG_DEVEL << ADB_HERE;
       auto const uuid = to_string(boost::uuids::random_generator()());
       auto const crashDirectory = arangodb::basics::FileUtils::buildFilename(
           databaseDirectoryPath, uuid);
-      LOG_DEVEL << ADB_HERE
-                << "Creating crashes directory at: " << crashDirectory;
       arangodb::basics::FileUtils::createDirectory(crashDirectory);
 
       // Async registry is singleton
