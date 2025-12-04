@@ -66,7 +66,7 @@ class Feature final : public ArangodFeature, public CrashHandlerDataSource {
   void stop() override final;
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override final;
 
-  velocypack::SharedSlice getCrashData() const override;  
+  velocypack::SharedSlice getCrashData() const override;
 
   std::string_view getDataSourceName() const override;
 

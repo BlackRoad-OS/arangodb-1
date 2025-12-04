@@ -143,8 +143,6 @@ velocypack::SharedSlice Feature::getCrashData() const {
   return collectAsyncRegistryData().sharedSlice();
 }
 
-std::string_view Feature::getDataSourceName() const {
-  return name();
-}
+std::string_view Feature::getDataSourceName() const { return name(); }
 
 Feature::~Feature() { registry.set_metrics(nullptr); }
