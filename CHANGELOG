@@ -1,6 +1,8 @@
 devel
 -----
 
+* Updated ArangoDB Starter to v0.19.15.
+
 * Rebuilt included rclone v1.65.2 with go1.24.11 and non-vulnerable
   dependencies.
 
@@ -55,8 +57,6 @@ devel
   versions of the included node packages.
 
 * Fix Swagger UI missing generated data.
-
-* Updated ArangoDB Starter to v0.19.14.
 
 * Ignore flag --cluster.upgrade on DBservers, since it only concerns
   coordinators.
