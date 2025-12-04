@@ -92,6 +92,8 @@ class GeoEqualsTest : public ::testing::Test {
         .AlwaysDo([](arangodb::velocypack::Builder* b) { delete b; });
     fakeit::When(Method(expressionContextMock, trx))
         .AlwaysDo([&]() -> transaction::Methods& { return this->trx; });
+    fakeit::When(Method(expressionContextMock, getResourceMonitorPtr))
+        .AlwaysReturn(nullptr);
   }
 
   ~GeoEqualsTest() {
