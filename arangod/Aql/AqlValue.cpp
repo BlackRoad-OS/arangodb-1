@@ -29,8 +29,6 @@
 #include "Basics/SupervisedBuffer.h"
 #include "Basics/GlobalResourceMonitor.h"
 #include "Basics/VelocyPackHelper.h"
-#include "Logger/LogMacros.h"
-#include "Logger/Logger.h"
 #include "Transaction/Context.h"
 #include "Transaction/Helpers.h"
 #ifdef USE_V8
@@ -59,6 +57,7 @@ void AqlValue::setPointer(uint8_t const* pointer) noexcept {
 uint64_t AqlValue::hash(uint64_t seed) const {
   auto t = type();
   if (ADB_UNLIKELY(t == RANGE)) {
+    TRI_ASSERT(_data.rangeMeta.range != nullptr);
     uint64_t const n = _data.rangeMeta.range->size();
 
     // simon: copied from VPackSlice::normalizedHash()
@@ -1044,20 +1043,25 @@ int AqlValue::Compare(velocypack::Options const* options, AqlValue const& left,
     case VPACK_MANAGED_STRING:
       return basics::VelocyPackHelper::compare(
           left.slice(leftType), right.slice(rightType), compareUtf8, options);
-    case RANGE:
-      if (left.range()->_low < right.range()->_low) {
+    case RANGE: {
+      auto const* rl = left.range();
+      auto const* rr = right.range();
+      TRI_ASSERT(rl != nullptr);
+      TRI_ASSERT(rr != nullptr);
+      if (rl->_low < rr->_low) {
         return -1;
       }
-      if (left.range()->_low > right.range()->_low) {
+      if (rl->_low > rr->_low) {
         return 1;
       }
-      if (left.range()->_high < right.range()->_high) {
+      if (rl->_high < rr->_high) {
         return -1;
       }
-      if (left.range()->_high > right.range()->_high) {
+      if (rl->_high > rr->_high) {
         return 1;
       }
       return 0;
+    }
   }
   return 0;
 }
@@ -1373,17 +1377,13 @@ namespace std {
 using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
-  // Use a non-zero seed to minimize the chance of hash returning 0
-  // 0xdeadbeef is a common "magic number" used as a non-zero seed
-  auto hash64 =
-      x.hash(0xdeadbeef);  // make a normalized hash, for the semantics of the
-                           // value regardless of the storage type
+  auto hash64 = x.hash(AqlValue::kDefaultSeed);  // make a normalized hash, for
+                                                 // the semantics of the
+  // value regardless of the storage type
   size_t h = static_cast<size_t>(hash64);
-  // If hash is 0 (very unlikely with non-zero seed), remap to a large prime
-  // to avoid collision with the marker that uses h == 0. Using a large prime
-  // minimizes collision probability with other hash values.
+  // Remap 0 to avoid collision with marker that uses h == 0
   if (h == 0) {
-    // Large prime number, unlikely to collide with other hash values
+    // Golden ratio constant (2^64 * φ), used for uniform hash distribution
     h = 0x9e3779b97f4a7c15ULL;
   }
   return h;
@@ -1415,16 +1415,14 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
       case T::VPACK_INLINE_INT64:
       case T::VPACK_INLINE_UINT64:
       case T::VPACK_INLINE_DOUBLE:
-        // long numbers are stored in the same form, so we can compare raw bits
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
 
       case T::RANGE: {
         auto const* ra = a._data.rangeMeta.range;
         auto const* rb = b._data.rangeMeta.range;
-        if (ra == nullptr || rb == nullptr) {
-          return ra == rb;  // both null -> equal, one null -> not equal
-        }
+        TRI_ASSERT(ra != nullptr);
+        TRI_ASSERT(rb != nullptr);
         return ra->_low == rb->_low && ra->_high == rb->_high;
       }
 
