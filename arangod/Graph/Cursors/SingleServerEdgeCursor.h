@@ -93,8 +93,8 @@ class SingleServerEdgeCursor {
   enum Direction { FORWARD, BACKWARD };
 
   SingleServerEdgeCursor(
-      ResourceMonitor& monitor, transaction::Methods* trx,
-      arangodb::aql::Variable const* tmpVar,
+      ResourceMonitor& monitor, SingleServerProvider<StepType>& provider,
+      transaction::Methods* trx, arangodb::aql::Variable const* tmpVar,
       std::vector<IndexAccessor>& globalIndexConditions,
       std::unordered_map<uint64_t, std::vector<IndexAccessor>>&
           depthBasedIndexConditions,
@@ -106,8 +106,7 @@ class SingleServerEdgeCursor {
   using Callback = std::function<void(EdgeDocumentToken&&,
                                       arangodb::velocypack::Slice, size_t)>;
 
-  void readNext(uint64_t batchSize, SingleServerProvider<StepType>& provider,
-                aql::TraversalStats& stats, size_t depth,
+  void readNext(uint64_t batchSize, aql::TraversalStats& stats, size_t depth,
                 Callback const& callback);
 
   void prepareIndexExpressions(aql::Ast* ast);
@@ -129,6 +128,7 @@ class SingleServerEdgeCursor {
       _depthLookupInfo;  // depth -> lookup info
 
   ResourceMonitor& _monitor;
+  SingleServerProvider<StepType>& _provider;
   transaction::Methods* _trx;
   // Only works with hardcoded variables
   arangodb::aql::FixedVarExpressionContext& _expressionCtx;

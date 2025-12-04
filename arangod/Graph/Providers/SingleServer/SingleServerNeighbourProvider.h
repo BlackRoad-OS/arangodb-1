@@ -48,7 +48,8 @@ struct SingleServerBaseProviderOptions;
  */
 template<class Step>
 struct SingleServerNeighbourProvider {
-  SingleServerNeighbourProvider(SingleServerBaseProviderOptions& opts,
+  SingleServerNeighbourProvider(SingleServerProvider<Step>& provider,
+                                SingleServerBaseProviderOptions& opts,
                                 transaction::Methods* trx,
                                 ResourceMonitor& resourceMonitor,
                                 uint64_t batchSize, bool useCache = true);
@@ -61,8 +62,7 @@ struct SingleServerNeighbourProvider {
   /**
      Gives the next _batchSize neighbours for _currentStep
    */
-  auto next(SingleServerProvider<Step>& provider,
-            std::shared_ptr<aql::TraversalStats> stats)
+  auto next(std::shared_ptr<aql::TraversalStats> stats)
       -> std::shared_ptr<std::vector<ExpansionInfo>>;
 
   /**

@@ -205,8 +205,8 @@ IndexIterator& SingleServerEdgeCursor<Step>::LookupInfo::cursor() {
 
 template<class Step>
 SingleServerEdgeCursor<Step>::SingleServerEdgeCursor(
-    ResourceMonitor& monitor, transaction::Methods* trx,
-    arangodb::aql::Variable const* tmpVar,
+    ResourceMonitor& monitor, SingleServerProvider<Step>& provider,
+    transaction::Methods* trx, arangodb::aql::Variable const* tmpVar,
     std::vector<IndexAccessor>& globalIndexConditions,
     std::unordered_map<uint64_t, std::vector<IndexAccessor>>&
         depthBasedIndexConditions,
@@ -214,6 +214,7 @@ SingleServerEdgeCursor<Step>::SingleServerEdgeCursor(
     bool requiresFullDocument, bool useCache)
     : _tmpVar(tmpVar),
       _monitor(monitor),
+      _provider(provider),
       _trx(trx),
       _expressionCtx(expressionContext),
       _requiresFullDocument(requiresFullDocument),
@@ -296,9 +297,10 @@ void SingleServerEdgeCursor<Step>::rearm(VertexType vertex, uint64_t depth,
 }
 
 template<class Step>
-void SingleServerEdgeCursor<Step>::readNext(
-    uint64_t batchSize, SingleServerProvider<Step>& provider,
-    aql::TraversalStats& stats, size_t depth, Callback const& callback) {
+void SingleServerEdgeCursor<Step>::readNext(uint64_t batchSize,
+                                            aql::TraversalStats& stats,
+                                            size_t depth,
+                                            Callback const& callback) {
   TRI_ASSERT(!getLookupInfos(depth).empty());
   transaction::BuilderLeaser tmpBuilder(_trx);
 
@@ -307,7 +309,7 @@ void SingleServerEdgeCursor<Step>::readNext(
                                           VPackSlice edge) {
     if (edge.isString()) {
       tmpBuilder->clear();
-      provider.insertEdgeIntoResult(edgeToken, *tmpBuilder);
+      _provider.insertEdgeIntoResult(edgeToken, *tmpBuilder);
       edge = tmpBuilder->slice();
     }
     return evaluateEdgeExpression(expression, edge);

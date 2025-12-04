@@ -101,10 +101,10 @@ SingleServerProvider<Step>::SingleServerProvider(
       _edgeLookup(_trx.get(), _opts.getEdgeProjections()) {
   // stack has one neighbour provider that always stays and is used for the
   // non-batched expansions
-  _neighbours.emplace(
-      std::numeric_limits<size_t>::max(),
-      SingleServerNeighbourProvider<Step>{
-          _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize});
+  _neighbours.emplace(std::numeric_limits<size_t>::max(),
+                      SingleServerNeighbourProvider<Step>{
+                          *this, _opts, _trx.get(), _monitor,
+                          aql::ExecutionBlock::DefaultBatchSize});
 }
 
 template<class Step>
@@ -145,10 +145,8 @@ auto SingleServerProvider<Step>::expand(
   auto& neighbours = neighboursIt->second;
   neighbours.rearm(step, _stats);
 
-  // TODO (in a later PR) return each batch of neighbours instead of iterating
-  // over all of them
   while (neighbours.hasMore(step.getDepth())) {
-    auto batch = neighbours.next(*this, _stats);
+    auto batch = neighbours.next(_stats);
     for (auto const& neighbour : *batch) {
       VPackSlice edge = neighbour.edge();
       VertexType id = _cache.persistString(([&]() -> auto {
@@ -198,7 +196,7 @@ auto SingleServerProvider<Step>::expandToNextBatch(
   }
 
   auto count = 0;
-  auto batch = cursor.next(*this, _stats);
+  auto batch = cursor.next(_stats);
   for (auto const& neighbour : *batch) {
     count++;
     VPackSlice edge = neighbour.edge();
@@ -248,7 +246,7 @@ auto SingleServerProvider<Step>::addExpansionIterator(
   // 2. cache results currently in a resource manager crash when used with this
   // stack
   auto cursor = SingleServerNeighbourProvider<Step>{
-      _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize,
+      *this, _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize,
       false};
   cursor.rearm(step, _stats);
   if (_ast != nullptr) {
@@ -282,10 +280,10 @@ auto SingleServerProvider<Step>::clear() -> void {
   auto neighbours = std::move(neighboursIt->second);
   _neighbours.clear();
   neighbours.clear();
-  _neighbours.emplace(
-      std::numeric_limits<size_t>::max(),
-      SingleServerNeighbourProvider<Step>{
-          _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize});
+  _neighbours.emplace(std::numeric_limits<size_t>::max(),
+                      SingleServerNeighbourProvider<Step>{
+                          *this, _opts, _trx.get(), _monitor,
+                          aql::ExecutionBlock::DefaultBatchSize});
 }
 
 template<class Step>

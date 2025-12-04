@@ -36,11 +36,13 @@ using namespace arangodb::graph;
 
 template<class Step>
 SingleServerNeighbourProvider<Step>::SingleServerNeighbourProvider(
-    SingleServerBaseProviderOptions& opts, transaction::Methods* trx,
-    ResourceMonitor& resourceMonitor, uint64_t batchSize, bool useCache)
+    SingleServerProvider<Step>& provider, SingleServerBaseProviderOptions& opts,
+    transaction::Methods* trx, ResourceMonitor& resourceMonitor,
+    uint64_t batchSize, bool useCache)
     : _cursor{std::make_unique<SingleServerEdgeCursor<Step>>(
-          resourceMonitor, trx, opts.tmpVar(), opts.indexInformations().first,
-          opts.indexInformations().second, opts.expressionContext(),
+          resourceMonitor, provider, trx, opts.tmpVar(),
+          opts.indexInformations().first, opts.indexInformations().second,
+          opts.expressionContext(),
           /*requiresFullDocument*/ opts.hasWeightMethod(), opts.useCache())},
       _batchSize{batchSize},
       _resourceMonitor{resourceMonitor} {
@@ -69,7 +71,6 @@ auto SingleServerNeighbourProvider<Step>::rearm(
 }
 template<class Step>
 auto SingleServerNeighbourProvider<Step>::next(
-    SingleServerProvider<Step>& provider,
     std::shared_ptr<aql::TraversalStats> stats)
     -> std::shared_ptr<std::vector<ExpansionInfo>> {
   TRI_ASSERT(_currentStep != std::nullopt);
@@ -86,7 +87,7 @@ auto SingleServerNeighbourProvider<Step>::next(
   NeighbourBatch newNeighbours = std::make_shared<std::vector<ExpansionInfo>>();
   newNeighbours->reserve(_batchSize);
   _cursor->readNext(
-      _batchSize, provider, *stats, _currentStep->getDepth(),
+      _batchSize, *stats, _currentStep->getDepth(),
       [&](EdgeDocumentToken&& eid, VPackSlice edge, size_t cursorID) -> void {
         ++_readSomething;
         newNeighbours->emplace_back(std::move(eid), edge, cursorID);
