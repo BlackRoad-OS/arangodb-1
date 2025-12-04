@@ -134,6 +134,15 @@
     args:
       extremeVerbosity: true
 
+# cluster
+- recovery_cluster_crash_dump:
+    options:
+      priority: 2000
+      type: cluster
+      buckets: 8
+    args:
+      extremeVerbosity: true
+
 - recovery_server:
     options:
       priority: 2000
