@@ -22,6 +22,7 @@ target_include_directories(arango_async
 target_link_libraries(arango_async INTERFACE
   arango_async_registry
   arango_async_interface
+  arango_async_monitoring
   arango_basic_utils
 )
 target_link_libraries(arango_async PUBLIC

@@ -49,7 +49,6 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include "SystemMonitor/AsyncRegistry/Feature.h"
 #include "BuildId/BuildId.h"
 #include "CrashHandler/CrashHandlerDataSource.h"
 #include "Basics/FileUtils.h"
@@ -527,16 +526,6 @@ void logProcessInfo() {
   LOG_TOPIC("ded81", INFO, arangodb::Logger::CRASH) << buffer.view();
 }
 
-void dumpAsyncRegistry(std::string const& crashesDirectory) {
-  LOG_DEVEL << ADB_HERE;
-
-  std::string filename = arangodb::basics::FileUtils::buildFilename(
-      crashesDirectory, "async-registry.json");
-
-  auto data = arangodb::async_registry::collectAsyncRegistryData();
-  arangodb::basics::FileUtils::spit(filename, data.toJson());
-}
-
 void actuallyDumpCrashInfo() {
   // Handle the crash logging in this dedicated thread
   // We can safely do all the work here since we're not in a signal
@@ -576,9 +565,6 @@ void actuallyDumpCrashInfo() {
       auto const crashDirectory = arangodb::basics::FileUtils::buildFilename(
           databaseDirectoryPath, uuid);
       arangodb::basics::FileUtils::createDirectory(crashDirectory);
-
-      // Async registry is singleton
-      dumpAsyncRegistry(crashDirectory);
 
       for (auto const* dataSource : dataSources) {
         std::string filename = arangodb::basics::FileUtils::buildFilename(

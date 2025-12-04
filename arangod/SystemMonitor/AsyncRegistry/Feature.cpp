@@ -139,4 +139,12 @@ void Feature::collectOptions(std::shared_ptr<options::ProgramOptions> options) {
           R"(Each thread that is involved in the async-registry needs to garbage collect its finished async function calls regularly. This option controls how often this is done in seconds. This can possibly be performance relevant because each involved thread aquires a lock.)");
 }
 
+velocypack::SharedSlice Feature::getCrashData() const {
+  return collectAsyncRegistryData().sharedSlice();
+}
+
+std::string_view Feature::getDataSourceName() const {
+  return name();
+}
+
 Feature::~Feature() { registry.set_metrics(nullptr); }

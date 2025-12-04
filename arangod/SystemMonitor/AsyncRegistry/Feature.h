@@ -25,6 +25,7 @@
 #include "Async/Registry/registry_variable.h"
 #include "SystemMonitor/AsyncRegistry/Metrics.h"
 #include "Basics/FutureSharedLock.h"
+#include "CrashHandler/CrashHandlerDataSource.h"
 #include "RestServer/arangod.h"
 #include "Scheduler/SchedulerFeature.h"
 
@@ -32,7 +33,7 @@ namespace arangodb::async_registry {
 
 auto collectAsyncRegistryData() -> velocypack::Builder;
 
-class Feature final : public ArangodFeature {
+class Feature final : public ArangodFeature, public CrashHandlerDataSource {
  private:
   static auto create_metrics(arangodb::metrics::MetricsFeature& metrics_feature)
       -> std::shared_ptr<RegistryMetrics>;
@@ -64,6 +65,10 @@ class Feature final : public ArangodFeature {
   void start() override final;
   void stop() override final;
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override final;
+
+  velocypack::SharedSlice getCrashData() const override;  
+
+  std::string_view getDataSourceName() const override;
 
  private:
   struct Options {

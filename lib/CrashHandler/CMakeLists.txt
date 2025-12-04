@@ -20,7 +20,6 @@ target_link_libraries(arango_crashhandler
   PRIVATE
     arango_basic_errors
     arango_build_id
-    arango_async_monitoring
     boost_system
   PUBLIC
     velocypack)

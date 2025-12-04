@@ -78,8 +78,11 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
            if (state == ArangodServer::State::IN_START) {
              // drop privileges before starting features
              server.getFeature<PrivilegeFeature>().dropPrivilegesPermanently();
+             // Register crash handler data sources
              CrashHandler::addDataSource(
                  &server.getFeature<ApiRecordingFeature>());
+             CrashHandler::addDataSource(
+                 &server.getFeature<async_registry::Feature>());
            }
          },
          {}});
