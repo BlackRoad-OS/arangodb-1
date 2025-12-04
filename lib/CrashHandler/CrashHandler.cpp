@@ -554,9 +554,8 @@ void actuallyDumpCrashInfo() {
     // Flush logs
     arangodb::Logger::flush();
 
-    // Now we try to dump as much as information as we can about the database
-    // state Create a crashes directory path which is _database_directory +
-    // /crashes
+    // Create a crash directory and dump data from all registerd and alive data
+    // sources
     if (!databaseDirectoryPath.empty()) {
       if (!arangodb::basics::FileUtils::exists(databaseDirectoryPath)) {
         arangodb::basics::FileUtils::createDirectory(databaseDirectoryPath);
@@ -566,6 +565,7 @@ void actuallyDumpCrashInfo() {
           databaseDirectoryPath, uuid);
       arangodb::basics::FileUtils::createDirectory(crashDirectory);
 
+      // Dump data from all registerd and alive data sources
       for (auto const* dataSource : dataSources) {
         std::string filename = arangodb::basics::FileUtils::buildFilename(
             crashDirectory,
@@ -574,6 +574,13 @@ void actuallyDumpCrashInfo() {
         auto data = dataSource->getCrashData();
         arangodb::basics::FileUtils::spit(filename, data.toJson());
       }
+
+      // Dump backtrace data
+      auto const backtraceFilename = arangodb::basics::FileUtils::buildFilename(
+          crashDirectory, "backtrace.txt");
+      arangodb::basics::FileUtils::spit(
+          backtraceFilename, ::backtraceBuffer.get(),
+          ::backtraceBufferUsed.load(std::memory_order_acquire));
     }
   } catch (...) {
     // Ignore exceptions in crash handling
