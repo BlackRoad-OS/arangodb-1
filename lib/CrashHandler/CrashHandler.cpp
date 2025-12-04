@@ -41,6 +41,7 @@
 #include <exception>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string_view>
 #include <thread>
 
@@ -146,6 +147,9 @@ void* crashUcontext = nullptr;
 
 /// @brief stores the database directory
 std::string databaseDirectoryPath;
+
+/// @brief maximum number of crash directories to keep
+static constexpr size_t maxCrashDirectories{10};
 
 /// @brief stores the data sources
 std::vector<arangodb::CrashHandlerDataSource const*> dataSources;
@@ -727,10 +731,48 @@ void CrashHandler::waitForCrashHandlerCompletion() {
   }
 }
 
+/// @brief cleans up old crash directories, keeping only the most recent ones
+void cleanupOldCrashDirectories() {
+  if (::databaseDirectoryPath.empty() ||
+      !arangodb::basics::FileUtils::isDirectory(::databaseDirectoryPath)) {
+    return;
+  }
+
+  auto entries =
+      arangodb::basics::FileUtils::listFiles(::databaseDirectoryPath);
+
+  std::priority_queue<std::pair<int64_t, std::string>,
+                      std::vector<std::pair<int64_t, std::string>>, std::greater<>>
+      crashDirs;
+
+  for (auto const& entry : entries) {
+    auto fullPath = arangodb::basics::FileUtils::buildFilename(
+        ::databaseDirectoryPath, entry);
+    if (arangodb::basics::FileUtils::isDirectory(fullPath)) {
+      int64_t mtime{0};
+      if (TRI_MTimeFile(fullPath.c_str(), &mtime) == TRI_ERROR_NO_ERROR) {
+        crashDirs.emplace(mtime, entry);
+      }
+    }
+  }
+
+  // Remove the oldest directories until we're at the limit
+  while (crashDirs.size() > ::maxCrashDirectories) {
+    auto const& [mtime, dirName] = crashDirs.top();
+    auto const crashDir = arangodb::basics::FileUtils::buildFilename(
+        ::databaseDirectoryPath, dirName);
+    TRI_RemoveDirectory(crashDir.c_str());
+    crashDirs.pop();
+  }
+}
+
 /// @brief sets the database directory
 void CrashHandler::setDatabaseDirectory(std::string path) {
   ::databaseDirectoryPath =
       arangodb::basics::FileUtils::buildFilename(path, "crashes");
+
+  // Clean up old crash directories on startup
+  cleanupOldCrashDirectories();
 }
 
 std::string CrashHandler::getCrashesDirectory() {
