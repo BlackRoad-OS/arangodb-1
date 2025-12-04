@@ -156,10 +156,7 @@ class SingleServerProvider {
   VertexLookup _vertexLookup;
   EdgeLookup _edgeLookup;
 
-  SingleServerNeighbourProvider<Step> _neighbours;
-  // TODO rename to something else than stack
-  std::unordered_map<CursorId, SingleServerNeighbourProvider<Step>>
-      _neighboursStack;
+  std::unordered_map<CursorId, SingleServerNeighbourProvider<Step>> _neighbours;
   aql::Ast* _ast = nullptr;  // ast from TraversalExecutor
 };
 }  // namespace graph

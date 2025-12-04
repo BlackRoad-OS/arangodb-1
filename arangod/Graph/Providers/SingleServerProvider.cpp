@@ -23,6 +23,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "SingleServerProvider.h"
+#include <limits>
 
 #include "Aql/ExecutionBlock.h"
 #include "Aql/QueryContext.h"
@@ -97,9 +98,14 @@ SingleServerProvider<Step>::SingleServerProvider(
                              .getFeature<QueryRegistryFeature>()
                              .requireWith(),
                     _opts.produceVertices()),
-      _edgeLookup(_trx.get(), _opts.getEdgeProjections()),
-      _neighbours{_opts, _trx.get(), _monitor,
-                  aql::ExecutionBlock::DefaultBatchSize} {}
+      _edgeLookup(_trx.get(), _opts.getEdgeProjections()) {
+  // stack has one neighbour provider that always stays and is used for the
+  // non-batched expansions
+  _neighbours.emplace(
+      std::numeric_limits<size_t>::max(),
+      SingleServerNeighbourProvider<Step>{
+          _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize});
+}
 
 template<class Step>
 auto SingleServerProvider<Step>::startVertex(VertexType vertex, size_t depth,
@@ -134,12 +140,15 @@ auto SingleServerProvider<Step>::expand(
   LOG_TOPIC("c9169", TRACE, Logger::GRAPHS)
       << "<SingleServerProvider> Expanding " << vertex.getID();
 
-  _neighbours.rearm(step, _stats);
+  auto neighboursIt = _neighbours.find(std::numeric_limits<size_t>::max());
+  TRI_ASSERT(neighboursIt != _neighbours.end());
+  auto& neighbours = neighboursIt->second;
+  neighbours.rearm(step, _stats);
 
   // TODO (in a later PR) return each batch of neighbours instead of iterating
   // over all of them
-  while (_neighbours.hasMore(step.getDepth())) {
-    auto batch = _neighbours.next(*this, _stats);
+  while (neighbours.hasMore(step.getDepth())) {
+    auto batch = neighbours.next(*this, _stats);
     for (auto const& neighbour : *batch) {
       VPackSlice edge = neighbour.edge();
       VertexType id = _cache.persistString(([&]() -> auto {
@@ -176,15 +185,15 @@ auto SingleServerProvider<Step>::expandToNextBatch(
   TRI_ASSERT(!step.isLooseEnd());
   auto const& vertex = step.getVertex();
 
-  auto cursorIt = _neighboursStack.find(id);
-  TRI_ASSERT(cursorIt != _neighboursStack.end());
+  auto cursorIt = _neighbours.find(id);
+  TRI_ASSERT(cursorIt != _neighbours.end());
   auto& cursor = cursorIt->second;
 
   LOG_TOPIC("c9179", TRACE, Logger::GRAPHS)
       << "<SingleServerProvider> Expanding (next batch) " << vertex.getID();
 
   if (not cursor.hasMore(step.getDepth())) {
-    _neighboursStack.erase(cursorIt);
+    _neighbours.erase(cursorIt);
     return false;
   }
 
@@ -217,7 +226,7 @@ auto SingleServerProvider<Step>::expandToNextBatch(
     // probability we do not need it anymore after refactoring is complete.
   }
   if (count == 0 && not cursor.hasMore(step.getDepth())) {
-    _neighboursStack.erase(cursorIt);
+    _neighbours.erase(cursorIt);
     return false;
   }
   return true;
@@ -245,7 +254,7 @@ auto SingleServerProvider<Step>::addExpansionIterator(
   if (_ast != nullptr) {
     cursor.prepareIndexExpressions(_ast);
   }
-  _neighboursStack.emplace(id, std::move(cursor));
+  _neighbours.emplace(id, std::move(cursor));
   callback();
 }
 
@@ -266,8 +275,17 @@ auto SingleServerProvider<Step>::clear() -> void {
   // Clear the cache - this cache does contain StringRefs
   // We need to make sure that no one holds references to the cache (!)
   _cache.clear();
+  // move always existing neighbour provider out of map, clear everything and
+  // then push it back into the map
+  auto neighboursIt = _neighbours.find(std::numeric_limits<size_t>::max());
+  TRI_ASSERT(neighboursIt != _neighbours.end());
+  auto neighbours = std::move(neighboursIt->second);
   _neighbours.clear();
-  _neighboursStack.clear();
+  neighbours.clear();
+  _neighbours.emplace(
+      std::numeric_limits<size_t>::max(),
+      SingleServerNeighbourProvider<Step>{
+          _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize});
 }
 
 template<class Step>
@@ -299,7 +317,10 @@ EdgeType SingleServerProvider<Step>::getEdgeIdRef(
 
 template<class Step>
 void SingleServerProvider<Step>::prepareIndexExpressions(aql::Ast* ast) {
-  _neighbours.prepareIndexExpressions(ast);
+  auto neighboursIt = _neighbours.find(std::numeric_limits<size_t>::max());
+  TRI_ASSERT(neighboursIt != _neighbours.end());
+  auto& neighbours = neighboursIt->second;
+  neighbours.prepareIndexExpressions(ast);
   _ast = ast;
 }
 
@@ -370,7 +391,10 @@ auto SingleServerProvider<StepType>::fetchEdges(
 template<class StepType>
 bool SingleServerProvider<StepType>::hasDepthSpecificLookup(
     uint64_t depth) const noexcept {
-  return _neighbours.hasDepthSpecificLookup(depth);
+  auto neighboursIt = _neighbours.find(std::numeric_limits<size_t>::max());
+  TRI_ASSERT(neighboursIt != _neighbours.end());
+  auto& neighbours = neighboursIt->second;
+  return neighbours.hasDepthSpecificLookup(depth);
 }
 
 template class arangodb::graph::SingleServerProvider<SingleServerProviderStep>;
