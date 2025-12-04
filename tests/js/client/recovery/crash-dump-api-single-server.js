@@ -90,10 +90,12 @@ function recoverySuite () {
       assertTrue(contents.hasOwnProperty('files'), 'Should have files');
 
       // Assert specific expected files are present
-      assertTrue(contents.files.hasOwnProperty('ApiRecording.json'), 
+      assertTrue(contents.files.hasOwnProperty('ApiRecording.json'),
                  'Crash dump should contain ApiRecording.json');
-      assertTrue(contents.files.hasOwnProperty('async-registry.json'), 
-                 'Crash dump should contain async-registry.json');
+      assertTrue(contents.files.hasOwnProperty('Coroutines.json'),
+                 'Crash dump should contain Coroutines.json');
+      assertTrue(contents.files.hasOwnProperty('backtrace.txt'),
+                 'Crash dump should contain backtrace.txt');
 
       // Clean up - delete the crash
       let deleteResponse = arango.DELETE('/_admin/server/crashes/' + encodeURIComponent(crashId));
