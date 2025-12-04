@@ -742,7 +742,8 @@ void cleanupOldCrashDirectories() {
       arangodb::basics::FileUtils::listFiles(::databaseDirectoryPath);
 
   std::priority_queue<std::pair<int64_t, std::string>,
-                      std::vector<std::pair<int64_t, std::string>>, std::greater<>>
+                      std::vector<std::pair<int64_t, std::string>>,
+                      std::greater<>>
       crashDirs;
 
   for (auto const& entry : entries) {
