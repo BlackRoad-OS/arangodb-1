@@ -1216,13 +1216,6 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
     if (getValueReference(currentRow, reg).isEmpty()) {
       AqlValue const& a = getValueReference(fromRow, reg);
       if (a.requiresDestruction()) {
-        // We need to update the reference counter for this value. However, it
-        // is possible that the value is not yet present in _valueCount (e.g.,
-        // in release builds, the assertion that guards this is removed). In
-        // this case we must insert an entry with the correct memory usage,
-        // similar to what setValue() does. Otherwise we end up with a ValueInfo
-        // with memoryUsage == 0 and refCount == 1, which will prevent the value
-        // from being destroyed later and cause a memory leak.
         auto it = _valueCount.find(a.data());
         if (it != _valueCount.end()) {
           // Value already registered, just increment refCount
