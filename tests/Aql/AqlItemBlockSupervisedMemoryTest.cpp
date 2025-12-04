@@ -289,12 +289,16 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // STEP 1: Create a supervised slice
   // This allocates memory on the heap with ResourceMonitor* prefix
   // Memory is tracked in ResourceMonitor during allocation
+  size_t initialMemory = monitor.current();
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
   size_t expectedMemory = supervised.memoryUsage();
-  size_t initialMemory = monitor.current();
+  // After creating the supervised slice, memory should increase
+  size_t memoryAfterCreation = monitor.current();
+  EXPECT_GE(memoryAfterCreation, initialMemory + expectedMemory - 100U)
+      << "Memory should increase after creating supervised slice";
 
   // STEP 2: Store the value in row 0 using setValue()
   // setValue() properly registers the value in _valueCount with:
@@ -304,7 +308,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // because memory is already accounted for in ResourceMonitor during
   // allocation.
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), memoryAfterCreation);
 
   // STEP 3: Use referenceValuesFromRow() to copy from row 0 to row 1
   //

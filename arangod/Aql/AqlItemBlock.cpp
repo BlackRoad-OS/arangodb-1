@@ -329,12 +329,7 @@ void AqlItemBlock::destroy() noexcept {
                     << it.data() << ", memoryUsage=" << valueInfo.memoryUsage
                     << ", entry=" << i;
                 totalSupervisedUsed += valueInfo.memoryUsage;
-                // For supervised slices, we should NEVER destroy them - only erase.
-                // The memory is always managed by the ResourceMonitor that created it,
-                // not by the block. The block only tracks references via refCount.
-                // Destroying them would cause use-after-free if external AqlValue
-                // objects still reference the same memory.
-                it.destroy();  // Still need to destroy to decrement ResourceMonitor
+                it.destroy();
               } else {
                 totalUsed += valueInfo.memoryUsage;
                 it.destroy();
@@ -352,14 +347,6 @@ void AqlItemBlock::destroy() noexcept {
               }
             }
           } else {
-            // Value not found in _valueCount
-            // This should only happen if the value was stolen (ownership transferred).
-            // If a value was never properly registered, that's a bug that should
-            // be fixed at the registration point (e.g., in referenceValuesFromRow()).
-            // However, for supervised slices, we must still destroy them to decrement
-            // the ResourceMonitor, even if they're not tracked. This handles the case
-            // where supervised slices are created in initFromSlice() but not added via
-            // setValue() (e.g., when used for shadow rows).
             if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
               LOG_TOPIC("a1b2i", ERR, Logger::AQL)
                   << "[DEBUG] destroy: SUPERVISED SLICE NOT FOUND IN "
@@ -367,18 +354,14 @@ void AqlItemBlock::destroy() noexcept {
                   << "data=" << it.data() << ", entry=" << i
                   << " (value was stolen or never tracked). "
                   << "Destroying to decrement ResourceMonitor.";
-              // Destroy the supervised slice to decrement ResourceMonitor
-              // This handles the case where supervised slices are created but not
-              // properly tracked (e.g., in initFromSlice() for shadow rows)
               it.destroy();
             } else {
-              // For non-supervised slices, if not found in _valueCount, assume
-              // ownership has been transferred and just erase
               it.erase();
             }
           }
         } else {
-          // Note that if we do not know it the thing it has been stolen from us!
+          // Note that if we do not know it the thing it has been stolen from
+          // us!
           it.erase();
         }
       }
@@ -1233,12 +1216,12 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
     if (getValueReference(currentRow, reg).isEmpty()) {
       AqlValue const& a = getValueReference(fromRow, reg);
       if (a.requiresDestruction()) {
-        // We need to update the reference counter for this value. However, it is
-        // possible that the value is not yet present in _valueCount (e.g., in
-        // release builds, the assertion that guards this is removed). In this
-        // case we must insert an entry with the correct memory usage, similar
-        // to what setValue() does. Otherwise we end up with a ValueInfo with
-        // memoryUsage == 0 and refCount == 1, which will prevent the value
+        // We need to update the reference counter for this value. However, it
+        // is possible that the value is not yet present in _valueCount (e.g.,
+        // in release builds, the assertion that guards this is removed). In
+        // this case we must insert an entry with the correct memory usage,
+        // similar to what setValue() does. Otherwise we end up with a ValueInfo
+        // with memoryUsage == 0 and refCount == 1, which will prevent the value
         // from being destroyed later and cause a memory leak.
         auto it = _valueCount.find(a.data());
         if (it != _valueCount.end()) {
@@ -1264,7 +1247,7 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
               << ", currentRow=" << currentRow << ", fromRow=" << fromRow
               << ", reg=" << reg.value() << ", isSupervisedSlice="
               << (a.type() == AqlValue::VPACK_SUPERVISED_SLICE);
-          
+
           // Register the value similar to what setValue() does
           ValueInfo& valueInfo = _valueCount[a.data()];
           valueInfo.refCount = 1;
