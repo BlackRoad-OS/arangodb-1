@@ -422,11 +422,10 @@ void AqlItemBlock::shrink(size_t numRows) {
           continue;
         }
       } else {
-        if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
-          a.destroy();
-        } else {
-          a.erase();
-        }
+        // Value not found in _valueCount - assume ownership has been
+        // transferred (stolen) and simply erase without destroying to avoid
+        // use-after-free
+        a.erase();
         continue;
       }
     }
@@ -513,10 +512,11 @@ void AqlItemBlock::clearRegisters(RegIdFlatSet const& toClear) {
             continue;
           }
         } else {
-          if (a.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
-            a.destroy();
-            continue;
-          }
+          // Value not found in _valueCount - assume ownership has been
+          // transferred (stolen) and simply erase without destroying to avoid
+          // use-after-free
+          a.erase();
+          continue;
         }
       }
       a.erase();
