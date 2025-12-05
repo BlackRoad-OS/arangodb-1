@@ -44,6 +44,8 @@
 #include <algorithm>
 #include <limits>
 
+#include "Logger/LogMacros.h"
+
 using namespace arangodb;
 using namespace arangodb::aql;
 
@@ -323,14 +325,17 @@ void AqlItemBlock::destroy() noexcept {
             if (--valueInfo.refCount == 0) {
               if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
                 totalSupervisedUsed += valueInfo.memoryUsage;
-                it.destroy();
               } else {
                 totalUsed += valueInfo.memoryUsage;
-                it.destroy();
               }
+              it.destroy();
               // destroy() calls erase, so no need to call erase() again later
               continue;
             }
+
+            // There are still other references in this block.
+            // Drop this slot’s handle but do not free underlying memory.
+            it.erase();
           } else {
             if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
               it.destroy();
@@ -458,11 +463,24 @@ void AqlItemBlock::rescale(size_t numRows, RegisterCount numRegisters) {
     increaseMemoryUsage(sizeof(AqlValue) * (targetSize - currentSize));
 
     // Values will not be re-initialized, but are expected to be that way.
-#ifdef ARANGODB_ENABLE_MAINTAINER_MODE
+//#ifdef ARANGODB_ENABLE_MAINTAINER_MODE
     for (size_t i = currentSize; i < targetSize; i++) {
-      TRI_ASSERT(_data[i].isEmpty());
+      if (!_data[i].isEmpty()) {
+        LOG_DEVEL << "rescale found non-empty cell at index " << i
+                  << " currentSize=" << currentSize
+                  << " targetSize=" << targetSize
+                  << " old_numRows=" << _numRows
+                  << " old_numRegs=" << _numRegisters
+                  << " maxModifiedRowIndex=" << _maxModifiedRowIndex
+                  << " new_numRows=" << numRows
+                  << " new_numRegs=" << numRegisters
+                  << " requiresDestruction=" << _data[i].requiresDestruction()
+                  << " type=" << static_cast<int>(_data[i].type());
+        TRI_ASSERT(false);
+      }
+      //TRI_ASSERT(_data[i].isEmpty());
     }
-#endif
+//#endif
   } else if (targetSize < numEntries()) {
     decreaseMemoryUsage(sizeof(AqlValue) * (currentSize - targetSize));
   }
