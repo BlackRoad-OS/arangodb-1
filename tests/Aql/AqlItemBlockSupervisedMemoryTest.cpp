@@ -206,7 +206,6 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
   // Set the value using setValue() - this is the CORRECT way to store values
@@ -219,8 +218,11 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // Verify memory is tracked correctly
   // For supervised slices, memory is already accounted in ResourceMonitor
-  // during allocation, so we shouldn't double-count it
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // during allocation (in allocateSupervised), so setValue() should NOT
+  // increase ResourceMonitor usage. It only tracks in _memoryUsage internally.
+  // The memory was already tracked when the slice was created, so current
+  // should equal initialMemory (not initialMemory + expectedMemory).
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Destroy the block - this should properly clean up all values
   // If setValue() worked correctly, destroy() will find the value in
@@ -439,12 +441,13 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
   // Set the value in row 0 - this registers it in _valueCount with refCount=1
+  // For supervised slices, memory is already tracked in ResourceMonitor when
+  // created, so setValue() doesn't increase ResourceMonitor usage
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Reference it to row 1
   // Since the value IS in _valueCount (set via setValue()),
@@ -459,8 +462,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // All three rows reference the same supervised slice
   // No additional memory should be allocated (same heap object, just more
-  // references)
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // references). Memory was already tracked when slice was created.
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Destroy the block
   // destroy() should:
@@ -654,15 +657,16 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
   // Set the value using setValue() - this should create a correct entry
   // in _valueCount with refCount=1 and memoryUsage=expectedMemory
+  // For supervised slices, memory is already tracked in ResourceMonitor when
+  // created, so setValue() doesn't increase ResourceMonitor usage
   block->setValue(0, 0, supervised);
 
-  // Verify memory is tracked
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // Verify memory is tracked (already tracked when slice was created)
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Destroy the block
   // destroy() should:
@@ -721,13 +725,14 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
   // STEP 1: Store the value in row 0
   // This registers it in _valueCount with refCount=1
+  // For supervised slices, memory is already tracked in ResourceMonitor when
+  // created, so setValue() doesn't increase ResourceMonitor usage
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // STEP 2: Reference it to row 1
   // Now both row 0 and row 1 point to the SAME supervised slice (same heap
@@ -744,8 +749,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_EQ(val0.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  // Memory should still be the same (no additional allocation)
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // Memory should still be the same (no additional allocation, already tracked)
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // STEP 3: Destroy the value in row 0
   // destroyValue() should:
@@ -756,7 +761,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   block->destroyValue(0, 0);
 
   // Memory should still be allocated (row 1 still references it)
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Row 0 should now be empty
   EXPECT_TRUE(block->getValueReference(0, 0).isEmpty());
@@ -819,12 +824,13 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   AqlValue supervised = createLargeSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
-  size_t expectedMemory = supervised.memoryUsage();
   size_t initialMemory = monitor.current();
 
   // Store in row 0 - this creates a CORRECT entry in _valueCount
+  // For supervised slices, memory is already tracked in ResourceMonitor when
+  // created, so setValue() doesn't increase ResourceMonitor usage
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Reference to row 1 - THIS IS WHERE THE BUG CAN OCCUR
   // In the buggy code, if the value isn't found properly, it creates
@@ -844,7 +850,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   block->destroyValue(0, 0);
 
   // Memory should still be allocated (row 1 still has it)
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // Row 1 should still have the value
   EXPECT_FALSE(block->getValueReference(1, 0).isEmpty());
@@ -987,8 +993,10 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_GT(expectedMemory, 0U);
 
   // STEP 2: Store it in row 0 - this properly registers it in _valueCount
+  // For supervised slices, memory is already tracked in ResourceMonitor when
+  // created, so setValue() doesn't increase ResourceMonitor usage
   block->setValue(0, 0, supervised);
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // STEP 3: Use referenceValuesFromRow() to copy from row 0 to row 1
   // This is the critical path where the bug could manifest in release builds
@@ -1008,7 +1016,8 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   // Memory should still be the same (same data, just more references)
-  EXPECT_EQ(monitor.current(), initialMemory + expectedMemory);
+  // Memory was already tracked when slice was created
+  EXPECT_EQ(monitor.current(), initialMemory);
 
   // STEP 4: Destroy the block
   // destroy() should properly clean up all values, even with multiple
