@@ -45,8 +45,7 @@ class SanitizerHandler:
 
         Priority:
         1. Explicit CLI flag (highest)
-        2. Environment variables
-        3. Binary name detection (lowest)
+        2. Environment variables (lowest)
 
         Returns:
             Set of sanitizer environment variable names (e.g., 'ASAN_OPTIONS')
@@ -65,14 +64,6 @@ class SanitizerHandler:
         for san_var in self.ALL_SANITIZERS:
             if san_var in os.environ:
                 detected.add(san_var)
-
-        # Priority 3: Check binary name (only if no env vars set)
-        if not detected:
-            binary_name_lower = self.binary_path.name.lower()
-            if "asan" in binary_name_lower:
-                detected.update(self.ALUBSAN_SANITIZERS)
-            if "tsan" in binary_name_lower:
-                detected.update(self.TSAN_SANITIZERS)
 
         return detected
 

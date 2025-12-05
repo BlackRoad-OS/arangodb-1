@@ -51,7 +51,7 @@ class TestSanitizerHandler:
     def test_no_sanitizers_detected_by_default(
         self, mock_binary: Path, temp_dirs: tuple[Path, Path, Path]
     ) -> None:
-        """Test that no sanitizers are detected without env vars or special binary name."""
+        """Test that no sanitizers are detected without env vars or explicit flag."""
         _, log_dir, repo_root = temp_dirs
 
         # Clear sanitizer env vars
@@ -72,37 +72,6 @@ class TestSanitizerHandler:
 
             assert handler.is_sanitizer_build()
             assert "ASAN_OPTIONS" in handler._detected_sanitizers
-
-    def test_detect_sanitizer_from_binary_name(
-        self, temp_dirs: tuple[Path, Path, Path]
-    ) -> None:
-        """Test detecting sanitizer from binary name."""
-        binary_dir, log_dir, repo_root = temp_dirs
-        asan_binary = binary_dir / "arangod-asan"
-        asan_binary.touch()
-
-        with patch.dict(os.environ, {}, clear=True):
-            handler = SanitizerHandler(asan_binary, log_dir, repo_root)
-
-            assert handler.is_sanitizer_build()
-            # ASAN binary name triggers ASAN/LSAN/UBSAN
-            assert "ASAN_OPTIONS" in handler._detected_sanitizers
-            assert "LSAN_OPTIONS" in handler._detected_sanitizers
-            assert "UBSAN_OPTIONS" in handler._detected_sanitizers
-
-    def test_detect_tsan_from_binary_name(
-        self, temp_dirs: tuple[Path, Path, Path]
-    ) -> None:
-        """Test detecting TSAN from binary name."""
-        binary_dir, log_dir, repo_root = temp_dirs
-        tsan_binary = binary_dir / "arangod-tsan"
-        tsan_binary.touch()
-
-        with patch.dict(os.environ, {}, clear=True):
-            handler = SanitizerHandler(tsan_binary, log_dir, repo_root)
-
-            assert handler.is_sanitizer_build()
-            assert "TSAN_OPTIONS" in handler._detected_sanitizers
 
     def test_parse_existing_options(
         self, mock_binary: Path, temp_dirs: tuple[Path, Path, Path]
@@ -408,28 +377,6 @@ class TestExplicitSanitizer:
             assert "halt_on_error=0" in env_vars["TSAN_OPTIONS"]
             assert "history_size=7" in env_vars["TSAN_OPTIONS"]
             assert "verbosity=2" in env_vars["TSAN_OPTIONS"]
-
-    def test_explicit_takes_priority_over_binary_name(self, tmp_path: Path) -> None:
-        """Test explicit sanitizer takes priority over binary name detection."""
-        binary_dir = tmp_path / "bin"
-        log_dir = tmp_path / "logs"
-        binary_dir.mkdir()
-        log_dir.mkdir()
-        # Binary name suggests ASAN, but we explicitly request TSAN
-        asan_binary = binary_dir / "arangod-asan"
-        asan_binary.touch()
-
-        with patch.dict(os.environ, {}, clear=True):
-            handler = SanitizerHandler(
-                binary_path=asan_binary,
-                log_dir=log_dir,
-                repo_root=tmp_path,
-                explicit_sanitizer="tsan",
-            )
-            assert handler.is_sanitizer_build()
-            # Should only detect TSAN, not ASAN
-            assert "TSAN_OPTIONS" in handler._detected_sanitizers
-            assert "ASAN_OPTIONS" not in handler._detected_sanitizers
 
     def test_explicit_takes_priority_over_env_vars(self, tmp_path: Path) -> None:
         """Test explicit sanitizer takes priority over environment variables."""
