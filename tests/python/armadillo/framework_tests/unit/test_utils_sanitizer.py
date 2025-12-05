@@ -463,3 +463,194 @@ class TestCreateSanitizerHandler:
         assert handler._explicit_sanitizer == "tsan"
         assert handler.is_sanitizer_build()
         assert "TSAN_OPTIONS" in handler._detected_sanitizers
+
+
+class TestCheckSanitizerLogs:
+    """Test check_sanitizer_logs functionality."""
+
+    def test_no_logs_when_not_sanitizer_build(self, tmp_path: Path) -> None:
+        """Test that no logs are checked when not a sanitizer build."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(12345)
+
+            assert result is None
+
+    def test_no_logs_when_files_dont_exist(self, tmp_path: Path) -> None:
+        """Test that None is returned when sanitizer log files don't exist."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(12345)
+
+            assert result is None
+
+    def test_reads_alubsan_log_file(self, tmp_path: Path) -> None:
+        """Test reading ALUBSAN sanitizer log file."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 12345
+        log_content = "ERROR: AddressSanitizer: heap-use-after-free\ndetails here..."
+
+        # Create log file with PID suffix
+        log_file = log_dir / f"alubsan.log.arangod.{pid}"
+        log_file.write_text(log_content)
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(pid)
+
+            assert result is not None
+            assert "ALUBSAN Report" in result
+            assert f"PID {pid}" in result
+            assert log_content in result
+
+    def test_reads_tsan_log_file(self, tmp_path: Path) -> None:
+        """Test reading TSAN sanitizer log file."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 67890
+        log_content = "WARNING: ThreadSanitizer: data race\ndetails here..."
+
+        # Create log file with PID suffix
+        log_file = log_dir / f"tsan.log.arangod.{pid}"
+        log_file.write_text(log_content)
+
+        with patch.dict(os.environ, {"TSAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(pid)
+
+            assert result is not None
+            assert "TSAN Report" in result
+            assert f"PID {pid}" in result
+            assert log_content in result
+
+    def test_reads_multiple_sanitizer_logs(self, tmp_path: Path) -> None:
+        """Test reading multiple sanitizer log files for same PID."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 11111
+        alubsan_content = "ERROR: AddressSanitizer: leak detected"
+        tsan_content = "WARNING: ThreadSanitizer: data race"
+
+        # Create both log files
+        alubsan_log = log_dir / f"alubsan.log.arangod.{pid}"
+        tsan_log = log_dir / f"tsan.log.arangod.{pid}"
+        alubsan_log.write_text(alubsan_content)
+        tsan_log.write_text(tsan_content)
+
+        with patch.dict(
+            os.environ, {"ASAN_OPTIONS": "", "TSAN_OPTIONS": ""}, clear=True
+        ):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(pid)
+
+            assert result is not None
+            assert "ALUBSAN Report" in result
+            assert "TSAN Report" in result
+            assert alubsan_content in result
+            assert tsan_content in result
+
+    def test_ignores_short_content(self, tmp_path: Path) -> None:
+        """Test that files with <10 chars of content are ignored."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 22222
+        short_content = "short"  # Less than 10 chars
+
+        log_file = log_dir / f"alubsan.log.arangod.{pid}"
+        log_file.write_text(short_content)
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(pid)
+
+            assert result is None
+
+    def test_handles_read_errors_gracefully(self, tmp_path: Path) -> None:
+        """Test that read errors are handled gracefully."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 33333
+
+        # Create a log file path but make it a directory (will cause read error)
+        log_file = log_dir / f"alubsan.log.arangod.{pid}"
+        log_file.mkdir()
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(pid)
+
+            # Should include error message
+            assert result is not None
+            assert "Error reading" in result
+
+    def test_different_binary_names(self, tmp_path: Path) -> None:
+        """Test that different binary names are handled correctly."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangosh"  # Different binary name
+        binary.touch()
+
+        pid = 44444
+        log_content = "ERROR: AddressSanitizer: heap-buffer-overflow"
+
+        # Log file should use binary name
+        log_file = log_dir / f"alubsan.log.arangosh.{pid}"
+        log_file.write_text(log_content)
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.check_sanitizer_logs(pid)
+
+            assert result is not None
+            assert "arangosh" in result
+            assert log_content in result

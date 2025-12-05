@@ -95,9 +95,13 @@ class ServerRuntimeState:
         self.process_info = process_info
 
     def stop(self) -> None:
-        """Mark server as stopped."""
+        """Mark server as stopped.
+
+        Note: process_info is preserved for post-mortem analysis
+        (exit codes, sanitizer logs, etc.).
+        """
         self.is_running = False
-        self.process_info = None
+        # Keep process_info for post-shutdown health checks
 
 
 @dataclass

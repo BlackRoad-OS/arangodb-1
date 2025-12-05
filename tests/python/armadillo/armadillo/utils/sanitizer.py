@@ -223,6 +223,47 @@ class SanitizerHandler:
 
         return log_paths
 
+    def check_sanitizer_logs(self, pid: int) -> Optional[str]:
+        """Check for and read sanitizer log files for a given PID.
+
+        When halt_on_error=0, processes exit with code 0 even if sanitizers
+        detected issues. Log files follow pattern: {log_path}.{binary_name}.{pid}
+
+        Args:
+            pid: Process ID to check for sanitizer logs
+
+        Returns:
+            Content of sanitizer log files if found and non-empty, None otherwise
+        """
+        if not self.is_sanitizer_build():
+            return None
+
+        binary_name = self.binary_path.name
+        all_content = []
+
+        for log_type, base_log_path in self.get_log_paths().items():
+            # Pattern: {base_log_path}.{binary_name}.{pid}
+            log_file = Path(f"{base_log_path}.{binary_name}.{pid}")
+
+            if not log_file.exists():
+                continue
+
+            try:
+                content = log_file.read_text(encoding="utf-8", errors="replace")
+                # Only include if content is meaningful (>10 chars, like JS implementation)
+                if len(content) > 10:
+                    all_content.append(
+                        f"=== {log_type.upper()} Report for '{binary_name}' (PID {pid}) ===\n"
+                        f"Log file: {log_file}\n\n{content}"
+                    )
+            except (OSError, UnicodeDecodeError) as e:
+                # Log read error but continue checking other logs
+                all_content.append(
+                    f"=== Error reading {log_type} log {log_file}: {e} ==="
+                )
+
+        return "\n\n".join(all_content) if all_content else None
+
 
 def create_sanitizer_handler(
     binary_path: Path,

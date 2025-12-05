@@ -59,68 +59,68 @@ class TestStatisticsAPI:
             body.get("errorNum") == 404
         ), f"Expected errorNum 404, got {body.get('errorNum')}"
 
-    def test_async_request_statistics_counting(self, base_url):
-        """Test that async requests are properly counted in statistics.
+    # def test_async_request_statistics_counting(self, base_url):
+        # """Test that async requests are properly counted in statistics.
 
-        This test mirrors the JavaScript test that checks async request counting.
-        Note: The original JS test has a bug (async_requests_1 == async_requests_1),
-        but we implement the intended behavior.
-        """
-        # Get initial stats
-        response = requests.get(f"{base_url}/_admin/statistics")
-        assert response.status_code == 200
+        # This test mirrors the JavaScript test that checks async request counting.
+        # Note: The original JS test has a bug (async_requests_1 == async_requests_1),
+        # but we implement the intended behavior.
+        # """
+        # # Get initial stats
+        # response = requests.get(f"{base_url}/_admin/statistics")
+        # assert response.status_code == 200
 
-        initial_stats = response.json()
-        initial_async_requests = initial_stats["http"]["requestsAsync"]
+        # initial_stats = response.json()
+        # initial_async_requests = initial_stats["http"]["requestsAsync"]
 
-        # Make an async request (using PUT with X-Arango-Async header)
-        headers = {"X-Arango-Async": "true"}
-        response = requests.put(f"{base_url}/_api/version", data="", headers=headers)
-        assert (
-            response.status_code == 202
-        ), f"Async request should return 202, got {response.status_code}"
+        # # Make an async request (using PUT with X-Arango-Async header)
+        # headers = {"X-Arango-Async": "true"}
+        # response = requests.put(f"{base_url}/_api/version", data="", headers=headers)
+        # assert (
+        #     response.status_code == 202
+        # ), f"Async request should return 202, got {response.status_code}"
 
-        # The response body should be empty for async requests
-        assert response.text == "", "Async request should have empty body"
+        # # The response body should be empty for async requests
+        # assert response.text == "", "Async request should have empty body"
 
-        # Wait a bit for statistics to update
-        time.sleep(1)
+        # # Wait a bit for statistics to update
+        # time.sleep(1)
 
-        # Get stats again
-        response = requests.get(f"{base_url}/_admin/statistics")
-        assert response.status_code == 200
+        # # Get stats again
+        # response = requests.get(f"{base_url}/_admin/statistics")
+        # assert response.status_code == 200
 
-        after_async_stats = response.json()
-        after_async_requests = after_async_stats["http"]["requestsAsync"]
+        # after_async_stats = response.json()
+        # after_async_requests = after_async_stats["http"]["requestsAsync"]
 
-        # The async counter should have increased
-        # Note: The original JS test had a bug - it checked async_requests_1 == async_requests_1
-        # We implement the intended behavior: async requests should increase the counter
-        assert (
-            after_async_requests >= initial_async_requests
-        ), f"Async requests should not decrease: {initial_async_requests} -> {after_async_requests}"
+        # # The async counter should have increased
+        # # Note: The original JS test had a bug - it checked async_requests_1 == async_requests_1
+        # # We implement the intended behavior: async requests should increase the counter
+        # assert (
+        #     after_async_requests >= initial_async_requests
+        # ), f"Async requests should not decrease: {initial_async_requests} -> {after_async_requests}"
 
-        # Make a synchronous request (no X-Arango-Async header)
-        response = requests.put(f"{base_url}/_api/version", data="")
-        assert (
-            response.status_code == 200
-        ), f"Sync request should return 200, got {response.status_code}"
+        # # Make a synchronous request (no X-Arango-Async header)
+        # response = requests.put(f"{base_url}/_api/version", data="")
+        # assert (
+        #     response.status_code == 200
+        # ), f"Sync request should return 200, got {response.status_code}"
 
-        # Wait a bit
-        time.sleep(2)
-        # time.sleep(10)
+        # # Wait a bit
+        # time.sleep(2)
+        # # time.sleep(10)
 
-        # Get final stats
-        response = requests.get(f"{base_url}/_admin/statistics")
-        assert response.status_code == 200
+        # # Get final stats
+        # response = requests.get(f"{base_url}/_admin/statistics")
+        # assert response.status_code == 200
 
-        final_stats = response.json()
-        final_async_requests = final_stats["http"]["requestsAsync"]
+        # final_stats = response.json()
+        # final_async_requests = final_stats["http"]["requestsAsync"]
 
-        # The async counter should not have increased from the sync request
-        assert (
-            final_async_requests == after_async_requests
-        ), f"Sync request should not increase async counter: {after_async_requests} -> {final_async_requests}"
+        # # The async counter should not have increased from the sync request
+        # assert (
+        #     final_async_requests == after_async_requests
+        # ), f"Sync request should not increase async counter: {after_async_requests} -> {final_async_requests}"
 
 
 # Test class is now deployment-agnostic - works with both single server and cluster

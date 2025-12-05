@@ -63,11 +63,18 @@ class ServerHealthInfo(BaseModel):
         default_factory=dict
     )  # server_id -> crash info
     exit_codes: Dict[str, int] = Field(default_factory=dict)  # server_id -> exit code
+    sanitizer_errors: Dict[str, str] = Field(
+        default_factory=dict
+    )  # server_id -> sanitizer log content
 
     def has_issues(self) -> bool:
         """Check if there are any server health issues."""
-        return bool(self.crashes) or any(
-            code != 0 for code in self.exit_codes.values()  # pylint: disable=no-member
+        return (
+            bool(self.crashes)
+            or any(
+                code != 0 for code in self.exit_codes.values()
+            )  # pylint: disable=no-member
+            or bool(self.sanitizer_errors)  # pylint: disable=no-member
         )
 
     def get_failure_summary(self) -> List[str]:
@@ -90,6 +97,14 @@ class ServerHealthInfo(BaseModel):
                 msg = f"Server {server_id} exited with code {exit_code}"
                 msg += _get_exit_code_context(exit_code)
                 issues.append(msg)
+
+        # Report sanitizer errors
+        for (
+            server_id,
+            san_errors,
+        ) in self.sanitizer_errors.items():  # pylint: disable=no-member
+            preview = san_errors[:200] if len(san_errors) > 200 else san_errors
+            issues.append(f"Server {server_id} has sanitizer errors: {preview}")
 
         return issues
 
@@ -129,6 +144,22 @@ class ServerHealthInfo(BaseModel):
                 lines.append(f"  {server_id}: exit_code={crash.exit_code}")
                 if crash.stderr:
                     lines.append(f"    stderr: {crash.stderr[:200]}")
+                error_count += 1
+
+        # Format sanitizer errors
+        if self.sanitizer_errors:  # pylint: disable=no-member
+            lines.append("\nSanitizer Errors:")
+            for (
+                server_id,
+                san_errors,
+            ) in self.sanitizer_errors.items():  # pylint: disable=no-member
+                lines.append(f"  {server_id}:")
+                # Include first 500 chars of sanitizer output
+                preview = san_errors[:500] if len(san_errors) > 500 else san_errors
+                for line in preview.splitlines():
+                    lines.append(f"    {line}")
+                if len(san_errors) > 500:
+                    lines.append(f"    ... (truncated, {len(san_errors)} total bytes)")
                 error_count += 1
 
         return "\n".join(lines), error_count

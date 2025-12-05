@@ -440,11 +440,12 @@ class DeploymentController:
         Returns health data including:
         - Exit codes from shutdown (non-zero may indicate sanitizer issues)
         - Crash information if servers crashed
+        - Sanitizer errors from log files (ASAN/LSAN/UBSAN/TSAN)
 
         Should be called after stop() to capture exit codes.
 
         Returns:
-            ServerHealthInfo with crashes and exit codes
+            ServerHealthInfo with crashes, exit codes, and sanitizer errors
 
         Example:
             >>> controller.stop()
@@ -465,10 +466,48 @@ class DeploymentController:
             str(k): v for k, v in all_crashes.items() if k in deployment_server_ids
         }
 
+        # Check for sanitizer log files
+        sanitizer_errors = self._check_sanitizer_logs()
+
         return ServerHealthInfo(
             crashes=filtered_crashes,
             exit_codes=filtered_exit_codes,
+            sanitizer_errors=sanitizer_errors,
         )
+
+    def _check_sanitizer_logs(self) -> Dict[str, str]:
+        """Check for sanitizer log files for all servers in deployment.
+
+        Returns:
+            Dictionary mapping server IDs to sanitizer error content
+        """
+        from pathlib import Path
+        from ..utils.sanitizer import create_sanitizer_handler
+
+        sanitizer_errors = {}
+
+        for server_id, server in self.deployment.get_servers().items():
+            process_info = server._runtime.process_info
+            if not process_info:
+                continue
+
+            binary_path = Path(process_info.command[0])
+            log_dir = server.paths.base_dir
+            repo_root = server._get_command_builder().get_repository_root()
+            explicit_sanitizer = getattr(self._app_context.config, "sanitizer", None)
+
+            sanitizer_handler = create_sanitizer_handler(
+                binary_path=binary_path,
+                log_dir=log_dir,
+                repo_root=repo_root,
+                explicit_sanitizer=explicit_sanitizer,
+            )
+
+            san_errors = sanitizer_handler.check_sanitizer_logs(process_info.pid)
+            if san_errors:
+                sanitizer_errors[str(server_id)] = san_errors
+
+        return sanitizer_errors
 
     # Properties
 
