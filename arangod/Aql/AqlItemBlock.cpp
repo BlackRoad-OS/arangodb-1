@@ -44,8 +44,6 @@
 #include <algorithm>
 #include <limits>
 
-#include "Logger/LogMacros.h"
-
 using namespace arangodb;
 using namespace arangodb::aql;
 
@@ -462,25 +460,12 @@ void AqlItemBlock::rescale(size_t numRows, RegisterCount numRegisters) {
   if (targetSize > numEntries()) {
     increaseMemoryUsage(sizeof(AqlValue) * (targetSize - currentSize));
 
-    // Values will not be re-initialized, but are expected to be that way.
-//#ifdef ARANGODB_ENABLE_MAINTAINER_MODE
+// Values will not be re-initialized, but are expected to be that way.
+#ifdef ARANGODB_ENABLE_MAINTAINER_MODE
     for (size_t i = currentSize; i < targetSize; i++) {
-      if (!_data[i].isEmpty()) {
-        LOG_DEVEL << "rescale found non-empty cell at index " << i
-                  << " currentSize=" << currentSize
-                  << " targetSize=" << targetSize
-                  << " old_numRows=" << _numRows
-                  << " old_numRegs=" << _numRegisters
-                  << " maxModifiedRowIndex=" << _maxModifiedRowIndex
-                  << " new_numRows=" << numRows
-                  << " new_numRegs=" << numRegisters
-                  << " requiresDestruction=" << _data[i].requiresDestruction()
-                  << " type=" << static_cast<int>(_data[i].type());
-        TRI_ASSERT(false);
-      }
-      //TRI_ASSERT(_data[i].isEmpty());
+      TRI_ASSERT(_data[i].isEmpty());
     }
-//#endif
+#endif
   } else if (targetSize < numEntries()) {
     decreaseMemoryUsage(sizeof(AqlValue) * (currentSize - targetSize));
   }
