@@ -330,17 +330,13 @@ void AqlItemBlock::destroy() noexcept {
               // destroy() calls erase, so no need to call erase() again later
               continue;
             }
-
-            // There are still other references in this block.
-            // Drop this slot’s handle but do not free underlying memory.
-            it.erase();
-          } else {
-            if (it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
-              it.destroy();
-            } else {
-              it.erase();
-            }
           }
+          // 1. There are still other references in this block.
+          //    Drop this slot’s handle but do not free underlying memory.
+          // 2. Value not found in _valueCount - assume ownership has been
+          //    transferred (stolen) and simply erase without destroying
+          //    to avoid use-after-free / double-free.
+          it.erase();
         } else {
           // Note that if we do not know it the thing it has been stolen from
           // us!

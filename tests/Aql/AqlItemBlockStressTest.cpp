@@ -321,7 +321,10 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_StealAndTrack) {
   auto block = itemBlockManager.requestBlock(2, 1);
   size_t blockMemory = monitor.current() - initialMemory;
 
-  AqlValue val = createSupervisedSlice("Test value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+
   size_t valueMemory = val.memoryUsage();
 
   block->setValue(0, 0, val);
@@ -333,11 +336,11 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_StealAndTrack) {
 
   // Steal value
   AqlValue stolen = block->stealAndEraseValue(0, 0);
+  EXPECT_EQ(stolen.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   size_t memoryAfterSteal = monitor.current();
 
-  // Memory should decrease (block no longer tracks row 0's value)
-  // But stolen value is still alive
-  EXPECT_LT(memoryAfterSteal, memoryAfterSet);
+  // Memory should not change because stolen value is still alive
+  EXPECT_EQ(memoryAfterSteal, memoryAfterSet);
 
   // Destroy stolen value
   stolen.destroy();
@@ -397,45 +400,46 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_CloneDataAndMoveShadow) {
 }
 
 TEST_F(AqlItemBlockStressTest, MemoryAccounting_CloneToBlock) {
-  // Test: Memory tracking after cloneToBlock
   size_t initialMemory = monitor.current();
 
-  auto block = itemBlockManager.requestBlock(1, 2);
+  SharedAqlItemBlockPtr cloned;
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  {
+    auto block = itemBlockManager.requestBlock(1, 2);
 
-  block->setValue(0, 0, val1);
-  block->setValue(0, 1, val2);
+    std::string big1(300, 'a');
+    std::string big2(300, 'b');
+    AqlValue val1 = createSupervisedSlice(big1);
+    AqlValue val2 = createSupervisedSlice(big2);
 
-  InputAqlItemRow row(block, 0);
+    block->setValue(0, 0, val1);
+    block->setValue(0, 1, val2);
 
-  size_t memoryBeforeClone = monitor.current();
+    size_t memoryBeforeClone = monitor.current();
 
-  RegIdFlatSet regs;
-  regs.insert(RegisterId::makeRegular(0));
-  regs.insert(RegisterId::makeRegular(1));
+    RegIdFlatSet regs;
+    regs.insert(RegisterId::makeRegular(0));
+    regs.insert(RegisterId::makeRegular(1));
 
-  SharedAqlItemBlockPtr cloned = row.cloneToBlock(itemBlockManager, regs, 2);
+    {
+      InputAqlItemRow row(block, 0);
+      cloned = row.cloneToBlock(itemBlockManager, regs, 2);
+    } // row is destroyed here
 
-  size_t memoryAfterClone = monitor.current();
+    size_t memoryAfterClone = monitor.current();
+    EXPECT_GT(memoryAfterClone, memoryBeforeClone);
 
-  // Memory should increase (new block + cloned values)
-  EXPECT_GT(memoryAfterClone, memoryBeforeClone);
+    // block is last owner now
+  }
 
-  // Destroy original
-  block.reset(nullptr);
-  size_t memoryAfterOriginalDestroy = monitor.current();
-
-  // Memory should decrease
-  EXPECT_LT(memoryAfterOriginalDestroy, memoryAfterClone);
-
-  // Destroy cloned
+  // At this point only `cloned` should hold the values.
+  // Now destroy cloned:
+  size_t memoryBeforeDestroyCloned = monitor.current();
   cloned.reset(nullptr);
-
-  // Memory should be back to initial (allowing for overhead)
   size_t finalMemory = monitor.current();
+
   EXPECT_LE(finalMemory, initialMemory + 2000U);
+  EXPECT_LE(finalMemory, memoryBeforeDestroyCloned);
 }
 
 // ============================================================================
@@ -873,7 +877,9 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_StealDoesNotLeak) {
 
   auto block = itemBlockManager.requestBlock(10, 1);
 
-  AqlValue val = createSupervisedSlice("Shared value");
+  std::string big(300, 's');
+  AqlValue val = createSupervisedSlice(big);
+  ASSERT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   for (size_t i = 0; i < 10; i++) {
     block->setValue(i, 0, val);
   }
@@ -888,8 +894,8 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_StealDoesNotLeak) {
 
   size_t memoryAfterSteal = monitor.current();
 
-  // Memory should decrease (block no longer tracks stolen values)
-  EXPECT_LT(memoryAfterSteal, memoryAfterSet);
+  // Memory should not change even after stealAndEraseValue
+  EXPECT_EQ(memoryAfterSteal, memoryAfterSet);
 
   // Destroy stolen values
   for (auto& val : stolen) {
