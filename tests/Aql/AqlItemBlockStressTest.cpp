@@ -38,6 +38,8 @@
 #include <velocypack/Builder.h>
 #include <velocypack/Value.h>
 
+#include "Logger/LogMacros.h"
+
 using namespace arangodb;
 using namespace arangodb::aql;
 
@@ -424,7 +426,7 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_CloneToBlock) {
     {
       InputAqlItemRow row(block, 0);
       cloned = row.cloneToBlock(itemBlockManager, regs, 2);
-    } // row is destroyed here
+    }  // row is destroyed here
 
     size_t memoryAfterClone = monitor.current();
     EXPECT_GT(memoryAfterClone, memoryBeforeClone);
@@ -878,9 +880,9 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_StealDoesNotLeak) {
   auto block = itemBlockManager.requestBlock(10, 1);
 
   std::string big(300, 's');
-  AqlValue val = createSupervisedSlice(big);
-  ASSERT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   for (size_t i = 0; i < 10; i++) {
+    AqlValue val = createSupervisedSlice(big);
+    ASSERT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
     block->setValue(i, 0, val);
   }
 
@@ -896,7 +898,6 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_StealDoesNotLeak) {
 
   // Memory should not change even after stealAndEraseValue
   EXPECT_EQ(memoryAfterSteal, memoryAfterSet);
-
   // Destroy stolen values
   for (auto& val : stolen) {
     val.destroy();

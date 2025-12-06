@@ -1666,4 +1666,3 @@ TEST_F(AqlValueToVelocyPackDeduplicationTest,
     val.destroy();
   }
 }
-
