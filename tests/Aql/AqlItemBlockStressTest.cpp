@@ -80,8 +80,12 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_SerializeAfterSteal) {
   // memory
   auto block = itemBlockManager.requestBlock(2, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big1(300, 'a');
+  std::string big2(300, 'b');
+  AqlValue val1 = createSupervisedSlice(big1);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  AqlValue val2 = createSupervisedSlice(big2);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(0, 1, val2);
@@ -113,7 +117,9 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_CloneAfterSteal) {
   // Test: Clone block after values are stolen
   auto block = itemBlockManager.requestBlock(3, 2);
 
-  AqlValue val1 = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val1);
   block->setValue(1, 0, val1);
   block->setValue(2, 0, val1);
@@ -144,7 +150,9 @@ TEST_F(AqlItemBlockStressTest, ASAN_DoubleFree_DestroyAfterSteal) {
   // Test: Destroy stolen value, then destroy block - should not double-free
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  AqlValue val = createSupervisedSlice("Test value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
   block->setValue(1, 0, val);
 
@@ -163,9 +171,15 @@ TEST_F(AqlItemBlockStressTest,
   // Test: cloneDataAndMoveShadow steals values, then destroy original
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
-  AqlValue val3 = createSupervisedSlice("Value 3");
+  std::string big1(300, 'a');
+  std::string big2(300, 'b');
+  std::string big3(300, 'c');
+  AqlValue val1 = createSupervisedSlice(big1);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  AqlValue val2 = createSupervisedSlice(big2);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  AqlValue val3 = createSupervisedSlice(big3);
+  EXPECT_EQ(val3.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(1, 0, val2);
@@ -194,8 +208,11 @@ TEST_F(AqlItemBlockStressTest,
   // Test: Create InputAqlItemRow, steal values, then clone
   auto block = itemBlockManager.requestBlock(2, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(0, 1, val2);
@@ -229,7 +246,9 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_ReferenceAfterDestroy) {
   // Test: Reference values from a row, then destroy that row's values
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue val = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
 
   // Reference to rows 1 and 2
@@ -258,7 +277,9 @@ TEST_F(AqlItemBlockStressTest, ASAN_DoubleFree_MultipleSteals) {
   // Test: Steal same value multiple times (should not double-free)
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue val = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
   block->setValue(1, 0, val);
   block->setValue(2, 0, val);
@@ -281,8 +302,11 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_CloneToBlockAfterDestroy) {
   // Test: Clone row to block, destroy original, then use cloned
   auto block = itemBlockManager.requestBlock(1, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(0, 1, val2);
@@ -365,9 +389,13 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_CloneDataAndMoveShadow) {
 
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
-  AqlValue val3 = createSupervisedSlice("Value 3");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  AqlValue val3 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val3.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(1, 0, val2);
@@ -452,8 +480,11 @@ TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentClone) {
   // Test: Multiple threads cloning the same block
   auto block = itemBlockManager.requestBlock(10, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   for (size_t i = 0; i < 10; i++) {
     block->setValue(i, 0, val1);
@@ -498,8 +529,10 @@ TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentSteal) {
   // Test: Multiple threads trying to steal from same block
   auto block = itemBlockManager.requestBlock(10, 1);
 
-  AqlValue val = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
   for (size_t i = 0; i < 10; i++) {
+    AqlValue val = createSupervisedSlice(big);
+    EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
     block->setValue(i, 0, val);
   }
 
@@ -540,8 +573,11 @@ TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentSerialize) {
   // Test: Multiple threads serializing the same block
   auto block = itemBlockManager.requestBlock(5, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   for (size_t i = 0; i < 5; i++) {
     block->setValue(i, 0, val1);
@@ -584,7 +620,9 @@ TEST_F(AqlItemBlockStressTest, UBSAN_NullPointerAccess) {
   // Test: Access block after reset (should be caught by smart pointer)
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  AqlValue val = createSupervisedSlice("Test");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
 
   // Reset block
@@ -598,7 +636,9 @@ TEST_F(AqlItemBlockStressTest, UBSAN_InvalidIndexAccess) {
   // Test: Access invalid indices (should be caught by assertions in debug mode)
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  AqlValue val = createSupervisedSlice("Test");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
 
   // Access valid indices
@@ -613,8 +653,11 @@ TEST_F(AqlItemBlockStressTest, UBSAN_InvalidRegisterAccess) {
   // Test: Access invalid register IDs
   auto block = itemBlockManager.requestBlock(1, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(0, 1, val2);
@@ -637,10 +680,11 @@ TEST_F(AqlItemBlockStressTest, Stress_MultipleOperations) {
   auto block = itemBlockManager.requestBlock(100, 5);
 
   // Set many values
+  std::string prefix(300, 'v');
   for (size_t i = 0; i < 100; i++) {
     for (RegisterId::value_t j = 0; j < 5; j++) {
       std::string content =
-          "Value " + std::to_string(i) + "," + std::to_string(j);
+          prefix + std::to_string(i) + "," + std::to_string(j);
       AqlValue val = createSupervisedSlice(content);
       block->setValue(i, j, val);
     }
@@ -677,8 +721,9 @@ TEST_F(AqlItemBlockStressTest, Stress_InputAqlItemRow_MultipleClones) {
   // Test: Create many InputAqlItemRow clones
   auto block = itemBlockManager.requestBlock(1, 10);
 
+  std::string prefix(300, 'v');
   for (RegisterId::value_t j = 0; j < 10; j++) {
-    std::string content = "Value " + std::to_string(j);
+    std::string content = prefix + std::to_string(j);
     AqlValue val = createSupervisedSlice(content);
     block->setValue(0, j, val);
   }
@@ -719,13 +764,14 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_ToVelocyPackAfterStealAll) {
   // Test: Serialize after ALL values are stolen
   auto block = itemBlockManager.requestBlock(2, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
-
-  block->setValue(0, 0, val1);
-  block->setValue(0, 1, val2);
-  block->setValue(1, 0, val1);
-  block->setValue(1, 1, val2);
+  std::string big(300, 'a');
+  for (size_t i = 0; i < 2; i++) {
+    for (size_t j = 0; j < 2; j++) {
+      AqlValue val = createSupervisedSlice(big);
+      EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+      block->setValue(i, j, val);
+    }
+  }
 
   // Steal ALL values
   std::vector<AqlValue> stolen;
@@ -752,7 +798,9 @@ TEST_F(AqlItemBlockStressTest, ASAN_DoubleFree_CloneAfterStealThenDestroy) {
   // Test: Clone block, steal from original, destroy original, use clone
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue val = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
   block->setValue(1, 0, val);
   block->setValue(2, 0, val);
@@ -784,7 +832,9 @@ TEST_F(AqlItemBlockStressTest,
   // Test: Create InputAqlItemRow, destroy block, try to use row
   auto block = itemBlockManager.requestBlock(1, 1);
 
-  AqlValue val = createSupervisedSlice("Test value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
 
   InputAqlItemRow row(block, 0);
@@ -800,7 +850,9 @@ TEST_F(AqlItemBlockStressTest, ASAN_DoubleFree_ReferenceAfterDestroy) {
   // Test: Reference values, destroy source, use references
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue val = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
+  AqlValue val = createSupervisedSlice(big);
+  EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, val);
 
   // Reference to rows 1 and 2
@@ -835,8 +887,11 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_CloneToBlockAfterSteal) {
   // Test: Clone row to block, steal from original, use cloned
   auto block = itemBlockManager.requestBlock(2, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, val1);
   block->setValue(0, 1, val2);
@@ -920,8 +975,11 @@ TEST_F(AqlItemBlockStressTest, ASAN_UseAfterFree_ShadowRowSerialization) {
   // Test: Serialize shadow rows after cloneDataAndMoveShadow
   auto block = itemBlockManager.requestBlock(5, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   // Set values in all rows
   for (size_t i = 0; i < 5; i++) {
@@ -965,9 +1023,10 @@ TEST_F(AqlItemBlockStressTest,
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create supervised slices (exactly as in error report)
-  std::string content1 = "Supervised slice 1";
-  std::string content2 = "Supervised slice 2";
-  std::string content3 = "Supervised slice 3";
+  std::string prefix(300, 'a');
+  std::string content1 = prefix + "Supervised slice 1";
+  std::string content2 = prefix + "Supervised slice 2";
+  std::string content3 = prefix + "Supervised slice 3";
 
   arangodb::velocypack::Builder b1, b2, b3;
   b1.add(arangodb::velocypack::Value(content1));
@@ -1019,7 +1078,9 @@ TEST_F(AqlItemBlockStressTest,
   // CRITICAL: Access slice data after steal - should trigger use-after-free
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  AqlValue supervised = createSupervisedSlice("Test value");
+  std::string big(300, 'a');
+  AqlValue supervised = createSupervisedSlice(big);
+  EXPECT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
 
@@ -1053,8 +1114,11 @@ TEST_F(AqlItemBlockStressTest,
   // CRITICAL: Clone with shadow rows, then serialize original multiple times
   auto block = itemBlockManager.requestBlock(5, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1");
-  AqlValue val2 = createSupervisedSlice("Value 2");
+  std::string big(300, 'a');
+  AqlValue val1 = createSupervisedSlice(big);
+  AqlValue val2 = createSupervisedSlice(big);
+  EXPECT_EQ(val1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+  EXPECT_EQ(val2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   for (size_t i = 0; i < 5; i++) {
     block->setValue(i, 0, val1);
@@ -1090,7 +1154,8 @@ TEST_F(AqlItemBlockStressTest, ASAN_CRITICAL_StealThenAccessViaReference) {
   // CRITICAL: Steal value, then try to access it via old reference
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  AqlValue supervised = createSupervisedSlice("Shared value");
+  std::string big(300, 'a');
+  AqlValue supervised = createSupervisedSlice(big);
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
 
@@ -1219,7 +1284,8 @@ TEST_F(AqlItemBlockStressTest,
   // still try to access the slice if there's a bug
   auto block = itemBlockManager.requestBlock(2, 1);
 
-  AqlValue supervised = createSupervisedSlice("Test value for serialization");
+  AqlValue supervised =
+      createSupervisedSlice("Test value for serialization that is long enough");
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
 
@@ -1259,8 +1325,10 @@ TEST_F(AqlItemBlockStressTest,
   // This might trigger the bug if toVelocyPack doesn't check for empty values
   auto block = itemBlockManager.requestBlock(5, 2);
 
-  AqlValue val1 = createSupervisedSlice("Value 1 for serialization test");
-  AqlValue val2 = createSupervisedSlice("Value 2 for serialization test");
+  AqlValue val1 = createSupervisedSlice(
+      "Value 1 for serialization test that is long enough");
+  AqlValue val2 = createSupervisedSlice(
+      "Value 2 for serialization test that is long enough");
 
   for (size_t i = 0; i < 5; i++) {
     block->setValue(i, 0, val1);
@@ -1307,7 +1375,8 @@ TEST_F(AqlItemBlockStressTest,
   // This might trigger use-after-free if the slice is accessed incorrectly
   auto block = itemBlockManager.requestBlock(3, 1);
 
-  AqlValue supervised = createSupervisedSlice("Shared supervised slice");
+  AqlValue supervised =
+      createSupervisedSlice("Shared supervised slice that is long enough");
 
   // Set same value in all rows (shared)
   block->setValue(0, 0, supervised);
