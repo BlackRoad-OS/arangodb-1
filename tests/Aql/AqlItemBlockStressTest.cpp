@@ -478,6 +478,10 @@ TEST_F(AqlItemBlockStressTest, MemoryAccounting_CloneToBlock) {
 
 TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentClone) {
   // Test: Multiple threads cloning the same block
+  // Note: This test only works for blocks WITHOUT shadow rows.
+  // If the block had shadow rows, cloneDataAndMoveShadow() would call
+  // stealAndEraseValue() which modifies _valueCount, causing data races.
+  // For blocks with shadow rows, each thread should use a separate block.
   auto block = itemBlockManager.requestBlock(10, 2);
 
   std::string big(300, 'a');
@@ -526,30 +530,35 @@ TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentClone) {
 }
 
 TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentSteal) {
-  // Test: Multiple threads trying to steal from same block
-  auto block = itemBlockManager.requestBlock(10, 1);
-
-  std::string big(300, 'a');
-  for (size_t i = 0; i < 10; i++) {
-    AqlValue val = createSupervisedSlice(big);
-    EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
-    block->setValue(i, 0, val);
-  }
-
+  // Test: Multiple threads stealing from separate blocks (one per thread)
+  // Note: AqlItemBlock is not thread-safe - each thread must use its own block
+  std::vector<SharedAqlItemBlockPtr> blocks;
   std::vector<std::thread> threads;
   std::vector<AqlValue> stolenValues;
   std::mutex stolenMutex;
   std::atomic<int> errorCount{0};
+  std::atomic<int> successCount{0};
 
+  std::string big(300, 'a');
+
+  // Create a separate block for each thread
   for (int i = 0; i < 5; i++) {
-    int rowIndex = i * 2;
-    threads.emplace_back([&, rowIndex]() {
+    auto block = itemBlockManager.requestBlock(2, 1);
+    AqlValue val = createSupervisedSlice(big);
+    EXPECT_EQ(val.type(), AqlValue::VPACK_SUPERVISED_SLICE);
+    block->setValue(0, 0, val);
+    blocks.push_back(block);
+  }
+
+  // Each thread steals from its own block
+  for (int i = 0; i < 5; i++) {
+    threads.emplace_back([&, i]() {
       try {
-        // Each thread steals from a different row
-        AqlValue stolen = block->stealAndEraseValue(rowIndex, 0);
+        AqlValue stolen = blocks[i]->stealAndEraseValue(0, 0);
 
         std::lock_guard<std::mutex> lock(stolenMutex);
         stolenValues.push_back(stolen);
+        successCount++;
       } catch (...) {
         errorCount++;
       }
@@ -566,7 +575,11 @@ TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentSteal) {
   }
 
   EXPECT_EQ(errorCount.load(), 0);
-  block.reset(nullptr);
+  EXPECT_EQ(successCount.load(), 5);
+  EXPECT_EQ(stolenValues.size(), 5);
+
+  // Clean up blocks
+  blocks.clear();
 }
 
 TEST_F(AqlItemBlockStressTest, TSAN_ConcurrentSerialize) {
