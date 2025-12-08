@@ -6127,7 +6127,7 @@ struct AnySimplifier {
       }
     }
 
-    // We only transform if we clearly found both an array and an attribute.
+    // Transform only when we found both an array and an attribute.
     if (attr == nullptr || array == nullptr) {
       return mutableNode;
     }
@@ -6157,7 +6157,45 @@ struct AnySimplifier {
 
     // Now try to rewrite this node itself if it is ANY ==.
     if (mutableNode->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
-      return simplifyAnyEq(mutableNode);
+      if (node->type != NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
+        return const_cast<AstNode*>(node);
+      }
+
+      size_t const n = mutableNode->numMembers();
+
+      AstNode* attr = nullptr;
+      AstNode* array = nullptr;
+      std::string tmpName;
+
+      // Look through all children and try to find:
+      //  - one array expression (deterministic)
+      //  - one attribute/reference expression
+      for (size_t i = 0; i < n; ++i) {
+        AstNode* child = mutableNode->getMember(i);
+        if (child == nullptr) {
+          continue;
+        }
+
+        if (child->isArray() && child->isDeterministic()) {
+          if (array == nullptr) {
+            array = child;
+          } else {
+            // more than one array -> ambiguous, bail out
+            return mutableNode;
+          }
+        } else if (attr == nullptr && qualifies(child, tmpName)) {
+          attr = child;
+        }
+      }
+
+      // Transform only when we found both an array and an attribute.
+      if (attr == nullptr || array == nullptr) {
+        return mutableNode;
+      }
+
+      // Build: attr IN array
+      return ast->createNodeBinaryOperator(
+          NODE_TYPE_OPERATOR_BINARY_IN, attr, array);
     }
 
     return mutableNode;
