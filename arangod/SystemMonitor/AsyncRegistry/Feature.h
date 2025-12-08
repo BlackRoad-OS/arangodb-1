@@ -28,10 +28,20 @@
 #include "CrashHandler/CrashHandlerDataSource.h"
 #include "RestServer/arangod.h"
 #include "Scheduler/SchedulerFeature.h"
+#include "Async/Registry/promise.h"
+#include "Containers/Forest/depth_first.h"
+#include "Containers/Forest/forest.h"
+#include "Inspection/VPack.h"
 
 namespace arangodb::async_registry {
 
 auto collectAsyncRegistryData() -> velocypack::Builder;
+
+auto all_undeleted_promises() -> containers::ForestWithRoots<PromiseSnapshot>;
+
+auto getStacktraceData(
+    containers::IndexedForestWithRoots<PromiseSnapshot> const& promises)
+    -> velocypack::Builder;
 
 class Feature final : public ArangodFeature, public CrashHandlerDataSource {
  private:
