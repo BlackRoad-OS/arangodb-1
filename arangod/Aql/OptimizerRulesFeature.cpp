@@ -353,6 +353,14 @@ are not used in data modification queries.)");
                R"(Combine multiple `OR` equality conditions on the same
 variable or attribute with an `IN` condition.)");
 
+  // try to replace ANY == array comparisons with IN
+  registerRule(
+      "replace-any-eq-with-in", replaceAnyWithInRule,
+      OptimizerRule::replaceAnyWithInRule,
+      OptimizerRule::makeFlags(OptimizerRule::Flags::CanBeDisabled),
+      R"(Replace `ANY ==` array comparison expressions with equivalent `IN`
+expressions to enable further optimizations and index usage.)");
+
   // try to remove redundant OR conditions
   registerRule("remove-redundant-or", removeRedundantOrRule,
                OptimizerRule::removeRedundantOrRule,

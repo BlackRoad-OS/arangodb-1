@@ -6056,6 +6056,160 @@ void arangodb::aql::replaceOrWithInRule(Optimizer* opt,
   opt->addPlan(std::move(plan), rule, modified);
 }
 
+/// @brief auxiliary struct for the ANY-to-IN conversion
+struct AnySimplifier {
+  Ast* ast;
+  ExecutionPlan* plan;
+
+  AnySimplifier(Ast* ast, ExecutionPlan* plan) : ast(ast), plan(plan) {}
+
+  std::string stringifyNode(AstNode const* node) const {
+    try {
+      return node->toString();
+    } catch (...) {
+    }
+    return std::string();
+  }
+
+  bool qualifies(AstNode const* node, std::string& attributeName) const {
+    if (node->isConstant()) {
+      return false;
+    }
+
+    if (node->type == NODE_TYPE_ATTRIBUTE_ACCESS ||
+        node->type == NODE_TYPE_INDEXED_ACCESS ||
+        node->type == NODE_TYPE_REFERENCE) {
+      attributeName = stringifyNode(node);
+      return true;
+    }
+
+    return false;
+  }
+
+  /// @brief Rewrite:
+  ///   ['Alice','Bob', 'Carol'] ANY == p.name
+  /// into:
+  ///   p.name IN ['Alice', 'Bob', 'Carol']
+  AstNode* simplifyAnyEq(AstNode const* node) const {
+    if (node == nullptr) {
+      return nullptr;
+    }
+
+    if (node->type != NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
+      return const_cast<AstNode*>(node);
+    }
+
+    auto* mutableNode = const_cast<AstNode*>(node);
+    size_t const n = mutableNode->numMembers();
+
+    AstNode* attr = nullptr;
+    AstNode* array = nullptr;
+    std::string tmpName;
+
+    // Look through all children and try to find:
+    //  - one array expression (deterministic)
+    //  - one attribute/reference expression
+    for (size_t i = 0; i < n; ++i) {
+      AstNode* child = mutableNode->getMember(i);
+      if (child == nullptr) {
+        continue;
+      }
+
+      if (child->isArray() && child->isDeterministic()) {
+        if (array == nullptr) {
+          array = child;
+        } else {
+          // more than one array -> ambiguous, bail out
+          return mutableNode;
+        }
+      } else if (attr == nullptr && qualifies(child, tmpName)) {
+        attr = child;
+      }
+    }
+
+    // We only transform if we clearly found both an array and an attribute.
+    if (attr == nullptr || array == nullptr) {
+      return mutableNode;
+    }
+
+    // Build: attr IN array
+    return ast->createNodeBinaryOperator(
+        NODE_TYPE_OPERATOR_BINARY_IN, attr, array);
+  }
+
+  /// @brief recursively simplify the expression tree
+  AstNode* simplify(AstNode const* node) const {
+    if (node == nullptr) {
+      return nullptr;
+    }
+
+    auto* mutableNode = const_cast<AstNode*>(node);
+
+    // First, recurse into children (post-order)
+    size_t const n = mutableNode->numMembers();
+    for (size_t i = 0; i < n; ++i) {
+      AstNode* child = mutableNode->getMember(i);
+      AstNode* newChild = simplify(child);
+      if (newChild != child) {
+        mutableNode->changeMember(i, newChild);
+      }
+    }
+
+    // Now try to rewrite this node itself if it is ANY ==.
+    if (mutableNode->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
+      return simplifyAnyEq(mutableNode);
+    }
+
+    return mutableNode;
+  }
+};
+
+void arangodb::aql::replaceAnyWithInRule(Optimizer* opt,
+                                         std::unique_ptr<ExecutionPlan> plan,
+                                         OptimizerRule const& rule) {
+  containers::SmallVector<ExecutionNode*, 8> nodes;
+  plan->findNodesOfType(nodes, EN::FILTER, true);
+
+  bool modified = false;
+  for (auto const& n : nodes) {
+    TRI_ASSERT(n->hasDependency());
+    auto const dep = n->getFirstDependency();
+
+    if (dep->getType() != EN::CALCULATION) {
+      continue;
+    }
+
+    auto fn = ExecutionNode::castTo<FilterNode const*>(n);
+    auto cn = ExecutionNode::castTo<CalculationNode*>(dep);
+    auto outVar = cn->outVariable();
+
+    if (outVar != fn->inVariable()) {
+      continue;
+    }
+
+    auto root = cn->expression()->node();
+
+    AnySimplifier simplifier(plan->getAst(), plan.get());
+    auto newRoot = simplifier.simplify(root);
+
+    if (newRoot != root) {
+      auto expr = std::make_unique<Expression>(plan->getAst(), newRoot);
+
+      TRI_IF_FAILURE("OptimizerRules::replaceAnyWithInRuleOom") {
+        THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
+      }
+
+      ExecutionNode* newNode = plan->createNode<CalculationNode>(
+          plan.get(), plan->nextId(), std::move(expr), outVar);
+
+      plan->replaceNode(cn, newNode);
+      modified = true;
+    }
+  }
+
+  opt->addPlan(std::move(plan), rule, modified);
+}
+
 struct RemoveRedundantOr {
   AstNode const* bestValue = nullptr;
   AstNodeType comparison;

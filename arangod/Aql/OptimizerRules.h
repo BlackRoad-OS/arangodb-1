@@ -270,6 +270,13 @@ void undistributeRemoveAfterEnumCollRule(Optimizer*,
 void replaceOrWithInRule(Optimizer*, std::unique_ptr<ExecutionPlan>,
                          OptimizerRule const&);
 
+/// @brief Rewrite:
+///   ['Alice','Bob', 'Carol'] ANY == p.name
+/// into:
+///   p.name IN ['Alice', 'Bob', 'Carol']
+void replaceAnyWithInRule(Optimizer* opt, std::unique_ptr<ExecutionPlan> plan,
+                          OptimizerRule const& rule);
+
 void removeRedundantOrRule(Optimizer*, std::unique_ptr<ExecutionPlan>,
                            OptimizerRule const&);
 
