@@ -40,6 +40,7 @@
 #include <velocypack/Buffer.h>
 #include <velocypack/Slice.h>
 
+#include <atomic>
 #include <bit>
 #include <type_traits>
 
@@ -288,10 +289,7 @@ AqlValue AqlValue::at(int64_t position, bool& mustDestroy, bool doCopy) const {
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isArray()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         int64_t const n = static_cast<int64_t>(s.length());
         if (position < 0) {
           // a negative position is allowed
@@ -340,10 +338,7 @@ AqlValue AqlValue::at(int64_t position, size_t n, bool& mustDestroy,
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isArray()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         if (position < 0) {
           // a negative position is allowed
           position = static_cast<int64_t>(n) + position;
@@ -390,10 +385,7 @@ AqlValue AqlValue::getKeyAttribute(bool& mustDestroy, bool doCopy) const {
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isObject()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         auto const found = transaction::helpers::extractKeyFromDocument(s);
         if (!found.isNone()) {
           if (doCopy) {
@@ -424,16 +416,13 @@ AqlValue AqlValue::getIdAttribute(CollectionNameResolver const& resolver,
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isObject()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         auto const found = transaction::helpers::extractIdFromDocument(s);
         if (found.isCustom()) {
           // _id as a custom type needs special treatment
           mustDestroy = true;
           return AqlValue{
-              transaction::helpers::extractIdString(&resolver, found, s)};
+              transaction::helpers::extractIdString(&resolver, found, s), rm};
         }
         if (!found.isNone()) {
           if (doCopy) {
@@ -463,10 +452,7 @@ AqlValue AqlValue::getFromAttribute(bool& mustDestroy, bool doCopy) const {
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isObject()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         auto const found = transaction::helpers::extractFromFromDocument(s);
         if (!found.isNone()) {
           if (doCopy) {
@@ -496,10 +482,7 @@ AqlValue AqlValue::getToAttribute(bool& mustDestroy, bool doCopy) const {
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isObject()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         auto const found = transaction::helpers::extractToFromDocument(s);
         if (!found.isNone()) {
           if (doCopy) {
@@ -532,10 +515,7 @@ AqlValue AqlValue::get(CollectionNameResolver const& resolver,
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isObject()) {
         auto const found = s.get(name);
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         if (found.isCustom()) {
           // _id needs special treatment
           mustDestroy = true;
@@ -574,10 +554,7 @@ AqlValue AqlValue::get(CollectionNameResolver const& resolver,
     case VPACK_MANAGED_STRING:
     case VPACK_SUPERVISED_SLICE:
       if (auto s = slice(t); s.isObject()) {
-        ResourceMonitor* rm = nullptr;
-        if (this->type() == VPACK_SUPERVISED_SLICE) {
-          rm = this->_data.supervisedSliceMeta.getResourceMonitor();
-        }
+        ResourceMonitor* rm = getResourceMonitor();
         VPackSlice prev;
         size_t const n = names.size();
         for (size_t i = 0; i < n; ++i) {
@@ -595,7 +572,8 @@ AqlValue AqlValue::get(CollectionNameResolver const& resolver,
               // x.y._id
               mustDestroy = true;
               return AqlValue(
-                  transaction::helpers::extractIdString(&resolver, s, prev));
+                  transaction::helpers::extractIdString(&resolver, s, prev),
+                  rm);
             }
             // x._id.y
             return AqlValue{AqlValueHintNull{}};
@@ -907,12 +885,10 @@ void AqlValue::toVelocyPack(velocypack::Options const* options,
     case VPACK_INLINE_UINT64:
     case VPACK_INLINE_DOUBLE:
     case VPACK_MANAGED_SLICE:
-    case VPACK_MANAGED_STRING: {
+    case VPACK_MANAGED_STRING:
+    case VPACK_SUPERVISED_SLICE: {
       auto s = slice(t);
       builder.add(s);
-    } break;
-    case VPACK_SUPERVISED_SLICE: {
-      builder.add(VPackSlice{_data.supervisedSliceMeta.getPayloadPtr()});
     } break;
     case RANGE: {
       builder.openArray(/*unindexed*/ allowUnindexed);
@@ -984,14 +960,23 @@ void AqlValue::destroy() noexcept {
       break;
     case VPACK_SUPERVISED_SLICE: {
       if (_data.supervisedSliceMeta.pointer == nullptr) {
-        // to prevent duplicate deletion
         erase();
         return;
       }
-      auto len = _data.supervisedSliceMeta.getLength();
-      deallocateSupervised(_data.supervisedSliceMeta.pointer, len);
+
+      uint8_t* base = _data.supervisedSliceMeta.pointer;
+
+      // sanity test for corruption of the rm*
+      TRI_ASSERT(reinterpret_cast<uintptr_t>(base) %
+                     alignof(arangodb::ResourceMonitor*) ==
+                 0);
+
+      std::uint64_t len = _data.supervisedSliceMeta.getLength();
+
       _data.supervisedSliceMeta.pointer = nullptr;
       _data.supervisedSliceMeta.lengthOrigin = 0;
+
+      deallocateSupervised(base, len);
       break;
     }
     default:
@@ -1159,7 +1144,7 @@ int AqlValue::Compare(velocypack::Options const* options, AqlValue const& left,
 
 AqlValue::AqlValue() noexcept { erase(); }
 
-AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
+AqlValue::AqlValue(DocumentData& data) noexcept {
   TRI_ASSERT(data);
   auto size = data->size();
   TRI_ASSERT(size >= 1);
@@ -1171,7 +1156,7 @@ AqlValue::AqlValue(DocumentData& data, arangodb::ResourceMonitor* rm) noexcept {
 
   // Small values: keep the old fast path — inline if it fits.
   if (size < sizeof(AqlValue)) {
-    initFromSlice(slice, static_cast<velocypack::ValueLength>(size), rm);
+    initFromSlice(slice, static_cast<velocypack::ValueLength>(size));
     return;
   }
 
@@ -1192,6 +1177,7 @@ AqlValue::AqlValue(AqlValue const& other,
   setType(t);
   switch (t) {
     case VPACK_MANAGED_SLICE:
+      TRI_ASSERT(other.data() == data);
       _data.managedSliceMeta.lengthOrigin =
           other._data.managedSliceMeta.lengthOrigin;
       _data.managedSliceMeta.pointer =
@@ -1201,13 +1187,16 @@ AqlValue::AqlValue(AqlValue const& other,
       _data.managedStringMeta.pointer = static_cast<std::string const*>(data);
       break;
     case VPACK_SUPERVISED_SLICE: {
+      TRI_ASSERT(other.data() == data);
       auto mot = static_cast<MemoryOriginType>(
           other._data.supervisedSliceMeta.getOrigin());
       auto len = static_cast<velocypack::ValueLength>(
           other._data.supervisedSliceMeta.getLength());
       setSupervisedData(VPACK_SUPERVISED_SLICE, mot, len);
       _data.supervisedSliceMeta.pointer =
-          const_cast<uint8_t*>(static_cast<uint8_t const*>(data));
+          other._data.supervisedSliceMeta.pointer;
+      TRI_ASSERT(_data.supervisedSliceMeta.getPayloadPtr() == data)
+          << "data argument must match with AqlValue's payload";
       break;
     }
     case RANGE:
@@ -1350,7 +1339,7 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
   TRI_ASSERT(size == slice.byteSize());
   TRI_ASSERT(!slice.isExternal());
   if (rm != nullptr && size > sizeof(_data.inlineSliceMeta.slice)) {
-    setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::Malloc,
+    setSupervisedData(VPACK_SUPERVISED_SLICE, MemoryOriginType::New,
                       static_cast<velocypack::ValueLength>(size));
     uint8_t* p = allocateSupervised(*rm, size);
     memcpy(p + kPrefix, slice.begin(), size);
@@ -1383,9 +1372,14 @@ AqlValue::AqlValue(velocypack::Buffer<uint8_t>&& buffer,
         _data.managedSliceMeta.pointer = buffer.steal();
       }
     }
+  }
+  // Only verify managed slices. Inline or supervised values set no managed
+  // slice pointer.
+  if (type() == VPACK_MANAGED_SLICE) {
     TRI_ASSERT(_data.managedSliceMeta.getLength() ==
                VPackSlice(_data.managedSliceMeta.pointer).byteSize());
   }
+  // The function ends here. Do not close the namespace prematurely.
 }
 
 AqlValue::AqlValue(AqlValueHintSliceNoCopy v) noexcept
@@ -1431,10 +1425,6 @@ bool AqlValue::requiresDestruction() const noexcept {
 bool AqlValue::isEmpty() const noexcept {
   if (_data.aqlValueType == VPACK_INLINE &&
       _data.inlineSliceMeta.slice[0] == '\x00') {
-    return true;
-  }
-  if (_data.aqlValueType == VPACK_MANAGED_STRING &&
-      _data.managedStringMeta.pointer == nullptr) {
     return true;
   }
   return false;
@@ -1609,7 +1599,12 @@ uint8_t* AqlValue::allocateSupervised(arangodb::ResourceMonitor& rm,
   }
 
   *reinterpret_cast<arangodb::ResourceMonitor**>(base) = &rm;
-  rm.increaseMemoryUsage(total);
+  try {
+    rm.increaseMemoryUsage(total);
+  } catch (...) {
+    ::operator delete(base);
+    throw;
+  }
   return reinterpret_cast<uint8_t*>(base);
 }
 
@@ -1617,8 +1612,15 @@ void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
   if (base == nullptr) {
     return;
   }
-  auto* rm = *reinterpret_cast<arangodb::ResourceMonitor**>(base);
-  rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
+
+  auto rmPtr = reinterpret_cast<arangodb::ResourceMonitor**>(base);
+  arangodb::ResourceMonitor* rm = *rmPtr;
+  ADB_PROD_ASSERT(rm != nullptr);
+
+  if (rm != nullptr) {
+    rm->decreaseMemoryUsage(len + static_cast<std::uint64_t>(kPrefix));
+    *rmPtr = nullptr;
+  }
   ::operator delete(static_cast<void*>(base));
 }
 
