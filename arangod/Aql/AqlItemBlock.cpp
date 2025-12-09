@@ -320,7 +320,9 @@ void AqlItemBlock::destroy() noexcept {
             TRI_ASSERT(valueInfo.refCount > 0);
 
             if (--valueInfo.refCount == 0) {
-              totalUsed += valueInfo.memoryUsage;
+              if (it.type() != AqlValue::VPACK_SUPERVISED_SLICE) {
+                totalUsed += valueInfo.memoryUsage;
+              }
               it.destroy();
               // destroy() calls erase, so no need to call erase() again later
               continue;
@@ -391,7 +393,9 @@ void AqlItemBlock::shrink(size_t numRows) {
         TRI_ASSERT(valueInfo.refCount > 0);
 
         if (--valueInfo.refCount == 0) {
-          totalUsed += valueInfo.memoryUsage;
+          if (a.type() != AqlValue::VPACK_SUPERVISED_SLICE) {
+            totalUsed += valueInfo.memoryUsage;
+          }
           // destroy calls erase() for AqlValues with dynamic memory,
           // no need for an extra a.erase() here
           a.destroy();
@@ -466,7 +470,9 @@ void AqlItemBlock::clearRegisters(RegIdFlatSet const& toClear) {
           TRI_ASSERT(valueInfo.refCount > 0);
 
           if (--valueInfo.refCount == 0) {
-            totalUsed += valueInfo.memoryUsage;
+            if (a.type() != AqlValue::VPACK_SUPERVISED_SLICE) {
+              totalUsed += valueInfo.memoryUsage;
+            }
             // destroy calls erase() for AqlValues with dynamic memory,
             // no need for an extra a.erase() here
             a.destroy();
@@ -1006,7 +1012,9 @@ void AqlItemBlock::setValue(size_t index, RegisterId::value_t column,
     if (++valueInfo.refCount == 1) {
       // we just inserted the item
       size_t memoryUsage = value.memoryUsage();
-      increaseMemoryUsage(memoryUsage);
+      if (value.type() != AqlValue::VPACK_SUPERVISED_SLICE) {
+        increaseMemoryUsage(memoryUsage);
+      }
       valueInfo.setMemoryUsage(memoryUsage);
     }
   }
@@ -1029,7 +1037,9 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
     if (it != _valueCount.end()) {
       auto& valueInfo = (*it).second;
       if (--valueInfo.refCount == 0) {
-        decreaseMemoryUsage(valueInfo.memoryUsage);
+        if (element.type() != AqlValue::VPACK_SUPERVISED_SLICE) {
+          decreaseMemoryUsage(valueInfo.memoryUsage);
+        }
         _valueCount.erase(it);
         element.destroy();
         // no need for an extra element.erase() in this case, as
@@ -1102,7 +1112,9 @@ void AqlItemBlock::steal(AqlValue const& value) {
   if (value.requiresDestruction()) {
     auto it = _valueCount.find(value.data());
     if (it != _valueCount.end()) {
-      decreaseMemoryUsage((*it).second.memoryUsage);
+      if (value.type() != AqlValue::VPACK_SUPERVISED_SLICE) {
+        decreaseMemoryUsage((*it).second.memoryUsage);
+      }
       _valueCount.erase(it);
     }
   }

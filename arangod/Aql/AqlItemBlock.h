@@ -165,14 +165,10 @@ class AqlItemBlock {
         auto& valueInfo = _valueCount[value->data()];
         if (++valueInfo.refCount == 1) {
           size_t memoryUsage = value->memoryUsage();
-          bool needsAccounting =
-              (value->type() != AqlValue::VPACK_SUPERVISED_SLICE);
-          if (needsAccounting) {
+          if (value->type() != AqlValue::VPACK_SUPERVISED_SLICE) {
             increaseMemoryUsage(memoryUsage);
-            valueInfo.setMemoryUsage(memoryUsage);
-          } else {
-            valueInfo.setMemoryUsage(memoryUsage);
           }
+          valueInfo.setMemoryUsage(memoryUsage);
         }
       } catch (...) {
         // invoke dtor
