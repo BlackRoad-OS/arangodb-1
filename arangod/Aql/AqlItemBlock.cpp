@@ -1046,15 +1046,28 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
 
 void AqlItemBlock::eraseAll() {
   size_t const n = maxModifiedEntries();
+
+  containers::FlatHashMap<void const*, AqlValue::AqlValueType>
+      aqlValuePtrsToTypes;
+  aqlValuePtrsToTypes.reserve(_valueCount.size());
   for (size_t i = 0; i < n; i++) {
     auto& it = _data[i];
+    if (it.requiresDestruction()) {
+      aqlValuePtrsToTypes[it.data()] = it.type();
+    }
     it.erase();
   }
 
   size_t totalUsed = 0;
   for (auto const& it : _valueCount) {
     if (ADB_LIKELY(it.second.refCount > 0)) {
-      totalUsed += it.second.memoryUsage;
+      // For supervised slices, memory is already accounted for during
+      // deallocation, so we don't account for it here
+      auto typeIt = aqlValuePtrsToTypes.find(it.first);
+      if (typeIt != aqlValuePtrsToTypes.end() &&
+          typeIt->second != AqlValue::VPACK_SUPERVISED_SLICE) {
+        totalUsed += it.second.memoryUsage;
+      }
     }
   }
   decreaseMemoryUsage(totalUsed);
