@@ -74,6 +74,13 @@ uint64_t AqlValue::hash(uint64_t seed) const {
 
     return value;
   }
+  if (ADB_UNLIKELY(t == VPACK_INLINE_DOUBLE)) {
+    double v = asDouble();
+    if (v == -0.0) {
+      v = 0.0;
+    }
+    return VELOCYPACK_HASH(&v, sizeof(v), seed);
+  }
   // we must use the slow hash function here, because a value may have
   // different representations in case it's an array/object/number
   return slice(t).normalizedHash(seed);
@@ -1377,16 +1384,10 @@ namespace std {
 using arangodb::aql::AqlValue;
 
 size_t hash<AqlValue>::operator()(AqlValue const& x) const noexcept {
-  auto hash64 = x.hash(AqlValue::kDefaultSeed);  // make a normalized hash, for
-                                                 // the semantics of the
-  // value regardless of the storage type
-  size_t h = static_cast<size_t>(hash64);
-  // Remap 0 to avoid collision with marker that uses h == 0
-  if (h == 0) {
-    // Golden ratio constant (2^64 * φ), used for uniform hash distribution
-    h = 0x9e3779b97f4a7c15ULL;
-  }
-  return h;
+  auto hash64 = x.hash(
+      AqlValue::kDefaultSeed);  // make a normalized hash, for the semantics of
+                                // the value regardless of the storage type
+  return static_cast<size_t>(hash64);
 }
 
 bool equal_to<AqlValue>::operator()(AqlValue const& a,
@@ -1414,9 +1415,20 @@ bool equal_to<AqlValue>::operator()(AqlValue const& a,
 
       case T::VPACK_INLINE_INT64:
       case T::VPACK_INLINE_UINT64:
-      case T::VPACK_INLINE_DOUBLE:
         return a._data.longNumberMeta.data.intLittleEndian.val ==
                b._data.longNumberMeta.data.intLittleEndian.val;
+
+      case T::VPACK_INLINE_DOUBLE: {
+        double da = a.asDouble();
+        double db = b.asDouble();
+        if (da == -0.0) {
+          da = 0.0;
+        }
+        if (db == -0.0) {
+          db = 0.0;
+        }
+        return da == db;
+      }
 
       case T::RANGE: {
         auto const* ra = a._data.rangeMeta.range;
