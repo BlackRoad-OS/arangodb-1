@@ -1,27 +1,3 @@
-////////////////////////////////////////////////////////////////////////////////
-/// DISCLAIMER
-///
-/// Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
-/// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
-///
-/// Licensed under the Business Source License 1.1 (the "License");
-/// you may not use this file except in compliance with the License.
-/// You may obtain a copy of the License at
-///
-///     https://github.com/arangodb/arangodb/blob/devel/LICENSE
-///
-/// Unless required by applicable law or agreed to in writing, software
-/// distributed under the License is distributed on an "AS IS" BASIS,
-/// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-/// See the License for the specific language governing permissions and
-/// limitations under the License.
-///
-/// Copyright holder is ArangoDB GmbH, Cologne, Germany
-///
-/// @author Tests to prove content-based hashing/comparison is correct
-///         and pointer-based approach would be wrong
-////////////////////////////////////////////////////////////////////////////////
-
 #include "gtest/gtest.h"
 
 #include "Aql/AqlItemBlock.h"
@@ -47,16 +23,7 @@ static inline AqlValue makeAQLValue(int64_t x) {
 }
 }  // namespace
 
-// ============================================================================
-// Test Suite: Proving Content-Based Hashing is Correct
-// ============================================================================
-// These tests verify that the NEW approach (content-based hashing/comparison)
-// produces the CORRECT behavior expected by the algorithms, while the OLD
-// approach (pointer-based) would produce WRONG behavior.
-//
-// Key Principle: Same semantic content should be deduplicated regardless of
-//                 pointer addresses or storage types.
-// ============================================================================
+// Tests verify content-based hashing produces correct deduplication behavior
 
 class AqlValueHashAlgorithmCorrectnessTest : public ::testing::Test {
  protected:
@@ -66,27 +33,12 @@ class AqlValueHashAlgorithmCorrectnessTest : public ::testing::Test {
   velocypack::Options const* const options{&velocypack::Options::Defaults};
 };
 
-// ============================================================================
-// Tests for AqlItemBlock::toVelocyPack() Algorithm
-// ============================================================================
-// Expected Behavior: Same semantic content should map to the SAME position
-//                    in the "raw" array, regardless of pointer addresses.
-//
-// OLD APPROACH (WRONG): Would hash by pointer -> different pointers = different
-//                       positions -> NO deduplication -> WASTES SPACE
-//
-// NEW APPROACH (CORRECT): Hashes by content -> same content = same position ->
-//                         deduplication -> SAVES SPACE
-// ============================================================================
+// Tests for AqlItemBlock::toVelocyPack() deduplication
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPack_DeduplicatesSameContent_DifferentPointers) {
-  // CRITICAL TEST: Prove that toVelocyPack() correctly deduplicates
-  // AqlValues with same content but different pointers
-  //
-  // Algorithm Expectation: Same content -> same position in raw array
-  // OLD APPROACH: Would FAIL (different pointers -> different positions)
-  // NEW APPROACH: Should PASS (same content -> same position)
+  // Verify toVelocyPack() deduplicates AqlValues with same content but
+  // different pointers
 
   auto block = itemBlockManager.requestBlock(4, 1);
 
@@ -132,7 +84,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice data = slice.get("data");
   ASSERT_TRUE(raw.isArray());
 
-  // ALGORITHM EXPECTATION: v1 and v2 (same content, different pointers)
+  // Expected: v1 and v2 (same content, different pointers)
   // should map to the SAME position in the raw array
   //
   // The raw array structure:
@@ -191,7 +143,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPack_DeduplicatesSameContent_DifferentStorageTypes) {
-  // CRITICAL TEST: Prove that toVelocyPack() correctly deduplicates
+  // Test: Prove that toVelocyPack() correctly deduplicates
   // AqlValues with same content in DIFFERENT storage types
   //
   // Algorithm Expectation: Same semantic content -> same position in raw array
@@ -224,7 +176,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice raw = slice.get("raw");
   ASSERT_TRUE(raw.isArray());
 
-  // ALGORITHM EXPECTATION: v1 and v2 (same number 42, different storage)
+  // Expected: v1 and v2 (same number 42, different storage)
   // should map to the SAME position in the raw array
   //
   // This tests normalized comparison: integer 42 and VPack representation of 42
@@ -259,7 +211,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   AqlValue v2(b2.slice(), static_cast<arangodb::velocypack::ValueLength>(
                               b2.slice().byteSize()));
 
-  // CRITICAL: Verify different pointers
+  // Verify: Verify different pointers
   void const* ptr1 = v1.data();
   void const* ptr2 = v2.data();
   EXPECT_NE(ptr1, ptr2)
@@ -309,7 +261,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        cloneToBlock_DeduplicatesSameContent_DifferentPointers) {
-  // CRITICAL TEST: Prove that cloneToBlock() correctly deduplicates
+  // Test: Prove that cloneToBlock() correctly deduplicates
   // AqlValues with same content but different pointers
   //
   // Algorithm Expectation: Same content -> reuse same cloned value from cache
@@ -365,7 +317,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
   EXPECT_NE(nullptr, clonedBlock.get());
 
-  // ALGORITHM EXPECTATION: v1 and v2 (same content, different pointers)
+  // Expected: v1 and v2 (same content, different pointers)
   // should result in the SAME cloned value being reused
   //
   // With CORRECT deduplication:
@@ -426,7 +378,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        cloneToBlock_DeduplicatesSameContent_DifferentStorageTypes) {
-  // CRITICAL TEST: Prove that cloneToBlock() correctly deduplicates
+  // Test: Prove that cloneToBlock() correctly deduplicates
   // AqlValues with same content in DIFFERENT storage types
   //
   // Algorithm Expectation: Same semantic content -> reuse same cloned value
@@ -455,7 +407,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   AqlValue const& cloned0 = clonedBlock->getValueReference(0, 0);
   AqlValue const& cloned1 = clonedBlock->getValueReference(0, 1);
 
-  // ALGORITHM EXPECTATION: v1 and v2 (same number 42, different storage)
+  // Expected: v1 and v2 (same number 42, different storage)
   // should result in the SAME cloned value being reused
   //
   // This tests that normalized comparison works: integer 42 and VPack 42
@@ -600,7 +552,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice raw2 = slice2.get("raw");
   size_t uniqueInBlock2 = raw2.length() - 2;
 
-  // ALGORITHM EXPECTATION: Each block should deduplicate internally
+  // Expected: Each block should deduplicate internally
   // Both blocks should have 1 unique value (the sharedContent)
   EXPECT_EQ(1U, uniqueInBlock1)
       << "Block1: Same content should deduplicate to 1 entry";
@@ -660,7 +612,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice raw = slice.get("raw");
   size_t uniqueValuesInRaw = raw.length() - 2;
 
-  // ALGORITHM EXPECTATION: All 100 rows have the same content
+  // Expected: All 100 rows have the same content
   // -> Should deduplicate to 1 unique value in raw array
   //
   // OLD APPROACH: If hashing by pointer, and each AqlValue has different
@@ -710,7 +662,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
   EXPECT_NE(nullptr, clonedBlock.get());
 
-  // ALGORITHM EXPECTATION: All columns have the same content
+  // Expected: All columns have the same content
   // -> Should deduplicate to 1 cloned value, reused across all columns
   //
   // Verify that all columns reference semantically equal values (deduplication
@@ -753,7 +705,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPack_FormatSpecification_RawArrayStructure) {
-  // ALGORITHM EXPECTATION: The raw array must have nulls at positions 0 and 1
+  // Expected: The raw array must have nulls at positions 0 and 1
   // This is a hard requirement of the format specification
 
   auto block = itemBlockManager.requestBlock(1, 1);
@@ -784,7 +736,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPack_DataArrayReferencesCorrectPositions) {
-  // ALGORITHM EXPECTATION: The data array should reference positions in raw
+  // Expected: The data array should reference positions in raw
   // array correctly. Same content should reference the same position.
 
   auto block = itemBlockManager.requestBlock(3, 1);
@@ -812,7 +764,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   ASSERT_TRUE(raw.isArray());
   ASSERT_TRUE(data.isArray());
 
-  // ALGORITHM EXPECTATION: val1 and val2 (same content) should map to same
+  // Expected: val1 and val2 (same content) should map to same
   // position Parse data array to find positions referenced by rows 0, 1, and 2
   // The data format is complex (with runs), but we can verify:
   // - Same content should reference same position in raw array
@@ -821,17 +773,17 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   // Count unique positions in raw array (excluding nulls at 0 and 1)
   size_t uniqueInRaw = raw.length() - 2;
 
-  // ALGORITHM EXPECTATION: Only 2 unique values (100 and 200)
+  // Expected: Only 2 unique values (100 and 200)
   // This proves deduplication worked correctly
   EXPECT_EQ(2U, uniqueInRaw)
-      << "ALGORITHM EXPECTATION: Same content (val1 and val2) should "
+      << " Same content (val1 and val2) should "
          "deduplicate "
       << "to 1 entry in raw array. Total should be 2 (100 and 200).";
 }
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPack_CompressionFormat_RepeatedValues) {
-  // ALGORITHM EXPECTATION: The format uses compression for repeated values
+  // Expected: The format uses compression for repeated values
   // Multiple occurrences of the same value should use positional references
   // (integers >= 2) rather than storing the value multiple times
 
@@ -853,14 +805,14 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice raw = slice.get("raw");
   VPackSlice data = slice.get("data");
 
-  // ALGORITHM EXPECTATION: Raw array should have only 1 unique value
+  // Expected: Raw array should have only 1 unique value
   // (plus 2 nulls at start)
   size_t uniqueInRaw = raw.length() - 2;
   EXPECT_EQ(1U, uniqueInRaw)
-      << "ALGORITHM EXPECTATION: 5 rows with same value should deduplicate "
+      << " 5 rows with same value should deduplicate "
       << "to 1 entry in raw array (compression requirement)";
 
-  // ALGORITHM EXPECTATION: Data array should reference position 2 (first value)
+  // Expected: Data array should reference position 2 (first value)
   // multiple times, not store the value 5 times
   // The format should use positional references (>= 2) for repeated values
   ASSERT_TRUE(data.isArray());
@@ -872,7 +824,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPack_CrossRowDeduplication) {
-  // ALGORITHM EXPECTATION: Deduplication should work across rows
+  // Expected: Deduplication should work across rows
   // Same value in different rows should map to same position in raw array
 
   auto block = itemBlockManager.requestBlock(4, 2);
@@ -905,11 +857,11 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice slice = result.slice();
   VPackSlice raw = slice.get("raw");
 
-  // ALGORITHM EXPECTATION: Only 3 unique values (777, 111, 222)
+  // Expected: Only 3 unique values (777, 111, 222)
   // Even though shared appears 5 times across different rows/columns
   size_t uniqueInRaw = raw.length() - 2;
   EXPECT_EQ(3U, uniqueInRaw)
-      << "ALGORITHM EXPECTATION: Cross-row deduplication should work. "
+      << " Cross-row deduplication should work. "
       << "5 occurrences of 777, 2 of 111, 1 of 222 should deduplicate to 3 "
          "unique values.";
 }
@@ -923,7 +875,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        cloneToBlock_CacheReusesSameClonedValue) {
-  // ALGORITHM EXPECTATION: When same content appears multiple times,
+  // Expected: When same content appears multiple times,
   // cloneToBlock() should reuse the SAME cloned value from cache
   // This saves memory by avoiding duplicate clones
 
@@ -952,7 +904,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   AqlValue const& cloned2 = clonedBlock->getValueReference(0, 2);
   AqlValue const& cloned3 = clonedBlock->getValueReference(0, 3);
 
-  // ALGORITHM EXPECTATION: Columns 0, 1, and 2 should reference the SAME
+  // Expected: Columns 0, 1, and 2 should reference the SAME
   // cloned value (same pointer) because they have the same content
   // This proves the cache correctly reused the cloned value
 
@@ -965,31 +917,31 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        type0 == AqlValue::AqlValueType::RANGE) &&
       type0 == type1 && type0 == type2) {
     EXPECT_EQ(cloned0.data(), cloned1.data())
-        << "ALGORITHM EXPECTATION: Same content (val1 and val2) should result "
+        << " Same content (val1 and val2) should result "
         << "in same cloned value pointer (cache reuse)";
     EXPECT_EQ(cloned1.data(), cloned2.data())
-        << "ALGORITHM EXPECTATION: Same content (val2 and val3) should result "
+        << " Same content (val2 and val3) should result "
         << "in same cloned value pointer (cache reuse)";
   }
 
-  // ALGORITHM EXPECTATION: Column 3 should be different (different content)
+  // Expected: Column 3 should be different (different content)
   EXPECT_NE(cloned0.data(), cloned3.data())
-      << "ALGORITHM EXPECTATION: Different content should result in different "
+      << " Different content should result in different "
          "cloned value";
 
   // Verify semantic equality
   std::equal_to<AqlValue> equal;
   EXPECT_TRUE(equal(cloned0, cloned1))
-      << "ALGORITHM EXPECTATION: Cloned values should be semantically equal";
+      << " Cloned values should be semantically equal";
   EXPECT_TRUE(equal(cloned1, cloned2))
-      << "ALGORITHM EXPECTATION: Cloned values should be semantically equal";
+      << " Cloned values should be semantically equal";
   EXPECT_FALSE(equal(cloned0, cloned3))
-      << "ALGORITHM EXPECTATION: Different content should not be equal";
+      << " Different content should not be equal";
 }
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        cloneToBlock_MemoryEfficiency_CountsClones) {
-  // ALGORITHM EXPECTATION: cloneToBlock() should create fewer clones
+  // Expected: cloneToBlock() should create fewer clones
   // than the number of values when there are duplicates
   // This is the memory efficiency goal of the algorithm
 
@@ -1018,7 +970,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   }
   auto clonedBlock = sourceRow.cloneToBlock(itemBlockManager, registers, 10);
 
-  // ALGORITHM EXPECTATION: With 10 columns but only 3 unique values,
+  // Expected: With 10 columns but only 3 unique values,
   // the algorithm should create only 3 clones (not 10)
   // We verify this by checking that same content shares the same cloned value
 
@@ -1031,7 +983,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   for (RegisterId::value_t col : {0, 2, 4, 5, 6, 8}) {
     AqlValue const& cloned = clonedBlock->getValueReference(0, col);
     EXPECT_TRUE(equal(firstShared, cloned))
-        << "ALGORITHM EXPECTATION: Column " << col
+        << " Column " << col
         << " should reuse same cloned value as column 0 (memory efficiency)";
   }
 
@@ -1039,7 +991,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   for (RegisterId::value_t col : {1, 7}) {
     AqlValue const& cloned = clonedBlock->getValueReference(0, col);
     EXPECT_TRUE(equal(firstUnique1, cloned))
-        << "ALGORITHM EXPECTATION: Column " << col
+        << " Column " << col
         << " should reuse same cloned value as column 1 (memory efficiency)";
   }
 
@@ -1047,17 +999,17 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   for (RegisterId::value_t col : {3, 9}) {
     AqlValue const& cloned = clonedBlock->getValueReference(0, col);
     EXPECT_TRUE(equal(firstUnique2, cloned))
-        << "ALGORITHM EXPECTATION: Column " << col
+        << " Column " << col
         << " should reuse same cloned value as column 3 (memory efficiency)";
   }
 
-  // ALGORITHM EXPECTATION: This proves only 3 clones were created for 10 values
+  // Expected: This proves only 3 clones were created for 10 values
   // Memory efficiency: 10 values -> 3 clones (70% reduction)
 }
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        cloneToBlock_OnlyClonesDestructibleValues) {
-  // ALGORITHM EXPECTATION: cloneToBlock() only clones values that require
+  // Expected: cloneToBlock() only clones values that require
   // destruction. Values that don't require destruction are copied directly
   // without going through the cache
 
@@ -1085,23 +1037,22 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
                             RegisterId{3}};
   auto clonedBlock = sourceRow.cloneToBlock(itemBlockManager, registers, 4);
 
-  // ALGORITHM EXPECTATION: Inline values (don't require destruction) are
+  // Expected: Inline values (don't require destruction) are
   // copied directly without cache lookup. They should still be equal though.
   std::equal_to<AqlValue> equal;
   AqlValue const& cloned0 = clonedBlock->getValueReference(0, 0);
   AqlValue const& cloned1 = clonedBlock->getValueReference(0, 1);
 
-  EXPECT_TRUE(equal(cloned0, cloned1))
-      << "ALGORITHM EXPECTATION: Same inline values should be equal";
+  EXPECT_TRUE(equal(cloned0, cloned1)) << " Same inline values should be equal";
 
-  // ALGORITHM EXPECTATION: The cache is only used for values requiring
+  // Expected: The cache is only used for values requiring
   // destruction Inline values bypass the cache (they're copied directly) This
   // is correct behavior - no need to cache values that don't need destruction
 }
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        cloneToBlock_EmptyValuesHandledCorrectly) {
-  // ALGORITHM EXPECTATION: Empty values should be handled correctly
+  // Expected: Empty values should be handled correctly
   // They don't require destruction, so they bypass the cache
 
   auto sourceBlock = itemBlockManager.requestBlock(1, 3);
@@ -1118,18 +1069,15 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   RegIdFlatSet registers = {RegisterId{0}, RegisterId{1}, RegisterId{2}};
   auto clonedBlock = sourceRow.cloneToBlock(itemBlockManager, registers, 3);
 
-  // ALGORITHM EXPECTATION: Empty values should be handled correctly
+  // Expected: Empty values should be handled correctly
   // They don't go through the cache (no destruction needed)
   AqlValue const& cloned0 = clonedBlock->getValueReference(0, 0);
   AqlValue const& cloned1 = clonedBlock->getValueReference(0, 1);
   AqlValue const& cloned2 = clonedBlock->getValueReference(0, 2);
 
-  EXPECT_TRUE(cloned0.isEmpty())
-      << "ALGORITHM EXPECTATION: Empty value should remain empty";
-  EXPECT_TRUE(cloned1.isEmpty())
-      << "ALGORITHM EXPECTATION: Empty value should remain empty";
-  EXPECT_FALSE(cloned2.isEmpty())
-      << "ALGORITHM EXPECTATION: Non-empty value should remain non-empty";
+  EXPECT_TRUE(cloned0.isEmpty()) << " Empty value should remain empty";
+  EXPECT_TRUE(cloned1.isEmpty()) << " Empty value should remain empty";
+  EXPECT_FALSE(cloned2.isEmpty()) << " Non-empty value should remain non-empty";
 
   // Empty values don't require destruction, so they bypass cache
   // This is correct behavior
@@ -1139,12 +1087,12 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 // Critical Safety Tests: Block Transfer and Destruction
 // ============================================================================
 // These tests verify that when blocks are destroyed, references remain valid
-// This is CRITICAL for the new hash approach - it must create proper copies
+// Verify proper memory management when transferring AqlValues between blocks
 // ============================================================================
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        blockTransfer_SourceBlockDestroyed_ReferencesStillValid) {
-  // CRITICAL SAFETY TEST: When transferring AqlValues from one block to
+  // Safety test: When transferring AqlValues from one block to
   // another, and the source block is destroyed, the destination block must
   // still have valid references. This tests that the new hash approach creates
   // proper independent copies, not just pointer references.
@@ -1158,7 +1106,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   auto sourceBlock = itemBlockManager.requestBlock(2, 2);
 
   // Create values that require destruction (managed slices)
-  // CRITICAL: We must keep the Builders alive because AqlValue might reference
+  // Verify: We must keep the Builders alive because AqlValue might reference
   // them
   std::string content1 = "content_for_transfer_test_1";
   std::string content2 = "content_for_transfer_test_2";
@@ -1174,14 +1122,14 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   sourceBlock->setValue(1, 0, val3);  // Same content as val1
   sourceBlock->setValue(1, 1, val2);  // Same as row 0, col 1
 
-  // CRITICAL: val1, val2, val3 are now owned by sourceBlock
+  // Verify: val1, val2, val3 are now owned by sourceBlock
   // We should NOT destroy them manually - the block will handle cleanup
 
   // Create destination block
   auto destBlock = itemBlockManager.requestBlock(2, 2);
 
   // Transfer values using cloneToBlock (which uses the hash/comparison)
-  // CRITICAL: We must call cloneToBlock BEFORE destroying sourceBlock
+  // Verify: We must call cloneToBlock BEFORE destroying sourceBlock
   // because cloneToBlock needs to access the values from sourceBlock
   InputAqlItemRow sourceRow0(sourceBlock, 0);
   InputAqlItemRow sourceRow1(sourceBlock, 1);
@@ -1191,7 +1139,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   auto clonedBlock1 = sourceRow1.cloneToBlock(itemBlockManager, registers, 2);
 
   // Now transfer cloned values to destination block
-  // CRITICAL: We must clone the values because setValue() doesn't clone them,
+  // Verify: We must clone the values because setValue() doesn't clone them,
   // and we need independent copies so destBlock can own them independently
   AqlValue dest00 = clonedBlock0->getValueReference(0, 0).clone();
   AqlValue dest01 = clonedBlock0->getValueReference(0, 1).clone();
@@ -1203,7 +1151,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   destBlock->setValue(1, 0, dest10);
   destBlock->setValue(1, 1, dest11);
 
-  // CRITICAL: Verify destBlock has valid, accessible values
+  // Verify: Verify destBlock has valid, accessible values
   // We verify this BEFORE destroying source blocks to avoid use-after-free
   AqlValue const& dest00_ref = destBlock->getValueReference(0, 0);
   AqlValue const& dest01_ref = destBlock->getValueReference(0, 1);
@@ -1215,7 +1163,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   EXPECT_FALSE(dest10_ref.isEmpty()) << "CRITICAL: Value should be accessible";
   EXPECT_FALSE(dest11_ref.isEmpty()) << "CRITICAL: Value should be accessible";
 
-  // CRITICAL: Verify we can serialize the dest block
+  // Verify: Verify we can serialize the dest block
   // This proves the values are valid and properly cloned
   // We serialize BEFORE destroying source blocks to avoid use-after-free
   // The fact that cloneToBlock() was called successfully proves it creates
@@ -1227,7 +1175,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
   VPackSlice slice = result.slice();
   ASSERT_TRUE(slice.isObject())
-      << "CRITICAL: Serialization should succeed (proves values are valid)";
+      << " Serialization should succeed (proves values are valid)";
   VPackSlice raw = slice.get("raw");
   ASSERT_TRUE(raw.isArray()) << "CRITICAL: Raw array should be accessible";
 
@@ -1245,7 +1193,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        toVelocyPackFromVelocyPack_RoundTrip_DeduplicationPreserved) {
-  // CRITICAL TEST: Serialize with toVelocyPack(), then deserialize with
+  // Test: Serialize with toVelocyPack(), then deserialize with
   // initFromSlice(). Verify that deduplication is preserved - same content
   // should result in only ONE AqlValue instance in the deserialized block,
   // not multiple instances.
@@ -1292,11 +1240,10 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   // Count unique values in raw array (excluding nulls at positions 0 and 1)
   size_t uniqueInRaw = raw.length() - 2;
 
-  // ALGORITHM EXPECTATION: Only 2 unique values (sharedContent and
-  // different_content) Even though sharedContent appears 6 times across
-  // different rows/columns
+  // Only 2 unique values expected (sharedContent and different_content)
+  // sharedContent appears 6 times but should be deduplicated to 1 entry
   EXPECT_EQ(2U, uniqueInRaw)
-      << "CRITICAL: Serialization should deduplicate same content to 1 entry. "
+      << "Serialization should deduplicate same content. "
       << "6 occurrences of sharedContent + 2 of different_content should "
          "become 2 unique values.";
 
@@ -1304,9 +1251,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   auto deserializedBlock = itemBlockManager.requestBlock(5, 2);
   deserializedBlock->initFromSlice(serializedSlice);
 
-  // CRITICAL: Verify that deserialized block correctly reconstructs
-  // deduplication Same content should reference the same AqlValue instance
-  // (same pointer)
+  // Verify deserialized block correctly reconstructs deduplication
   AqlValue const& deser00 = deserializedBlock->getValueReference(0, 0);
   AqlValue const& deser10 = deserializedBlock->getValueReference(1, 0);
   AqlValue const& deser20 = deserializedBlock->getValueReference(2, 0);
@@ -1314,16 +1259,11 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
 
   // All should be semantically equal (same content)
   std::equal_to<AqlValue> equal;
-  EXPECT_TRUE(equal(deser00, deser10))
-      << "CRITICAL: Deserialized same content should be equal";
-  EXPECT_TRUE(equal(deser10, deser20))
-      << "CRITICAL: Deserialized same content should be equal";
-  EXPECT_TRUE(equal(deser20, deser40))
-      << "CRITICAL: Deserialized same content should be equal";
+  EXPECT_TRUE(equal(deser00, deser10));
+  EXPECT_TRUE(equal(deser10, deser20));
+  EXPECT_TRUE(equal(deser20, deser40));
 
   // Verify they reference the same AqlValue instance (deduplication preserved)
-  // This is the key test - with proper deduplication, same content should
-  // result in same pointer in the deserialized block
   auto type00 = deser00.type();
   auto type10 = deser10.type();
   auto type20 = deser20.type();
@@ -1334,21 +1274,17 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
        type00 == AqlValue::AqlValueType::RANGE) &&
       type00 == type10 && type00 == type20 && type00 == type40) {
     EXPECT_EQ(deser00.data(), deser10.data())
-        << "CRITICAL: Deserialized same content should reference same AqlValue "
-           "instance "
-        << "(deduplication preserved)";
+        << "Deserialized same content should reference same AqlValue instance";
     EXPECT_EQ(deser10.data(), deser20.data())
-        << "CRITICAL: Deserialized same content should reference same AqlValue "
-           "instance";
+        << "Deserialized same content should reference same AqlValue instance";
     EXPECT_EQ(deser20.data(), deser40.data())
-        << "CRITICAL: Deserialized same content should reference same AqlValue "
-           "instance";
+        << "Deserialized same content should reference same AqlValue instance";
   }
 
   // Verify different content is different
   AqlValue const& deser30 = deserializedBlock->getValueReference(3, 0);
   EXPECT_FALSE(equal(deser00, deser30))
-      << "CRITICAL: Different content should not be equal";
+      << " Different content should not be equal";
 
   // Verify we can re-serialize the deserialized block
   velocypack::Builder reSerialized;
@@ -1361,7 +1297,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice reRaw = reSerializedSlice.get("raw");
   size_t reUniqueInRaw = reRaw.length() - 2;
   EXPECT_EQ(2U, reUniqueInRaw)
-      << "CRITICAL: Re-serialization should preserve deduplication";
+      << " Re-serialization should preserve deduplication";
 }
 
 TEST_F(AqlValueHashAlgorithmCorrectnessTest,
@@ -1406,7 +1342,7 @@ TEST_F(AqlValueHashAlgorithmCorrectnessTest,
   VPackSlice serializedSlice = serialized.slice();
   VPackSlice raw = serializedSlice.get("raw");
 
-  // ALGORITHM EXPECTATION: Only 3 unique values (60 total occurrences)
+  // Expected: Only 3 unique values (60 total occurrences)
   size_t uniqueInRaw = raw.length() - 2;
   EXPECT_EQ(3U, uniqueInRaw) << "CRITICAL: 60 occurrences of 3 unique values "
                                 "should deduplicate to 3 entries";

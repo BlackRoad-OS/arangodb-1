@@ -1,27 +1,3 @@
-////////////////////////////////////////////////////////////////////////////////
-/// DISCLAIMER
-///
-/// Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
-/// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
-///
-/// Licensed under the Business Source License 1.1 (the "License");
-/// you may not use this file except in compliance with the License.
-/// You may obtain a copy of the License at
-///
-///     https://github.com/arangodb/arangodb/blob/devel/LICENSE
-///
-/// Unless required by applicable law or agreed to in writing, software
-/// distributed under the License is distributed on an "AS IS" BASIS,
-/// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-/// See the License for the specific language governing permissions and
-/// limitations under the License.
-///
-/// Copyright holder is ArangoDB GmbH, Cologne, Germany
-///
-/// @author Comprehensive tests for std::hash<AqlValue> and
-/// std::equal_to<AqlValue>
-////////////////////////////////////////////////////////////////////////////////
-
 #include "AqlItemBlockHelper.h"
 #include "gtest/gtest.h"
 
@@ -54,29 +30,8 @@ class AqlValueHashTest : public ::testing::Test {
   velocypack::Options const* const options{&velocypack::Options::Defaults};
 };
 
-// ============================================================================
-// TESTS FOR std::hash<AqlValue> AND std::equal_to<AqlValue>
-// ============================================================================
-// These tests verify the hash function and equality comparator behavior,
-// especially the hash/equality contract: if a == b, then hash(a) == hash(b)
-//
-// USAGE LOCATIONS:
-// 1. AqlItemBlock::toVelocyPack() - uses FlatHashMap<AqlValue, size_t> for
-// deduplication
-// 2. This is the ONLY place that uses std::hash<AqlValue> and
-// std::equal_to<AqlValue>
-//
-// PURPOSE:
-// - Verify if the old hash (in current branch) is wrong
-// - Verify if the new hash (in bug-fix/aql-value-hash branch) is right
-// - Cover all hash/comparator usages, edge cases, ASAN error possibilities
-// - Verify if it makes sense to hash by pointer address vs payload content
-//
-// KNOWN ISSUE (old hash):
-// - Supervised slices: hash by pointer address, but compare by content
-//   This violates the hash/equality contract for content-equal supervised
-//   slices
-// ============================================================================
+// Tests for std::hash<AqlValue> and std::equal_to<AqlValue>
+// Verifies hash/equality contract: if a == b, then hash(a) == hash(b)
 
 TEST_F(AqlValueHashTest, AqlValueHash_InlineValues) {
   // Inline values: hash and compare by content
@@ -134,12 +89,8 @@ TEST_F(AqlValueHashTest, AqlValueHash_ManagedSlices) {
 }
 
 TEST_F(AqlValueHashTest, AqlValueHash_SupervisedSlices_SameContent) {
-  // CRITICAL TEST: Supervised slices with same content
-  // This tests if the new hash implementation fixes the issue where
-  // hash uses pointer address but equality uses content comparison
-  //
-  // OLD HASH (BUG): Different pointers -> different hashes, but equal() returns
-  // true NEW HASH (FIX): Same content -> same hash, equal() returns true
+  // Test supervised slices with same content but different pointers
+  // Verifies hash uses content, not pointer address
   std::string content = "same supervised content";
   arangodb::velocypack::Builder b1, b2;
   b1.add(arangodb::velocypack::Value(content));
