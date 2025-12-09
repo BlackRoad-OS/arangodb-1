@@ -31,6 +31,7 @@
 
 #include "Graph/Queues/BatchedLifoQueue.h"
 #include "Graph/Queues/BatchedFifoQueue.h"
+#include "Graph/Queues/NewBatchedLifoQueue.h"
 #include "Graph/Queues/FifoQueue.h"
 #include "Graph/Queues/LifoQueue.h"
 #include "Graph/Queues/QueueTracer.h"
@@ -44,6 +45,8 @@
 #include "Graph/Providers/ProviderTracer.h"
 #include "Graph/Steps/ClusterProviderStep.h"
 #include "Graph/Types/UniquenessLevel.h"
+
+#include "Graph/Providers/SingleServer/SingleServerNeighbourProvider.h"
 
 #ifdef USE_ENTERPRISE
 #include "Enterprise/Graph/Providers/SmartGraphProvider.h"
@@ -246,7 +249,12 @@ struct DFSConfiguration {
   using batched = typename std::conditional<
       std::is_same_v<ProviderType,
                      enterprise::SmartGraphProvider<ClusterProviderStep>>,
-      LifoQueue<Step>, BatchedLifoQueue<Step>>::type;
+      LifoQueue<Step>,
+      typename std::conditional<
+          std::is_same_v<ProviderType, ClusterProvider<ClusterProviderStep>>,
+          BatchedLifoQueue<Step>,
+          NewBatchedLifoQueue<Step, SingleServerNeighbourProvider<Step>>>::
+          type>::type;
   using Queue = typename std::conditional<useTracing, QueueTracer<batched>,
                                           batched>::type;
   using Store =

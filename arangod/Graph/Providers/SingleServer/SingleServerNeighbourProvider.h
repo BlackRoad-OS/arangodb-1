@@ -102,5 +102,10 @@ struct SingleServerNeighbourProvider {
   const uint64_t _batchSize;
   ResourceMonitor& _resourceMonitor;
 };
+template<typename Step, typename Inspector>
+auto inspect(Inspector& f, SingleServerProvider<Step>& x) {
+  // TODO
+  return f.object(x).fields();
+}
 
 }  // namespace arangodb::graph

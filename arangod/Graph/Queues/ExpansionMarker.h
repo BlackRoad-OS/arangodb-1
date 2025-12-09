@@ -23,9 +23,17 @@
 #pragma once
 
 #include <variant>
+#include <memory>
+#include <vector>
 #include "Inspection/Types.h"
+#include "Aql/TraversalStats.h"
+
+namespace arangodb::aql {
+class TraversalStats;
+}
 
 namespace arangodb::graph {
+struct ExpansionInfo;
 
 using CursorId = std::size_t;
 
@@ -47,6 +55,24 @@ template<typename Step, typename Inspector>
 auto inspect(Inspector& f, QueueEntry<Step>& x) {
   return f.variant(x).unqualified().alternatives(
       inspection::inlineType<Step>(), inspection::inlineType<Expansion>());
+}
+
+template<typename T>
+concept NeighbourCursor = requires(T t,
+                                   std::shared_ptr<aql::TraversalStats> stats,
+                                   uint64_t depth) {
+  {
+    t.next(stats)
+    } -> std::convertible_to<std::shared_ptr<std::vector<ExpansionInfo>>>;
+  { t.hasMore(depth) } -> std::convertible_to<bool>;
+};
+
+template<typename Step, typename Cursor>
+struct NewQueueEntry : std::variant<Step, Cursor> {};
+template<typename Step, typename Cursor, typename Inspector>
+auto inspect(Inspector& f, NewQueueEntry<Step, Cursor>& x) {
+  return f.variant(x).unqualified().alternatives(
+      inspection::inlineType<Step>(), inspection::inlineType<Cursor>());
 }
 
 }  // namespace arangodb::graph
