@@ -1104,19 +1104,33 @@ void AqlItemBlock::destroyValue(size_t index, RegisterId::value_t column) {
 
 void AqlItemBlock::eraseAll() {
   size_t const n = maxModifiedEntries();
+
+  // Build a set of supervised slice data pointers to handle them separately
+  containers::FlatHashMap<void const*, bool> supervisedSlices;
   for (size_t i = 0; i < n; i++) {
     auto& it = _data[i];
+    if (it.requiresDestruction() &&
+        it.type() == AqlValue::VPACK_SUPERVISED_SLICE) {
+      supervisedSlices.try_emplace(it.data(), true);
+    }
     it.erase();
   }
 
   size_t totalUsed = 0;
+  size_t totalSupervisedUsed = 0;
   for (auto const& it : _valueCount) {
     if (ADB_LIKELY(it.second.refCount > 0)) {
-      totalUsed += it.second.memoryUsage;
+      if (supervisedSlices.find(it.first) != supervisedSlices.end()) {
+        totalSupervisedUsed += it.second.memoryUsage;
+      } else {
+        totalUsed += it.second.memoryUsage;
+      }
     }
   }
 
   decreaseMemoryUsage(totalUsed);
+  TRI_ASSERT(_memoryUsage >= totalSupervisedUsed);
+  _memoryUsage -= totalSupervisedUsed;
   _valueCount.clear();
   _shadowRows.clear();
 }
