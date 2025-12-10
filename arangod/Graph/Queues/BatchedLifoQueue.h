@@ -198,8 +198,7 @@ class BatchedLifoQueue {
 };
 template<class StepType, NeighbourCursor C, typename Inspector>
 auto inspect(Inspector& f, BatchedLifoQueue<StepType, C>& x) {
-  return f.object(x).fields();
-  // return f.object(x).fields(f.field("queue", x._queue));
+  return f.object(x).fields(f.field("queue", x._queue));
 }
 
 }  // namespace graph

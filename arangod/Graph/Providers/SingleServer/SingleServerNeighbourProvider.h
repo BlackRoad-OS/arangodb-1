@@ -86,6 +86,10 @@ struct SingleServerNeighbourProvider {
    */
   auto hasMore(uint64_t depth) -> bool;
 
+ public:
+  template<typename S, typename Inspector>
+  friend auto inspect(Inspector& f, SingleServerNeighbourProvider<S>& x);
+
  private:
   std::unique_ptr<SingleServerEdgeCursor<Step>> _cursor;
 
@@ -103,9 +107,8 @@ struct SingleServerNeighbourProvider {
   ResourceMonitor& _resourceMonitor;
 };
 template<typename Step, typename Inspector>
-auto inspect(Inspector& f, SingleServerProvider<Step>& x) {
-  // TODO
-  return f.object(x).fields();
+auto inspect(Inspector& f, SingleServerNeighbourProvider<Step>& x) {
+  return f.object(x).fields(f.field("step", x._currentStep));
 }
 
 }  // namespace arangodb::graph

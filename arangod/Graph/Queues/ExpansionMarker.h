@@ -72,7 +72,7 @@ struct NewQueueEntry : std::variant<Step, std::reference_wrapper<Cursor>> {};
 template<typename Step, NeighbourCursor Cursor, typename Inspector>
 auto inspect(Inspector& f, NewQueueEntry<Step, Cursor>& x) {
   return f.variant(x).unqualified().alternatives(
-      inspection::inlineType<Step>(), inspection::inlineType<Cursor>());
+      inspection::inlineType<Step>(), inspection::type<Cursor>("cursor"));
 }
 
 }  // namespace arangodb::graph
