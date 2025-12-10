@@ -28,7 +28,7 @@
 if (getOptions === true) {
   return {
     'query.global-memory-limit': "20000000",
-    'query.memory-limit': "16000000"
+    'query.memory-limit': "19000000"
   };
 }
 const jsunity = require('jsunity');
