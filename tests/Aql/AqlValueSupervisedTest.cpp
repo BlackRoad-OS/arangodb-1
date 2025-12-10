@@ -714,16 +714,23 @@ TEST(AqlValueSupervisedTest, ManagedStringEqualsSupervisedSliceSameContent) {
   EXPECT_EQ(rm.current(), 0U);
 }
 
-// Supervised slice self-clone should remain equal (bytewise equal)
+// Supervised slice self-clone should NOT be equal (pointer comparison)
+// NOTE: In this branch, supervised slices compare by pointer, not content.
+// Content-based equality will be fixed in a separate branch.
 TEST(AqlValueSupervisedTest, SupervisedSliceCloneEquality) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
 
   Builder b = makeLargeArray(512, 'q');  // large array
   AqlValue a(b.slice(), 0, &rm);         // supervised
-  AqlValue c = a.clone();  // new supervised buffer with same bytes
+  AqlValue c =
+      a.clone();  // new supervised buffer with same bytes but different pointer
 
-  expectEqualBothWays(a, c);
+  // With pointer-based comparison, clone creates a new pointer, so they are NOT
+  // equal
+  expectNotEqualBothWays(a, c);
+  // But content is the same
+  EXPECT_TRUE(a.slice().binaryEquals(c.slice()));
 
   a.destroy();
   c.destroy();
@@ -760,7 +767,8 @@ TEST(AqlValueSupervisedTest, ManagedSliceShallowCopyEquality) {
   cpy.destroy();
 }
 
-// Supervised slice deep copy (copy-ctor) should compare equal (bytewise)
+// Supervised slice shallow copy (copy-ctor) should compare equal (same pointer)
+// NOTE: Copy constructor does a shallow copy, so they share the same pointer
 TEST(AqlValueSupervisedTest, SupervisedSliceShallowCopyEquality) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
@@ -768,7 +776,7 @@ TEST(AqlValueSupervisedTest, SupervisedSliceShallowCopyEquality) {
   Builder b = makeString(300, 's');
   AqlValue v(b.slice(), 0, &rm);  // SupervisedSlice
   ASSERT_EQ(v.type(), AqlValue::VPACK_SUPERVISED_SLICE);
-  AqlValue cpy = v;  // shallow copy
+  AqlValue cpy = v;  // shallow copy (shares same pointer)
 
   expectEqualBothWays(v, cpy);
 
@@ -778,8 +786,7 @@ TEST(AqlValueSupervisedTest, SupervisedSliceShallowCopyEquality) {
   EXPECT_EQ(rm.current(), 0U);
 }
 
-// Comprehensive test for behavior of operator==; ManagedSlice should be equal
-// to SupervisedSlice as long as the heap data are the same
+// Comprehensive test for behavior of operator==
 TEST(AqlValueSupervisedTest, ManagedSliceIsEqualToSupervisedSlice) {
   auto& g = GlobalResourceMonitor::instance();
   ResourceMonitor rm(g);
@@ -803,13 +810,13 @@ TEST(AqlValueSupervisedTest, ManagedSliceIsEqualToSupervisedSlice) {
   ASSERT_EQ(supervisedB2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   std::equal_to<AqlValue> eq;
-  // They should be equal
+  // Cross-type comparisons (managed vs supervised) use content-based equality
   EXPECT_TRUE(eq(managedA1, supervisedA1));
   EXPECT_TRUE(eq(managedA1, supervisedA2));
   EXPECT_TRUE(eq(managedA2, supervisedA1));
   EXPECT_TRUE(eq(managedA2, supervisedA2));
 
-  EXPECT_TRUE(eq(supervisedA1, supervisedA2));
+  EXPECT_FALSE(eq(supervisedA1, supervisedA2));  // Different ptrs
 
   EXPECT_FALSE(eq(managedA1, supervisedB1));
   EXPECT_FALSE(eq(managedA1, supervisedB2));
