@@ -66,12 +66,11 @@ class BatchedLifoQueue {
     guard.steal();  // now we are responsible for tracking the memory
   }
 
-  // TODO: get a Cursor reference and push it to queue
-  void append(Expansion expansion) {
+  void append(Cursor& cursor) {
     arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Entry));
     // if push_front() throws, no harm is done, and the memory usage increase
     // will be rolled back
-    // _queue.push_front({std::move(expansion)});
+    _queue.push_front(std::reference_wrapper<Cursor>(cursor));
     guard.steal();  // now we are responsible for tracking the memory
   }
 
@@ -138,9 +137,9 @@ class BatchedLifoQueue {
     return std::get<Step>(first);
   }
 
-  QueueEntry<Step> pop() {
+  std::optional<Step> pop() {
     TRI_ASSERT(!isEmpty());
-    auto first = std::move(_queue.front());
+    auto first = _queue.front();
     LOG_TOPIC("9cda4", TRACE, Logger::GRAPHS)
         << "<BatchedLifoQueue> Pop: "
         << (std::holds_alternative<Step>(first)
@@ -152,14 +151,20 @@ class BatchedLifoQueue {
       return {std::get<Step>(first)};
     }
     // TODO
-    // - get next items from cursor with first.next()
-    // - if there are items:
-    //   - push these back to queue
-    //   - pop first one and return it
-    // - no items:
-    //   - pop cursor and return call to pop()
+    // auto cursor = std::get<std::reference_wrapper<Cursor>>(first);
+    // if (not cursor.hasMore(first.depth())) {
+    //   _queue.pop_front();
+    //   return pop();
+    // }
+    // // TODO get rid of traversal stats input
+    // // TODO next needs to return a vec of steps
+    // auto new_steps = cursor.next(/*TODO traversalstats*/);
+    // for (auto&& step : *new_steps) {
+    //   _queue.append(step);
+    // }
+    // return pop();
     _queue.pop_front();
-    return {Expansion{}};
+    return {};
   }
 
   std::vector<Step*> getStepsWithoutFetchedVertex() {

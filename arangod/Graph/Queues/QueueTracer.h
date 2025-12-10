@@ -45,7 +45,10 @@ class QueueTracer {
   bool isBatched() { return false; }
   void clear();
   void append(Step step);
-  void append(Expansion expansion) { TRI_ASSERT(false); }
+  template<NeighbourCursor Cursor>
+  void append(Cursor& expansion) {
+    TRI_ASSERT(false);
+  }
   void setStartContent(std::vector<Step> startSteps);
   bool firstIsVertexFetched() const;
   bool hasProcessableElement() const;
@@ -53,7 +56,7 @@ class QueueTracer {
   bool isEmpty() const;
   std::vector<Step*> getLooseEnds();
 
-  QueueEntry<Step> pop();
+  std::optional<Step> pop();
   Step const& peek() const;
 
   // Return all Steps where the Provider needs to call fetchVertices()

@@ -196,11 +196,11 @@ auto WeightedShortestPathEnumerator<QueueType, PathStoreType, ProviderType,
         -> void {
   ensureQueueHasProcessableElement();
   auto tmp = _queue.pop();
-  TRI_ASSERT(std::holds_alternative<Step>(tmp));
+  TRI_ASSERT(tmp.has_value());
 
   TRI_ASSERT(_queue.isEmpty());
 
-  auto posPrevious = _interior.append(std::move(std::get<Step>(tmp)));
+  auto posPrevious = _interior.append(std::move(tmp.value()));
   auto& step = _interior.getStepReference(posPrevious);
   ValidationResult res = _validator.validatePath(step);
 
@@ -218,9 +218,9 @@ auto WeightedShortestPathEnumerator<QueueType, PathStoreType, ProviderType,
         Ball& other, std::optional<CalculatedCandidate>& bestPath) -> void {
   ensureQueueHasProcessableElement();
   auto tmp = _queue.pop();
-  TRI_ASSERT(std::holds_alternative<Step>(tmp));
+  TRI_ASSERT(tmp.has_value());
 
-  auto posPrevious = _interior.append(std::move(std::get<Step>(tmp)));
+  auto posPrevious = _interior.append(std::move(tmp.value()));
   auto& step = _interior.getStepReference(posPrevious);
 
   TRI_ASSERT(step.getWeight() >= _diameter);

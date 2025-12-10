@@ -88,22 +88,27 @@ class BatchedFifoQueue {
     guard.steal();  // now we are responsible for tracking the memory
   }
 
-  void append(Expansion expansion) {
-    arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Expansion));
-    auto cursorId = expansion.id;
-    if (_biggestCursorId.has_value() && cursorId <= _biggestCursorId.value()) {
-      // iterator already existed, put it at front! of continuation queue
-      // if push_front() throws, no harm is done, and the memory usage increase
-      // will be rolled back
-      _continuationQueue.push_front(std::move(expansion));
-    } else {
-      // new iterator
-      _biggestCursorId = cursorId;
-      // if push_front() throws, no harm is done, and the memory usage increase
-      // will be rolled back
-      _continuationQueue.push_back(std::move(expansion));
-    }
-    guard.steal();  // now we are responsible for tracking the memory
+  template<NeighbourCursor Cursor>
+  void append(Cursor& expansion) {
+    // TODO
+    // arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Expansion));
+    // auto cursorId = expansion.id;
+    // if (_biggestCursorId.has_value() && cursorId <= _biggestCursorId.value())
+    // {
+    //   // iterator already existed, put it at front! of continuation queue
+    //   // if push_front() throws, no harm is done, and the memory usage
+    //   increase
+    //   // will be rolled back
+    //   _continuationQueue.push_front(std::move(expansion));
+    // } else {
+    //   // new iterator
+    //   _biggestCursorId = cursorId;
+    //   // if push_front() throws, no harm is done, and the memory usage
+    //   increase
+    //   // will be rolled back
+    //   _continuationQueue.push_back(std::move(expansion));
+    // }
+    // guard.steal();  // now we are responsible for tracking the memory
   }
 
   void setStartContent(std::vector<Step> startSteps) {
@@ -160,23 +165,25 @@ class BatchedFifoQueue {
     return _queue.front();
   }
 
-  QueueEntry<Step> pop() {
+  std::optional<Step> pop() {
     TRI_ASSERT(!isEmpty());
+    // TODO
     // if queue is empty, pop next iterator
-    if (_queue.empty()) {
-      auto first = std::move(_continuationQueue.front());
-      LOG_TOPIC("0cda4", TRACE, Logger::GRAPHS)
-          << "<BatchedFifoQueue> Pop: next batch";
-      _resourceMonitor.decreaseMemoryUsage(sizeof(Expansion));
-      _continuationQueue.pop_front();
-      return {first};
-    }
-    auto first = std::move(_queue.front());
-    LOG_TOPIC("9c2a4", TRACE, Logger::GRAPHS)
-        << "<BatchedFifoQueue> Pop: " << first.toString();
-    _resourceMonitor.decreaseMemoryUsage(sizeof(Step));
-    _queue.pop_front();
-    return {first};
+    // if (_queue.empty()) {
+    //   auto first = std::move(_continuationQueue.front());
+    //   LOG_TOPIC("0cda4", TRACE, Logger::GRAPHS)
+    //       << "<BatchedFifoQueue> Pop: next batch";
+    //   _resourceMonitor.decreaseMemoryUsage(sizeof(Expansion));
+    //   _continuationQueue.pop_front();
+    //   return {first};
+    // }
+    // auto first = std::move(_queue.front());
+    // LOG_TOPIC("9c2a4", TRACE, Logger::GRAPHS)
+    //     << "<BatchedFifoQueue> Pop: " << first.toString();
+    // _resourceMonitor.decreaseMemoryUsage(sizeof(Step));
+    // _queue.pop_front();
+    // return {first};
+    return {};
   }
 
   std::vector<Step*> getStepsWithoutFetchedVertex() {

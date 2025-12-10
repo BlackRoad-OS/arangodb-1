@@ -63,7 +63,10 @@ class LifoQueue {
     guard.steal();  // now we are responsible for tracking the memory
   }
 
-  void append(Expansion expansion) { TRI_ASSERT(false); }
+  template<NeighbourCursor Cursor>
+  void append(Cursor& expansion) {
+    TRI_ASSERT(false);
+  }
 
   void setStartContent(std::vector<Step> startSteps) {
     arangodb::ResourceUsageScope guard(_resourceMonitor,
@@ -119,7 +122,7 @@ class LifoQueue {
     return first;
   }
 
-  QueueEntry<Step> pop() {
+  std::optional<Step> pop() {
     TRI_ASSERT(!isEmpty());
     Step first = std::move(_queue.front());
     LOG_TOPIC("9cd64", TRACE, Logger::GRAPHS)

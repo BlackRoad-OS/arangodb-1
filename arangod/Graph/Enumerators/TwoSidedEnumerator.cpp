@@ -212,8 +212,8 @@ auto TwoSidedEnumerator<QueueType, PathStoreType, ProviderType, PathValidator>::
   }
 
   auto tmp = _queue.pop();
-  TRI_ASSERT(std::holds_alternative<Step>(tmp));
-  auto step = std::get<Step>(tmp);
+  TRI_ASSERT(tmp.has_value());
+  auto step = std::move(tmp.value());
   auto previous = _interior.append(step);
 
   _provider.expand(step, previous, [&](Step n) -> void {
