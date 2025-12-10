@@ -223,8 +223,9 @@ struct BFSConfiguration {
       std::is_same_v<ProviderType,
                      enterprise::SmartGraphProvider<ClusterProviderStep>>,
       FifoQueue<Step>, BatchedFifoQueue<Step>>::type;
-  using Queue = typename std::conditional<useTracing, QueueTracer<batched>,
-                                          batched>::type;
+  using Queue =
+      typename std::conditional<useTracing, QueueTracer<FifoQueue<Step>>,
+                                FifoQueue<Step>>::type;
   using Store =
       typename std::conditional<useTracing, PathStoreTracer<PathStore<Step>>,
                                 PathStore<Step>>::type;

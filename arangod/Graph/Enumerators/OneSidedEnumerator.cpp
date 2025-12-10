@@ -179,7 +179,7 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
     }
     if (step.getDepth() < _options.getMaxDepth() && !res.isPruned()) {
       // currently batching only works with cluster case
-      if (_queue.isBatched()) {
+      if (_queue.isBatched() && ServerState::instance()->isSingleServer()) {
         auto cursorId = _nextCursorId++;
         _provider.addExpansionIterator(cursorId, step, [&]() -> void {
           _queue.append({Expansion{cursorId, posPrevious}});
