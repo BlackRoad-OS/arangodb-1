@@ -25,6 +25,7 @@
 
 #include "Basics/ResourceUsage.h"
 #include "Basics/debugging.h"
+#include "Graph/Providers/SingleServer/ExpansionInfo.h"
 #include "Inspection/Format.h"
 #include "Logger/LogMacros.h"
 #include "Graph/Queues/ExpansionMarker.h"
@@ -35,7 +36,7 @@
 namespace arangodb {
 namespace graph {
 
-template<class StepType>
+template<class StepType, NeighbourCursor Cursor>
 class BatchedLifoQueue {
  public:
   static constexpr bool RequiresWeight = false;
@@ -52,36 +53,31 @@ class BatchedLifoQueue {
 
   void clear() {
     if (!_queue.empty()) {
-      for (auto const& item : _queue) {
-        if (std::holds_alternative<Step>(item)) {
-          _resourceMonitor.decreaseMemoryUsage(sizeof(Step));
-        } else {
-          _resourceMonitor.decreaseMemoryUsage(sizeof(Expansion));
-        }
-      }
+      _resourceMonitor.decreaseMemoryUsage(_queue.size() * sizeof(Entry));
       _queue.clear();
     }
   }
 
   void append(Step step) {
-    arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Step));
+    arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Entry));
     // if push_front() throws, no harm is done, and the memory usage increase
     // will be rolled back
     _queue.push_front({std::move(step)});
     guard.steal();  // now we are responsible for tracking the memory
   }
 
+  // TODO: get a Cursor reference and push it to queue
   void append(Expansion expansion) {
-    arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Expansion));
+    arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Entry));
     // if push_front() throws, no harm is done, and the memory usage increase
     // will be rolled back
-    _queue.push_front({std::move(expansion)});
+    // _queue.push_front({std::move(expansion)});
     guard.steal();  // now we are responsible for tracking the memory
   }
 
   void setStartContent(std::vector<Step> startSteps) {
     arangodb::ResourceUsageScope guard(_resourceMonitor,
-                                       sizeof(Step) * startSteps.size());
+                                       sizeof(Entry) * startSteps.size());
     TRI_ASSERT(_queue.empty());
     for (auto& s : startSteps) {
       // For LIFO just append to the back,
@@ -150,13 +146,20 @@ class BatchedLifoQueue {
         << (std::holds_alternative<Step>(first)
                 ? std::get<Step>(first).toString()
                 : "next batch");
+    _resourceMonitor.decreaseMemoryUsage(sizeof(Entry));
     if (std::holds_alternative<Step>(first)) {
-      _resourceMonitor.decreaseMemoryUsage(sizeof(Step));
-    } else {
-      _resourceMonitor.decreaseMemoryUsage(sizeof(Expansion));
+      _queue.pop_front();
+      return {std::get<Step>(first)};
     }
+    // TODO
+    // - get next items from cursor with first.next()
+    // - if there are items:
+    //   - push these back to queue
+    //   - pop first one and return it
+    // - no items:
+    //   - pop cursor and return call to pop()
     _queue.pop_front();
-    return first;
+    return {Expansion{}};
   }
 
   std::vector<Step*> getStepsWithoutFetchedVertex() {
@@ -182,19 +185,21 @@ class BatchedLifoQueue {
       }
     }
   }
-  template<class S, typename Inspector>
-  friend auto inspect(Inspector& f, BatchedLifoQueue<S>& x);
+  template<class S, NeighbourCursor C, typename Inspector>
+  friend auto inspect(Inspector& f, BatchedLifoQueue<S, C>& x);
 
  private:
+  using Entry = NewQueueEntry<Step, Cursor>;
   /// @brief queue datastore
-  std::deque<QueueEntry<Step>> _queue;
+  std::deque<Entry> _queue;
 
   /// @brief query context
   arangodb::ResourceMonitor& _resourceMonitor;
 };
-template<class StepType, typename Inspector>
-auto inspect(Inspector& f, BatchedLifoQueue<StepType>& x) {
-  return f.object(x).fields(f.field("queue", x._queue));
+template<class StepType, NeighbourCursor C, typename Inspector>
+auto inspect(Inspector& f, BatchedLifoQueue<StepType, C>& x) {
+  return f.object(x).fields();
+  // return f.object(x).fields(f.field("queue", x._queue));
 }
 
 }  // namespace graph

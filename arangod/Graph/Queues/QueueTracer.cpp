@@ -28,7 +28,6 @@
 #include "Graph/Providers/SingleServer/SingleServerNeighbourProvider.h"
 #include "Graph/Queues/BatchedFifoQueue.h"
 #include "Graph/Queues/BatchedLifoQueue.h"
-#include "Graph/Queues/NewBatchedLifoQueue.h"
 #include "Graph/Queues/FifoQueue.h"
 #include "Graph/Queues/LifoQueue.h"
 #include "Graph/Queues/WeightedQueue.h"
@@ -189,12 +188,9 @@ template class ::arangodb::graph::QueueTracer<
     arangodb::graph::BatchedFifoQueue<SingleServerProviderStep>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::LifoQueue<SingleServerProviderStep>>;
-template class ::arangodb::graph::QueueTracer<
-    arangodb::graph::BatchedLifoQueue<SingleServerProviderStep>>;
-template class ::arangodb::graph::QueueTracer<
-    arangodb::graph::NewBatchedLifoQueue<
-        SingleServerProviderStep,
-        SingleServerNeighbourProvider<SingleServerProviderStep>>>;
+template class ::arangodb::graph::QueueTracer<arangodb::graph::BatchedLifoQueue<
+    SingleServerProviderStep,
+    SingleServerNeighbourProvider<SingleServerProviderStep>>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::WeightedQueue<SingleServerProviderStep>>;
 
@@ -204,12 +200,8 @@ template class ::arangodb::graph::QueueTracer<
     arangodb::graph::BatchedFifoQueue<ClusterProviderStep>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::LifoQueue<ClusterProviderStep>>;
-template class ::arangodb::graph::QueueTracer<
-    arangodb::graph::BatchedLifoQueue<ClusterProviderStep>>;
-template class ::arangodb::graph::QueueTracer<
-    arangodb::graph::NewBatchedLifoQueue<
-        ClusterProviderStep,
-        SingleServerNeighbourProvider<SingleServerProviderStep>>>;
+template class ::arangodb::graph::QueueTracer<arangodb::graph::BatchedLifoQueue<
+    ClusterProviderStep, SingleServerNeighbourProvider<ClusterProviderStep>>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::WeightedQueue<ClusterProviderStep>>;
 
@@ -220,12 +212,9 @@ template class ::arangodb::graph::QueueTracer<
     arangodb::graph::BatchedFifoQueue<enterprise::SmartGraphStep>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::LifoQueue<enterprise::SmartGraphStep>>;
-template class ::arangodb::graph::QueueTracer<
-    arangodb::graph::BatchedLifoQueue<enterprise::SmartGraphStep>>;
-template class ::arangodb::graph::QueueTracer<
-    arangodb::graph::NewBatchedLifoQueue<
-        enterprise::SmartGraphStep,
-        SingleServerNeighbourProvider<enterprise::SmartGraphStep>>>;
+template class ::arangodb::graph::QueueTracer<arangodb::graph::BatchedLifoQueue<
+    enterprise::SmartGraphStep,
+    SingleServerNeighbourProvider<enterprise::SmartGraphStep>>>;
 template class ::arangodb::graph::QueueTracer<
     arangodb::graph::WeightedQueue<enterprise::SmartGraphStep>>;
 #endif

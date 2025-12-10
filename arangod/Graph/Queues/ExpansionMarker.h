@@ -67,9 +67,9 @@ concept NeighbourCursor = requires(T t,
   { t.hasMore(depth) } -> std::convertible_to<bool>;
 };
 
-template<typename Step, typename Cursor>
-struct NewQueueEntry : std::variant<Step, Cursor> {};
-template<typename Step, typename Cursor, typename Inspector>
+template<typename Step, NeighbourCursor Cursor>
+struct NewQueueEntry : std::variant<Step, std::reference_wrapper<Cursor>> {};
+template<typename Step, NeighbourCursor Cursor, typename Inspector>
 auto inspect(Inspector& f, NewQueueEntry<Step, Cursor>& x) {
   return f.variant(x).unqualified().alternatives(
       inspection::inlineType<Step>(), inspection::inlineType<Cursor>());
