@@ -5797,6 +5797,42 @@ struct CommonNodeFinder {
   }
 };
 
+/// @brief common utilities for checking and stringifying AST nodes
+struct SimplifierHelper {
+  /// @brief convert AST node to its string representation
+  /// @param node The node to stringify
+  /// @return The string representation, or empty string on failure
+  static std::string stringifyNode(AstNode const* node) {
+    try {
+      return node->toString();
+    } catch (...) {
+      return std::string();
+    }
+  }
+
+  /// @brief Check if a node qualifies as an attribute/reference expression
+  ///
+  /// Constants are excluded as they cannot be used for index lookups.
+  ///
+  /// @param node The node to check
+  /// @param attributeName Output parameter: the stringified attribute name
+  /// @return true if the node is a valid attribute/reference expression
+  static bool qualifies(AstNode const* node, std::string& attributeName) {
+    if (node->isConstant()) {
+      return false;
+    }
+
+    if (node->type == NODE_TYPE_ATTRIBUTE_ACCESS ||
+        node->type == NODE_TYPE_INDEXED_ACCESS ||
+        node->type == NODE_TYPE_REFERENCE) {
+      attributeName = stringifyNode(node);
+      return true;
+    }
+
+    return false;
+  }
+};
+
 /// @brief auxilliary struct for the OR-to-IN conversion
 struct OrSimplifier {
   Ast* ast;
@@ -6056,40 +6092,90 @@ void arangodb::aql::replaceOrWithInRule(Optimizer* opt,
   opt->addPlan(std::move(plan), rule, modified);
 }
 
-/// @brief auxiliary struct for the ANY-to-IN conversion
+/// @brief for the ANY-to-IN conversion
+///
+/// Transforms expressions of the form:
+///   ['Alice','Bob', 'Carol'] ANY == p.name
+/// into:
+///   p.name IN ['Alice', 'Bob', 'Carol']
+///
+/// enables the optimizer to use index lookups and other optimizations
+/// that are not yet available for ANY == expressions.
 struct AnySimplifier {
-  Ast* ast;
-  ExecutionPlan* plan;
+  Ast& ast;
+  ExecutionPlan& plan;
 
-  AnySimplifier(Ast* ast, ExecutionPlan* plan) : ast(ast), plan(plan) {}
+  explicit AnySimplifier(Ast& ast, ExecutionPlan& plan)
+      : ast(ast), plan(plan) {}
 
+  /// @brief Safely convert an AST node to its string representation
   std::string stringifyNode(AstNode const* node) const {
-    try {
-      return node->toString();
-    } catch (...) {
-    }
-    return std::string();
+    return SimplifierHelper::stringifyNode(node);
   }
 
+  /// @brief Check if a node qualifies as an attribute/reference expression
+  /// @param node The node to check
+  /// @param attributeName Output parameter: the stringified attribute name
+  /// @return true if the node is a valid attribute/reference expression
   bool qualifies(AstNode const* node, std::string& attributeName) const {
-    if (node->isConstant()) {
-      return false;
-    }
-
-    if (node->type == NODE_TYPE_ATTRIBUTE_ACCESS ||
-        node->type == NODE_TYPE_INDEXED_ACCESS ||
-        node->type == NODE_TYPE_REFERENCE) {
-      attributeName = stringifyNode(node);
-      return true;
-    }
-
-    return false;
+    return SimplifierHelper::qualifies(node, attributeName);
   }
 
-  /// @brief Rewrite:
-  ///   ['Alice','Bob', 'Carol'] ANY == p.name
-  /// into:
-  ///   p.name IN ['Alice', 'Bob', 'Carol']
+  /// @brief Extract attribute and array from an ANY == expression
+  /// @param node The ANY == node to analyze (must have 3 members: lhs, rhs,
+  /// quantifier)
+  /// @return Optional pair containing (attribute node, array node) if both
+  /// found unambiguously
+  std::optional<std::pair<AstNode*, AstNode*>> extractAttributeAndArray(
+      AstNode const* node) const {
+    TRI_ASSERT(node->numMembers() == 3);
+
+    // Member 2 is always the quantifier - must be ANY for this transformation
+    auto quantifier = node->getMember(2);
+    if (quantifier == nullptr || !Quantifier::isAny(quantifier)) {
+      return std::nullopt;
+    }
+
+    // Members 0 and 1 are the left and right expressions
+    // We need to find which one is the array and which one is the attribute
+    auto lhs = node->getMember(0);
+    auto rhs = node->getMember(1);
+
+    if (lhs == nullptr || rhs == nullptr) {
+      return std::nullopt;
+    }
+
+    AstNode* attr = nullptr;
+    AstNode* array = nullptr;
+    std::string tmpName;  // Unused, but required by qualifies()
+
+    // Check if lhs is the array and rhs is the attribute
+    if (lhs->isArray() && lhs->isDeterministic() && qualifies(rhs, tmpName)) {
+      array = lhs;
+      attr = rhs;
+    }
+    // Check if rhs is the array and lhs is the attribute
+    else if (rhs->isArray() && rhs->isDeterministic() &&
+             qualifies(lhs, tmpName)) {
+      array = rhs;
+      attr = lhs;
+    } else {
+      // Neither combination works - cannot transform
+      return std::nullopt;
+    }
+
+    return std::make_pair(attr, array);
+  }
+
+  /// @brief Rewrite an ANY == expression to an IN expression
+  ///
+  /// Transforms: ['Alice','Bob', 'Carol'] ANY == p.name
+  ///      into:  p.name IN ['Alice', 'Bob', 'Carol']
+  ///
+  /// @param node The ANY == node to transform (must be
+  /// NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ)
+  /// @return The transformed IN node, or the original node if transformation is
+  /// not possible
   AstNode* simplifyAnyEq(AstNode const* node) const {
     if (node == nullptr) {
       return nullptr;
@@ -6099,106 +6185,82 @@ struct AnySimplifier {
       return const_cast<AstNode*>(node);
     }
 
-    auto* mutableNode = const_cast<AstNode*>(node);
-    size_t const n = mutableNode->numMembers();
-
-    AstNode* attr = nullptr;
-    AstNode* array = nullptr;
-    std::string tmpName;
-
-    // Look through all children and try to find:
-    //  - one array expression (deterministic)
-    //  - one attribute/reference expression
-    for (size_t i = 0; i < n; ++i) {
-      AstNode* child = mutableNode->getMember(i);
-      if (child == nullptr) {
-        continue;
-      }
-
-      if (child->isArray() && child->isDeterministic()) {
-        if (array == nullptr) {
-          array = child;
-        } else {
-          // more than one array -> ambiguous, bail out
-          return mutableNode;
-        }
-      } else if (attr == nullptr && qualifies(child, tmpName)) {
-        attr = child;
-      }
+    auto result = extractAttributeAndArray(node);
+    if (!result.has_value()) {
+      // Cannot transform - return original node
+      return const_cast<AstNode*>(node);
     }
 
-    // Transform only when we found both an array and an attribute.
-    if (attr == nullptr || array == nullptr) {
-      return mutableNode;
-    }
+    auto [attr, array] = result.value();
 
     // Build: attr IN array
-    return ast->createNodeBinaryOperator(
-        NODE_TYPE_OPERATOR_BINARY_IN, attr, array);
+    return ast.createNodeBinaryOperator(NODE_TYPE_OPERATOR_BINARY_IN, attr,
+                                        array);
   }
 
-  /// @brief recursively simplify the expression tree
+  /// @brief Recursively simplify the expression tree (post-order traversal)
+  ///
+  /// Processes children first, then attempts to transform the current node
+  /// if it is an ANY == expression.
+  ///
+  /// @param node The root of the expression tree to simplify
+  /// @return The simplified expression tree
   AstNode* simplify(AstNode const* node) const {
     if (node == nullptr) {
       return nullptr;
     }
 
-    auto* mutableNode = const_cast<AstNode*>(node);
+    // First, recurse into children (post-order traversal)
+    size_t const numMembers = node->numMembers();
+    bool childrenModified = false;
+    containers::SmallVector<AstNode*, 8> newChildren;
+    newChildren.reserve(numMembers);
 
-    // First, recurse into children (post-order)
-    size_t const n = mutableNode->numMembers();
-    for (size_t i = 0; i < n; ++i) {
-      AstNode* child = mutableNode->getMember(i);
+    for (size_t i = 0; i < numMembers; ++i) {
+      AstNode* child = node->getMember(i);
       AstNode* newChild = simplify(child);
+      newChildren.push_back(newChild);
       if (newChild != child) {
-        mutableNode->changeMember(i, newChild);
+        childrenModified = true;
       }
     }
 
-    // Now try to rewrite this node itself if it is ANY ==.
-    if (mutableNode->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
-      if (node->type != NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
-        return const_cast<AstNode*>(node);
-      }
-
-      size_t const n = mutableNode->numMembers();
-
-      AstNode* attr = nullptr;
-      AstNode* array = nullptr;
-      std::string tmpName;
-
-      // Look through all children and try to find:
-      //  - one array expression (deterministic)
-      //  - one attribute/reference expression
-      for (size_t i = 0; i < n; ++i) {
-        AstNode* child = mutableNode->getMember(i);
-        if (child == nullptr) {
-          continue;
+    // If children were modified, create a new node with the modified children
+    AstNode* result = const_cast<AstNode*>(node);
+    if (childrenModified) {
+      if (node->type == NODE_TYPE_OPERATOR_BINARY_AND) {
+        result = ast.createNodeBinaryOperator(node->type, newChildren[0],
+                                              newChildren[1]);
+      } else if (node->type == NODE_TYPE_OPERATOR_NARY_AND) {
+        result = ast.createNodeNaryOperator(node->type);
+        for (auto* child : newChildren) {
+          result->addMember(child);
         }
-
-        if (child->isArray() && child->isDeterministic()) {
-          if (array == nullptr) {
-            array = child;
-          } else {
-            // more than one array -> ambiguous, bail out
-            return mutableNode;
-          }
-        } else if (attr == nullptr && qualifies(child, tmpName)) {
-          attr = child;
+      } else if (numMembers == 2 &&
+                 (node->type == NODE_TYPE_OPERATOR_BINARY_OR ||
+                  node->type == NODE_TYPE_OPERATOR_BINARY_EQ ||
+                  node->type == NODE_TYPE_OPERATOR_BINARY_NE ||
+                  node->type == NODE_TYPE_OPERATOR_BINARY_LT ||
+                  node->type == NODE_TYPE_OPERATOR_BINARY_LE ||
+                  node->type == NODE_TYPE_OPERATOR_BINARY_GT ||
+                  node->type == NODE_TYPE_OPERATOR_BINARY_GE)) {
+        result = ast.createNodeBinaryOperator(node->type, newChildren[0],
+                                              newChildren[1]);
+      } else {
+        // For other node types, clone and replace children
+        result = ast.shallowCopyForModify(node);
+        for (size_t i = 0; i < numMembers; ++i) {
+          result->changeMember(i, newChildren[i]);
         }
       }
-
-      // Transform only when we found both an array and an attribute.
-      if (attr == nullptr || array == nullptr) {
-        return mutableNode;
-      }
-
-      // Build: attr IN array
-      return ast->createNodeBinaryOperator(
-          NODE_TYPE_OPERATOR_BINARY_IN, attr, array);
     }
 
-    return mutableNode;
+    // Now try to rewrite this node itself if it is ANY ==
+    if (result->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
+      return simplifyAnyEq(result);
+    }
+
+    return result;
   }
 };
 
@@ -6227,7 +6289,7 @@ void arangodb::aql::replaceAnyWithInRule(Optimizer* opt,
 
     auto root = cn->expression()->node();
 
-    AnySimplifier simplifier(plan->getAst(), plan.get());
+    AnySimplifier simplifier(*plan->getAst(), *plan.get());
     auto newRoot = simplifier.simplify(root);
 
     if (newRoot != root) {
