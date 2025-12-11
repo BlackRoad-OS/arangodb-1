@@ -437,6 +437,16 @@ DECLARE_GAUGE(arangodb_internal_cluster_info_memory_usage, std::uint64_t,
 DECLARE_GAUGE(arangodb_metadata_number_of_shards, std::uint64_t,
               "Global number of shards");
 
+// New coordinator-level shard metrics
+DECLARE_GAUGE(arangodb_metadata_total_number_of_shards, std::uint64_t,
+              "Total number of shards (viewed by coordinator)");
+DECLARE_GAUGE(arangodb_metadata_number_out_of_sync_shards, std::uint64_t,
+              "Number of shards out-of-sync between Plan and Current");
+DECLARE_GAUGE(arangodb_metadata_number_not_replicated_shards, std::uint64_t,
+              "Number of shards with fewer replicas in Current than planned");
+DECLARE_GAUGE(arangodb_metadata_number_follower_shards, std::uint64_t,
+              "Total number of follower replicas observed in Current");
+
 ClusterInfo::ClusterInfo(ArangodServer& server, AgencyCache& agencyCache,
                          AgencyCallbackRegistry& agencyCallbackRegistry,
                          ErrorCode syncerShutdownCode,
@@ -1957,6 +1967,11 @@ auto ClusterInfo::loadPlan() -> consensus::index_t {
 
   updateMetadataMetrics();
 
+  // Update coordinator specific shard metrics computed from Plan
+  if (_metadataMetrics.has_value()) {
+    updateCoordinatorPlanMetrics();
+  }
+
   _clusterFeature.addDirty(changeSet.dbs);
 
   {
@@ -2247,6 +2262,11 @@ auto ClusterInfo::loadCurrent() -> consensus::index_t {
         << "Have loaded new collections current cache!";
     _currentCollections.swap(newCollections);
     _shardsToCurrentServers.swap(newShardsToCurrentServers);
+  }
+
+  // Update coordinator-specific shard metrics computed from Current
+  if (_metadataMetrics.has_value()) {
+    updateCoordinatorCurrentMetrics();
   }
 
   _currentProt.isValid = true;
@@ -6311,14 +6331,140 @@ auto ClusterInfo::getReplicatedLogPlanSpecification(replication2::LogId id)
 }
 
 ClusterInfo::MetadataMetrics::MetadataMetrics(metrics::MetricsFeature& metrics)
-    : numberOfShards(metrics.add(arangodb_metadata_number_of_shards{})),
-      numberOfCollections(
-          metrics.add(arangodb_metadata_number_of_collections{})),
-      numberOfDatabases(metrics.add(arangodb_metadata_number_of_databases{})) {
+  : numberOfShards(metrics.add(arangodb_metadata_number_of_shards{})),
+    numberOfCollections(
+      metrics.add(arangodb_metadata_number_of_collections{})),
+    numberOfDatabases(metrics.add(arangodb_metadata_number_of_databases{})),
+    totalNumberOfShards(
+      metrics.add(arangodb_metadata_total_number_of_shards{})),
+    numberOutOfSyncShards(
+      metrics.add(arangodb_metadata_number_out_of_sync_shards{})),
+    numberNotReplicatedShards(
+      metrics.add(arangodb_metadata_number_not_replicated_shards{})),
+    numberFollowerShards(metrics.add(arangodb_metadata_number_follower_shards{})) {
   // TODO We should expose these on a single server as well, but that can't
   //      happen in the ClusterInfo.
   TRI_ASSERT(ServerState::instance()->isCoordinator())
       << "ClusterInfo::MetadataMetrics should be exposed only on a coordinator";
+}
+
+// Update coordinator-level plan metrics.
+// NOTE: caller is expected to hold the appropriate locks (e.g. in loadPlan
+// the _planProt.lock write lock is held when this is invoked).
+void ClusterInfo::updateCoordinatorPlanMetrics() {
+  if (!_metadataMetrics.has_value()) {
+    return;
+  }
+
+  uint64_t totalShards = 0;
+  uint64_t leaders = 0;
+  uint64_t followers = 0;
+  uint64_t notReplicated = 0;
+
+  // iterate planned shards map. Caller should hold _planProt.lock
+  for (auto const& entry : _shards) {
+    auto const& shardVecPtr = entry.second;
+    if (!shardVecPtr) {
+      continue;
+    }
+    for (auto const& shard : *shardVecPtr) {
+      ++totalShards;
+      auto it = _shardsToPlanServers.find(shard);
+      if (it == _shardsToPlanServers.end() || !it->second) {
+        // no plan servers recorded
+        ++notReplicated;
+        continue;
+      }
+      auto const& servers = *it->second;
+      if (!servers.empty()) {
+        ++leaders;
+        if (servers.size() > 1) {
+          followers += (servers.size() - 1);
+        } else {
+          ++notReplicated;
+        }
+      } else {
+        ++notReplicated;
+      }
+    }
+  }
+
+  _metadataMetrics->totalNumberOfShards.store(totalShards,
+                                              std::memory_order_relaxed);
+  // For plan-only update we set follower/leader counts computed from plan
+  _metadataMetrics->numberFollowerShards.store(followers,
+                                               std::memory_order_relaxed);
+  _metadataMetrics->numberOutOfSyncShards.store(0, std::memory_order_relaxed);
+  _metadataMetrics->numberNotReplicatedShards.store(notReplicated,
+                                                   std::memory_order_relaxed);
+}
+
+// Update coordinator-level current metrics.
+// Caller is expected to hold _currentProt.lock (write) when invoked.
+// This routine will read Plan maps under a read-lock to compare planned vs
+// actual state.
+void ClusterInfo::updateCoordinatorCurrentMetrics() {
+  if (!_metadataMetrics.has_value()) {
+    return;
+  }
+
+  uint64_t totalShards = 0;
+  uint64_t followers = 0;
+  uint64_t outOfSync = 0;
+  uint64_t notReplicated = 0;
+
+  // read plan under read lock to compare leaders/replication factors
+  READ_LOCKER(readLocker, _planProt.lock);
+
+  for (auto const& it : _shardsToCurrentServers) {
+    auto const& shardId = it.first;
+    auto const& serversPtr = it.second;
+    ++totalShards;
+    size_t currentN = (serversPtr ? serversPtr->size() : 0);
+    if (currentN > 0) {
+      followers += (currentN - 1);
+    }
+
+    // compare to plan
+    auto pit = _shardsToPlanServers.find(shardId);
+    size_t plannedN = 0;
+    std::string_view plannedLeader{};
+    if (pit != _shardsToPlanServers.end() && pit->second) {
+      plannedN = pit->second->size();
+      if (plannedN > 0) {
+        plannedLeader = pit->second->at(0);
+      }
+    }
+
+    // current leader
+    std::string_view currentLeader{};
+    if (serversPtr && !serversPtr->empty()) {
+      currentLeader = serversPtr->at(0);
+    }
+
+    // out of sync: leader changed or missing
+    if (plannedN == 0) {
+      // No plan present: treat as out-of-sync
+      ++outOfSync;
+    } else if (currentLeader.empty()) {
+      ++outOfSync;
+    } else if (!plannedLeader.empty() && plannedLeader != currentLeader) {
+      ++outOfSync;
+    }
+
+    if (plannedN > currentN) {
+      ++notReplicated;
+    }
+  }
+
+  _metadataMetrics->totalNumberOfShards.store(totalShards,
+                                              std::memory_order_relaxed);
+  _metadataMetrics->numberFollowerShards.store(followers,
+                                               std::memory_order_relaxed);
+  _metadataMetrics->numberOutOfSyncShards.store(outOfSync,
+                                                std::memory_order_relaxed);
+  _metadataMetrics->numberNotReplicatedShards.store(notReplicated,
+                                                   std::memory_order_relaxed);
 }
 
 AnalyzerModificationTransaction::AnalyzerModificationTransaction(

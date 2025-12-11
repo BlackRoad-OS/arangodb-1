@@ -1057,6 +1057,12 @@ class ClusterInfo final {
   void triggerWaiting(AssocMultiMap<uint64_t, futures::Promise<Result>>& mm,
                       uint64_t commitIndex);
 
+  // Coordinator-only metric helpers. These expect the caller to hold the
+  // appropriate locks when invoked (plan: _planProt.lock, current:
+  // _currentProt.lock).
+  void updateCoordinatorPlanMetrics();
+  void updateCoordinatorCurrentMetrics();
+
   //////////////////////////////////////////////////////////////////////////////
   /// @brief get the timeout for reloading the server list
   //////////////////////////////////////////////////////////////////////////////
@@ -1124,6 +1130,12 @@ class ClusterInfo final {
     metrics::Gauge<std::uint64_t>& numberOfShards;
     metrics::Gauge<std::uint64_t>& numberOfCollections;
     metrics::Gauge<std::uint64_t>& numberOfDatabases;
+
+    // New coordinator-level shard metrics
+    metrics::Gauge<std::uint64_t>& totalNumberOfShards;
+    metrics::Gauge<std::uint64_t>& numberOutOfSyncShards;
+    metrics::Gauge<std::uint64_t>& numberNotReplicatedShards;
+    metrics::Gauge<std::uint64_t>& numberFollowerShards;
 
     explicit MetadataMetrics(metrics::MetricsFeature& metrics);
   };
