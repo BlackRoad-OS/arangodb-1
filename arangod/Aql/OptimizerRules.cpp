@@ -5889,22 +5889,6 @@ struct OrSimplifier {
         }
       }
       // intentionally falls through
-    } else if (node->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) {
-      TRI_ASSERT(node->numMembers() == 3);
-      auto arrayNode = node->getMember(0);
-      auto attrNode = node->getMember(1);
-      auto quantifier = node->getMember(2);
-
-      // Check if quantifier is ANY
-      if (Quantifier::isAny(quantifier)) {
-        if (arrayNode->isArray() && qualifies(attrNode, attributeName)) {
-          if (arrayNode->isDeterministic()) {
-            attr = attrNode;
-            value = arrayNode;
-            return true;
-          }
-        }
-      }
     }
 
     return false;
@@ -5954,11 +5938,9 @@ struct OrSimplifier {
       }
 
       if ((lhsNew->type == NODE_TYPE_OPERATOR_BINARY_EQ ||
-           lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-           lhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) &&
+           lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN) &&
           (rhsNew->type == NODE_TYPE_OPERATOR_BINARY_EQ ||
-           rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-           rhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ)) {
+           rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN)) {
         std::string leftName;
         std::string rightName;
         AstNode const* leftAttr = nullptr;
@@ -5997,13 +5979,10 @@ struct OrSimplifier {
               }
             }
 
-            return buildValues(
-                leftAttr, leftValue,
-                lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-                    lhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ,
-                rightValue,
-                rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-                    rhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ);
+            return buildValues(leftAttr, leftValue,
+                               lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN,
+                               rightValue,
+                               rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN);
           }
         }
       }
