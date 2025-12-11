@@ -5946,11 +5946,9 @@ struct OrSimplifier {
       }
 
       if ((lhsNew->type == NODE_TYPE_OPERATOR_BINARY_EQ ||
-           lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-           lhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ) &&
+           lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN) &&
           (rhsNew->type == NODE_TYPE_OPERATOR_BINARY_EQ ||
-           rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-           rhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ)) {
+           rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN)) {
         std::string leftName;
         std::string rightName;
         AstNode const* leftAttr = nullptr;
@@ -5989,13 +5987,10 @@ struct OrSimplifier {
               }
             }
 
-            return buildValues(
-                leftAttr, leftValue,
-                lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-                    lhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ,
-                rightValue,
-                rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN ||
-                    rhsNew->type == NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ);
+            return buildValues(leftAttr, leftValue,
+                   lhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN,
+                   rightValue,
+                   rhsNew->type == NODE_TYPE_OPERATOR_BINARY_IN);
           }
         }
       }
