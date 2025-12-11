@@ -5800,9 +5800,12 @@ struct CommonNodeFinder {
 /// @brief common utilities for checking and stringifying AST nodes
 struct SimplifierHelper {
   /// @brief convert AST node to its string representation
-  /// @param node The node to stringify
-  /// @return The string representation, or empty string on failure
+  /// @param node The node to stringify (may be nullptr)
+  /// @return The string representation, or empty string on failure or nullptr
   static std::string stringifyNode(AstNode const* node) {
+    if (node == nullptr) {
+      return std::string();
+    }
     try {
       return node->toString();
     } catch (...) {
@@ -5814,10 +5817,14 @@ struct SimplifierHelper {
   ///
   /// Constants are excluded as they cannot be used for index lookups.
   ///
-  /// @param node The node to check
+  /// @param node The node to check (may be nullptr)
   /// @param attributeName Output parameter: the stringified attribute name
   /// @return true if the node is a valid attribute/reference expression
   static bool qualifies(AstNode const* node, std::string& attributeName) {
+    if (node == nullptr) {
+      return false;
+    }
+
     if (node->isConstant()) {
       return false;
     }
@@ -5841,26 +5848,11 @@ struct OrSimplifier {
   OrSimplifier(Ast* ast, ExecutionPlan* plan) : ast(ast), plan(plan) {}
 
   std::string stringifyNode(AstNode const* node) const {
-    try {
-      return node->toString();
-    } catch (...) {
-    }
-    return std::string();
+    return SimplifierHelper::stringifyNode(node);
   }
 
   bool qualifies(AstNode const* node, std::string& attributeName) const {
-    if (node->isConstant()) {
-      return false;
-    }
-
-    if (node->type == NODE_TYPE_ATTRIBUTE_ACCESS ||
-        node->type == NODE_TYPE_INDEXED_ACCESS ||
-        node->type == NODE_TYPE_REFERENCE) {
-      attributeName = stringifyNode(node);
-      return true;
-    }
-
-    return false;
+    return SimplifierHelper::qualifies(node, attributeName);
   }
 
   bool detect(AstNode const* node, bool preferRight, std::string& attributeName,
@@ -6109,6 +6101,8 @@ struct AnySimplifier {
       : ast(ast), plan(plan) {}
 
   /// @brief Safely convert an AST node to its string representation
+  /// @param node The node to stringify
+  /// @return The string representation, or empty string on failure
   std::string stringifyNode(AstNode const* node) const {
     return SimplifierHelper::stringifyNode(node);
   }

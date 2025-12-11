@@ -69,7 +69,7 @@ function NewAqlReplaceAnyWithINTestSuite () {
     return db._query(query, params, { optimizer: { rules: [ "-all", "+replace-or-with-in" ] } }).toArray();
   };
   
-  var verifyExecutionPlan = function (query, params) {
+  var verifyExecutionPlan = function (query, params) { 
     var explainWithRule = db._createStatement({
       query: query,
       bindVars: params || {},
@@ -131,15 +131,18 @@ function NewAqlReplaceAnyWithINTestSuite () {
 
       let docs = [];
       for (var i = 1; i <= 10; ++i) {
-        docs.push({ "value" : i, "name": "Alice", "tags": ["a", "b"], "categories": ["x", "y"] });
-        docs.push({ "value" : i + 10, "name": "Bob", "tags": ["b", "c"], "categories": ["y", "z"] });
-        docs.push({ "value" : i + 20, "name": "Carol", "tags": ["c", "d"], "categories": ["z"] });
+        docs.push({ "value" : i, "name": "Alice", "tags": ["a", "b"], "categories": ["x", "y"], "active": true, "score": 100 + i });
+        docs.push({ "value" : i + 10, "name": "Bob", "tags": ["b", "c"], "categories": ["y", "z"], "active": false, "score": 200 + i });
+        docs.push({ "value" : i + 20, "name": "Carol", "tags": ["c", "d"], "categories": ["z"], "active": true, "score": 300 + i });
+        docs.push({ "value" : i + 30, "name": null, "tags": ["d"], "categories": [], "active": null, "score": null });
         docs.push({"a" : {"b" : i}});
       }
       replace.insert(docs);
       
       replace.ensureIndex({ type: "persistent", fields: ["name"] });
       replace.ensureIndex({ type: "persistent", fields: ["a.b"] });
+      replace.ensureIndex({ type: "persistent", fields: ["value"] });
+      replace.ensureIndex({ type: "persistent", fields: ["score"] });
     },
 
     tearDownAll : function () {
@@ -272,6 +275,7 @@ function NewAqlReplaceAnyWithINTestSuite () {
     },
     
     testFiresEmptyArray : function () {
+      // do a db.explain() here with and without optimizer rules to check if the optimizer includes a noresultnode, being faster
       var query = "FOR x IN " + replace.name() + 
         " FILTER [] ANY == x.name RETURN x.value";
 
@@ -608,6 +612,161 @@ function NewAqlReplaceAnyWithINTestSuite () {
                  "Plan with replace-any-eq-with-in should use IndexNode even with multiple conditions");
       
       var expected = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ];
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      
+      assertEqual(expected, withRule);
+      assertEqual(withRule, withoutRule, "Results should match");
+    },
+    
+    testFiresWithNumbers : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER [1, 2, 3] ANY == x.value SORT x.value RETURN x.value";
+      
+      var plans = verifyExecutionPlan(query, {});
+      verifyPlansDifferent(plans.withRule, plans.withoutRule, query);
+      
+      var expected = [ 1, 2, 3 ];
+      var actual = getQueryResults(query, {});
+      assertEqual(expected, actual);
+      
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      assertEqual(withRule, withoutRule, "Results with and without rule should match");
+      
+      var orQuery = "FOR x IN " + replace.name() + 
+        " FILTER x.value == 1 || x.value == 2 || x.value == 3 SORT x.value RETURN x.value";
+      var orResult = executeWithOrRule(orQuery, {});
+      assertEqual(withRule, orResult, "Results with ANY == should match OR query");
+    },
+    
+    testFiresWithBooleans : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER [true] ANY == x.active SORT x.value RETURN x.value";
+      
+      var plans = verifyExecutionPlan(query, {});
+      verifyPlansDifferent(plans.withRule, plans.withoutRule, query);
+      
+      var expected = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 ];
+      var actual = getQueryResults(query, {});
+      assertEqual(expected, actual);
+      
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      assertEqual(withRule, withoutRule, "Results with and without rule should match");
+      
+      var orQuery = "FOR x IN " + replace.name() + 
+        " FILTER x.active == true SORT x.value RETURN x.value";
+      var orResult = executeWithOrRule(orQuery, {});
+      assertEqual(withRule, orResult, "Results with ANY == should match OR query");
+    },
+    
+    testFiresWithNullValues : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER [null] ANY == x.name SORT x.value RETURN x.value";
+      
+      var plans = verifyExecutionPlan(query, {});
+      verifyPlansDifferent(plans.withRule, plans.withoutRule, query);
+      
+      var actual = getQueryResults(query, {});
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      
+      assertEqual(withRule, withoutRule, "Results with and without rule should match");
+      assertEqual(actual, withRule, "Query results should match");
+      
+      assertTrue(withRule.length > 0, "Should find documents with null name");
+    },
+    
+    testFiresWithMixedNullAndValues : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER [null, 'Alice'] ANY == x.name SORT x.value RETURN x.value";
+      
+      var plans = verifyExecutionPlan(query, {});
+      verifyPlansDifferent(plans.withRule, plans.withoutRule, query);
+      
+      var actual = getQueryResults(query, {});
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      
+      assertEqual(withRule, withoutRule, "Results with and without rule should match");
+      assertEqual(actual, withRule, "Query results should match");
+      
+      assertTrue(withRule.length >= 10, "Should find at least Alice documents");
+    },
+    
+    testFiresWithComplexBooleanExpression : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER (['Alice', 'Bob'] ANY == x.name || x.value > 30) && x.value <= 40 SORT x.value RETURN x.value";
+      
+      var plans = verifyExecutionPlan(query, {});
+      verifyPlansDifferent(plans.withRule, plans.withoutRule, query);
+      
+      var expected = [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40 ];
+      var actual = getQueryResults(query, {});
+      assertEqual(expected, actual);
+      
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      assertEqual(withRule, withoutRule, "Results with and without rule should match");
+    },
+    
+    testIntegrationWithReplaceOrWithIn : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER (x.name == 'Alice' || x.name == 'Bob') && ['Carol'] ANY == x.name SORT x.value RETURN x.value";
+      
+      var explainWithBothRules = db._createStatement({
+        query: query,
+        bindVars: {},
+        options: { optimizer: { rules: [ "-all", "+replace-or-with-in", "+" + ruleName ] } }
+      }).explain();
+      
+      var planWithBothRules = explainWithBothRules.plan;
+      
+      assertTrue(planWithBothRules.rules.indexOf("replace-or-with-in") !== -1,
+                 "Plan should contain replace-or-with-in");
+      assertTrue(planWithBothRules.rules.indexOf(ruleName) !== -1,
+                 "Plan should contain replace-any-eq-with-in");
+      
+      var expected = [];
+      var actual = getQueryResults(query, {});
+      assertEqual(expected, actual);
+      
+      var withRule = executeWithRule(query, {});
+      var withoutRule = executeWithoutRule(query, {});
+      assertEqual(withRule, withoutRule, "Results with and without rule should match");
+    },
+    
+    testIndexOptimizationWithNumbers : function () {
+      var query = 
+        "FOR x IN " + replace.name() + 
+        " FILTER [1, 2, 3] ANY == x.value SORT x.value RETURN x.value";
+      
+      var explainWithRule = db._createStatement({
+        query: query,
+        bindVars: {},
+        options: { optimizer: { rules: [ "-all", "+replace-any-eq-with-in", "+use-indexes" ] } }
+      }).explain();
+      
+      var planWithRule = explainWithRule.plan;
+      
+      assertTrue(planWithRule.rules.indexOf(ruleName) !== -1,
+                 "Plan with rule should contain replace-any-eq-with-in");
+      assertTrue(planWithRule.rules.indexOf("use-indexes") !== -1,
+                 "Plan with rule should contain use-indexes");
+      
+      var indexNodesWith = findExecutionNodes(planWithRule, "IndexNode");
+      
+      assertTrue(indexNodesWith.length > 0,
+                 "Plan with replace-any-eq-with-in should use IndexNode for numeric values");
+      
+      var expected = [ 1, 2, 3 ];
       var withRule = executeWithRule(query, {});
       var withoutRule = executeWithoutRule(query, {});
       
