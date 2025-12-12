@@ -1,5 +1,5 @@
 /*jshint globalstrict:false, strict:false, maxlen: 500 */
-/*global assertEqual, assertTrue, assertFalse, assertNotEqual, print, */
+/*global assertEqual, assertTrue, assertFalse, assertNotEqual, */
 
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
@@ -50,6 +50,29 @@ function ClusterDBServerShardMetricsTestSuite() {
       sum += value;
     }
     return sum;
+  };
+
+  // Helper to calculate total shard count for a database (shards * replicationFactor)
+  const getDbShardCount = function(database) {
+    const oldDb = db._name();
+    db._useDatabase(database);
+    const count = db._collections().reduce((sum, col) => {
+      const props = col.properties();
+      return sum + props.numberOfShards * props.replicationFactor;
+    }, 0);
+    db._useDatabase(oldDb);
+    return count;
+  };
+
+  // Helper to calculate total leader count for a database (just numberOfShards)
+  const getDbLeaderCount = function(database) {
+    const oldDb = db._name();
+    db._useDatabase(database);
+    const count = db._collections().reduce((sum, col) => {
+      return sum + col.properties().numberOfShards;
+    }, 0);
+    db._useDatabase(oldDb);
+    return count;
   };
 
   // Helper function to generate documents that cover all shards
@@ -132,31 +155,26 @@ function ClusterDBServerShardMetricsTestSuite() {
       internal.wait(1);
       const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
       if (shardsNumMetricValue !== expectedShardsNum && expectedShardsNum !== null) {
-        print(`The metric ${shardsNumMetric} has value ${shardsNumMetricValue} should have been ${expectedShardsNum}`);
         continue;
       }
 
       const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
       if (shardsLeaderNumMetricValue !== expectedShardsLeaderNum && expectedShardsLeaderNum !== null) {
-        print(`The metric ${shardsLeaderNumMetric} has value ${shardsLeaderNumMetricValue} should have been ${expectedShardsLeaderNum}`);
         continue;
       }
 
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
       if (shardsOutOfSyncNumMetricValue !== expectedShardsOutOfSync) {
-        print(`The metric ${shardsOutOfSyncNumMetric} has value ${shardsOutOfSyncNumMetricValue} should have been ${expectedShardsOutOfSync}`);
         continue;
       }
 
       const followersOutOfSyncNumMetricValue = getDBServerMetricSum(servers, followersOutOfSyncNumMetric);
       if (followersOutOfSyncNumMetricValue !== expectedFollowersOutOfSync) {
-        print(`The metric ${followersOutOfSyncNumMetric} has value ${followersOutOfSyncNumMetricValue} should have been ${expectedFollowersOutOfSync}`);
         continue;
       }
 
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
       if (shardsNotReplicatedNumMetricValue !== expectedShardsNotReplicated) {
-        print(`The metric ${shardsNotReplicatedNumMetric} has value ${shardsNotReplicatedNumMetricValue} should have been ${expectedShardsNotReplicated}`);
         continue;
       }
 
@@ -174,20 +192,27 @@ function ClusterDBServerShardMetricsTestSuite() {
 
     testShardCountMetricStability: function () {
       const dbServers = getDBServers();
-      // shardsNum: 12 * 2 (since the replication factor for _system collections is 2)
-      // shardsLeaderNum: 12
-      getMetricsAndAssert(dbServers, 24, 12, 0, 0);
+      const systemShardCount = getDbShardCount("_system");
+      const systemLeaderCount = getDbLeaderCount("_system");
+      getMetricsAndAssert(dbServers, systemShardCount, systemLeaderCount, 0, 0);
 
       db._createDatabase(dbName);
-      // shardsNum: 24 + 16 (2 * 8), 24 shards from old database + 16 shards from new database
-      // shardsLeaderNum: 12 + 8 from new database
-      getMetricsAndEventuallyAssert(dbServers, 40, 20, 0, 0);
+      const newDbShardCount = getDbShardCount(dbName);
+      const newDbLeaderCount = getDbLeaderCount(dbName);
+      const totalShardCount = systemShardCount + newDbShardCount;
+      const totalLeaderCount = systemLeaderCount + newDbLeaderCount;
+      getMetricsAndEventuallyAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
 
       db._useDatabase(dbName);
+      const testCollShards = 6;
+      const testCollReplication = 2;
       db._create(collectionName, {
-        numberOfShards: 6,
-        replicationFactor: 2
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication
       });
+
+      const expectedShardCount = totalShardCount + (testCollShards * testCollReplication);
+      const expectedLeaderCount = totalLeaderCount + testCollShards;
 
       // Check stability of metrics
       let metricsMap = {
@@ -205,9 +230,9 @@ function ClusterDBServerShardMetricsTestSuite() {
       }
 
       // Assert the value of the first entry
-      assertEqual(metricsMap[shardsNumMetric][0], 52); // 40 + (2 * 6) shards from new collection
-      assertEqual(metricsMap[shardsLeaderNumMetric][0], 26); // 20 + 6 leaders from new collection
-      assertEqual(metricsMap[shardsFollowerNumMetric][0], 26); // 52 - 26 followers
+      assertEqual(metricsMap[shardsNumMetric][0], expectedShardCount);
+      assertEqual(metricsMap[shardsLeaderNumMetric][0], expectedLeaderCount);
+      assertEqual(metricsMap[shardsFollowerNumMetric][0], expectedShardCount - expectedLeaderCount);
       assertEqual(metricsMap[shardsOutOfSyncNumMetric][0], 0);
       assertEqual(metricsMap[followersOutOfSyncNumMetric][0], 0);
       assertEqual(metricsMap[shardsNotReplicatedNumMetric][0], 0);
@@ -223,19 +248,20 @@ function ClusterDBServerShardMetricsTestSuite() {
 
     testShardOutOfSyncMetricChange: function () {
       const dbServers = getDBServers();
-      getMetricsAndAssert(dbServers, 24, 12, 0, 0);
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
+      const testCollShards = 2;
+      const testCollReplication = 3;
       db._create(collectionName, {
-        numberOfShards: 2,
-        replicationFactor: 3,
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
       });
 
-      // Assert initial state
-      // shardsNum: 40 (12 * 2 + 8 * 2) (from two databases) + 2 * 3 (from new collection)
-      // shardsLeaderNum: 12 + 8 + 2
-      getMetricsAndAssert(dbServers, 46, 22, 0, 0);
+      // Calculate expected counts after setup
+      const totalShardCount = getDbShardCount("_system") + getDbShardCount(dbName);
+      const totalLeaderCount = getDbLeaderCount("_system") + getDbLeaderCount(dbName);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
 
       const shards = db[collectionName].shards(true);
       const dbServerWithLeaderId = Object.values(shards).map(servers => servers[0]);
@@ -243,7 +269,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       dbServerWithoutLeader.suspend();
 
       // Ensure we insert documents on ALL shards
-      const docsToInsert = generateDocsForAllShards(db[collectionName], 2, 50);
+      const docsToInsert = generateDocsForAllShards(db[collectionName], testCollShards, 50);
       db[collectionName].insert(docsToInsert);
 
       // Get metrics after we kill one db server with follower
@@ -252,12 +278,14 @@ function ClusterDBServerShardMetricsTestSuite() {
       // also other system shards might also be out of sync
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
       assertTrue(shardsOutOfSyncNumMetricValue >= 2);
-      getMetricsAndAssert(onlineServers, 44, 22, null, 0);
+      // One server is down, so we lose testCollShards shards (one replica per shard)
+      const onlineShardCount = totalShardCount - testCollShards;
+      getMetricsAndAssert(onlineServers, onlineShardCount, totalLeaderCount, null, 0);
 
       dbServerWithoutLeader.resume();
 
       // Eventually true
-      getMetricsAndEventuallyAssert(dbServers, 46, 22, 0, 0);
+      getMetricsAndEventuallyAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
     },
 
     testShardNotReplicatedMetricChange: function () {
@@ -265,14 +293,19 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
+      const testCollShards = 1;
+      const testCollReplication = 3;
       db._create(collectionName, {
-        numberOfShards: 1,
-        replicationFactor: 3,
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
       });
       // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
 
-      getMetricsAndAssert(dbServers, 43, 21, 0, 0);
+      // Calculate expected counts after setup
+      const totalShardCount = getDbShardCount("_system") + getDbShardCount(dbName);
+      const totalLeaderCount = getDbLeaderCount("_system") + getDbLeaderCount(dbName);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
 
       // Get db servers which have the two followers
       const shards = db[collectionName].shards(true);
@@ -294,39 +327,34 @@ function ClusterDBServerShardMetricsTestSuite() {
       // shards distribution of internal collections from _system and $dbName databases, but we can assert that:
       // - eventually the number of shards would be equal to the total number of leaders
       // - eventually the number of shards leaders must be 1 or greater
-      // - eventually the number of out of syn should be at least 1
+      // - eventually the number of out of sync should be at least 1
       // - eventually the number of not replicated shards should be at least 1
       for(let i = 0; i < 100; i++) {
         internal.wait(1);
         const shardsNumMetricValue = getDBServerMetricSum(onlineServers, shardsNumMetric);
-        if (shardsNumMetricValue !== 21) {
-          print(`The metric ${shardsNumMetric} has value ${shardsNumMetricValue} should have been 21`);
+        if (shardsNumMetricValue !== totalLeaderCount) {
           continue;
         }
         const shardsLeaderNumMetricValue = getDBServerMetricSum(onlineServers, shardsLeaderNumMetric);
         if (shardsLeaderNumMetricValue < 1) {
-          print(`The metric ${shardsLeaderNumMetric} has value ${shardsLeaderNumMetricValue} should have at least 1`);
           continue;
         }
         const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
         if (shardsOutOfSyncNumMetricValue < 1) {
-          print(`The metric ${shardsOutOfSyncNumMetric} has value ${shardsOutOfSyncNumMetricValue} should be at least 1`);
           continue;
         }
         const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(onlineServers, shardsNotReplicatedNumMetric);
         if (shardsNotReplicatedNumMetricValue < 1) {
-          print(`The metric ${shardsNotReplicatedNumMetric} has value ${shardsNotReplicatedNumMetricValue} should be at least 1`);
           continue;
         }
         const followersOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, followersOutOfSyncNumMetric);
         if (followersOutOfSyncNumMetricValue < 1) {
-          print(`The metric ${followersOutOfSyncNumMetric} has value ${followersOutOfSyncNumMetricValue} should be at least 1`);
           continue;
         }
 
         break;
       }
-      getMetricsAndAssert(onlineServers, 21, null, null, null);
+      getMetricsAndAssert(onlineServers, totalLeaderCount, null, null, null);
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(onlineServers, shardsNotReplicatedNumMetric);
       assertEqual(shardsOutOfSyncNumMetricValue, shardsNotReplicatedNumMetricValue);
@@ -337,7 +365,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       });
 
       // Eventually true
-      getMetricsAndEventuallyAssert(dbServers, 43, 21, 0, 0);
+      getMetricsAndEventuallyAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
     },
 
     testShardFollowerOutOfSync: function () {
@@ -345,11 +373,17 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
+      const testCollShards = 1;
+      const testCollReplication = 2;
       db._create(collectionName, {
-        numberOfShards: 1,
-        replicationFactor: 2,
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
       });
-      getMetricsAndAssert(dbServers, 42, 21, 0, 0);
+
+      // Calculate expected counts after setup
+      const totalShardCount = getDbShardCount("_system") + getDbShardCount(dbName);
+      const totalLeaderCount = getDbLeaderCount("_system") + getDbLeaderCount(dbName);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
 
       // Get the db servers which do not have the leader
       const shards = db[collectionName].shards(true);
@@ -382,7 +416,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       assertTrue(followersOutOfSyncNumMetricValue > 0);
       dbServersWithoutLeader[1].resume();
 
-      getMetricsAndEventuallyAssert(dbServers, 42, 21, 0, 0);
+      getMetricsAndEventuallyAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
     },
 
     testShardMetricsDuringMoveLeader: function () {
@@ -390,14 +424,19 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
+      const testCollShards = 2;
+      const testCollReplication = 3;
       let col = db._create(collectionName, {
-        numberOfShards: 2,
-        replicationFactor: 3,
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
       });
       // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
 
-      getMetricsAndAssert(dbServers, 46, 22, 0, 0);
+      // Calculate expected counts after setup
+      const totalShardCount = getDbShardCount("_system") + getDbShardCount(dbName);
+      const totalLeaderCount = getDbLeaderCount("_system") + getDbLeaderCount(dbName);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
 
       // Get shard information - shards(true) returns server IDs
       const shards = col.shards(true);
@@ -412,7 +451,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       assertTrue(moveResult);
 
       // The metrics should remain the same
-      getMetricsAndAssert(dbServers, 46, 22, 0, 0);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
     },
 
     testShardMetricsDuringMoveFollower: function () {
@@ -420,14 +459,19 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
+      const testCollShards = 1;
+      const testCollReplication = 2;
       let col = db._create(collectionName, {
-        numberOfShards: 1,
-        replicationFactor: 2,
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
       });
       // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
 
-      getMetricsAndAssert(dbServers, 42, 21, 0, 0);
+      // Calculate expected counts after setup
+      const totalShardCount = getDbShardCount("_system") + getDbShardCount(dbName);
+      const totalLeaderCount = getDbLeaderCount("_system") + getDbLeaderCount(dbName);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
 
       // Get shard information - shards(true) returns server IDs
       const shards = col.shards(true);
@@ -446,7 +490,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       assertTrue(moveResult);
 
       // The metrics should remain the same
-      getMetricsAndAssert(dbServers, 42, 21, 0, 0);
+      getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
     },
 
   };
