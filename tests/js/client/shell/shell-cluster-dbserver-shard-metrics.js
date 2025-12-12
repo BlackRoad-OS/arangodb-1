@@ -65,7 +65,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       const shardId = collection.getResponsibleShard({ _key: key });
       
       if (!shardMap[shardId]) {
-        shardMap[shardId] = 1;
+        shardMap[shardId] = 0;
       }
       
       if (shardMap[shardId] < docsPerShard) {
@@ -285,22 +285,22 @@ function ClusterDBServerShardMetricsTestSuite() {
           continue;
         }
         const shardsLeaderNumMetricValue = getDBServerMetricSum(onlineServers, shardsLeaderNumMetric);
-        if (shardsLeaderNumMetricValue < 0) {
+        if (shardsLeaderNumMetricValue < 1) {
           print(`The metric ${shardsLeaderNumMetric} has value ${shardsLeaderNumMetricValue} should have at least 1`);
           continue;
         }
         const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
-        if (shardsOutOfSyncNumMetricValue < 0) {
+        if (shardsOutOfSyncNumMetricValue < 1) {
           print(`The metric ${shardsOutOfSyncNumMetric} has value ${shardsOutOfSyncNumMetricValue} should be at least 1`);
           continue;
         }
         const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(onlineServers, shardsNotReplicatedNumMetric);
-        if (shardsNotReplicatedNumMetricValue < 0) {
+        if (shardsNotReplicatedNumMetricValue < 1) {
           print(`The metric ${shardsNotReplicatedNumMetric} has value ${shardsNotReplicatedNumMetricValue} should be at least 1`);
           continue;
         }
         const followersOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, followersOutOfSyncNumMetric);
-        if (followersOutOfSyncNumMetricValue < 0) {
+        if (followersOutOfSyncNumMetricValue < 1) {
           print(`The metric ${followersOutOfSyncNumMetric} has value ${followersOutOfSyncNumMetricValue} should be at least 1`);
           continue;
         }
