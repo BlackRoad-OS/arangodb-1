@@ -1,7 +1,7 @@
 devel
 -----
 
-* COR-8: Improved shard statistics on DBservers by updating only
+* COR-8: Improved the accuracy of shard metrics on DBservers by updating only
   metrics for databases with changes, rather than recalculating all metrics.
   Added new metrics `arangodb_shards_follower_number` to track the number of
   follower shards on each DBserver and `arangodb_shard_followers_out_of_sync_number`
