@@ -137,6 +137,7 @@ target_sources(arango_tests_replication2_pure PRIVATE
 target_link_libraries(arango_tests_replication2_pure PUBLIC
   arango_replication2_pure
   arango_lightweight
+  arango_crashhandler_light
   arango_futures
   gtest
   gmock

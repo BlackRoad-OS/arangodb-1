@@ -22,7 +22,6 @@ target_link_libraries(arango_crashhandler
     arango_basic_errors
     arango_build_id
     boost_system
-  PUBLIC
     velocypack)
 
 # TODO: With an update of libunwind to 1.6 or above
