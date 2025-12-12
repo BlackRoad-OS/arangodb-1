@@ -480,7 +480,13 @@ TEST_F(AqlShadowRowsEqTest, shadow_row_depth_equivalence) {
 
 TEST_F(AqlItemRowsTest, cloneToBlock_ManagedSlices) {
   auto inputBlock =
-      buildBlock<3>(itemBlockManager, {{{{1}, {2}, {3}}}, {{{4}, {5}, {6}}}});
+      buildBlock<3>(itemBlockManager, {
+        {
+          {{1}, {2}, {3}}
+        }, {
+          {{4}, {5}, {6}}
+        }
+      });
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -510,7 +516,13 @@ TEST_F(AqlItemRowsTest, cloneToBlock_ManagedSlices) {
 
 TEST_F(AqlItemRowsTest, cloneToBlock_SubsetOfRegisters) {
   auto inputBlock =
-      buildBlock<3>(itemBlockManager, {{{{1}, {2}, {3}}}, {{{4}, {5}, {6}}}});
+      buildBlock<3>(itemBlockManager, {
+        {
+          {{1}, {2}, {3}}
+        }, {
+          {{4}, {5}, {6}}
+        }
+      });
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -569,6 +581,7 @@ TEST_F(AqlItemRowsTest, cloneToBlock_SharedSupervisedSlices) {
       b.slice(),
       static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
       &monitor);
+  EXPECT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   inputBlock->setValue(0, 0, supervised);
   inputBlock->setValue(1, 0, supervised);
@@ -590,8 +603,8 @@ TEST_F(AqlItemRowsTest, cloneToBlock_SharedSupervisedSlices) {
 }
 
 TEST_F(AqlItemRowsTest, cloneToBlock_EmptyRow) {
+  // All values are empty
   auto inputBlock = itemBlockManager.requestBlock(1, 3);
-  // Row 0 is empty (all values are empty)
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -620,7 +633,13 @@ TEST_F(AqlItemRowsTest, cloneToBlock_EmptyRow) {
 TEST_F(AqlItemRowsTest, cloneToBlock_DestroyOriginalAfterClone) {
   // Test: Clone row to block, then destroy original - cloned should still work
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
+      buildBlock<2>(itemBlockManager, {
+        {
+          {{1}, {2}}
+        }, {
+          {{3}, {4}}
+        }
+      });
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -649,7 +668,13 @@ TEST_F(AqlItemRowsTest, cloneToBlock_DestroyValueInOriginalAfterClone) {
   // Test: Clone row, then destroy values in original
   // Cloned values should be independent copies
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
+      buildBlock<2>(itemBlockManager, {
+        {
+          {{1}, {2}}
+        }, {
+          {{3}, {4}}
+        }
+      });
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -678,7 +703,13 @@ TEST_F(AqlItemRowsTest,
        cloneToBlock_DestroyValueInClonedAfterOriginalDestroyed) {
   // Test: Clone row, destroy original, then destroy values in cloned
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
+      buildBlock<2>(itemBlockManager, {
+        {
+          {{1}, {2}}
+        }, {
+          {{3}, {4}}
+        }
+      });
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -708,7 +739,13 @@ TEST_F(AqlItemRowsTest,
 TEST_F(AqlItemRowsTest, cloneToBlock_MultipleClonesSameRow) {
   // Test: Create multiple clones of the same row - each should be independent
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
+      buildBlock<2>(itemBlockManager, {
+        {
+          {{1}, {2}}
+        }, {
+          {{3}, {4}}
+        }
+      });
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -759,6 +796,7 @@ TEST_F(AqlItemRowsTest,
       b.slice(),
       static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
       &monitor);
+  EXPECT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   inputBlock->setValue(0, 0, supervised);
   inputBlock->setValue(1, 0, supervised);
@@ -773,6 +811,7 @@ TEST_F(AqlItemRowsTest,
 
   SharedAqlItemBlockPtr clonedBlock =
       source.cloneToBlock(itemBlockManager, regs, 1);
+  EXPECT_GT(monitor.current(), initialMemory);
 
   ASSERT_NE(clonedBlock, nullptr);
   EXPECT_EQ(clonedBlock->getValueReference(0, 0).slice().stringView(), content);
@@ -784,7 +823,7 @@ TEST_F(AqlItemRowsTest,
   EXPECT_EQ(clonedBlock->getValueReference(0, 0).slice().stringView(), content);
 
   // Memory should still be tracked (cloned value + original value in row 1)
-  EXPECT_GT(monitor.current(), 0U);
+  EXPECT_GT(monitor.current(), 0);
 
   // Destroy cloned block
   clonedBlock.reset(nullptr);
@@ -808,6 +847,7 @@ TEST_F(AqlItemRowsTest, cloneToBlock_SharedSupervisedSlicesMultipleClones) {
       b.slice(),
       static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
       &monitor);
+  EXPECT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   inputBlock->setValue(0, 0, supervised);
   // supervised goes out of scope, but block now owns the memory
