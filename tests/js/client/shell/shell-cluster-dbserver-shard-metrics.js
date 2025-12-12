@@ -56,23 +56,42 @@ function ClusterDBServerShardMetricsTestSuite() {
   const generateDocsForAllShards = function(collection, numberOfShards, docsPerShard) {
     let shardMap = {};
     let docsToInsert = [];
+    const batchSize = 1000;
+    let keyIndex = 0;
 
-    // Generate keys that cover all shards
-    let i = 0;
-    while (Object.keys(shardMap).length < numberOfShards || 
+    while (Object.keys(shardMap).length < numberOfShards ||
            Object.values(shardMap).some(count => count < docsPerShard)) {
-      const key = `test${i}`;
-      const shardId = collection.getResponsibleShard({ _key: key });
-      
-      if (!shardMap[shardId]) {
-        shardMap[shardId] = 0;
+
+      const query = `
+        FOR i IN 1..@batchSize
+          RETURN { key: CONCAT('key', i), shardId: SHARD_ID(@collection, { _key: CONCAT('test', i) }) }
+      `;
+      const results = db._query(query, {
+        'batchSize': batchSize,
+        'collection': collection.name()
+      }).toArray();
+
+      // Process the batch results
+      for (const result of results) {
+        const { key, shardId } = result;
+
+        if (!shardMap[shardId]) {
+          shardMap[shardId] = 0;
+        }
+
+        if (shardMap[shardId] < docsPerShard) {
+          shardMap[shardId]++;
+          docsToInsert.push({ _key: key });
+        }
+
+        // Early exit if we've satisfied all shards
+        if (Object.keys(shardMap).length >= numberOfShards &&
+            Object.values(shardMap).every(count => count >= docsPerShard)) {
+          break;
+        }
       }
-      
-      if (shardMap[shardId] < docsPerShard) {
-        shardMap[shardId]++;
-        docsToInsert.push({ _key: key });
-      }
-      ++i;
+
+      keyIndex += batchSize;
     }
 
     return docsToInsert;
