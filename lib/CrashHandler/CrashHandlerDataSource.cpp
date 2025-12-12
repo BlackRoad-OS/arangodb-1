@@ -21,20 +21,14 @@
 /// @author Jure Bajic
 ////////////////////////////////////////////////////////////////////////////////
 
-#pragma once
-
-#include <string_view>
-#include <velocypack/SharedSlice.h>
+#include "CrashHandler/CrashHandlerDataSource.h"
+#include "CrashHandler/CrashHandler.h"
 
 namespace arangodb {
 
-class CrashHandlerDataSource {
- public:
-  virtual ~CrashHandlerDataSource();
-
-  virtual velocypack::SharedSlice getCrashData() const = 0;
-
-  virtual std::string_view getDataSourceName() const = 0;
-};
+CrashHandlerDataSource::~CrashHandlerDataSource() {
+  // Automatically unregister from crash handler when destroyed
+  CrashHandler::removeDataSource(this);
+}
 
 }  // namespace arangodb
