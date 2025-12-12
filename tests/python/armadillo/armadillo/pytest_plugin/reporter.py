@@ -52,6 +52,9 @@ class ArmadilloReporter:
         result_collector: Optional[ResultCollector] = None,
     ):
         self.test_times: Dict[str, Dict[str, float]] = {}
+        self._test_start_times: Dict[str, datetime] = (
+            {}
+        )  # Store actual start datetime for timestamp matching
         self.test_reports: Dict[str, TestReport] = (
             {}
         )  # Store reports for result collection
@@ -227,6 +230,10 @@ class ArmadilloReporter:
     def pytest_runtest_setup(self, item: Item) -> None:
         """Handle test setup start."""
         test_name = self._get_test_name(item.nodeid)
+
+        # Capture actual datetime for timestamp matching with sanitizer files
+        self._test_start_times[item.nodeid] = datetime.now()
+
         if test_name in self.test_times:
             self.test_times[test_name]["setup_start"] = time.time()
 
@@ -482,6 +489,7 @@ class ArmadilloReporter:
                 test_timeout=config.test_timeout,
                 compact_mode=config.compact_mode,
                 show_server_logs=config.show_server_logs,
+                sanitizer_match_tolerance_seconds=config.timeouts.sanitizer_match_tolerance,
             )
 
             # Set server health if provided (ServerHealthInfo instances)
@@ -501,3 +509,161 @@ class ArmadilloReporter:
 
         self._print_session_summary()
         self.summary_printed = True
+
+    def print_post_analysis_summary(
+        self,
+        server_health: Dict[DeploymentId, ServerHealthInfo],
+        sanitizer_matches: Dict[str, List[tuple[Path, str]]],
+    ) -> None:
+        """Print post-test analysis summary showing server health issues.
+
+        Args:
+            server_health: Server health info by deployment ID
+            sanitizer_matches: Dict mapping test nodeid to [(file_path, confidence)]
+        """
+        from ..utils.output import write_stdout
+        import os
+
+        write_stdout("\n")
+        write_stdout(
+            self._colorize("⚠️  Post-Test Health Analysis:", Colors.YELLOW) + "\n"
+        )
+
+        # Count and display matched sanitizer issues
+        if sanitizer_matches:
+            write_stdout(
+                f"\n    {self._colorize(f'Tests with Sanitizer Issues ({len(sanitizer_matches)}):', Colors.YELLOW)}\n"
+            )
+            for nodeid, matches in sanitizer_matches.items():
+                # Display test nodeid
+                test_display = self._colorize(nodeid, Colors.BOLD)
+                write_stdout(f"    • {test_display}\n")
+
+                for san_file, confidence in matches:
+                    # Try to extract error type from sanitizer file
+                    try:
+                        with open(san_file) as f:
+                            first_lines = [f.readline() for _ in range(10)]
+                            error_type = self._extract_sanitizer_type(first_lines)
+                            confidence_color = (
+                                Colors.RED if confidence == "high" else Colors.YELLOW
+                            )
+                            write_stdout(
+                                f"      → {error_type} "
+                                f"({self._colorize(f'confidence: {confidence}', confidence_color)})\n"
+                            )
+                    except (OSError, IOError):
+                        write_stdout(f"      → {san_file.name}\n")
+
+        # Show unmatched sanitizer reports
+        total_sanitizers = 0
+        if server_health:
+            for health in server_health.values():
+                if hasattr(health, "sanitizer_files"):
+                    for files in health.sanitizer_files.values():
+                        total_sanitizers += len(files)
+
+        matched_count = sum(len(matches) for matches in sanitizer_matches.values())
+        unmatched_count = total_sanitizers - matched_count
+
+        if unmatched_count > 0:
+            write_stdout(
+                f"\n    • {self._colorize(f'{unmatched_count} sanitizer report(s)', Colors.YELLOW)} "
+                f"could not be matched to specific tests\n"
+            )
+            write_stdout(
+                f"      (see suite-level system-err in {self._colorize('junit.xml', Colors.CYAN)})\n"
+            )
+
+        # Show exit code issues
+        exit_code_issues = []
+        for deployment_id, health in server_health.items():
+            for server_id, exit_code in health.exit_codes.items():
+                if exit_code != 0:
+                    exit_code_issues.append((server_id, exit_code))
+
+        if exit_code_issues:
+            write_stdout(
+                f"\n    {self._colorize('Server Exit Code Issues:', Colors.YELLOW)}\n"
+            )
+            for server_id, exit_code in exit_code_issues:
+                from ..core.types import _get_exit_code_context
+
+                context = _get_exit_code_context(exit_code)
+                write_stdout(
+                    f"    • Server {self._colorize(server_id, Colors.BOLD)}: "
+                    f"exit code {self._colorize(str(exit_code), Colors.RED)}{context}\n"
+                )
+
+        # Print adjusted pass/fail counts
+        if sanitizer_matches:
+            # Calculate adjusted counts
+            adjusted_failed = len(sanitizer_matches)
+            adjusted_passed = max(0, self.passed_tests - adjusted_failed)
+
+            write_stdout(
+                f"\n    {self._colorize('Adjusted Results:', Colors.YELLOW)} "
+                f"{self._colorize(f'{adjusted_passed} passed', Colors.GREEN)}, "
+                f"{self._colorize(f'{adjusted_failed} failed', Colors.RED)} (sanitizer)\n"
+            )
+
+        write_stdout(
+            f"\n{self._colorize('❌ Tests failed due to server health issues', Colors.RED)}\n"
+        )
+
+    def _extract_sanitizer_type(self, lines: list[str]) -> str:
+        """Extract sanitizer error type from first few lines of report.
+
+        Args:
+            lines: First few lines from sanitizer log file
+
+        Returns:
+            Human-readable error type string
+        """
+        text = " ".join(lines).lower()
+
+        # AddressSanitizer patterns
+        if "addresssanitizer" in text or "asan" in text:
+            if "heap-use-after-free" in text:
+                return "ASAN: heap-use-after-free"
+            if "heap-buffer-overflow" in text:
+                return "ASAN: heap-buffer-overflow"
+            if "stack-buffer-overflow" in text:
+                return "ASAN: stack-buffer-overflow"
+            if "global-buffer-overflow" in text:
+                return "ASAN: global-buffer-overflow"
+            if "use-after-poison" in text:
+                return "ASAN: use-after-poison"
+            if "double-free" in text:
+                return "ASAN: double-free"
+            if "alloc-dealloc-mismatch" in text:
+                return "ASAN: alloc-dealloc-mismatch"
+            return "ASAN error"
+
+        # ThreadSanitizer patterns
+        if "threadsanitizer" in text or "tsan" in text:
+            if "data race" in text:
+                return "TSAN: data race"
+            if "lock-order-inversion" in text:
+                return "TSAN: lock-order-inversion"
+            if "thread leak" in text:
+                return "TSAN: thread leak"
+            return "TSAN error"
+
+        # UndefinedBehaviorSanitizer patterns
+        if "undefinedbehaviorsanitizer" in text or "ubsan" in text:
+            if "null pointer" in text:
+                return "UBSAN: null pointer dereference"
+            if "misaligned" in text:
+                return "UBSAN: misaligned access"
+            if "integer overflow" in text:
+                return "UBSAN: integer overflow"
+            if "division by zero" in text:
+                return "UBSAN: division by zero"
+            return "UBSAN error"
+
+        # LeakSanitizer patterns
+        if "leaksanitizer" in text or "lsan" in text:
+            return "LSAN: memory leak"
+
+        return "Sanitizer error"

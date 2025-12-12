@@ -311,8 +311,8 @@ def _execute_test_run(options: TestRunOptions) -> None:
 
     # Configure output directory and formats
     options.output_dir.mkdir(parents=True, exist_ok=True)
-    if "junit" in options.formats:
-        pytest_args.extend(["--junitxml", str(options.output_dir / "junit.xml")])
+    # Note: JUnit XML export is handled by Armadillo's ResultCollector in plugin.py
+    # when "junit" is in formats list. No need for pytest's --junitxml flag.
 
     # Configure parallel execution
     if options.parallel:

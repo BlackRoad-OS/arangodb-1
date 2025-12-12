@@ -482,10 +482,10 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(12345)
 
-            assert result is None
+            assert result == []
 
     def test_no_logs_when_files_dont_exist(self, tmp_path: Path) -> None:
-        """Test that None is returned when sanitizer log files don't exist."""
+        """Test that empty list is returned when sanitizer log files don't exist."""
         binary_dir = tmp_path / "bin"
         log_dir = tmp_path / "logs"
         binary_dir.mkdir()
@@ -498,7 +498,7 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(12345)
 
-            assert result is None
+            assert result == []
 
     def test_reads_alubsan_log_file(self, tmp_path: Path) -> None:
         """Test reading ALUBSAN sanitizer log file."""
@@ -521,10 +521,10 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(pid)
 
-            assert result is not None
-            assert "ALUBSAN Report" in result
-            assert f"PID {pid}" in result
-            assert log_content in result
+            assert len(result) == 1
+            assert result[0].content == log_content
+            assert result[0].sanitizer_type == "alubsan"
+            assert result[0].file_path == log_file
 
     def test_reads_tsan_log_file(self, tmp_path: Path) -> None:
         """Test reading TSAN sanitizer log file."""
@@ -547,10 +547,10 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(pid)
 
-            assert result is not None
-            assert "TSAN Report" in result
-            assert f"PID {pid}" in result
-            assert log_content in result
+            assert len(result) == 1
+            assert result[0].content == log_content
+            assert result[0].sanitizer_type == "tsan"
+            assert result[0].file_path == log_file
 
     def test_reads_multiple_sanitizer_logs(self, tmp_path: Path) -> None:
         """Test reading multiple sanitizer log files for same PID."""
@@ -578,11 +578,14 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(pid)
 
-            assert result is not None
-            assert "ALUBSAN Report" in result
-            assert "TSAN Report" in result
-            assert alubsan_content in result
-            assert tsan_content in result
+            assert len(result) == 2
+            # Both sanitizer types should be present
+            sanitizer_types = {error.sanitizer_type for error in result}
+            assert sanitizer_types == {"alubsan", "tsan"}
+            # Both content strings should be present
+            contents = {error.content for error in result}
+            assert alubsan_content in contents
+            assert tsan_content in contents
 
     def test_ignores_short_content(self, tmp_path: Path) -> None:
         """Test that files with <10 chars of content are ignored."""
@@ -604,7 +607,7 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(pid)
 
-            assert result is None
+            assert result == []
 
     def test_handles_read_errors_gracefully(self, tmp_path: Path) -> None:
         """Test that read errors are handled gracefully."""
@@ -626,9 +629,9 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(pid)
 
-            # Should include error message
-            assert result is not None
-            assert "Error reading" in result
+            # Should include error message in SanitizerError object
+            assert len(result) == 1
+            assert "Error reading" in result[0].content
 
     def test_different_binary_names(self, tmp_path: Path) -> None:
         """Test that different binary names are handled correctly."""
@@ -651,6 +654,168 @@ class TestCheckSanitizerLogs:
 
             result = handler.check_sanitizer_logs(pid)
 
-            assert result is not None
-            assert "arangosh" in result
-            assert log_content in result
+            assert len(result) == 1
+            assert result[0].content == log_content
+            assert result[0].file_path == log_file
+            assert "arangosh" in str(result[0].file_path)
+
+
+class TestCheckSanitizerLogsErrorHandling:
+    """Test error handling in check_sanitizer_logs."""
+
+    def test_file_read_error_logged_and_creates_error_object(
+        self, tmp_path: Path
+    ) -> None:
+        """Test file read errors are logged and create SanitizerError objects."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 55555
+
+        # Create a log file path but make it a directory (causes OSError)
+        log_file = log_dir / f"alubsan.log.arangod.{pid}"
+        log_file.mkdir()
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            # Should log warning and create error object
+            result = handler.check_sanitizer_logs(pid)
+
+            assert len(result) == 1
+            assert "Error reading sanitizer file" in result[0].content
+            assert result[0].sanitizer_type == "alubsan"
+            assert result[0].file_path == log_file
+
+    def test_unicode_decode_error_handled(self, tmp_path: Path) -> None:
+        """Test unicode decode errors are handled gracefully."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 66666
+
+        # Create log file with invalid UTF-8 bytes
+        log_file = log_dir / f"alubsan.log.arangod.{pid}"
+        # Write invalid UTF-8 sequence
+        log_file.write_bytes(b"\x80\x81\x82 Invalid UTF-8 sequence here")
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            # Should handle gracefully with errors="replace"
+            result = handler.check_sanitizer_logs(pid)
+
+            # Content should be readable (with replacement characters)
+            assert len(result) == 1
+            assert len(result[0].content) > 10  # Not short
+            assert result[0].sanitizer_type == "alubsan"
+
+    def test_permission_error_creates_error_object(self, tmp_path: Path) -> None:
+        """Test permission errors create SanitizerError objects."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 77777
+        log_file = log_dir / f"alubsan.log.arangod.{pid}"
+        log_file.write_text("ERROR: Some sanitizer error here")
+
+        with patch.dict(os.environ, {"ASAN_OPTIONS": ""}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            # Mock read_text to raise PermissionError
+            with patch.object(
+                Path, "read_text", side_effect=PermissionError("Access denied")
+            ):
+                result = handler.check_sanitizer_logs(pid)
+
+                # Should create error object
+                assert len(result) == 1
+                assert "Error reading sanitizer file" in result[0].content
+                assert "Access denied" in result[0].content
+
+
+class TestGetSanitizerFilePaths:
+    """Test get_sanitizer_file_paths functionality."""
+
+    def test_returns_empty_list_when_not_sanitizer_build(self, tmp_path: Path) -> None:
+        """Test empty list returned when not a sanitizer build."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        with patch.dict(os.environ, {}, clear=True):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.get_sanitizer_file_paths(12345)
+
+            assert result == []
+
+    def test_returns_existing_files_only(self, tmp_path: Path) -> None:
+        """Test only returns files that actually exist."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 88888
+
+        # Create only ASAN log file, not TSAN
+        alubsan_log = log_dir / f"alubsan.log.arangod.{pid}"
+        alubsan_log.write_text("Some error")
+
+        with patch.dict(
+            os.environ, {"ASAN_OPTIONS": "", "TSAN_OPTIONS": ""}, clear=True
+        ):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.get_sanitizer_file_paths(pid)
+
+            # Should only return the file that exists
+            assert len(result) == 1
+            assert result[0] == alubsan_log
+
+    def test_returns_all_matching_files(self, tmp_path: Path) -> None:
+        """Test returns all sanitizer log files for given PID."""
+        binary_dir = tmp_path / "bin"
+        log_dir = tmp_path / "logs"
+        binary_dir.mkdir()
+        log_dir.mkdir()
+        binary = binary_dir / "arangod"
+        binary.touch()
+
+        pid = 99999
+
+        # Create both log files
+        alubsan_log = log_dir / f"alubsan.log.arangod.{pid}"
+        tsan_log = log_dir / f"tsan.log.arangod.{pid}"
+        alubsan_log.write_text("ASAN error")
+        tsan_log.write_text("TSAN error")
+
+        with patch.dict(
+            os.environ, {"ASAN_OPTIONS": "", "TSAN_OPTIONS": ""}, clear=True
+        ):
+            handler = SanitizerHandler(binary, log_dir, tmp_path)
+
+            result = handler.get_sanitizer_file_paths(pid)
+
+            # Should return both files
+            assert len(result) == 2
+            assert alubsan_log in result
+            assert tsan_log in result

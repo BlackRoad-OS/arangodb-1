@@ -156,6 +156,9 @@ class ArmadilloPlugin:
         # Session execution state - encapsulates test abortion logic
         self.execution_state = SessionExecutionState()
 
+        # Track failures across all pytest phases for complete failure information
+        self._test_failures: Dict[str, list] = {}  # nodeid -> List[TestFailureInfo]
+
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
         # In pytest subprocess, config needs to be loaded from environment variables
@@ -524,12 +527,16 @@ def pytest_sessionstart(session: Session) -> None:
     add_file_logging(framework_log_file, level="DEBUG")
     logger.info("Framework debug logging enabled: %s", framework_log_file)
 
+    # Always create reporter (with result collector) even in compact mode
+    # The reporter's verbose console output is only used when NOT in compact mode,
+    # but the result collector is always needed for JSON/JUnit export
+    plugin.reporter = ArmadilloReporter(
+        process_supervisor=plugin._process_supervisor,
+        result_collector=plugin._session_app_context.result_collector,
+    )
+
     if not framework_config.compact_mode:
-        # Create reporter with result collector and process supervisor from context
-        plugin.reporter = ArmadilloReporter(
-            process_supervisor=plugin._process_supervisor,
-            result_collector=plugin._session_app_context.result_collector,
-        )
+        # Only initialize reporter's console output features in verbose mode
         plugin.reporter.pytest_sessionstart(session)
         # Set the actual test start time AFTER server deployment is complete
         plugin.reporter.session_start_time = time.time()
@@ -662,25 +669,54 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
         session.exitstatus = 1
 
     # Print summary and export results AFTER we know final health status
-    if not _is_compact_mode_enabled() and plugin.reporter:
+    if plugin.reporter:
         plugin.reporter.session_finish_time = time.time()
         # Set deployment failed flag on reporter if either deployment or health failed
         plugin.reporter.deployment_failed = plugin._deployment_failed or bool(
             plugin._server_health
         )
-        # Print the final summary with correct status
-        plugin.reporter.print_final_summary()
-        plugin.reporter.pytest_sessionfinish(session, exitstatus)
 
-        # Export test results
+        # Print summary only in verbose mode
+        if not _is_compact_mode_enabled():
+            plugin.reporter.print_final_summary()
+            plugin.reporter.pytest_sessionfinish(session, exitstatus)
+
+        # Print post-analysis summary if health issues detected (works in both modes)
+        if plugin._server_health:
+            # Perform sanitizer matching for console output
+            from ..utils.sanitizer_matcher import match_all_sanitizers
+
+            sanitizer_files = {}
+            for dep_id, health in plugin._server_health.items():
+                if hasattr(health, "sanitizer_files"):
+                    for server_id, files in health.sanitizer_files.items():
+                        sanitizer_files[server_id] = files
+
+            sanitizer_matches = {}
+            if sanitizer_files and plugin.reporter.result_collector:
+                results = plugin.reporter.result_collector.finalize_results()
+                sanitizer_matches = match_all_sanitizers(
+                    sanitizer_files,
+                    results.get("test_suites", {}),
+                    min_confidence="high",
+                )
+
+            # Print summary (works in both verbose and compact mode)
+            plugin.reporter.print_post_analysis_summary(
+                plugin._server_health, sanitizer_matches
+            )
+
+        # Export test results ALWAYS (regardless of compact mode)
+        # We always need JSON and JUnit XML for CI/CD integration
         try:
             # Determine output directory (default to test-results if not set)
             output_dir = Path("./test-results")
 
-            # Export results (JSON by default, JUnit is handled by pytest's --junitxml)
-            # Include server health info for post-test validation reporting
+            # Export results (JSON and custom JUnit XML with server health info)
+            # Note: This creates Armadillo's enhanced JUnit XML that includes
+            # sanitizer errors, crashes, and other server health information
             plugin.reporter.export_results(
-                output_dir, formats=["json"], server_health=plugin._server_health
+                output_dir, formats=["json", "junit"], server_health=plugin._server_health
             )
         except (OSError, IOError) as e:
             logger.error("Failed to export test results: %s", e, exc_info=True)
@@ -742,6 +778,15 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
     # Let pytest create the report first
     outcome = yield
     report = outcome.get_result()
+
+    # Collect failure info from ALL phases (setup, call, teardown)
+    if report.failed and call.when in ("setup", "call", "teardown"):
+        _record_failure_info(item, report, call, plugin)
+
+    # Record test results to ResultCollector (even in compact mode)
+    # This ensures we have data for JSON/JUnit export regardless of output mode
+    if call.when == "teardown" and plugin.reporter:
+        _record_test_to_collector(item, report, plugin)
 
     # Check for timeout during test execution
     # We use pytest-timeout for per-test timeouts, but it only aborts the current
@@ -1179,6 +1224,139 @@ def _emergency_cleanup(session: Optional[Session] = None) -> None:
         logger.error("Emergency cleanup stack trace: %s", traceback.format_exc())
 
 
+def _record_failure_info(item: Item, report: Any, call: Any, plugin: ArmadilloPlugin) -> None:
+    """Extract and record complete failure information from pytest report.
+
+    Called for each phase (setup, call, teardown) that fails, building up
+    a complete picture of what went wrong.
+
+    Args:
+        item: The pytest test item
+        report: The test report for this phase
+        call: The call object with exception info
+        plugin: The plugin instance
+    """
+    from ..results.collector import TestFailureInfo
+
+    # Initialize failure list for this test if needed
+    if item.nodeid not in plugin._test_failures:
+        plugin._test_failures[item.nodeid] = []
+
+    # Extract exception details
+    exc_type = ""
+    exc_message = ""
+    traceback_text = ""
+
+    if call.excinfo:
+        exc_type = call.excinfo.type.__name__ if call.excinfo.type else ""
+        exc_message = str(call.excinfo.value)
+        # Get full traceback representation
+        traceback_text = str(call.excinfo.getrepr(style="long"))
+
+    # Create failure info for this phase
+    failure_info = TestFailureInfo(
+        phase=call.when,
+        exception_type=exc_type,
+        exception_message=exc_message,
+        traceback=traceback_text,
+        longrepr=str(report.longrepr) if report.longrepr else ""
+    )
+
+    plugin._test_failures[item.nodeid].append(failure_info)
+    logger.debug(
+        "Recorded failure in %s phase for %s: %s: %s",
+        call.when,
+        item.nodeid,
+        exc_type,
+        exc_message
+    )
+
+def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) -> None:
+    """Record test result to ResultCollector (works in both compact and verbose modes).
+
+    This function is called for ALL tests regardless of output mode, ensuring we
+    have data for JSON/JUnit export even when the verbose reporter is disabled.
+
+    Args:
+        item: The pytest test item
+        report: The test report from teardown phase
+        plugin: The plugin instance containing the result collector
+    """
+    if not plugin.reporter or not plugin.reporter.result_collector:
+        return
+
+    # Determine outcome - CHECK FAILURE TRACKING FIRST
+    # The teardown report might say "passed" even if the call phase failed
+    # We need to check if we recorded any failures for this test
+    has_failure = item.nodeid in plugin._test_failures and plugin._test_failures[item.nodeid]
+
+    outcome_map = {
+        "passed": ExecutionOutcome.PASSED,
+        "failed": ExecutionOutcome.FAILED,
+        "skipped": ExecutionOutcome.SKIPPED,
+        "error": ExecutionOutcome.ERROR,
+    }
+
+    # Check for crashes or timeouts that override everything
+    if hasattr(report, "crash_info") and report.crash_info:
+        exec_outcome = ExecutionOutcome.CRASHED
+    elif plugin.execution_state.timeout_detected_in_test == item.nodeid:
+        exec_outcome = ExecutionOutcome.TIMEOUT
+    # If we recorded failures, use FAILED outcome regardless of what teardown says
+    elif has_failure:
+        exec_outcome = ExecutionOutcome.FAILED
+    else:
+        exec_outcome = outcome_map.get(report.outcome, ExecutionOutcome.ERROR)
+
+    # Get timing from report
+    duration = getattr(report, "duration", 0.0)
+
+    # Get details from report (fallback if no failure_info)
+    details = None
+    if report.longrepr:
+        details = str(report.longrepr)
+
+    # Get markers
+    markers = []
+    if hasattr(report, "keywords"):
+        markers = [key for key in report.keywords if not key.startswith("_")]
+
+    # Get timestamps from reporter if available
+    started_at = None
+    finished_at = None
+    if plugin.reporter and hasattr(plugin.reporter, '_test_start_times'):
+        started_at = plugin.reporter._test_start_times.get(item.nodeid)
+        if started_at:
+            from datetime import timedelta
+            finished_at = started_at + timedelta(seconds=duration)
+
+    # Get aggregated failure info from all phases
+    failure_info = None
+    if has_failure:
+        failures = plugin._test_failures[item.nodeid]
+        # Prefer call phase failure, otherwise use first failure
+        failure_info = next(
+            (f for f in failures if f.phase == "call"),
+            failures[0] if failures else None
+        )
+
+    # Record to collector with complete failure information
+    plugin.reporter.result_collector.record_test_result(
+        nodeid=item.nodeid,
+        outcome=exec_outcome,
+        duration=duration,
+        markers=markers,
+        details=details,
+        crash_info=getattr(report, "crash_info", None),
+        started_at=started_at,
+        finished_at=finished_at,
+        failure_info=failure_info,
+    )
+
+    # Clean up failure tracking for this test
+    if item.nodeid in plugin._test_failures:
+        del plugin._test_failures[item.nodeid]
+
 def _capture_deployment_health(
     controller: DeploymentController, deployment_id: DeploymentId
 ) -> None:
@@ -1268,8 +1446,10 @@ def create_package_deployment(package_name: str) -> Any:
         finally:
             logger.info("Stopping package cluster deployment %s", deployment_id)
             try:
+                # Stop the servers first - this causes process exit and sanitizer files to be written
                 controller.stop(timeout=120.0)
-                # Capture server health for post-test validation
+
+                # Capture health info AFTER stopping - process_info is preserved for sanitizer collection
                 _capture_deployment_health(controller, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error(
@@ -1305,8 +1485,10 @@ def create_package_deployment(package_name: str) -> Any:
         finally:
             logger.info("Stopping package single server for %s", package_name)
             try:
+                # Stop the server first - this causes process exit and sanitizer files to be written
                 controller.stop(timeout=30.0)
-                # Capture server health for post-test validation
+
+                # Capture health info AFTER stopping - process_info is preserved for sanitizer collection
                 _capture_deployment_health(controller, deployment_id)
             except (OSError, ProcessLookupError, RuntimeError, AttributeError) as e:
                 logger.error("Error stopping package server: %s", e)

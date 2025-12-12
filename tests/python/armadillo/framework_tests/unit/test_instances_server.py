@@ -314,9 +314,11 @@ class TestArangoServerErrorHandling:
         with pytest.raises(ServerShutdownError):
             self.server.stop()
 
-        # But should still clean up state in finally block
+        # Should clean up state in finally block
         assert self.server._runtime.is_running is False
-        assert self.server._runtime.process_info is None
+        # Process info is preserved for post-mortem analysis
+        assert self.server._runtime.process_info is not None
+        assert self.server._runtime.post_mortem_info is not None
 
     def test_invalid_port_type(self) -> None:
         """Test that invalid port types are caught."""
@@ -415,3 +417,165 @@ class TestArangoServerIntegration:
         except Exception:
             # Even if it fails, the attempt should have been made
             assert app_context.process_supervisor.stop.called
+
+
+class TestArangoServerNewMethods:
+    """Test new Server methods for sanitizers and post-mortem analysis."""
+
+    def setup_method(self) -> None:
+        """Set up test environment."""
+        self.app_context = ApplicationContext.for_testing()
+        self.server = ArangoServer.create_single_server(
+            server_id=ServerId("test"),
+            app_context=self.app_context,
+            port=8529,
+        )
+
+    def test_get_pid_returns_pid_when_running(self) -> None:
+        """Test get_pid returns PID when server has process info."""
+        from armadillo.core.process import ProcessInfo
+
+        # Set up server with process info
+        self.server._runtime.process_info = ProcessInfo(
+            pid=12345,
+            command=["arangod"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
+
+        result = self.server.get_pid()
+
+        assert result == 12345
+
+    def test_get_pid_returns_none_when_no_process(self) -> None:
+        """Test get_pid returns None when server has no process info."""
+        # Server starts with no process info
+        assert self.server._runtime.process_info is None
+
+        result = self.server.get_pid()
+
+        assert result is None
+
+    def test_create_sanitizer_handler_returns_handler(self) -> None:
+        """Test create_sanitizer_handler returns handler when process info exists."""
+        from armadillo.core.process import ProcessInfo
+
+        # Set up server with process info
+        self.server._runtime.process_info = ProcessInfo(
+            pid=12345,
+            command=["/path/to/arangod", "--arg"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
+
+        handler = self.server.create_sanitizer_handler()
+
+        assert handler is not None
+        assert handler.binary_path == Path("/path/to/arangod")
+
+    def test_create_sanitizer_handler_returns_none_without_process_info(self) -> None:
+        """Test create_sanitizer_handler returns None when no process info."""
+        # Server starts with no process info
+        assert self.server._runtime.process_info is None
+
+        handler = self.server.create_sanitizer_handler()
+
+        assert handler is None
+
+
+class TestArangoServerPostMortemInfo:
+    """Test post_mortem_info preservation after server shutdown."""
+
+    def setup_method(self) -> None:
+        """Set up test environment."""
+        self.app_context = ApplicationContext.for_testing()
+        self.server = ArangoServer.create_single_server(
+            server_id=ServerId("test"),
+            app_context=self.app_context,
+            port=8529,
+        )
+
+    def test_post_mortem_info_preserved_after_stop(self) -> None:
+        """Test process info is preserved in post_mortem_info after stop."""
+        from armadillo.core.process import ProcessInfo
+
+        # Set up server as if it was running
+        process_info = ProcessInfo(
+            pid=12345,
+            command=["arangod"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
+        self.server._runtime.start(process_info)
+
+        # Stop the server
+        self.server._runtime.stop()
+
+        # Post-mortem info should be preserved
+        assert self.server._runtime.post_mortem_info is not None
+        assert self.server._runtime.post_mortem_info.pid == 12345
+        # Process info is also kept for backward compatibility
+        assert self.server._runtime.process_info is not None
+        assert self.server._runtime.process_info.pid == 12345
+        # But is_running should be False
+        assert self.server._runtime.is_running is False
+
+    def test_post_mortem_info_cleared_on_restart(self) -> None:
+        """Test post_mortem_info is cleared when server restarts."""
+        from armadillo.core.process import ProcessInfo
+
+        # Set up server with post-mortem info from previous run
+        old_process_info = ProcessInfo(
+            pid=12345,
+            command=["arangod"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
+        self.server._runtime.process_info = old_process_info
+        self.server._runtime.post_mortem_info = old_process_info
+        self.server._runtime.is_running = False
+
+        # Restart with new process
+        new_process_info = ProcessInfo(
+            pid=67890,
+            command=["arangod"],
+            start_time=456.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
+        self.server._runtime.start(new_process_info)
+
+        # Post-mortem info should be cleared
+        assert self.server._runtime.post_mortem_info is None
+        # New process info should be set
+        assert self.server._runtime.process_info.pid == 67890
+        assert self.server._runtime.is_running is True
+
+    def test_can_check_sanitizers_after_shutdown_via_post_mortem(self) -> None:
+        """Test sanitizer handler can be created after shutdown using post_mortem_info."""
+        from armadillo.core.process import ProcessInfo
+
+        # Set up server as if it ran and stopped
+        process_info = ProcessInfo(
+            pid=12345,
+            command=["/path/to/arangod", "--arg"],
+            start_time=123.0,
+            working_dir=Path("/tmp"),
+            env={},
+        )
+        self.server._runtime.start(process_info)
+        self.server._runtime.stop()
+
+        # Process info is preserved after stop
+        assert self.server._runtime.process_info is not None
+        assert self.server._runtime.post_mortem_info is not None
+
+        # Can still create sanitizer handler for post-mortem analysis
+        handler = self.server.create_sanitizer_handler()
+
+        assert handler is not None
+        assert handler.binary_path == Path("/path/to/arangod")

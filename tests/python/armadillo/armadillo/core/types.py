@@ -3,6 +3,7 @@
 from enum import Enum
 from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
+from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -52,6 +53,21 @@ def _get_exit_code_context(exit_code: int) -> str:
     return ""
 
 
+class SanitizerError(BaseModel):
+    """Individual sanitizer error with complete metadata.
+
+    This replaces the current Dict[str, str] approach which loses
+    timestamp information needed for matching sanitizers to tests.
+    """
+
+    content: str  # Full sanitizer report text
+    file_path: Path  # Path to the sanitizer file
+    timestamp: datetime  # When file was written (from os.path.getmtime)
+    sanitizer_type: str  # "asan", "lsan", "ubsan", "tsan"
+    server_id: str  # Which server produced this error
+    match_confidence: Optional[str] = None  # "high" | "low" - set when matched to test
+
+
 class ServerHealthInfo(BaseModel):
     """Health information about servers after deployment shutdown.
 
@@ -63,9 +79,10 @@ class ServerHealthInfo(BaseModel):
         default_factory=dict
     )  # server_id -> crash info
     exit_codes: Dict[str, int] = Field(default_factory=dict)  # server_id -> exit code
-    sanitizer_errors: Dict[str, str] = Field(
+
+    sanitizer_errors: Dict[str, List[SanitizerError]] = Field(
         default_factory=dict
-    )  # server_id -> sanitizer log content
+    )  # server_id -> list of SanitizerError objects
 
     def has_issues(self) -> bool:
         """Check if there are any server health issues."""
@@ -103,8 +120,13 @@ class ServerHealthInfo(BaseModel):
             server_id,
             san_errors,
         ) in self.sanitizer_errors.items():  # pylint: disable=no-member
-            preview = san_errors[:200] if len(san_errors) > 200 else san_errors
-            issues.append(f"Server {server_id} has sanitizer errors: {preview}")
+            for san_error in san_errors:
+                preview = (
+                    san_error.content[:200]
+                    if len(san_error.content) > 200
+                    else san_error.content
+                )
+                issues.append(f"Server {server_id} has sanitizer errors: {preview}")
 
         return issues
 
@@ -154,13 +176,16 @@ class ServerHealthInfo(BaseModel):
                 san_errors,
             ) in self.sanitizer_errors.items():  # pylint: disable=no-member
                 lines.append(f"  {server_id}:")
-                # Include first 500 chars of sanitizer output
-                preview = san_errors[:500] if len(san_errors) > 500 else san_errors
-                for line in preview.splitlines():
-                    lines.append(f"    {line}")
-                if len(san_errors) > 500:
-                    lines.append(f"    ... (truncated, {len(san_errors)} total bytes)")
-                error_count += 1
+                for san_error in san_errors:
+                    lines.append(f"    File: {san_error.file_path.name}")
+                    lines.append(f"    Timestamp: {san_error.timestamp.isoformat()}")
+                    lines.append(f"    Type: {san_error.sanitizer_type}")
+                    lines.append("")
+                    # Include full content
+                    for line in san_error.content.splitlines():
+                        lines.append(f"      {line}")
+                    lines.append("")
+                error_count += len(san_errors)
 
         return "\n".join(lines), error_count
 
@@ -209,6 +234,11 @@ class TimeoutConfig(BaseModel):
     process_graceful_stop: float = 3.0
     process_force_kill: float = 2.0
     emergency_cleanup: float = 15.0
+
+    # Sanitizer matching tolerance
+    sanitizer_match_tolerance: float = (
+        5.0  # Seconds after test end to consider for matching
+    )
 
 
 class InfrastructureConfig(BaseModel):

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass, field
-from ..core.types import ExecutionOutcome, CrashInfo, ServerHealthInfo
+from ..core.types import ExecutionOutcome, CrashInfo, ServerHealthInfo, SanitizerError
 from ..core.value_objects import ServerId, DeploymentId
 from ..core.errors import ResultProcessingError, SerializationError, FilesystemError
 from ..core.log import get_logger
@@ -16,6 +16,24 @@ from ..utils.codec import to_json_string
 from ..utils.filesystem import atomic_write
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class TestFailureInfo:
+    """Complete failure information from pytest report.
+
+    Aggregates failure data from setup/call/teardown phases.
+    This captures the complete failure story including exception details
+    and full traceback for proper reporting.
+    """
+
+    __test__ = False  # Tell pytest this is not a test class
+
+    phase: str  # "setup" | "call" | "teardown"
+    exception_type: str  # e.g., "AssertionError"
+    exception_message: str  # Short message
+    traceback: str  # Full traceback
+    longrepr: str  # Full pytest representation
 
 
 @dataclass
@@ -61,6 +79,13 @@ class TestResult:
     artifacts: List[str] = field(default_factory=list)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
+
+    # Complete failure information from pytest
+    failure_info: Optional[TestFailureInfo] = None
+
+    # Matched sanitizer errors (pre-computed during finalization)
+    # Each SanitizerError has its own match_confidence field
+    matched_sanitizers: List[SanitizerError] = field(default_factory=list)
 
 
 @dataclass
@@ -126,6 +151,7 @@ class ResultCollector:
         artifacts: Optional[List[str]] = None,
         started_at: Optional[datetime] = None,
         finished_at: Optional[datetime] = None,
+        failure_info: Optional[TestFailureInfo] = None,
     ) -> None:
         """Record a test result in the hierarchical structure."""
         if self._finalized:
@@ -149,6 +175,7 @@ class ResultCollector:
             artifacts=artifacts or [],
             started_at=started_at.isoformat() if started_at else None,
             finished_at=finished_at.isoformat() if finished_at else None,
+            failure_info=failure_info,
         )
 
         suite.tests[test_name] = test_result
@@ -209,6 +236,10 @@ class ResultCollector:
         # Finalize each suite's timing and summary
         for suite in self.test_suites.values():
             self._finalize_suite(suite)
+
+        # Match sanitizers to tests and attach to TestResult objects
+        # This is the SINGLE PLACE where sanitizer matching happens
+        self._match_and_attach_sanitizers()
 
         # Calculate overall summary
         summary = self._calculate_global_summary()
@@ -318,6 +349,65 @@ class ResultCollector:
                 t.duration_seconds for t in suite.tests.values()
             )
 
+    def _match_and_attach_sanitizers(self) -> None:
+        """Match sanitizers to tests and attach directly to TestResult objects.
+
+        This is the SINGLE PLACE where sanitizer matching happens.
+        Export functions will simply read the matched_sanitizers field.
+        Uses centralized matching logic from sanitizer_matcher module.
+        """
+        from ..utils.sanitizer_matcher import calculate_match_confidence
+
+        if not self.server_health:
+            return
+
+        # Extract all sanitizer errors from server health
+        all_sanitizer_errors: List[SanitizerError] = []
+        for health_info in self.server_health.values():
+            for server_errors in health_info.sanitizer_errors.values():
+                all_sanitizer_errors.extend(server_errors)
+
+        if not all_sanitizer_errors:
+            return
+
+        # Get tolerance from metadata (configurable, defaults to 5.0)
+        tolerance = self.metadata.get("sanitizer_match_tolerance_seconds", 5.0)
+
+        # Match each sanitizer error to tests using timestamps
+        for suite in self.test_suites.values():
+            for test in suite.tests.values():
+                if not test.started_at or not test.finished_at:
+                    continue
+
+                # Parse ISO timestamps
+                test_start = datetime.fromisoformat(test.started_at)
+                test_end = datetime.fromisoformat(test.finished_at)
+
+                # Find sanitizers that match this test's time window
+                for san_error in all_sanitizer_errors:
+                    confidence = calculate_match_confidence(
+                        san_error.timestamp, test_start, test_end, tolerance
+                    )
+
+                    # Only attach high-confidence matches
+                    if confidence == "high":
+                        # Create a copy with confidence set
+                        matched_san = san_error.model_copy()
+                        matched_san.match_confidence = confidence
+                        test.matched_sanitizers.append(matched_san)
+
+        # Log matching summary
+        total_matched = sum(
+            len(test.matched_sanitizers)
+            for suite in self.test_suites.values()
+            for test in suite.tests.values()
+        )
+        if total_matched > 0:
+            logger.info(
+                "Matched %d sanitizer error(s) to tests with high confidence",
+                total_matched,
+            )
+
     def _calculate_global_summary(self) -> Dict[str, int]:
         """Calculate overall summary statistics across all suites."""
         summary = {
@@ -337,7 +427,11 @@ class ResultCollector:
         return summary
 
     def _serialize_suites(self) -> Dict[str, Any]:
-        """Serialize test suites to dictionary format."""
+        """Serialize test suites to dictionary format.
+
+        Now includes complete failure information and matched sanitizers
+        from the data model (not computed during export).
+        """
         result = {}
         for file_path, suite in self.test_suites.items():
             result[file_path] = {
@@ -369,6 +463,34 @@ class ResultCollector:
                         "artifacts": test.artifacts,
                         "started_at": test.started_at,
                         "finished_at": test.finished_at,
+                        # Complete failure information
+                        "failure_info": (
+                            {
+                                "phase": test.failure_info.phase,
+                                "exception_type": test.failure_info.exception_type,
+                                "exception_message": test.failure_info.exception_message,
+                                "traceback": test.failure_info.traceback,
+                                "longrepr": test.failure_info.longrepr,
+                            }
+                            if test.failure_info
+                            else None
+                        ),
+                        # Matched sanitizers (pre-computed during finalization)
+                        "matched_sanitizers": (
+                            [
+                                {
+                                    "content": san.content,
+                                    "file_path": str(san.file_path),
+                                    "timestamp": san.timestamp.isoformat(),
+                                    "sanitizer_type": san.sanitizer_type,
+                                    "server_id": san.server_id,
+                                    "match_confidence": san.match_confidence,
+                                }
+                                for san in test.matched_sanitizers
+                            ]
+                            if test.matched_sanitizers
+                            else []
+                        ),
                     }
                     for test_name, test in suite.tests.items()
                 },
@@ -396,7 +518,7 @@ class ResultCollector:
                     self._export_json(results, file_path)
                     exported_files["json"] = file_path
                 elif format_name == "junit":
-                    file_path = output_dir / "junit.xml"
+                    file_path = output_dir / "armadillo-junit.xml"
                     self._export_junit(results, file_path)
                     exported_files["junit"] = file_path
                 else:
@@ -412,6 +534,32 @@ class ResultCollector:
         )
         return exported_files
 
+    def _format_matched_sanitizers_for_junit(
+        self, matched_sanitizers: List[Dict[str, Any]]
+    ) -> str:
+        """Format matched sanitizers for JUnit XML error element.
+
+        Pure transformation - reads from pre-computed matched_sanitizers data.
+
+        Args:
+            matched_sanitizers: List of sanitizer dictionaries from data model
+
+        Returns:
+            Formatted string with sanitizer content
+        """
+        lines = ["Sanitizer issue(s) detected during test execution:\n"]
+
+        for san in matched_sanitizers:
+            lines.append(f"File: {Path(san['file_path']).name}")
+            lines.append(f"Timestamp: {san['timestamp']}")
+            lines.append(f"Type: {san['sanitizer_type']}")
+            lines.append(f"Server: {san['server_id']}")
+            lines.append("")
+            lines.append(san["content"])
+            lines.append("\n" + "=" * 70 + "\n")
+
+        return "\n".join(lines)
+
     def _export_json(self, results: Dict[str, Any], file_path: Path) -> None:
         """Export results as JSON in hierarchical format."""
         json_content = to_json_string(results)
@@ -419,7 +567,11 @@ class ResultCollector:
         logger.debug("Exported JSON results to %s", file_path)
 
     def _export_junit(self, results: Dict[str, Any], file_path: Path) -> None:
-        """Export results as JUnit XML."""
+        """Export results as JUnit XML - pure transformation.
+
+        Reads from pre-computed data model. NO matching or enrichment logic.
+        All data has been computed during finalization in finalize_results().
+        """
         summary = results["summary"]
         test_run = results["test_run"]
         test_suites = results["test_suites"]
@@ -449,38 +601,57 @@ class ResultCollector:
                 testcase.set("time", f"{test_data['duration_seconds']:.3f}")
 
                 outcome = test_data["outcome"]
-                details = test_data.get("details")
 
-                if outcome == "failed":
+                # NEW: Use complete failure information from data model
+                if outcome == "failed" and test_data.get("failure_info"):
                     failure = ET.SubElement(testcase, "failure")
-                    failure.set("message", details or "Test failed")
-                    if details:
-                        failure.text = details
+                    failure_info = test_data["failure_info"]
+                    failure.set("type", failure_info["exception_type"])
+                    failure.set("message", failure_info["exception_message"])
+                    failure.text = failure_info["traceback"]
+                elif outcome == "failed":
+                    # Fallback if no failure_info (shouldn't happen with new code)
+                    failure = ET.SubElement(testcase, "failure")
+                    failure.set("message", test_data.get("details") or "Test failed")
+                    if test_data.get("details"):
+                        failure.text = test_data["details"]
                 elif outcome == "error":
                     error = ET.SubElement(testcase, "error")
-                    error.set("message", details or "Test error")
-                    if details:
-                        error.text = details
+                    error.set("message", test_data.get("details") or "Test error")
+                    if test_data.get("details"):
+                        error.text = test_data["details"]
                 elif outcome == "skipped":
                     skipped = ET.SubElement(testcase, "skipped")
-                    skipped.set("message", details or "Test skipped")
+                    skipped.set("message", test_data.get("details") or "Test skipped")
                 elif outcome == "timeout":
                     error = ET.SubElement(testcase, "error")
                     error.set("message", "Test timed out")
                     error.set("type", "timeout")
-                    if details:
-                        error.text = details
+                    if test_data.get("details"):
+                        error.text = test_data["details"]
                 elif outcome == "crashed":
                     error = ET.SubElement(testcase, "error")
                     error.set("message", "Test crashed")
                     error.set("type", "crash")
                     if test_data.get("crash_info"):
                         error.text = str(test_data["crash_info"])
-                    elif details:
-                        error.text = details
+                    elif test_data.get("details"):
+                        error.text = test_data["details"]
 
-        # Add server health issues as system-err elements
-        # Note: self.server_health contains ServerHealthInfo instances
+                # NEW: Read matched sanitizers from pre-computed data
+                if test_data.get("matched_sanitizers"):
+                    error = ET.SubElement(testcase, "error")
+                    error.set("type", "sanitizer")
+                    error.set(
+                        "message", "Sanitizer issue detected during test execution"
+                    )
+                    error.text = self._format_matched_sanitizers_for_junit(
+                        test_data["matched_sanitizers"]
+                    )
+
+        # Add server health issues as system-err elements (DUAL REPRESENTATION)
+        # This preserves the existing suite-level system-err for ALL sanitizers
+        # while per-test errors above show only high-confidence matches
         if self.server_health:
             health_errors = 0
             for deployment_id, health_info in self.server_health.items():
@@ -490,9 +661,10 @@ class ResultCollector:
                 )
 
                 # Add system-err element with formatted health issues
-                system_err = ET.SubElement(testsuite, "system-err")
-                system_err.text = formatted_text
-                health_errors += error_count
+                if formatted_text:
+                    system_err = ET.SubElement(testsuite, "system-err")
+                    system_err.text = formatted_text
+                    health_errors += error_count
 
             # Update errors attribute if health issues found
             if health_errors > 0:

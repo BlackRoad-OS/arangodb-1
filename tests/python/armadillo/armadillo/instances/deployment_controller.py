@@ -18,7 +18,7 @@ from ..core.types import (
     ClusterConfig,
     HealthStatus,
     ServerHealthInfo,
-    ServerConfig,
+    SanitizerError,
 )
 from ..core.context import ApplicationContext
 from ..core.value_objects import ServerId, DeploymentId
@@ -466,7 +466,6 @@ class DeploymentController:
             str(k): v for k, v in all_crashes.items() if k in deployment_server_ids
         }
 
-        # Check for sanitizer log files
         sanitizer_errors = self._check_sanitizer_logs()
 
         return ServerHealthInfo(
@@ -475,35 +474,33 @@ class DeploymentController:
             sanitizer_errors=sanitizer_errors,
         )
 
-    def _check_sanitizer_logs(self) -> Dict[str, str]:
+    def _check_sanitizer_logs(self) -> Dict[str, List[SanitizerError]]:
         """Check for sanitizer log files for all servers in deployment.
 
-        Returns:
-            Dictionary mapping server IDs to sanitizer error content
-        """
-        from pathlib import Path
-        from ..utils.sanitizer import create_sanitizer_handler
+        Returns structured sanitizer data with timestamps for matching.
 
-        sanitizer_errors = {}
+        Returns:
+            Dictionary mapping server IDs to list of SanitizerError objects
+        """
+        sanitizer_errors: Dict[str, List[SanitizerError]] = {}
 
         for server_id, server in self.deployment.get_servers().items():
-            process_info = server._runtime.process_info
-            if not process_info:
+            sanitizer_handler = server.create_sanitizer_handler()
+            if not sanitizer_handler:
                 continue
 
-            binary_path = Path(process_info.command[0])
-            log_dir = server.paths.base_dir
-            repo_root = server._get_command_builder().get_repository_root()
-            explicit_sanitizer = getattr(self._app_context.config, "sanitizer", None)
+            # Get PID for log file matching
+            pid = server.get_pid()
+            if not pid:
+                continue
 
-            sanitizer_handler = create_sanitizer_handler(
-                binary_path=binary_path,
-                log_dir=log_dir,
-                repo_root=repo_root,
-                explicit_sanitizer=explicit_sanitizer,
-            )
+            # Get structured sanitizer errors with timestamps
+            san_errors = sanitizer_handler.check_sanitizer_logs(pid)
 
-            san_errors = sanitizer_handler.check_sanitizer_logs(process_info.pid)
+            # Set server_id on each error
+            for error in san_errors:
+                error.server_id = str(server_id)
+
             if san_errors:
                 sanitizer_errors[str(server_id)] = san_errors
 

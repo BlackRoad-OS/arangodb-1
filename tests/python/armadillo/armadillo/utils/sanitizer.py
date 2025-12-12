@@ -2,7 +2,11 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, List
+from datetime import datetime
+from ..core.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class SanitizerHandler:
@@ -223,23 +227,52 @@ class SanitizerHandler:
 
         return log_paths
 
-    def check_sanitizer_logs(self, pid: int) -> Optional[str]:
-        """Check for and read sanitizer log files for a given PID.
+    def get_sanitizer_file_paths(self, pid: int) -> list[Path]:
+        """Get paths to sanitizer log files for a given PID.
 
-        When halt_on_error=0, processes exit with code 0 even if sanitizers
-        detected issues. Log files follow pattern: {log_path}.{binary_name}.{pid}
+        Log files follow pattern: {log_path}.{binary_name}.{pid}
 
         Args:
             pid: Process ID to check for sanitizer logs
 
         Returns:
-            Content of sanitizer log files if found and non-empty, None otherwise
+            List of Path objects for sanitizer log files that exist
         """
         if not self.is_sanitizer_build():
-            return None
+            return []
 
         binary_name = self.binary_path.name
-        all_content = []
+        file_paths = []
+
+        for log_type, base_log_path in self.get_log_paths().items():
+            # Pattern: {base_log_path}.{binary_name}.{pid}
+            log_file = Path(f"{base_log_path}.{binary_name}.{pid}")
+
+            if log_file.exists():
+                file_paths.append(log_file)
+
+        return file_paths
+
+    def check_sanitizer_logs(self, pid: int) -> List["SanitizerError"]:
+        """Check for sanitizer logs and return structured data.
+
+        Returns a list of SanitizerError objects with timestamps for matching.
+        This replaces the old approach of returning concatenated strings.
+
+        Args:
+            pid: Process ID to check for sanitizer logs
+
+        Returns:
+            List of SanitizerError objects (empty list if no errors found)
+        """
+        # Import here to avoid circular dependency
+        from ..core.types import SanitizerError
+
+        if not self.is_sanitizer_build():
+            return []
+
+        errors = []
+        binary_name = self.binary_path.name
 
         for log_type, base_log_path in self.get_log_paths().items():
             # Pattern: {base_log_path}.{binary_name}.{pid}
@@ -252,17 +285,35 @@ class SanitizerHandler:
                 content = log_file.read_text(encoding="utf-8", errors="replace")
                 # Only include if content is meaningful (>10 chars, like JS implementation)
                 if len(content) > 10:
-                    all_content.append(
-                        f"=== {log_type.upper()} Report for '{binary_name}' (PID {pid}) ===\n"
-                        f"Log file: {log_file}\n\n{content}"
-                    )
-            except (OSError, UnicodeDecodeError) as e:
-                # Log read error but continue checking other logs
-                all_content.append(
-                    f"=== Error reading {log_type} log {log_file}: {e} ==="
-                )
+                    # Get file modification time for matching
+                    timestamp = datetime.fromtimestamp(os.path.getmtime(log_file))
 
-        return "\n\n".join(all_content) if all_content else None
+                    error = SanitizerError(
+                        content=content,
+                        file_path=log_file,
+                        timestamp=timestamp,
+                        sanitizer_type=log_type,  # "alubsan" or "tsan"
+                        server_id="",  # Will be set by caller
+                    )
+                    errors.append(error)
+            except (OSError, UnicodeDecodeError) as e:
+                # Log file read failures for debugging
+                logger.warning(
+                    "Failed to read sanitizer log file %s: %s",
+                    log_file,
+                    e
+                )
+                # Create error entry for read failures
+                error = SanitizerError(
+                    content=f"Error reading sanitizer file: {e}",
+                    file_path=log_file,
+                    timestamp=datetime.now(),
+                    sanitizer_type=log_type,
+                    server_id="",
+                )
+                errors.append(error)
+
+        return errors
 
 
 def create_sanitizer_handler(

@@ -88,20 +88,27 @@ class ServerRuntimeState:
 
     is_running: bool = False
     process_info: Optional[ProcessInfo] = None
+    post_mortem_info: Optional[ProcessInfo] = None  # Preserved after shutdown
 
     def start(self, process_info: ProcessInfo) -> None:
         """Mark server as running with process info."""
         self.is_running = True
         self.process_info = process_info
+        self.post_mortem_info = None  # Clear any previous post-mortem data
 
     def stop(self) -> None:
         """Mark server as stopped.
 
-        Note: process_info is preserved for post-mortem analysis
-        (exit codes, sanitizer logs, etc.).
+        Preserves process_info in post_mortem_info for post-shutdown analysis
+        (exit codes, sanitizer logs, etc.). The process_info field remains
+        accessible for backward compatibility but post_mortem_info makes
+        the semantics explicit.
         """
         self.is_running = False
-        # Keep process_info for post-shutdown health checks
+        # Explicitly preserve process info for post-mortem analysis
+        if self.process_info:
+            self.post_mortem_info = self.process_info
+        # Keep process_info as well for backward compatibility
 
 
 @dataclass
@@ -580,3 +587,34 @@ class ArangoServer:
             logger.debug("Cleanup error for %s: %s", self.server_id, e)
 
         self._runtime.stop()
+
+    def get_pid(self) -> Optional[int]:
+        """Get process ID of running server.
+
+        Returns:
+            Process ID if server is running, None otherwise
+        """
+        if self._runtime.process_info:
+            return self._runtime.process_info.pid
+        return None
+
+    def create_sanitizer_handler(self):
+        """Create sanitizer handler for this server.
+
+        Returns:
+            Configured SanitizerHandler instance, or None if no process info available
+        """
+        if not self._runtime.process_info:
+            return None
+
+        binary_path = Path(self._runtime.process_info.command[0])
+        log_dir = self.paths.base_dir
+        repo_root = self._get_command_builder().get_repository_root()
+        explicit_sanitizer = getattr(self._config, "sanitizer", None)
+
+        return create_sanitizer_handler(
+            binary_path=binary_path,
+            log_dir=log_dir,
+            repo_root=repo_root,
+            explicit_sanitizer=explicit_sanitizer,
+        )

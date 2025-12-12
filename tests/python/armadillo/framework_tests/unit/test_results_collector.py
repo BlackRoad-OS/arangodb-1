@@ -287,7 +287,7 @@ class TestResultCollector:
         assert "junit" in exported_files
         junit_file = exported_files["junit"]
         assert junit_file.exists()
-        assert junit_file.name == "junit.xml"
+        assert junit_file.name == "armadillo-junit.xml"
 
         # Verify XML structure
         content = junit_file.read_text()
@@ -403,3 +403,192 @@ class TestResultCollectorEdgeCases:
         assert results["summary"]["total"] == 100
         assert results["summary"]["passed"] == 50
         assert results["summary"]["failed"] == 50
+
+
+class TestResultCollectorNewFeatures:
+    """Test new features from the refactoring."""
+
+    def test_record_test_with_failure_info(self) -> None:
+        """Test recording test with complete failure information."""
+        from armadillo.results.collector import TestFailureInfo
+
+        collector = ResultCollector()
+
+        failure_info = TestFailureInfo(
+            phase="call",
+            exception_type="AssertionError",
+            exception_message="Expected 5, got 3",
+            traceback="Traceback (most recent call last):\n  File ...",
+            longrepr="Full pytest representation...",
+        )
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_failed",
+            outcome=ExecutionOutcome.FAILED,
+            duration=1.0,
+            failure_info=failure_info,
+        )
+
+        results = collector.finalize_results()
+        test = results["test_suites"]["tests/test_example.py"]["tests"]["test_failed"]
+
+        assert test["failure_info"] is not None
+        assert test["failure_info"]["phase"] == "call"
+        assert test["failure_info"]["exception_type"] == "AssertionError"
+        assert test["failure_info"]["exception_message"] == "Expected 5, got 3"
+        assert "Traceback" in test["failure_info"]["traceback"]
+
+    def test_sanitizer_matching_during_finalization(self) -> None:
+        """Test that sanitizers are matched to tests during finalization."""
+        from armadillo.core.types import ServerHealthInfo, SanitizerError
+        from armadillo.core.value_objects import DeploymentId
+        from datetime import datetime, timezone
+
+        collector = ResultCollector()
+
+        # Record test with timestamps
+        test_start = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        test_end = datetime(2024, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_with_sanitizer",
+            outcome=ExecutionOutcome.FAILED,
+            duration=5.0,
+            started_at=test_start,
+            finished_at=test_end,
+        )
+
+        # Add sanitizer error that occurred during test
+        san_timestamp = datetime(2024, 1, 1, 12, 0, 2, tzinfo=timezone.utc)
+        sanitizer_error = SanitizerError(
+            content="AddressSanitizer: heap-use-after-free",
+            file_path=Path("/tmp/asan.123.log"),
+            timestamp=san_timestamp,
+            sanitizer_type="asan",
+            server_id="single_0",
+        )
+
+        health_info = ServerHealthInfo(sanitizer_errors={"single_0": [sanitizer_error]})
+        collector.set_server_health({DeploymentId("test-deployment"): health_info})
+
+        results = collector.finalize_results()
+        test = results["test_suites"]["tests/test_example.py"]["tests"][
+            "test_with_sanitizer"
+        ]
+
+        # Verify sanitizer was matched
+        assert len(test["matched_sanitizers"]) == 1
+        assert test["matched_sanitizers"][0]["sanitizer_type"] == "asan"
+        assert test["matched_sanitizers"][0]["server_id"] == "single_0"
+        assert test["matched_sanitizers"][0]["match_confidence"] == "high"
+
+    def test_sanitizer_not_matched_outside_time_window(self) -> None:
+        """Test that sanitizers outside test time window are not matched."""
+        from armadillo.core.types import ServerHealthInfo, SanitizerError
+        from armadillo.core.value_objects import DeploymentId
+        from datetime import datetime, timezone
+
+        collector = ResultCollector()
+
+        # Record test
+        test_start = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        test_end = datetime(2024, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_clean",
+            outcome=ExecutionOutcome.PASSED,
+            duration=5.0,
+            started_at=test_start,
+            finished_at=test_end,
+        )
+
+        # Add sanitizer error that occurred AFTER test (outside tolerance)
+        san_timestamp = datetime(2024, 1, 1, 12, 0, 20, tzinfo=timezone.utc)
+        sanitizer_error = SanitizerError(
+            content="AddressSanitizer: heap-use-after-free",
+            file_path=Path("/tmp/asan.123.log"),
+            timestamp=san_timestamp,
+            sanitizer_type="asan",
+            server_id="single_0",
+        )
+
+        health_info = ServerHealthInfo(sanitizer_errors={"single_0": [sanitizer_error]})
+        collector.set_server_health({DeploymentId("test-deployment"): health_info})
+
+        results = collector.finalize_results()
+        test = results["test_suites"]["tests/test_example.py"]["tests"]["test_clean"]
+
+        # Verify sanitizer was NOT matched
+        assert len(test["matched_sanitizers"]) == 0
+
+    def test_failure_info_in_junit_export(self, temp_dir: Path) -> None:
+        """Test that failure_info appears correctly in JUnit XML."""
+        from armadillo.results.collector import TestFailureInfo
+
+        collector = ResultCollector()
+
+        failure_info = TestFailureInfo(
+            phase="call",
+            exception_type="AssertionError",
+            exception_message="Expected 5, got 3",
+            traceback="Traceback (most recent call last):\n  File test.py, line 10\n    assert x == 5",
+            longrepr="Full pytest representation",
+        )
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_failed",
+            outcome=ExecutionOutcome.FAILED,
+            duration=1.0,
+            failure_info=failure_info,
+        )
+
+        exported_files = collector.export_results(["junit"], temp_dir)
+        junit_file = exported_files["junit"]
+        content = junit_file.read_text()
+
+        # Verify failure element has correct attributes and content
+        assert 'type="AssertionError"' in content
+        assert 'message="Expected 5, got 3"' in content
+        assert "Traceback" in content
+
+    def test_matched_sanitizers_in_junit_export(self, temp_dir: Path) -> None:
+        """Test that matched sanitizers appear in JUnit XML."""
+        from armadillo.core.types import ServerHealthInfo, SanitizerError
+        from armadillo.core.value_objects import DeploymentId
+        from datetime import datetime, timezone
+
+        collector = ResultCollector()
+
+        # Record test
+        test_start = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        test_end = datetime(2024, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
+
+        collector.record_test_result(
+            nodeid="tests/test_example.py::test_with_sanitizer",
+            outcome=ExecutionOutcome.FAILED,
+            duration=5.0,
+            started_at=test_start,
+            finished_at=test_end,
+        )
+
+        # Add sanitizer
+        san_timestamp = datetime(2024, 1, 1, 12, 0, 2, tzinfo=timezone.utc)
+        sanitizer_error = SanitizerError(
+            content="AddressSanitizer: heap-use-after-free on address 0x123",
+            file_path=Path("/tmp/asan.123.log"),
+            timestamp=san_timestamp,
+            sanitizer_type="asan",
+            server_id="single_0",
+        )
+
+        health_info = ServerHealthInfo(sanitizer_errors={"single_0": [sanitizer_error]})
+        collector.set_server_health({DeploymentId("test-deployment"): health_info})
+
+        exported_files = collector.export_results(["junit"], temp_dir)
+        junit_file = exported_files["junit"]
+        content = junit_file.read_text()
+
+        # Verify sanitizer error appears in JUnit XML
+        assert 'type="sanitizer"' in content
+        assert "Sanitizer issue detected" in content
+        assert "heap-use-after-free" in content
