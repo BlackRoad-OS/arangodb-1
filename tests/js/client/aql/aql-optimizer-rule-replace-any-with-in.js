@@ -105,9 +105,6 @@ function NewAqlReplaceAnyWithINTestSuite() {
         var calcNodesWith = findExecutionNodes(planWithRule, "CalculationNode");
         var calcNodesWithout = findExecutionNodes(planWithoutRule, "CalculationNode");
 
-        var calcNodesWith = findExecutionNodes(planWithRule, "CalculationNode");
-        var calcNodesWithout = findExecutionNodes(planWithoutRule, "CalculationNode");
-
         assertTrue(calcNodesWith.length > 0 || calcNodesWithout.length > 0,
             "Plans should have calculation nodes: " + query);
 
