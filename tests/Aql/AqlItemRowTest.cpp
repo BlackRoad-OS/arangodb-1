@@ -480,13 +480,7 @@ TEST_F(AqlShadowRowsEqTest, shadow_row_depth_equivalence) {
 
 TEST_F(AqlItemRowsTest, cloneToBlock_ManagedSlices) {
   auto inputBlock =
-      buildBlock<3>(itemBlockManager, {
-        {
-          {{1}, {2}, {3}}
-        }, {
-          {{4}, {5}, {6}}
-        }
-      });
+      buildBlock<3>(itemBlockManager, {{{{1}, {2}, {3}}}, {{{4}, {5}, {6}}}});
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -516,13 +510,7 @@ TEST_F(AqlItemRowsTest, cloneToBlock_ManagedSlices) {
 
 TEST_F(AqlItemRowsTest, cloneToBlock_SubsetOfRegisters) {
   auto inputBlock =
-      buildBlock<3>(itemBlockManager, {
-        {
-          {{1}, {2}, {3}}
-        }, {
-          {{4}, {5}, {6}}
-        }
-      });
+      buildBlock<3>(itemBlockManager, {{{{1}, {2}, {3}}}, {{{4}, {5}, {6}}}});
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -633,13 +621,7 @@ TEST_F(AqlItemRowsTest, cloneToBlock_EmptyRow) {
 TEST_F(AqlItemRowsTest, cloneToBlock_DestroyOriginalAfterClone) {
   // Test: Clone row to block, then destroy original - cloned should still work
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {
-        {
-          {{1}, {2}}
-        }, {
-          {{3}, {4}}
-        }
-      });
+      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -668,13 +650,7 @@ TEST_F(AqlItemRowsTest, cloneToBlock_DestroyValueInOriginalAfterClone) {
   // Test: Clone row, then destroy values in original
   // Cloned values should be independent copies
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {
-        {
-          {{1}, {2}}
-        }, {
-          {{3}, {4}}
-        }
-      });
+      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -703,13 +679,7 @@ TEST_F(AqlItemRowsTest,
        cloneToBlock_DestroyValueInClonedAfterOriginalDestroyed) {
   // Test: Clone row, destroy original, then destroy values in cloned
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {
-        {
-          {{1}, {2}}
-        }, {
-          {{3}, {4}}
-        }
-      });
+      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
 
   InputAqlItemRow source{inputBlock, 0};
 
@@ -739,13 +709,7 @@ TEST_F(AqlItemRowsTest,
 TEST_F(AqlItemRowsTest, cloneToBlock_MultipleClonesSameRow) {
   // Test: Create multiple clones of the same row - each should be independent
   auto inputBlock =
-      buildBlock<2>(itemBlockManager, {
-        {
-          {{1}, {2}}
-        }, {
-          {{3}, {4}}
-        }
-      });
+      buildBlock<2>(itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}});
 
   InputAqlItemRow source{inputBlock, 0};
 

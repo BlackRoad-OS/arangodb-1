@@ -29,6 +29,7 @@
 #include "Basics/ResourceUsage.h"
 #include "Basics/VelocyPackHelper.h"
 
+#include <boost/container/vector.hpp>
 #include <velocypack/Builder.h>
 #include <velocypack/Slice.h>
 
@@ -555,8 +556,9 @@ TEST_F(AqlItemBlockTest, cloneDataAndMoveShadow_NoShadowRows) {
 }
 
 TEST_F(AqlItemBlockTest, cloneDataAndMoveShadow_WithShadowRows) {
-  auto block = buildBlock<2>(
-      itemBlockManager, {{{{1}, {2}}}, {{{3}, {4}}}, {{{5}, {6}}}}, {{1, 0}});
+  auto block = buildBlock<2>(itemBlockManager,
+                             {{{{1}, {2}}}, {{{3}, {4}}}, {{{5}, {6}}}},
+                             /* shadow row */ {{/* row */ 1, /* depth */ 0}});
 
   // Row 1 is a shadow row
   ASSERT_TRUE(block->isShadowRow(1));
@@ -628,15 +630,69 @@ TEST_F(AqlItemBlockTest, cloneDataAndMoveShadow_SharedSupervisedSlices) {
       b.slice(),
       static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
       &monitor);
+  EXPECT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   block->setValue(0, 0, supervised);
   block->setValue(1, 0, supervised);
   block->setValue(2, 0, supervised);
+  auto initialMemory = monitor.current();
 
   // Make row 1 a shadow row
   block->makeShadowRow(1, 0);
 
   SharedAqlItemBlockPtr cloned = block->cloneDataAndMoveShadow();
+  // This assertion is tricky
+  // The first row's SupervisedSlide was clone (new allocation)
+  // The second row's SupervisedSlice was moved (no new allocation)
+  // The third row's SupervisedSlice was shared because it was cached by the
+  // first row (no new allocation)
+  EXPECT_EQ(monitor.current(), initialMemory * 2);
+
+  ASSERT_NE(cloned, nullptr);
+  EXPECT_EQ(cloned->numRows(), 3);
+  EXPECT_EQ(cloned->numRegisters(), 1);
+  EXPECT_TRUE(cloned->isShadowRow(1));
+
+  // Data rows (0, 2) should be cloned
+  EXPECT_EQ(cloned->getValueReference(0, 0).slice().stringView(), content);
+  EXPECT_EQ(cloned->getValueReference(2, 0).slice().stringView(), content);
+
+  // Shadow row (1) should be moved
+  EXPECT_EQ(cloned->getValueReference(1, 0).slice().stringView(), content);
+  EXPECT_TRUE(
+      block->getValueReference(1, 0).isEmpty());  // Stolen from original
+
+  // Clean up
+  cloned.reset(nullptr);
+  block.reset(nullptr);
+
+  // All memory should be released
+  EXPECT_EQ(monitor.current(), 0U);
+}
+
+TEST_F(AqlItemBlockTest, cloneDataAndMoveShadow_SupervisedSlices) {
+  auto block = itemBlockManager.requestBlock(3, 1);
+
+  size_t memSize = 0;
+  std::string content = "Supervised slice content";
+  for (size_t i = 0; i < 3; i++) {
+    velocypack::Builder b;
+    b.add(velocypack::Value(content));
+    AqlValue supervised = AqlValue(b.slice(), 0, &monitor);
+    block->setValue(i, 0, supervised);
+    memSize = supervised.memoryUsage();
+  }
+  auto initialMemory = monitor.current();
+
+  // Make row 1 a shadow row
+  block->makeShadowRow(1, 0);
+
+  SharedAqlItemBlockPtr cloned = block->cloneDataAndMoveShadow();
+  // The original block has independent three SupervisedSlices
+  // The cloned block should also have three independent SupervisedSlices
+  // but, the original second one was stolen by the cloned block
+  // so we subtract one memSize
+  EXPECT_EQ(monitor.current(), initialMemory * 2 - memSize);
 
   ASSERT_NE(cloned, nullptr);
   EXPECT_EQ(cloned->numRows(), 3);
@@ -714,10 +770,12 @@ TEST_F(AqlItemBlockTest, cloneDataAndMoveShadow_MixedManagedAndSupervised) {
       b1.slice(),
       static_cast<arangodb::velocypack::ValueLength>(b1.slice().byteSize()),
       &monitor);
+  EXPECT_EQ(supervised1.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   AqlValue supervised2 = AqlValue(
       b2.slice(),
       static_cast<arangodb::velocypack::ValueLength>(b2.slice().byteSize()),
       &monitor);
+  EXPECT_EQ(supervised2.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   block->setValue(1, 0, supervised1);
   block->setValue(1, 1, supervised2);
   block->makeShadowRow(1, 0);
