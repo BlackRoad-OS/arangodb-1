@@ -28,20 +28,12 @@ class AqlItemBlockSupervisedMemoryTest : public ::testing::Test {
   arangodb::ResourceMonitor monitor{global};
   AqlItemBlockManager itemBlockManager{monitor};
 
-  // Helper to create a supervised slice AqlValue
-  AqlValue createSupervisedSlice(std::string const& content) {
-    arangodb::velocypack::Builder b;
-    b.add(arangodb::velocypack::Value(content));
-    return AqlValue(
-        b.slice(),
-        static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
-        &monitor);
-  }
-
   // Helper to create a large supervised slice (to ensure it's not inlined)
-  AqlValue createLargeSupervisedSlice(size_t size = 200) {
+  AqlValue createSupervisedSlice(size_t size = 200) {
     std::string content(size, 'x');
-    return createSupervisedSlice(content);
+    velocypack::Builder b;
+    b.add(arangodb::velocypack::Value(content));
+    return AqlValue(b.slice(), 0, &monitor);
   }
 };
 
@@ -73,7 +65,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
 
   // Create a supervised slice
   // This allocates heap memory with ResourceMonitor* prefix
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
@@ -163,7 +155,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // This allocates memory on the heap with ResourceMonitor* prefix
   // Memory is tracked in ResourceMonitor during allocation
   size_t initialMemory = monitor.current();
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
@@ -309,7 +301,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   size_t initialMemory = monitor.current();
@@ -446,7 +438,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest, StealSupervisedSliceThenDestroyBlock) {
   auto block = itemBlockManager.requestBlock(2, 1);
 
   // Create and set a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   block->setValue(0, 0, supervised);
 
   size_t initialMemory = monitor.current();
@@ -525,7 +517,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   auto block = itemBlockManager.requestBlock(1, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   size_t initialMemory = monitor.current();
@@ -592,7 +584,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   auto block = itemBlockManager.requestBlock(2, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
@@ -692,7 +684,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   auto block = itemBlockManager.requestBlock(2, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   size_t initialMemory = monitor.current();
@@ -783,7 +775,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   auto block = itemBlockManager.requestBlock(1, 1);
 
   // Create and store supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSlice(200);
   block->setValue(0, 0, supervised);
 
   size_t initialMemory = monitor.current();
