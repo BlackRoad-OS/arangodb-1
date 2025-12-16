@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
-/// Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
+/// Copyright 2014-2025 ArangoDB GmbH, Cologne, Germany
 /// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 ///
 /// Licensed under the Business Source License 1.1 (the "License");
@@ -30,7 +30,7 @@ namespace arangodb {
 
 class CrashHandlerDataSource {
  public:
-  virtual ~CrashHandlerDataSource();
+  virtual ~CrashHandlerDataSource() = default;
 
   virtual velocypack::SharedSlice getCrashData() const = 0;
 

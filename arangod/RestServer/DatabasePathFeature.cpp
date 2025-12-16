@@ -31,7 +31,6 @@
 #include "Basics/application-exit.h"
 #include "Basics/files.h"
 #include "Basics/operating-system.h"
-#include "CrashHandler/CrashHandler.h"
 #include "Logger/LogMacros.h"
 #include "Logger/Logger.h"
 #include "Logger/LoggerStream.h"
@@ -228,7 +227,12 @@ void DatabasePathFeature::start() {
     }
   }
 
-  CrashHandler::setDatabaseDirectory(_directory);
+  _setCrashHandlerDatabaseDirectory(_directory);
+}
+
+void DatabasePathFeature::setCrashHandlerDatabaseDirectory(
+    std::function<void(std::string&)>&& callback) {
+  _setCrashHandlerDatabaseDirectory = std::move(callback);
 }
 
 std::string DatabasePathFeature::subdirectoryName(

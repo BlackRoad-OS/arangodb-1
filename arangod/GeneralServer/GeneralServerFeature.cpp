@@ -847,6 +847,10 @@ void GeneralServerFeature::defineRemainingHandlers(
       RestHandlerCreator<arangodb::RestAdminClusterHandler>::createNoData);
 
   f.addPrefixHandler(
+      "/_admin/crashes",
+      RestHandlerCreator<arangodb::async_registry::RestHandler>::createNoData);
+
+  f.addPrefixHandler(
       "/_admin/deployment",
       RestHandlerCreator<arangodb::RestAdminDeploymentHandler>::createNoData);
 

@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
-/// Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
+/// Copyright 2014-2025 ArangoDB GmbH, Cologne, Germany
 /// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 ///
 /// Licensed under the Business Source License 1.1 (the "License");
@@ -21,14 +21,29 @@
 /// @author Jure Bajic
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "CrashHandler/CrashHandlerDataSource.h"
-#include "CrashHandler/CrashHandler.h"
+#pragma once
+
+#include "RestHandler/RestBaseHandler.h"
 
 namespace arangodb {
 
-CrashHandlerDataSource::~CrashHandlerDataSource() {
-  // Automatically unregister from crash handler when destroyed
-  CrashHandler::removeDataSource(this);
-}
+////////////////////////////////////////////////////////////////////////////////
+/// @brief REST handler for crash management operations
+////////////////////////////////////////////////////////////////////////////////
+
+class RestCrashHandler : public RestBaseHandler {
+ public:
+  explicit RestCrashHandler(ArangodServer&, GeneralRequest*, GeneralResponse*);
+
+ public:
+  char const* name() const override final { return "RestCrashHandler"; }
+  RequestLane lane() const override final { return RequestLane::CLIENT_FAST; }
+  RestStatus execute() override;
+
+ private:
+  void handleListCrashes();
+  void handleGetCrash(std::string const& crashId);
+  void handleDeleteCrash(std::string const& crashId);
+};
 
 }  // namespace arangodb

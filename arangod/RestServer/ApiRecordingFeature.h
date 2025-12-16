@@ -152,6 +152,7 @@ class ApiRecordingFeature : public ArangodFeature,
 
   // CrashHandlerDataSource interface
   velocypack::SharedSlice getCrashData() const override;
+
   std::string_view getDataSourceName() const override;
 
  private:

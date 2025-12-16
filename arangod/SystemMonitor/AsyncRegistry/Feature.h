@@ -43,7 +43,8 @@ auto getStacktraceData(
     containers::IndexedForestWithRoots<PromiseSnapshot> const& promises)
     -> velocypack::Builder;
 
-class Feature final : public ArangodFeature, public CrashHandlerDataSource {
+class Feature final : public ArangodFeature,
+                      public arangodb::CrashHandlerDataSource {
  private:
   static auto create_metrics(arangodb::metrics::MetricsFeature& metrics_feature)
       -> std::shared_ptr<RegistryMetrics>;
