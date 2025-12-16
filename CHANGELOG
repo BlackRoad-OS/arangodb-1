@@ -1,4 +1,4 @@
-3.12.7.1 (XXXX-XX-XX)
+3.12.7.1 (2025-12-16)
 ---------------------
 
 * Rebuilt included rclone v1.65.2 with go1.24.11 and non-vulnerable
