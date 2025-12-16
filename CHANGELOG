@@ -1,3 +1,11 @@
+v3.11.14.3 (XXXX-XX-XX)
+-----------------------
+
+* Rebuilt included rclone v1.62.2 with go1.24.11 and non-vulnerable
+  dependencies.
+
+
+
 v3.11.14.2 (2025-12-05)
 -----------------------
 
