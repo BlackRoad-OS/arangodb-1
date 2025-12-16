@@ -1,6 +1,9 @@
 3.12.7.1 (XXXX-XX-XX)
 ---------------------
 
+* Rebuilt included rclone v1.65.2 with go1.24.11 and non-vulnerable
+  dependencies.
+
 * Licenses with "managed=true" in their grant are not "expiring". They go 
   directly from "good" to "read-only". This is relevant for the new automatic
   license management.
