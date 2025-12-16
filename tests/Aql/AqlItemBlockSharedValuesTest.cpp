@@ -1,4 +1,3 @@
-
 #include "gtest/gtest.h"
 
 #include "Aql/AqlItemBlock.h"
@@ -30,7 +29,7 @@ class AqlItemBlockSharedValuesTest : public ::testing::Test {
   AqlItemBlockManager itemBlockManager{monitor};
 
   // Helper to create a managed slice AqlValue (no ResourceMonitor)
-  AqlValue createManagedSlice(std::string const& content) {
+  AqlValue createManagedSliceWithString(std::string const& content) {
     arangodb::velocypack::Builder b;
     b.add(arangodb::velocypack::Value(content));
     // Create managed slice by not passing ResourceMonitor*
@@ -39,7 +38,7 @@ class AqlItemBlockSharedValuesTest : public ::testing::Test {
   }
 
   // Helper to create a supervised slice AqlValue (with ResourceMonitor)
-  AqlValue createSupervisedSlice(std::string const& content) {
+  AqlValue createSupervisedSliceWithString(std::string const& content) {
     arangodb::velocypack::Builder b;
     b.add(arangodb::velocypack::Value(content));
     return AqlValue(
@@ -49,15 +48,20 @@ class AqlItemBlockSharedValuesTest : public ::testing::Test {
   }
 
   // Helper to create a large managed slice (to ensure it's not inlined)
-  AqlValue createLargeManagedSlice(size_t size = 200) {
+  AqlValue createManagedSliceWithChars(size_t size = 200) {
     std::string content(size, 'x');
-    return createManagedSlice(content);
+    return createManagedSliceWithString(content);
   }
 
   // Helper to create a large supervised slice (to ensure it's not inlined)
-  AqlValue createLargeSupervisedSlice(size_t size = 200) {
+  AqlValue createSupervisedSliceWithChars(size_t size = 200) {
     std::string content(size, 'x');
-    return createSupervisedSlice(content);
+    arangodb::velocypack::Builder b;
+    b.add(arangodb::velocypack::Value(content));
+    return AqlValue(
+        b.slice(),
+        static_cast<arangodb::velocypack::ValueLength>(b.slice().byteSize()),
+        &monitor);
   }
 };
 
@@ -69,7 +73,7 @@ TEST_F(AqlItemBlockSharedValuesTest, MultipleManagedSlicesSameData_SetValue) {
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create a managed slice
-  AqlValue managed = createLargeManagedSlice(200);
+  AqlValue managed = createManagedSliceWithChars(200);
   ASSERT_EQ(managed.type(), AqlValue::VPACK_MANAGED_SLICE);
   ASSERT_TRUE(managed.requiresDestruction());
 
@@ -103,7 +107,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create a managed slice
-  AqlValue managed = createLargeManagedSlice(200);
+  AqlValue managed = createManagedSliceWithChars(200);
   ASSERT_EQ(managed.type(), AqlValue::VPACK_MANAGED_SLICE);
 
   size_t expectedMemory = managed.memoryUsage();
@@ -137,7 +141,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create a managed slice
-  AqlValue managed = createLargeManagedSlice(200);
+  AqlValue managed = createManagedSliceWithChars(200);
   ASSERT_EQ(managed.type(), AqlValue::VPACK_MANAGED_SLICE);
 
   size_t expectedMemory = managed.memoryUsage();
@@ -190,7 +194,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
 
   // Create a supervised slice - we'll use it for all three rows
   // to make them share the same pointer
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSliceWithChars(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
@@ -219,7 +223,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   EXPECT_EQ(monitor.current(), initialMemory);
 
   block.reset(nullptr);
-  size_t blockMemory = 3 * 1 * sizeof(AqlValue);
+  size_t blockMemory = 3 * sizeof(AqlValue);
   // Note: The block destroys supervised slices when it's destroyed, so we
   // should NOT call supervised.destroy() here - it would be a use-after-free.
   EXPECT_LE(monitor.current(), initialMemory - blockMemory + 100U);
@@ -232,7 +236,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   size_t initialMemory = monitor.current();
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSliceWithChars(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   size_t memoryAfterCreation = monitor.current();
@@ -260,7 +264,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   }
 
   block.reset(nullptr);
-  size_t blockMemory = 3 * 1 * sizeof(AqlValue);
+  size_t blockMemory = 3 * sizeof(AqlValue);
   // Note: The block destroys supervised slices when it's destroyed, so we
   // should NOT call supervised.destroy() here - it would be a use-after-free.
   EXPECT_LE(monitor.current(), memoryAfterCreation - blockMemory + 100U);
@@ -271,7 +275,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   auto block = itemBlockManager.requestBlock(3, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSliceWithChars(200);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   size_t initialMemory = monitor.current();
@@ -327,8 +331,8 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Create both managed and supervised slices with the same content
   std::string content =
       "This is a test string that is long enough to not be inlined";
-  AqlValue managed = createManagedSlice(content);
-  AqlValue supervised = createSupervisedSlice(content);
+  AqlValue managed = createManagedSliceWithString(content);
+  AqlValue supervised = createSupervisedSliceWithString(content);
 
   ASSERT_EQ(managed.type(), AqlValue::VPACK_MANAGED_SLICE);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
@@ -378,8 +382,10 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Create both managed and supervised slices
   std::string content1 = "First managed slice content";
   std::string content2 = "Second supervised slice content";
-  AqlValue managed = createManagedSlice(content1);
-  AqlValue supervised = createSupervisedSlice(content2);
+  AqlValue managed = createManagedSliceWithString(content1);
+  AqlValue supervised = createSupervisedSliceWithString(content2);
+  ASSERT_EQ(managed.type(), AqlValue::VPACK_MANAGED_SLICE);
+  ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   size_t managedMemory = managed.memoryUsage();
   size_t initialMemory = monitor.current();
@@ -420,9 +426,9 @@ TEST_F(AqlItemBlockSharedValuesTest, MultipleRegisters_AllManagedSlices) {
   auto block = itemBlockManager.requestBlock(2, 3);
 
   // Create managed slices
-  AqlValue val1 = createLargeManagedSlice(200);
-  AqlValue val2 = createLargeManagedSlice(200);
-  AqlValue val3 = createLargeManagedSlice(200);
+  AqlValue val1 = createManagedSliceWithChars(200);
+  AqlValue val2 = createManagedSliceWithChars(200);
+  AqlValue val3 = createManagedSliceWithChars(200);
 
   size_t initialMemory = monitor.current();
   size_t totalMemory =
@@ -458,9 +464,9 @@ TEST_F(AqlItemBlockSharedValuesTest, MultipleRegisters_AllSupervisedSlices) {
   auto block = itemBlockManager.requestBlock(2, 3);
 
   // Create supervised slices
-  AqlValue val1 = createLargeSupervisedSlice(200);
-  AqlValue val2 = createLargeSupervisedSlice(200);
-  AqlValue val3 = createLargeSupervisedSlice(200);
+  AqlValue val1 = createSupervisedSliceWithChars(200);
+  AqlValue val2 = createSupervisedSliceWithChars(200);
+  AqlValue val3 = createSupervisedSliceWithChars(200);
 
   size_t initialMemory = monitor.current();
 
@@ -497,9 +503,9 @@ TEST_F(AqlItemBlockSharedValuesTest,
   auto block = itemBlockManager.requestBlock(2, 3);
 
   // Create mixed slices
-  AqlValue managed1 = createLargeManagedSlice(200);
-  AqlValue supervised1 = createLargeSupervisedSlice(200);
-  AqlValue managed2 = createLargeManagedSlice(200);
+  AqlValue managed1 = createManagedSliceWithChars(200);
+  AqlValue supervised1 = createSupervisedSliceWithChars(200);
+  AqlValue managed2 = createManagedSliceWithChars(200);
 
   size_t initialMemory = monitor.current();
 
@@ -549,7 +555,7 @@ TEST_F(AqlItemBlockSharedValuesTest, ManyRows_AllManagedSlices) {
   auto block = itemBlockManager.requestBlock(numRows, 1);
 
   // Create a managed slice
-  AqlValue managed = createLargeManagedSlice(200);
+  AqlValue managed = createManagedSliceWithChars(200);
   size_t expectedMemory = managed.memoryUsage();
   size_t initialMemory = monitor.current();
 
@@ -576,7 +582,7 @@ TEST_F(AqlItemBlockSharedValuesTest, ManyRows_AllSupervisedSlices) {
   auto block = itemBlockManager.requestBlock(numRows, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSliceWithChars(200);
   size_t initialMemory = monitor.current();
 
   for (size_t i = 0; i < numRows; ++i) {
@@ -604,7 +610,7 @@ TEST_F(AqlItemBlockSharedValuesTest, PartialDestroy_ManagedSlices) {
   auto block = itemBlockManager.requestBlock(5, 1);
 
   // Create a managed slice
-  AqlValue managed = createLargeManagedSlice(200);
+  AqlValue managed = createManagedSliceWithChars(200);
   size_t expectedMemory = managed.memoryUsage();
   size_t initialMemory = monitor.current();
 
@@ -641,7 +647,7 @@ TEST_F(AqlItemBlockSharedValuesTest, PartialDestroy_SupervisedSlices) {
   auto block = itemBlockManager.requestBlock(5, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSliceWithChars(200);
   size_t initialMemory = monitor.current();
 
   for (size_t i = 0; i < 5; ++i) {
@@ -681,7 +687,7 @@ TEST_F(AqlItemBlockSharedValuesTest, StealAndDestroy_ManagedSlices) {
   auto block = itemBlockManager.requestBlock(2, 1);
 
   // Create a managed slice
-  AqlValue managed = createLargeManagedSlice(200);
+  AqlValue managed = createManagedSliceWithChars(200);
   size_t expectedMemory = managed.memoryUsage();
   size_t initialMemory = monitor.current();
 
@@ -718,7 +724,7 @@ TEST_F(AqlItemBlockSharedValuesTest, StealAndDestroy_SupervisedSlices) {
   auto block = itemBlockManager.requestBlock(2, 1);
 
   // Create a supervised slice
-  AqlValue supervised = createLargeSupervisedSlice(200);
+  AqlValue supervised = createSupervisedSliceWithChars(200);
   size_t initialMemory = monitor.current();
 
   block->setValue(0, 0, supervised);
@@ -733,6 +739,9 @@ TEST_F(AqlItemBlockSharedValuesTest, StealAndDestroy_SupervisedSlices) {
   size_t memoryAfterSteal = monitor.current();
   EXPECT_EQ(memoryAfterSteal, initialMemory);
 
+  // Because the original AqlValue escaped from AqlItemBlock by steal(),
+  // block.reset() won't affect anything to the original AqlValue
+  // Hence, no memory decrease for the AqlValue
   block.reset(nullptr);
   size_t memoryAfterBlockDestroy = monitor.current();
   size_t blockMemory = 2 * 1 * sizeof(AqlValue);
@@ -766,7 +775,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
   // Create a supervised slice in row 0 (data row)
   std::string content =
       "This is a test string that is long enough to not be inlined";
-  AqlValue supervised = createSupervisedSlice(content);
+  AqlValue supervised = createSupervisedSliceWithString(content);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
   ASSERT_TRUE(supervised.requiresDestruction());
 
@@ -899,7 +908,7 @@ TEST_F(AqlItemBlockSharedValuesTest,
 
   // Create a supervised slice
   std::string content = "Shared supervised slice content";
-  AqlValue supervised = createSupervisedSlice(content);
+  AqlValue supervised = createSupervisedSliceWithString(content);
   ASSERT_EQ(supervised.type(), AqlValue::VPACK_SUPERVISED_SLICE);
 
   // Set the same value in multiple shadow rows
@@ -959,6 +968,8 @@ TEST_F(AqlItemBlockSharedValuesTest,
   EXPECT_EQ(slice.get("nrItems").getNumericValue<size_t>(), 3);
 
   block.reset(nullptr);
+  // Because block's row were empty, so block.reset() won't free the values
+  // Hence it is safe to call cloned.reset()
   cloned.reset(nullptr);
   // Note: The block destroys supervised slices when it's destroyed, so we
   // should NOT call supervised.destroy() here - it would be a use-after-free.
