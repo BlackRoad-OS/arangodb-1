@@ -217,9 +217,6 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
           return std::make_unique<EndpointFeature>(server);
         }});
 
-    server.getFeature<DatabasePathFeature>().setCrashHandlerDatabaseDirectory(
-        [&](std::string& path) { crashHandler.setDatabaseDirectory(path); });
-
     try {
       server.run(argc, argv);
       if (server.helpShown()) {
