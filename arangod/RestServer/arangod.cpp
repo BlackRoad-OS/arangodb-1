@@ -86,8 +86,6 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
            }
          },
          {}});
-    server.getFeature<DatabasePathFeature>().setCrashHandlerDatabaseDirectory(
-        [&](std::string& path) { crashHandler.setDatabaseDirectory(path); });
 
     server.addFeatures(Visitor{
         []<typename T>(auto& server, TypeTag<T>) {
@@ -218,6 +216,9 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
         [](auto& server, TypeTag<HttpEndpointProvider>) {
           return std::make_unique<EndpointFeature>(server);
         }});
+
+    server.getFeature<DatabasePathFeature>().setCrashHandlerDatabaseDirectory(
+        [&](std::string& path) { crashHandler.setDatabaseDirectory(path); });
 
     try {
       server.run(argc, argv);
