@@ -128,7 +128,7 @@ AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
   VPackSlice p = toPushMaterializer.slice(toPush);
 
   if (list.isNull(true)) {
-    transaction::BuilderLeaser builder(trx);
+    auto builder = ThreadLocalBuilderLeaser::lease();
     builder->openArray();
     builder->add(p);
     builder->close();
@@ -142,7 +142,7 @@ AqlValue functions::Push(ExpressionContext* expressionContext, AstNode const&,
     return AqlValue(AqlValueHintNull());
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   AqlValueMaterializer materializer(vopts);
   VPackSlice l = materializer.slice(list);
@@ -190,7 +190,7 @@ AqlValue functions::Pop(ExpressionContext* expressionContext, AstNode const&,
   AqlValueMaterializer materializer(vopts);
   VPackSlice slice = materializer.slice(list);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   auto iterator = VPackArrayIterator(slice);
   while (iterator.valid() && iterator.index() + 1 != iterator.size()) {
@@ -252,7 +252,7 @@ AqlValue functions::Append(ExpressionContext* expressionContext, AstNode const&,
       added(11, basics::VelocyPackHelper::VPackHash(),
             basics::VelocyPackHelper::VPackEqual(options));
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
 
   for (VPackSlice it : VPackArrayIterator(l)) {
@@ -317,7 +317,7 @@ AqlValue functions::Unshift(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(vopts);
   VPackSlice a = materializer.slice(toAppend);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   builder->add(a);
 
@@ -353,7 +353,7 @@ AqlValue functions::Shift(ExpressionContext* expressionContext, AstNode const&,
     return AqlValue(AqlValueHintNull());
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
 
   if (list.length() > 0) {
@@ -397,7 +397,7 @@ AqlValue functions::RemoveValue(ExpressionContext* expressionContext,
 
   auto options = trx->transactionContextPtr()->getVPackOptions();
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   bool useLimit = false;
   int64_t limit = list.length();
@@ -470,7 +470,7 @@ AqlValue functions::RemoveValues(ExpressionContext* expressionContext,
   AqlValueMaterializer listMaterializer(vopts);
   VPackSlice l = listMaterializer.slice(list);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (VPackSlice it : VPackArrayIterator(l)) {
     if (!listContainsElement(vopts, v, it)) {
@@ -520,7 +520,7 @@ AqlValue functions::RemoveNth(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(vopts);
   VPackSlice v = materializer.slice(list);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   size_t target = static_cast<size_t>(p);
   size_t cur = 0;
   builder->openArray();
@@ -586,7 +586,7 @@ AqlValue functions::ReplaceNth(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer2(vopts);
   VPackSlice replaceValue = materializer2.slice(newValue);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
 
   VPackArrayIterator it(arraySlice);
@@ -698,7 +698,7 @@ AqlValue functions::Interleave(aql::ExpressionContext* expressionContext,
     iters.emplace_back(velocypack::ArrayIterator(slice));
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
 
   while (!iters.empty()) {  // in this loop we only deal with nonempty arrays
@@ -753,9 +753,7 @@ AqlValue functions::Range(ExpressionContext* expressionContext, AstNode const&,
     return AqlValue(AqlValueHintNull());
   }
 
-  transaction::Methods* trx = &expressionContext->trx();
-
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray(true);
   if (step < 0.0 && to <= from) {
     TRI_ASSERT(step != 0.0);
@@ -840,7 +838,7 @@ AqlValue functions::Unique(ExpressionContext* expressionContext, AstNode const&,
       values(512, basics::VelocyPackHelper::VPackHash(),
              basics::VelocyPackHelper::VPackEqual(options));
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
 
   for (VPackSlice s : VPackArrayIterator(slice)) {
@@ -891,7 +889,7 @@ AqlValue functions::SortedUnique(ExpressionContext* expressionContext,
     }
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (auto const& it : values) {
     builder->add(it);
@@ -935,7 +933,7 @@ AqlValue functions::Sorted(ExpressionContext* expressionContext, AstNode const&,
     }
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (auto const& it : values) {
     for (size_t i = 0; i < it.second; ++i) {
@@ -955,7 +953,7 @@ AqlValue functions::Union(ExpressionContext* expressionContext, AstNode const&,
 
   transaction::Methods* trx = &expressionContext->trx();
   auto* vopts = &trx->vpackOptions();
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   size_t const n = parameters.size();
   for (size_t i = 0; i < n; ++i) {
@@ -1039,7 +1037,7 @@ AqlValue functions::UnionDistinct(ExpressionContext* expressionContext,
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (auto const& it : values) {
     builder->add(it);
@@ -1112,7 +1110,7 @@ AqlValue functions::Intersection(ExpressionContext* expressionContext,
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (auto const& it : values) {
     if (it.second == n) {
@@ -1173,7 +1171,7 @@ AqlValue functions::Outersection(ExpressionContext* expressionContext,
     THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
   }
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (auto const& it : values) {
     if (it.second == 1) {
@@ -1222,7 +1220,7 @@ AqlValue functions::Flatten(ExpressionContext* expressionContext,
   AqlValueMaterializer materializer(vopts);
   VPackSlice listSlice = materializer.slice(list);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   flattenList(listSlice, maxDepth, 0, *builder.get());
   builder->close();
@@ -1371,7 +1369,7 @@ AqlValue functions::Minus(ExpressionContext* expressionContext, AstNode const&,
   }
 
   // We omit the normalize part from js, cannot occur here
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   for (auto const& it : contains) {
     builder->add(it.first);
@@ -1432,7 +1430,7 @@ AqlValue functions::Slice(ExpressionContext* expressionContext, AstNode const&,
   AqlValueMaterializer materializer(vopts);
   VPackSlice arraySlice = materializer.slice(baseArray);
 
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
 
   int64_t pos = 0;
@@ -1471,7 +1469,7 @@ AqlValue functions::ToArray(ExpressionContext* ctx, AstNode const&,
   }
 
   auto* trx = &ctx->trx();
-  transaction::BuilderLeaser builder(trx);
+  auto builder = ThreadLocalBuilderLeaser::lease();
   builder->openArray();
   if (value.isBoolean() || value.isNumber() || value.isString()) {
     // return array with single member

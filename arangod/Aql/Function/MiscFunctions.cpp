@@ -30,6 +30,7 @@
 #include "Aql/Functions.h"
 #include "Aql/QueryExpressionContext.h"
 #include "Basics/Result.h"
+#include "Basics/ThreadLocalLeaser.h"
 #include "Basics/fpconv.h"
 #include "Basics/tri-strings.h"
 #include "Transaction/Helpers.h"
@@ -174,7 +175,7 @@ AqlValue functions::Reverse(ExpressionContext* expressionContext,
       aql::functions::extractFunctionParameterValue(parameters, 0);
 
   if (value.isArray()) {
-    transaction::BuilderLeaser builder(trx);
+    auto builder = ThreadLocalBuilderLeaser::lease();
     AqlValueMaterializer materializer(&vopts);
     VPackSlice slice = materializer.slice(value);
     std::vector<VPackSlice> array;
@@ -194,7 +195,7 @@ AqlValue functions::Reverse(ExpressionContext* expressionContext,
     return AqlValue(builder->slice(), builder->size(), rm);
   } else if (value.isString()) {
     std::string utf8;
-    transaction::StringLeaser buf1(trx);
+    auto buf1 = ThreadLocalStringLeaser::lease();
     velocypack::StringSink adapter(buf1.get());
     appendAsString(vopts, adapter, value);
     icu_64_64::UnicodeString uBuf(buf1->data(),

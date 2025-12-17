@@ -31,6 +31,7 @@
 #include "Aql/QueryExpressionContext.h"
 #include "Basics/Exceptions.h"
 #include "Basics/Result.h"
+#include "Basics/ThreadLocalLeaser.h"
 #include "Containers/FlatHashSet.h"
 #include "Transaction/Helpers.h"
 #include "Transaction/Methods.h"
@@ -91,7 +92,7 @@ void getDocumentByIdentifier(transaction::Methods* trx,
                              std::string& collectionName,
                              std::string const& identifier, bool ignoreError,
                              VPackBuilder& result) {
-  transaction::BuilderLeaser searchBuilder(trx);
+  auto searchBuilder = ThreadLocalBuilderLeaser::lease();
 
   size_t pos = identifier.find('/');
   if (pos == std::string::npos) {
@@ -162,7 +163,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
   if (parameters.size() == 1) {
     AqlValue const& id =
         aql::functions::extractFunctionParameterValue(parameters, 0);
-    transaction::BuilderLeaser builder(trx);
+    auto builder = ThreadLocalBuilderLeaser::lease();
     if (id.isString()) {
       std::string identifier(id.slice().copyString());
       std::string colName;
@@ -208,7 +209,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
   AqlValue const& id =
       aql::functions::extractFunctionParameterValue(parameters, 1);
   if (id.isString()) {
-    transaction::BuilderLeaser builder(trx);
+    auto builder = ThreadLocalBuilderLeaser::lease();
     std::string identifier(id.slice().copyString());
     getDocumentByIdentifier(trx, options, collectionName, identifier, true,
                             *builder.get());
@@ -221,7 +222,7 @@ AqlValue functions::Document(ExpressionContext* expressionContext,
   }
 
   if (id.isArray()) {
-    transaction::BuilderLeaser builder(trx);
+    auto builder = ThreadLocalBuilderLeaser::lease();
     builder->openArray();
 
     AqlValueMaterializer materializer(vopts);
