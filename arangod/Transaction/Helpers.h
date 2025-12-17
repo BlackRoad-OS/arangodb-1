@@ -144,63 +144,12 @@ bool isValidEdgeAttribute(velocypack::Slice slice, bool allowExtendedNames);
 
 }  // namespace helpers
 
-/// @brief std::string leaser
-class StringLeaser {
- public:
-  explicit StringLeaser(Methods*);
-  explicit StringLeaser(Context*);
-
-  auto release() { return _lease.release(); }
-  void acquire(std::unique_ptr<std::string>&& r) {
-    _lease.acquire(std::move(r));
-  }
-
-  std::string const* string() const { return get(); }
-  std::string* operator->() { return get(); }
-  std::string const* operator->() const { return get(); }
-  std::string& operator*() { return *get(); }
-  std::string const& operator*() const { return *get(); }
-
-  std::string* get() { return _lease.get(); }
-  std::string const* get() const { return _lease.get(); }
-
- private:
-  ThreadLocalStringLeaser::Lease _lease;
-};
-
-class BuilderLeaser {
- public:
-  explicit BuilderLeaser(Context*);
-  explicit BuilderLeaser(Methods*);
-
-  BuilderLeaser(BuilderLeaser const&) = delete;
-  BuilderLeaser& operator=(BuilderLeaser const&) = delete;
-  BuilderLeaser& operator=(BuilderLeaser&&) = delete;
-
-  BuilderLeaser(BuilderLeaser&& source) = default;
-
-  velocypack::Builder* builder() noexcept { return get(); }
-  velocypack::Builder const* builder() const noexcept { return get(); }
-  velocypack::Builder* operator->() noexcept { return get(); }
-  velocypack::Builder const* operator->() const noexcept { return get(); }
-  velocypack::Builder& operator*() noexcept { return *get(); }
-  velocypack::Builder const& operator*() const noexcept { return *get(); }
-
-  velocypack::Builder* get() noexcept { return _lease.get(); }
-  velocypack::Builder const* get() const noexcept { return _lease.get(); }
-
-  auto release() { return _lease.release(); }
-
- private:
-  ThreadLocalBuilderLeaser::Lease _lease;
-};
-
-ResultT<transaction::BuilderLeaser> extractAttributeValues(
-    transaction::Methods& trx,
+ResultT<velocypack::Builder> extractAttributeValues(
     std::vector<std::vector<basics::AttributeName>> const& storedValues,
     velocypack::Slice doc, bool nullAllowed);
 
-ResultT<velocypack::Builder> extractAttributeValues(
+ResultT<ThreadLocalBuilderLeaser::Lease> extractAttributeValues(
+    transaction::Methods& trx,
     std::vector<std::vector<basics::AttributeName>> const& storedValues,
     velocypack::Slice doc, bool nullAllowed);
 
