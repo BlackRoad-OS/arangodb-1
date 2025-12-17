@@ -63,6 +63,7 @@
 #include "Aql/ExecutionNode/SortNode.h"
 #include "Aql/ExecutionNode/SubqueryNode.h"
 #include "Aql/ExecutionNode/SubqueryStartExecutionNode.h"
+#include "Aql/ExecutionNode/SubqueryEndExecutionNode.h"
 #include "Aql/ExecutionNode/TraversalNode.h"
 #include "Aql/ExecutionNode/MaterializeNode.h"
 #include "Aql/ExecutionNode/UpdateNode.h"

@@ -1492,7 +1492,10 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
       // Remove this AND node from the OR (same pattern as line 1665, 1692)
       _root->removeMemberUncheckedUnordered(r);
       retry = true;
-      goto fastForwardToNextOrItem;  // Use existing label for consistency
+      // Recalculate n and continue to next iteration (same as
+      // fastForwardToNextOrItem)
+      n = _root->numMembers();
+      continue;
     }
 
     if (andNumMembers <= 1) {
