@@ -200,7 +200,10 @@ commands:
             curl -s -L -o <<parameters.repo-path>>/build/bin/arangodb "https://github.com/arangodb-helper/arangodb/releases/download/$STARTER_REV/arangodb-linux-$arch"
             chmod a+x <<parameters.repo-path>>/build/bin/arangodb
 
-            curl -s -L -o <<parameters.repo-path>>/build/bin/rclone-arangodb "https://github.com/arangodb/rclone-arangodb/releases/download/golang-${RCLONE_GO}/golang-${RCLONE_GO}_${ARANGO_MAJOR_MINOR_VERSION}_v${RCLONE_VERSION}_rclone-arangodb-linux-$arch"
+            # Temporary hack to use the 3.12 version of rclone until we
+            # have a 4.0 version:
+            #curl -s -L -o <<parameters.repo-path>>/build/bin/rclone-arangodb "https://github.com/arangodb/rclone-arangodb/releases/download/golang-${RCLONE_GO}/golang-${RCLONE_GO}_${ARANGO_MAJOR_MINOR_VERSION}_v${RCLONE_VERSION}_rclone-arangodb-linux-$arch"
+            curl -s -L -o <<parameters.repo-path>>/build/bin/rclone-arangodb "https://github.com/arangodb/rclone-arangodb/releases/download/golang-${RCLONE_GO}/golang-${RCLONE_GO}_3.12_v${RCLONE_VERSION}_rclone-arangodb-linux-$arch"
             chmod a+x <<parameters.repo-path>>/build/bin/rclone-arangodb
   run-test:
     parameters:
