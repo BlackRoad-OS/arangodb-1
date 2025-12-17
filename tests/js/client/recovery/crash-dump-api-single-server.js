@@ -28,9 +28,10 @@
 // Test that crash dumps are created when the server crashes and can be 
 // retrieved via the crash dump API.
 
-var internal = require('internal');
-var jsunity = require('jsunity');
-var IM = global.instanceManager;
+const internal = require('internal');
+const jsunity = require('jsunity');
+const IM = global.instanceManager;
+const crashesEndpoint = '/_admin/crashes';
 
 if (runSetup === true) {
   'use strict';
@@ -40,7 +41,7 @@ if (runSetup === true) {
   arango.GET('/_api/database/current');
   
   // Verify no crashes exist before we crash
-  let response = arango.GET('/_admin/server/crashes');
+  let response = arango.GET(crashesEndpoint);
   if (!response.error && response.crashes) {
     assertEqual(0, response.crashes.length, 
                 'Expected no crashes before setup, found: ' + JSON.stringify(response.crashes));
@@ -63,7 +64,7 @@ function recoverySuite () {
   return {
     testCrashDumpCreatedAndAccessible: function () {
       // Check for crash dumps via API
-      let response = arango.GET('/_admin/server/crashes');
+      let response = arango.GET(crashesEndpoint);
       assertTrue(!response.error, 'Should not return error: ' + JSON.stringify(response));
       assertEqual(200, response.code, 'Should return 200');
 
@@ -80,7 +81,7 @@ function recoverySuite () {
       assertNotEqual(crashId, undefined, 'Crash ID should not be undefined');
       
       // Fetch crash contents
-      let contentsResponse = arango.GET('/_admin/server/crashes/' + encodeURIComponent(crashId));
+      let contentsResponse = arango.GET(crashesEndpoint + encodeURIComponent(crashId));
       assertTrue(!contentsResponse.error, 'Should get crash contents');
       assertEqual(200, contentsResponse.code, 'Should return 200 for crash contents');
 
@@ -98,14 +99,14 @@ function recoverySuite () {
                  'Crash dump should contain backtrace.txt');
 
       // Clean up - delete the crash
-      let deleteResponse = arango.DELETE('/_admin/server/crashes/' + encodeURIComponent(crashId));
+      let deleteResponse = arango.DELETE(crashesEndpoint + encodeURIComponent(crashId));
       assertTrue(!deleteResponse.error, 'Should delete crash');
       
       let deleteResult = deleteResponse.result || deleteResponse;
       assertTrue(deleteResult.deleted, 'Crash should be deleted');
 
       // Verify crash is gone
-      let verifyResponse = arango.GET('/_admin/server/crashes');
+      let verifyResponse = arango.GET(crashesEndpoint);
       let verifyCrashes = verifyResponse.result || verifyResponse;
       assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
     }
