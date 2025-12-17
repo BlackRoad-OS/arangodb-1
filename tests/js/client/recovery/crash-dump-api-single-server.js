@@ -31,7 +31,7 @@
 const internal = require('internal');
 const jsunity = require('jsunity');
 const IM = global.instanceManager;
-const crashesEndpoint = '/_admin/crashes';
+const crashesEndpoint = '/_admin/crashes/';
 
 if (runSetup === true) {
   'use strict';
@@ -82,7 +82,7 @@ function recoverySuite () {
       
       // Fetch crash contents
       let contentsResponse = arango.GET(crashesEndpoint + encodeURIComponent(crashId));
-      assertTrue(!contentsResponse.error, 'Should get crash contents');
+      assertTrue(!contentsResponse.error, `Should get crash contents: ${JSON.stringify(contentsResponse)}`);
       assertEqual(200, contentsResponse.code, 'Should return 200 for crash contents');
 
       let contents = contentsResponse.result || contentsResponse;
