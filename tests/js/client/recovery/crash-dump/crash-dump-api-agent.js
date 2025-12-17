@@ -4,7 +4,7 @@
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
 // /
-// / Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
+// / Copyright 2014-2025 ArangoDB GmbH, Cologne, Germany
 // / Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 // /
 // / Licensed under the Business Source License 1.1 (the "License");
@@ -31,6 +31,7 @@
 const jsunity = require('jsunity');
 const request = require('@arangodb/request');
 const IM = global.instanceManager;
+const crashesEndpoint = '/_admin/crashes';
 
 if (runSetup === true) {
   'use strict';
@@ -46,7 +47,7 @@ if (runSetup === true) {
   request({ url: agentUrl + '/_api/version', method: 'get', timeout: 10 });
   
   // Verify no crashes exist before we crash on agent
-  const response = request({ url: agentUrl + '/_admin/server/crashes', method: 'get', timeout: 10 });
+  const response = request({ url: agentUrl + crashesEndpoint, method: 'get', timeout: 10 });
   if (response.status !== 200) {
     throw new Error('Should return 200, got: ' + response.status);
   }
@@ -80,7 +81,7 @@ function recoverySuite () {
       const agentUrl = agent.url;
       
       // Check for crash dumps on the agent
-      const response = request({ url: agentUrl + '/_admin/server/crashes', method: 'get', timeout: 10 });
+      const response = request({ url: agentUrl + crashesEndpoint, method: 'get', timeout: 10 });
       assertEqual(200, response.status, 'Should return 200');
 
       const crashes = response.json.result || response.json;
@@ -97,7 +98,7 @@ function recoverySuite () {
       
       // Fetch crash contents
       const contentsResponse = request({ 
-        url: agentUrl + '/_admin/server/crashes/' + encodeURIComponent(crashId), 
+        url: agentUrl + crashesEndpoint + '/' + encodeURIComponent(crashId), 
         method: 'get', 
         timeout: 10 
       });
@@ -118,14 +119,14 @@ function recoverySuite () {
 
       // Clean up - delete the crash
       const deleteResponse = request({ 
-        url: agentUrl + '/_admin/server/crashes/' + encodeURIComponent(crashId), 
+        url: agentUrl + crashesEndpoint + '/' + encodeURIComponent(crashId), 
         method: 'delete', 
         timeout: 10 
       });
       assertEqual(200, deleteResponse.status, 'Should delete crash');
 
       // Verify crash is gone
-      const verifyResponse = request({ url: agentUrl + '/_admin/server/crashes', method: 'get', timeout: 10 });
+      const verifyResponse = request({ url: agentUrl + crashesEndpoint, method: 'get', timeout: 10 });
       const verifyCrashes = verifyResponse.json.result || verifyResponse.json;
       assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
     }

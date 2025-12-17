@@ -4,7 +4,7 @@
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
 // /
-// / Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
+// / Copyright 2014-2025 ArangoDB GmbH, Cologne, Germany
 // / Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 // /
 // / Licensed under the Business Source License 1.1 (the "License");
@@ -31,6 +31,7 @@
 const jsunity = require('jsunity');
 const request = require('@arangodb/request');
 const IM = global.instanceManager;
+const crashesEndpoint = '/_admin/crashes';
 
 if (runSetup === true) {
   'use strict';
@@ -46,7 +47,7 @@ if (runSetup === true) {
   request({ url: dbserverUrl + '/_api/version', method: 'get', timeout: 10 });
   
   // Verify no crashes exist before we crash on dbserver
-  const response = request({ url: dbserverUrl + '/_admin/server/crashes', method: 'get', timeout: 10 });
+  const response = request({ url: dbserverUrl + crashesEndpoint, method: 'get', timeout: 10 });
   if (response.status === 200 && response.json.result && response.json.result.crashes) {
     if (response.json.result.crashes.length !== 0) {
       throw new Error('Expected no crashes before setup on dbserver');
@@ -75,7 +76,7 @@ function recoverySuite () {
       const dbserverUrl = dbserver.url;
       
       // Check for crash dumps on the dbserver
-      const response = request({ url: dbserverUrl + '/_admin/server/crashes', method: 'get', timeout: 10 });
+      const response = request({ url: dbserverUrl + crashesEndpoint, method: 'get', timeout: 10 });
       assertEqual(200, response.status, 'Should return 200');
 
       const crashes = response.json.result || response.json;
@@ -92,7 +93,7 @@ function recoverySuite () {
       
       // Fetch crash contents
       const contentsResponse = request({ 
-        url: dbserverUrl + '/_admin/server/crashes/' + encodeURIComponent(crashId), 
+        url: dbserverUrl + crashesEndpoint + '/' + encodeURIComponent(crashId), 
         method: 'get', 
         timeout: 10 
       });
@@ -113,14 +114,14 @@ function recoverySuite () {
 
       // Clean up - delete the crash
       const deleteResponse = request({ 
-        url: dbserverUrl + '/_admin/server/crashes/' + encodeURIComponent(crashId), 
+        url: dbserverUrl + crashesEndpoint + '/' + encodeURIComponent(crashId), 
         method: 'delete', 
         timeout: 10 
       });
       assertEqual(200, deleteResponse.status, 'Should delete crash');
 
       // Verify crash is gone
-      const verifyResponse = request({ url: dbserverUrl + '/_admin/server/crashes', method: 'get', timeout: 10 });
+      const verifyResponse = request({ url: dbserverUrl + crashesEndpoint, method: 'get', timeout: 10 });
       const verifyCrashes = verifyResponse.json.result || verifyResponse.json;
       assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
     }

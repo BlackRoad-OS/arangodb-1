@@ -4,7 +4,7 @@
 // //////////////////////////////////////////////////////////////////////////////
 // / DISCLAIMER
 // /
-// / Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
+// / Copyright 2014-2025 ArangoDB GmbH, Cologne, Germany
 // / Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 // /
 // / Licensed under the Business Source License 1.1 (the "License");
@@ -30,6 +30,7 @@
 
 const jsunity = require('jsunity');
 const IM = global.instanceManager;
+const crashesEndpoint = '/_admin/crashes';
 
 if (runSetup === true) {
   'use strict';
@@ -39,7 +40,7 @@ if (runSetup === true) {
   arango.GET('/_api/database/current');
   
   // Verify no crashes exist before we crash
-  const response = arango.GET('/_admin/server/crashes');
+  const response = arango.GET(crashesEndpoint);
   if (!response.error && response.crashes && response.crashes.length !== 0) {
     throw new Error('Expected no crashes before setup, found: ' + JSON.stringify(response.crashes));
   }
@@ -61,7 +62,7 @@ function recoverySuite () {
   return {
     testCrashDumpCoordinatorCreatedAndAccessible: function () {
       // Check for crash dumps via API (goes to coordinator)
-      const response = arango.GET('/_admin/server/crashes');
+      const response = arango.GET(crashesEndpoint);
       assertTrue(!response.error, 'Should not return error: ' + JSON.stringify(response));
       assertEqual(200, response.code, 'Should return 200');
 
@@ -78,7 +79,7 @@ function recoverySuite () {
       assertNotEqual(crashId, undefined, 'Crash ID should not be undefined');
       
       // Fetch crash contents
-      const contentsResponse = arango.GET('/_admin/server/crashes/' + encodeURIComponent(crashId));
+      const contentsResponse = arango.GET(crashesEndpoint + '/' + encodeURIComponent(crashId));
       assertTrue(!contentsResponse.error, 'Should get crash contents');
       assertEqual(200, contentsResponse.code, 'Should return 200 for crash contents');
 
@@ -96,14 +97,14 @@ function recoverySuite () {
                  'Crash dump should contain backtrace.txt');
 
       // Clean up - delete the crash
-      const deleteResponse = arango.DELETE('/_admin/server/crashes/' + encodeURIComponent(crashId));
+      const deleteResponse = arango.DELETE(crashesEndpoint + '/' + encodeURIComponent(crashId));
       assertTrue(!deleteResponse.error, 'Should delete crash');
       
       const deleteResult = deleteResponse.result || deleteResponse;
       assertTrue(deleteResult.deleted, 'Crash should be deleted');
 
       // Verify crash is gone
-      const verifyResponse = arango.GET('/_admin/server/crashes');
+      const verifyResponse = arango.GET(crashesEndpoint);
       const verifyCrashes = verifyResponse.result || verifyResponse;
       assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
     }
