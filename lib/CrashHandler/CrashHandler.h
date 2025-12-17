@@ -29,6 +29,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CrashHandler/CrashHandlerInterface.h"
+
 namespace arangodb {
 
 class CrashHandlerDataSource;
@@ -47,7 +49,7 @@ enum class CrashHandlerState : int {
   SHUTDOWN = 3            ///< shutdown requested
 };
 
-class CrashHandler {
+class CrashHandler : public CrashHandlerInterface {
   std::atomic<bool> _threadRunning{false};
   // This needs to be static for the signal handlers to reach!
   static std::atomic<CrashHandler*> _theCrashHandler;
@@ -62,13 +64,28 @@ class CrashHandler {
     }
   }
 
-  ~CrashHandler() {
+  ~CrashHandler() override {
     // joins global background thread if running
     bool threadRunning = _threadRunning.exchange(false);
     if (threadRunning) {
       shutdownCrashHandler();
     }
     _theCrashHandler.store(nullptr);
+  }
+
+  // CrashHandlerInterface implementation - delegate to static methods
+  void setDatabaseDirectory(std::string path) override {
+    setDatabaseDirectoryStatic(std::move(path));
+  }
+  std::vector<std::string> listCrashes() override {
+    return listCrashesStatic();
+  }
+  std::unordered_map<std::string, std::string> getCrashContents(
+      std::string_view crashId) override {
+    return getCrashContentsStatic(crashId);
+  }
+  bool deleteCrash(std::string_view crashId) override {
+    return deleteCrashStatic(crashId);
   }
 
   /// @brief log backtrace for current thread to logfile
@@ -107,22 +124,22 @@ class CrashHandler {
   static void waitForCrashHandlerCompletion();
 
   /// @brief sets the database directory
-  static void setDatabaseDirectory(std::string path);
+  static void setDatabaseDirectoryStatic(std::string path);
 
   /// @brief gets the crashes directory path
   static std::string getCrashesDirectory();
 
   /// @brief lists all crash directories (returns UUIDs)
-  static std::vector<std::string> listCrashes();
+  static std::vector<std::string> listCrashesStatic();
 
   /// @brief gets the contents of a specific crash directory
   /// Returns a map of filename -> file contents
-  static std::unordered_map<std::string, std::string> getCrashContents(
+  static std::unordered_map<std::string, std::string> getCrashContentsStatic(
       std::string_view crashId);
 
   /// @brief deletes a specific crash directory
   /// Returns true if successful, false if not found
-  static bool deleteCrash(std::string_view crashId);
+  static bool deleteCrashStatic(std::string_view crashId);
 
   /// @brief adds a data source to the crash handler
   static void addDataSource(CrashHandlerDataSource const* dataSource);

@@ -768,7 +768,7 @@ void cleanupOldCrashDirectories() {
 }
 
 /// @brief sets the database directory
-void CrashHandler::setDatabaseDirectory(std::string path) {
+void CrashHandler::setDatabaseDirectoryStatic(std::string path) {
   ::databaseDirectoryPath =
       arangodb::basics::FileUtils::buildFilename(path, "crashes");
 
@@ -780,7 +780,7 @@ std::string CrashHandler::getCrashesDirectory() {
   return ::databaseDirectoryPath;
 }
 
-std::vector<std::string> CrashHandler::listCrashes() {
+std::vector<std::string> CrashHandler::listCrashesStatic() {
   std::vector<std::string> crashes;
 
   if (::databaseDirectoryPath.empty() ||
@@ -801,8 +801,8 @@ std::vector<std::string> CrashHandler::listCrashes() {
   return crashes;
 }
 
-std::unordered_map<std::string, std::string> CrashHandler::getCrashContents(
-    std::string_view crashId) {
+std::unordered_map<std::string, std::string>
+CrashHandler::getCrashContentsStatic(std::string_view crashId) {
   std::unordered_map<std::string, std::string> contents;
 
   if (::databaseDirectoryPath.empty()) {
@@ -831,7 +831,7 @@ std::unordered_map<std::string, std::string> CrashHandler::getCrashContents(
   return contents;
 }
 
-bool CrashHandler::deleteCrash(std::string_view crashId) {
+bool CrashHandler::deleteCrashStatic(std::string_view crashId) {
   if (::databaseDirectoryPath.empty()) {
     return false;
   }
