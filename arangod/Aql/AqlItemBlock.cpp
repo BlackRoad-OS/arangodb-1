@@ -1151,8 +1151,6 @@ void AqlItemBlock::referenceValuesFromRow(size_t currentRow,
           ++it->second.refCount;
         } else {
           // Value not found in _valueCount - need to register it properly
-          // This can happen in release builds where TRI_ASSERT is removed
-          // Register the value similar to what setValue() does
           ValueInfo& valueInfo = _valueCount[a.data()];
           valueInfo.refCount = 1;
           size_t memoryUsage = a.memoryUsage();
