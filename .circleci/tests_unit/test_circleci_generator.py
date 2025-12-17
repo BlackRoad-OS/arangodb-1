@@ -16,7 +16,7 @@ from src.config_lib import (
     BuildConfig,
     DeploymentType,
     ResourceSize,
-    Sanitizer,
+    BuildVariant,
     Architecture,
 )
 from src.filters import FilterCriteria
@@ -105,7 +105,8 @@ class TestGenerateWorkflowName:
         """Test workflow name includes sanitizer."""
         gen = self.create_generator()
         build_config = BuildConfig(
-            architecture=Architecture.X64, sanitizer=Sanitizer.TSAN
+            architecture=Architecture.X64,
+            build_variant=BuildVariant.TSAN,
         )
 
         name = gen._generate_workflow_name(build_config)
@@ -156,7 +157,8 @@ class TestCreateBuildJob:
         """Test creating build job with sanitizer."""
         gen = self.create_generator()
         build_config = BuildConfig(
-            architecture=Architecture.X64, sanitizer=Sanitizer.TSAN
+            architecture=Architecture.X64,
+            build_variant=BuildVariant.TSAN,
         )
 
         job = gen._create_build_job(build_config)
@@ -179,7 +181,8 @@ class TestCreateBuildJob:
         """Test creating frontend build job with sanitizer."""
         gen = self.create_generator()
         build_config = BuildConfig(
-            architecture=Architecture.X64, sanitizer=Sanitizer.ALUBSAN
+            architecture=Architecture.X64,
+            build_variant=BuildVariant.ALUBSAN,
         )
 
         job = gen._create_frontend_build_job(build_config)
@@ -300,7 +303,10 @@ class TestGenerateMethod:
 
     def test_generate_creates_workflows(self):
         """Test that generate() creates workflows."""
-        config = GeneratorConfig(filter_criteria=FilterCriteria())
+        config = GeneratorConfig(
+            filter_criteria=FilterCriteria(),
+            build_variants=[BuildVariant.NORMAL],  # Must provide build variants
+        )
         base_config = {"version": 2.1}
         gen = CircleCIGenerator(config, base_config=base_config)
 
@@ -878,6 +884,95 @@ class TestCreateTestJob:
         )
 
         assert result is None
+
+
+class TestSanitizerSuffixInJobNames:
+    """Test that sanitizer suffix is included in all job names."""
+
+    def create_generator(self):
+        """Helper to create generator."""
+        config = GeneratorConfig(filter_criteria=FilterCriteria())
+        return CircleCIGenerator(config, base_config={})
+
+    def test_test_job_names_include_sanitizer_suffix(self):
+        """Test that test job names include sanitizer suffix for TSAN and ALUBSAN."""
+        gen = self.create_generator()
+        job = TestJob(
+            name="resilience",
+            suites=[SuiteConfig(name="suite1")],
+            options=TestOptions(),
+        )
+
+        # Test NORMAL - no suffix
+        build_config_normal = BuildConfig(
+            architecture=Architecture.X64, build_variant=BuildVariant.NORMAL
+        )
+        result_normal = gen._create_test_job(
+            job, DeploymentType.CLUSTER, build_config_normal, ["build-job"]
+        )
+        assert result_normal is not None
+        assert result_normal["run-linux-tests"]["name"] == "test-cluster-resilience-x64"
+
+        # Test TSAN - should have -tsan suffix
+        build_config_tsan = BuildConfig(
+            architecture=Architecture.X64, build_variant=BuildVariant.TSAN
+        )
+        result_tsan = gen._create_test_job(
+            job, DeploymentType.CLUSTER, build_config_tsan, ["build-job"]
+        )
+        assert result_tsan is not None
+        assert (
+            result_tsan["run-linux-tests"]["name"] == "test-cluster-resilience-x64-tsan"
+        )
+
+        # Test ALUBSAN - should have -alubsan suffix
+        build_config_alubsan = BuildConfig(
+            architecture=Architecture.X64, build_variant=BuildVariant.ALUBSAN
+        )
+        result_alubsan = gen._create_test_job(
+            job, DeploymentType.CLUSTER, build_config_alubsan, ["build-job"]
+        )
+        assert result_alubsan is not None
+        assert (
+            result_alubsan["run-linux-tests"]["name"]
+            == "test-cluster-resilience-x64-alubsan"
+        )
+
+    def test_rta_job_names_include_sanitizer_suffix(self):
+        """Test that RTA UI job names include sanitizer suffix."""
+        gen = self.create_generator()
+        job = TestJob(
+            name="ui_tests",
+            suites=[SuiteConfig(name="UserPageTestSuite")],
+            options=TestOptions(),
+            job_type="run-rta-tests",
+        )
+
+        # Test TSAN - should have -tsan suffix
+        build_config_tsan = BuildConfig(
+            architecture=Architecture.X64, build_variant=BuildVariant.TSAN
+        )
+        result_tsan = gen._create_rta_test_jobs(job, build_config_tsan, ["build-job"])
+
+        assert len(result_tsan) == 2
+        assert result_tsan[0]["run-rta-tests"]["name"] == "test-single-UI-x64-tsan"
+        assert result_tsan[1]["run-rta-tests"]["name"] == "test-cluster-UI-x64-tsan"
+
+        # Test ALUBSAN - should have -alubsan suffix
+        build_config_alubsan = BuildConfig(
+            architecture=Architecture.X64, build_variant=BuildVariant.ALUBSAN
+        )
+        result_alubsan = gen._create_rta_test_jobs(
+            job, build_config_alubsan, ["build-job"]
+        )
+
+        assert len(result_alubsan) == 2
+        assert (
+            result_alubsan[0]["run-rta-tests"]["name"] == "test-single-UI-x64-alubsan"
+        )
+        assert (
+            result_alubsan[1]["run-rta-tests"]["name"] == "test-cluster-UI-x64-alubsan"
+        )
 
 
 class TestJobLevelArchitectureFiltering:
