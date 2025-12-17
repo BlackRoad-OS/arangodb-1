@@ -93,7 +93,7 @@ void performRequests(fu::ProtocolType pt) {
                               auto version = slice.get("version").copyString();
                               auto server = slice.get("server").copyString();
                               ASSERT_EQ(server, "arango");
-                              ASSERT_EQ(version[0], '3');  // major version
+                              ASSERT_EQ(version[0], '4');  // major version
                             }
                           });
   wg->wait();
