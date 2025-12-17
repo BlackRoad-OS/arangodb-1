@@ -21,13 +21,13 @@
 /// @author Jure Bajic
 ////////////////////////////////////////////////////////////////////////////////
 
-// #include "RestCrashHandler.h"
+#include "RestCrashHandler.h"
 
-// #include "CrashHandler/CrashHandler.h"
-// #include "Utils/ExecContext.h"
+#include "ApplicationFeatures/ApplicationServer.h"
+#include "RestServer/CrashHandlerFeature.h"
+#include "Utils/ExecContext.h"
 
-using namespace arangodb;
-using namespace arangodb::rest;
+namespace arangodb::crash_handler {
 
 RestCrashHandler::RestCrashHandler(ArangodServer& server,
                                    GeneralRequest* request,
@@ -39,6 +39,13 @@ RestStatus RestCrashHandler::execute() {
   if (!ExecContext::current().isAdminUser()) {
     generateError(rest::ResponseCode::FORBIDDEN, TRI_ERROR_HTTP_FORBIDDEN,
                   "you need admin rights for crash management operations");
+    return RestStatus::DONE;
+  }
+
+  auto& crashHandlerFeature = server().getFeature<CrashHandlerFeature>();
+  if (!crashHandlerFeature.isEnabled()) {
+    generateError(rest::ResponseCode::SERVICE_UNAVAILABLE, TRI_ERROR_DISABLED,
+                  "crash handler feature is disabled");
     return RestStatus::DONE;
   }
 
@@ -73,7 +80,8 @@ void RestCrashHandler::handleListCrashes() {
     return;
   }
 
-  auto crashes = CrashHandler::listCrashes();
+  auto& crashHandlerFeature = server().getFeature<CrashHandlerFeature>();
+  auto crashes = crashHandlerFeature.listCrashes();
 
   VPackBuilder builder;
   {
@@ -90,7 +98,8 @@ void RestCrashHandler::handleListCrashes() {
 }
 
 void RestCrashHandler::handleGetCrash(std::string const& crashId) {
-  auto contents = CrashHandler::getCrashContents(crashId);
+  auto& crashHandlerFeature = server().getFeature<CrashHandlerFeature>();
+  auto contents = crashHandlerFeature.getCrashContents(crashId);
 
   if (contents.empty()) {
     generateError(rest::ResponseCode::NOT_FOUND, TRI_ERROR_HTTP_NOT_FOUND,
@@ -114,7 +123,8 @@ void RestCrashHandler::handleGetCrash(std::string const& crashId) {
 }
 
 void RestCrashHandler::handleDeleteCrash(std::string const& crashId) {
-  bool deleted = CrashHandler::deleteCrash(crashId);
+  auto& crashHandlerFeature = server().getFeature<CrashHandlerFeature>();
+  bool deleted = crashHandlerFeature.deleteCrash(crashId);
 
   if (!deleted) {
     generateError(rest::ResponseCode::NOT_FOUND, TRI_ERROR_HTTP_NOT_FOUND,
@@ -130,3 +140,4 @@ void RestCrashHandler::handleDeleteCrash(std::string const& crashId) {
   }
   generateOk(rest::ResponseCode::OK, builder.slice());
 }
+}  // namespace arangodb::crash_handler

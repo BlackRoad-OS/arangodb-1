@@ -30,6 +30,7 @@
 #include "Agency/RestAgencyPrivHandler.h"
 #include "ApplicationFeatures/HttpEndpointProvider.h"
 #include "Aql/RestAqlHandler.h"
+#include "RestHandler/RestCrashHandler.h"
 #include "SystemMonitor/AsyncRegistry/RestHandler.h"
 #include "Basics/StringUtils.h"
 #include "Basics/application-exit.h"
@@ -848,7 +849,8 @@ void GeneralServerFeature::defineRemainingHandlers(
 
   f.addPrefixHandler(
       "/_admin/crashes",
-      RestHandlerCreator<arangodb::async_registry::RestHandler>::createNoData);
+      RestHandlerCreator<
+          arangodb::crash_handler::RestCrashHandler>::createNoData);
 
   f.addPrefixHandler(
       "/_admin/deployment",

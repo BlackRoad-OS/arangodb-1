@@ -25,7 +25,7 @@
 
 #include "RestHandler/RestBaseHandler.h"
 
-namespace arangodb {
+namespace arangodb::crash_handler {
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief REST handler for crash management operations
@@ -46,4 +46,4 @@ class RestCrashHandler : public RestBaseHandler {
   void handleDeleteCrash(std::string const& crashId);
 };
 
-}  // namespace arangodb
+}  // namespace arangodb::crash_handler
