@@ -202,10 +202,11 @@ auto WeightedTwoSidedEnumerator<ProviderType>::Ball::validateSingletonPath(
     CandidatesStore& candidates) -> void {
   ensureQueueHasProcessableElement();
   auto tmp = _queue.pop();
+  TRI_ASSERT(std::holds_alternative<Step>(tmp));
 
   TRI_ASSERT(_queue.isEmpty());
 
-  auto posPrevious = _interior.append(std::move(tmp));
+  auto posPrevious = _interior.append(std::move(std::get<Step>(tmp)));
   auto& step = _interior.getStepReference(posPrevious);
   ValidationResult res = _validator.validatePath(step);
 
@@ -220,13 +221,15 @@ auto WeightedTwoSidedEnumerator<ProviderType>::Ball::
         -> void {
   ensureQueueHasProcessableElement();
   auto tmp = _queue.pop();
+  TRI_ASSERT(std::holds_alternative<Step>(tmp));
+  auto tmpStep = std::get<Step>(tmp);
 
   // if the other side has explored this vertex, don't add it again
-  if (other.hasBeenVisited(tmp)) {
+  if (other.hasBeenVisited(tmpStep)) {
     _haveSeenOtherSide = true;
   }
 
-  auto posPrevious = _interior.append(std::move(tmp));
+  auto posPrevious = _interior.append(std::move(tmpStep));
   auto& step = _interior.getStepReference(posPrevious);
 
   TRI_ASSERT(step.getWeight() >= _diameter);
