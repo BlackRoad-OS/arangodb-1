@@ -1473,27 +1473,29 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
     andNumMembers = andNode->numMembers();
 
     // Remove false conditions from AND node
-    // This handles cases like x.name IN [] which are always false
-    // This is a general check that happens before other optimizations
     for (size_t j = andNumMembers; j > 0; --j) {
       auto op = andNode->getMemberUnchecked(j - 1);
 
       if (op->isFalse()) {
-        // Condition is always false, remove it from AND
         andNode->removeMemberUncheckedUnordered(j - 1);
         --andNumMembers;
       }
     }
 
-    // If AND node is now empty (all conditions were false), remove it from OR
-    // Use the same pattern as existing impossible condition handling
+    // Remove true conditions from AND node
+    for (size_t j = andNumMembers; j > 0; --j) {
+      auto op = andNode->getMemberUnchecked(j - 1);
+
+      if (op->isTrue()) {
+        andNode->removeMemberUncheckedUnordered(j - 1);
+        --andNumMembers;
+      }
+    }
+
+    // If AND node is now empty, remove it from OR
     if (andNumMembers == 0) {
-      // All conditions in this AND were false, so entire AND is false
-      // Remove this AND node from the OR (same pattern as line 1665, 1692)
       _root->removeMemberUncheckedUnordered(r);
       retry = true;
-      // Recalculate n and continue to next iteration (same as
-      // fastForwardToNextOrItem)
       n = _root->numMembers();
       continue;
     }

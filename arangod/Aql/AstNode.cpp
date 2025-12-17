@@ -31,6 +31,7 @@
 #include "Aql/Query.h"
 #include "Aql/Scopes.h"
 #include "Aql/types.h"
+#include "Assertions/Assert.h"
 #include "Basics/FloatingPoint.h"
 #include "Basics/StringUtils.h"
 #include "Basics/Utf8Helper.h"
@@ -1448,13 +1449,11 @@ bool AstNode::isFalse() const {
   } else if (type == NODE_TYPE_OPERATOR_BINARY_IN ||
              type == NODE_TYPE_OPERATOR_BINARY_NIN) {
     // Handle empty IN arrays: x.name IN [] → false
-    // Empty IN array always evaluates to false, regardless of lhs value
     if (numMembers() >= 2) {
+      TRI_ASSERT(numMembers() == 2);
       AstNode const* rhs = getMember(1);
       if (rhs != nullptr && rhs->type == NODE_TYPE_ARRAY &&
           rhs->numMembers() == 0) {
-        // Empty IN array → always false (lhs doesn't matter)
-        // NOT IN [] → always true (so isFalse() = false)
         return (type == NODE_TYPE_OPERATOR_BINARY_IN);
       }
     }
