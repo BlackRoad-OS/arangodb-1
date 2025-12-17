@@ -343,22 +343,16 @@ class TestArmadilloPytestHooks:
             setattr(reporter_module, "_reporter", None)
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
-    @patch("armadillo.pytest_plugin.plugin._current_session")
+    @patch("armadillo.pytest_plugin.plugin.PluginRegistry.get")
     def test_pytest_runtest_logstart_hook_connected(
-        self, mock_session: Any, mock_compact: Any
+        self, mock_registry_get: Any, mock_compact: Any
     ) -> None:
         """Test pytest_runtest_logstart hook calls reporter correctly."""
         mock_compact.return_value = False
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
-
-        # Set up session and stash mock
-        mock_stash = Mock()
-        mock_stash.__getitem__ = Mock(return_value=mock_plugin)
-        mock_config = Mock()
-        mock_config.stash = mock_stash
-        mock_session.config = mock_config
+        mock_registry_get.return_value = mock_plugin
 
         nodeid = "test_file.py::test_function"
         location = ("test_file.py", 10, "test_function")
@@ -429,22 +423,18 @@ class TestArmadilloPytestHooks:
         mock_reporter.pytest_runtest_teardown.assert_called_once_with(mock_item)
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
-    def test_pytest_runtest_logreport_hook_connected(self, mock_compact: Any) -> None:
+    @patch("armadillo.pytest_plugin.plugin.PluginRegistry.get")
+    def test_pytest_runtest_logreport_hook_connected(
+        self, mock_registry_get: Any, mock_compact: Any
+    ) -> None:
         """Test pytest_runtest_logreport hook calls reporter correctly."""
         mock_compact.return_value = False
         mock_reporter = Mock()
         mock_plugin = Mock()
         mock_plugin.reporter = mock_reporter
+        mock_registry_get.return_value = mock_plugin
 
-        # Set up stash mock
-        mock_stash = Mock()
-        mock_stash.get = Mock(return_value=mock_plugin)
-        mock_config = Mock()
-        mock_config.stash = mock_stash
-
-        # Report now provides its own config
         mock_report = Mock()
-        mock_report.config = mock_config
 
         pytest_runtest_logreport(mock_report)
 
@@ -511,9 +501,9 @@ class TestArmadilloReporterRegressionTests:
         assert callable(pytest_runtest_logreport)
 
     @patch("armadillo.pytest_plugin.plugin._is_compact_mode_enabled")
-    @patch("armadillo.pytest_plugin.plugin._current_session")
+    @patch("armadillo.pytest_plugin.plugin.PluginRegistry.get")
     def test_hooks_call_reporter_when_non_compact(
-        self, mock_session: Any, mock_compact: Any
+        self, mock_registry_get: Any, mock_compact: Any
     ) -> None:
         """Test hooks call reporter when compact mode is disabled.
 
@@ -526,13 +516,7 @@ class TestArmadilloReporterRegressionTests:
         mock_plugin._deployment_failed = False
         mock_plugin.execution_state = Mock()
         mock_plugin.execution_state.should_abort_test = Mock(return_value=(False, None))
-
-        # Set up stash mock
-        mock_stash = Mock()
-        mock_stash.__getitem__ = Mock(return_value=mock_plugin)
-        mock_config = Mock()
-        mock_config.stash = mock_stash
-        mock_session.config = mock_config
+        mock_registry_get.return_value = mock_plugin
 
         # Test that each hook calls the reporter
         pytest_runtest_logstart(

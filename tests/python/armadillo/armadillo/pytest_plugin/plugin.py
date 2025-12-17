@@ -45,10 +45,78 @@ from ..utils.crypto import random_id
 
 logger = get_logger(__name__)
 
-# Module-level session reference for hooks that don't receive config/session parameters.
-# This is intentionally minimal - only used for hooks like pytest_runtest_logstart that
-# have no other way to access the plugin. All test execution state lives in the plugin.
-_current_session: Optional[Session] = None
+
+class PluginRegistry:
+    """
+    Manages global access to the ArmadilloPlugin instance for pytest hooks.
+
+    Why this exists:
+    Some pytest hooks (pytest_runtest_logreport, pytest_runtest_logstart) don't
+    receive config/session parameters, so they cannot access the plugin via stash.
+    This registry provides explicit, fail-loud access to the plugin for those hooks.
+
+    Lifecycle:
+    - register() called in pytest_sessionstart
+    - unregister() called in pytest_sessionfinish
+    - get() fails loudly if plugin not registered
+
+    This is the standard pytest pattern for plugins that need global access.
+    """
+
+    _instance: Optional["ArmadilloPlugin"] = None
+    _registered: bool = False
+
+    @classmethod
+    def register(cls, plugin: "ArmadilloPlugin") -> None:
+        """Register plugin instance for global access.
+
+        Args:
+            plugin: The ArmadilloPlugin instance to register
+
+        Raises:
+            RuntimeError: If plugin already registered (prevents double-registration)
+        """
+        if cls._registered:
+            raise RuntimeError(
+                "ArmadilloPlugin already registered. "
+                "This indicates pytest_sessionstart was called twice without cleanup."
+            )
+        cls._instance = plugin
+        cls._registered = True
+        logger.debug("ArmadilloPlugin registered in global registry")
+
+    @classmethod
+    def unregister(cls) -> None:
+        """Unregister plugin instance.
+
+        Called during pytest_sessionfinish to clean up global state.
+        """
+        cls._instance = None
+        cls._registered = False
+        logger.debug("ArmadilloPlugin unregistered from global registry")
+
+    @classmethod
+    def get(cls) -> "ArmadilloPlugin":
+        """Get the registered plugin instance.
+
+        Returns:
+            The registered ArmadilloPlugin instance
+
+        Raises:
+            RuntimeError: If no plugin registered (fail-loud, not silent)
+        """
+        if not cls._registered or cls._instance is None:
+            raise RuntimeError(
+                "ArmadilloPlugin not available. "
+                "This hook requires an active pytest session. "
+                "Ensure pytest_sessionstart has been called."
+            )
+        return cls._instance
+
+    @classmethod
+    def is_registered(cls) -> bool:
+        """Check if plugin is registered."""
+        return cls._registered
 
 
 @dataclass
@@ -434,14 +502,14 @@ def pytest_addoption(parser: Any) -> None:
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: Session) -> None:
     """Set up test session and register cleanup handlers."""
-    global _current_session
-    _current_session = session
-
     logger.debug("Starting pytest plugin setup")
     logger.info("Test session started")
 
     # Get plugin and reset execution state for new session
     plugin = _get_plugin(session)
+
+    # Register plugin in global registry for hooks that don't receive session
+    PluginRegistry.register(plugin)
 
     # Create session-wide ProcessSupervisor (if not already created by pytest_sessionstart)
     if plugin._process_supervisor is None:
@@ -630,8 +698,6 @@ def _cleanup_temp_dir_if_needed(_session: Session, exitstatus: int) -> None:
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
     """Clean up all resources at the end of test session."""
-    global _current_session
-
     logger.debug("Starting pytest plugin cleanup")
 
     # Get plugin instance
@@ -716,19 +782,21 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
             # Note: This creates Armadillo's enhanced JUnit XML that includes
             # sanitizer errors, crashes, and other server health information
             plugin.reporter.export_results(
-                output_dir, formats=["json", "junit"], server_health=plugin._server_health
+                output_dir,
+                formats=["json", "junit"],
+                server_health=plugin._server_health,
             )
         except (OSError, IOError) as e:
             logger.error("Failed to export test results: %s", e, exc_info=True)
 
-    # Final cleanup: stop watchdog and clear session
+    # Final cleanup: stop watchdog and unregister plugin
     try:
         stop_watchdog()
     except (OSError, RuntimeError, AttributeError) as e:
         logger.debug("Error stopping watchdog: %s", e)
     finally:
-        # Clear session reference
-        _current_session = None
+        # Unregister plugin from global registry
+        PluginRegistry.unregister()
 
 
 def pytest_runtest_setup(item: Item) -> None:
@@ -885,15 +953,13 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
 
 def pytest_runtest_logreport(report: Any) -> None:
     """Handle test report."""
-    # Note: report object has .config but only for session/terminal reports
-    # For test reports, we try to get the plugin from the report's config if available
     if not _is_compact_mode_enabled():
-        # Try to get config from report if available
-        config = getattr(report, "config", None)
-        if config:
-            plugin = config.stash.get(plugin_key, None)
+        try:
+            plugin = PluginRegistry.get()
             if plugin and plugin.reporter:
                 plugin.reporter.pytest_runtest_logreport(report)
+        except RuntimeError as e:
+            logger.error("pytest_runtest_logreport called without active plugin: %s", e)
 
 
 def pytest_runtest_logstart(
@@ -901,14 +967,15 @@ def pytest_runtest_logstart(
 ) -> Optional[str]:
     """Override pytest's default test file output to suppress filename printing."""
     if not _is_compact_mode_enabled():
-        global _current_session
-        if _current_session:
-            plugin = _get_plugin(_current_session)
+        try:
+            plugin = PluginRegistry.get()
             if plugin and plugin.reporter:
                 # Call our reporter but suppress pytest's default filename output
                 plugin.reporter.pytest_runtest_logstart(nodeid, location)
                 # Return empty string to suppress pytest's default output
                 return ""
+        except RuntimeError as e:
+            logger.error("pytest_runtest_logstart called without active plugin: %s", e)
     return None
 
 
@@ -941,13 +1008,10 @@ def pytest_terminal_summary(
 
 def _cleanup_all_deployments(emergency: bool = True) -> None:
     """Cleanup all tracked deployments with bulletproof shutdown."""
-    global _current_session
-    if not _current_session:
-        logger.debug("No session available - cannot cleanup deployments")
-        return
-    plugin = _get_plugin(_current_session)
-    if not plugin:
-        logger.debug("No plugin instance - cannot cleanup deployments")
+    try:
+        plugin = PluginRegistry.get()
+    except RuntimeError as e:
+        logger.debug("No plugin available for deployment cleanup: %s", e)
         return
     deployments = list(plugin._package_deployments.items())
     if deployments:
@@ -1026,12 +1090,12 @@ def _cleanup_all_processes(emergency: bool = True) -> None:
     """Cleanup all supervised processes with bulletproof termination."""
     try:
         logger.info("Starting _cleanup_all_processes")
-        global _current_session
-        if not _current_session:
-            logger.debug("No session available - cannot cleanup processes")
+        try:
+            plugin = PluginRegistry.get()
+        except RuntimeError as e:
+            logger.debug("No plugin available for process cleanup: %s", e)
             return
-        plugin = _get_plugin(_current_session)
-        if not plugin or not plugin._process_supervisor:
+        if not plugin._process_supervisor:
             logger.debug("No process supervisor available - cannot cleanup processes")
             return
 
@@ -1174,14 +1238,17 @@ def _emergency_cleanup(session: Optional[Session] = None) -> None:
     """Emergency cleanup function registered with atexit.
 
     Args:
-        session: Optional session object. If not provided, uses global _current_session.
+        session: Optional session object. If not provided, uses registry.
     """
     # Check if there's actually anything to clean up
-    global _current_session
-    cleanup_session = session or _current_session
-    if not cleanup_session:
-        return
-    plugin = _get_plugin(cleanup_session)
+    if session:
+        plugin = _get_plugin(session)
+    else:
+        try:
+            plugin = PluginRegistry.get()
+        except RuntimeError:
+            # No plugin registered, nothing to clean up
+            return
     if not plugin:
         return
     has_deployments = bool(plugin._package_deployments)
@@ -1224,7 +1291,9 @@ def _emergency_cleanup(session: Optional[Session] = None) -> None:
         logger.error("Emergency cleanup stack trace: %s", traceback.format_exc())
 
 
-def _record_failure_info(item: Item, report: Any, call: Any, plugin: ArmadilloPlugin) -> None:
+def _record_failure_info(
+    item: Item, report: Any, call: Any, plugin: ArmadilloPlugin
+) -> None:
     """Extract and record complete failure information from pytest report.
 
     Called for each phase (setup, call, teardown) that fails, building up
@@ -1259,7 +1328,7 @@ def _record_failure_info(item: Item, report: Any, call: Any, plugin: ArmadilloPl
         exception_type=exc_type,
         exception_message=exc_message,
         traceback=traceback_text,
-        longrepr=str(report.longrepr) if report.longrepr else ""
+        longrepr=str(report.longrepr) if report.longrepr else "",
     )
 
     plugin._test_failures[item.nodeid].append(failure_info)
@@ -1268,8 +1337,9 @@ def _record_failure_info(item: Item, report: Any, call: Any, plugin: ArmadilloPl
         call.when,
         item.nodeid,
         exc_type,
-        exc_message
+        exc_message,
     )
+
 
 def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) -> None:
     """Record test result to ResultCollector (works in both compact and verbose modes).
@@ -1288,7 +1358,9 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
     # Determine outcome - CHECK FAILURE TRACKING FIRST
     # The teardown report might say "passed" even if the call phase failed
     # We need to check if we recorded any failures for this test
-    has_failure = item.nodeid in plugin._test_failures and plugin._test_failures[item.nodeid]
+    has_failure = (
+        item.nodeid in plugin._test_failures and plugin._test_failures[item.nodeid]
+    )
 
     outcome_map = {
         "passed": ExecutionOutcome.PASSED,
@@ -1324,10 +1396,11 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
     # Get timestamps from reporter if available
     started_at = None
     finished_at = None
-    if plugin.reporter and hasattr(plugin.reporter, '_test_start_times'):
+    if plugin.reporter and hasattr(plugin.reporter, "_test_start_times"):
         started_at = plugin.reporter._test_start_times.get(item.nodeid)
         if started_at:
             from datetime import timedelta
+
             finished_at = started_at + timedelta(seconds=duration)
 
     # Get aggregated failure info from all phases
@@ -1337,7 +1410,7 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
         # Prefer call phase failure, otherwise use first failure
         failure_info = next(
             (f for f in failures if f.phase == "call"),
-            failures[0] if failures else None
+            failures[0] if failures else None,
         )
 
     # Record to collector with complete failure information
@@ -1357,6 +1430,7 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
     if item.nodeid in plugin._test_failures:
         del plugin._test_failures[item.nodeid]
 
+
 def _capture_deployment_health(
     controller: DeploymentController, deployment_id: DeploymentId
 ) -> None:
@@ -1366,13 +1440,10 @@ def _capture_deployment_health(
         controller: The deployment controller that was shut down
         deployment_id: Identifier for this deployment
     """
-    global _current_session
-    if not _current_session:
-        logger.debug("_capture_deployment_health: no current session")
-        return
-    plugin = _get_plugin(_current_session)
-    if not plugin:
-        logger.debug("_capture_deployment_health: no plugin")
+    try:
+        plugin = PluginRegistry.get()
+    except RuntimeError:
+        logger.debug("_capture_deployment_health: no plugin available")
         return
     health = controller.get_health_info()
     if health.has_issues():
@@ -1409,12 +1480,10 @@ def create_package_deployment(package_name: str) -> Any:
     framework_config = get_config()
     deployment_mode = framework_config.deployment_mode
 
-    global _current_session
-    if not _current_session:
-        raise RuntimeError("Cannot create deployment: no session available")
-    plugin = _get_plugin(_current_session)
-    if not plugin:
-        raise RuntimeError("Cannot create deployment: no plugin instance available")
+    try:
+        plugin = PluginRegistry.get()
+    except RuntimeError as e:
+        raise RuntimeError("Cannot create deployment: no session available") from e
 
     if deployment_mode == DeploymentMode.CLUSTER:
         # Create cluster deployment for this package
