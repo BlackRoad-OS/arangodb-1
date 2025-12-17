@@ -336,8 +336,6 @@ struct AqlValue final {
     Malloc = 1,  // memory allocated by malloc
   };
 
-  static constexpr std::size_t kPrefix = sizeof(arangodb::ResourceMonitor*);
-
  public:
   // construct an empty AqlValue
   // note: this is the default constructor and should be as cheap as possible
@@ -387,8 +385,12 @@ struct AqlValue final {
   explicit AqlValue(AqlValueHintSliceCopy v,
                     arangodb::ResourceMonitor* rm = nullptr);
 
+  // construct from Slice, copying contents (calls slice.byteSize() internally)
+  explicit AqlValue(velocypack::Slice slice,
+                    arangodb::ResourceMonitor* rm = nullptr);
+
   // construct from Slice and length, copying contents
-  explicit AqlValue(velocypack::Slice slice, velocypack::ValueLength length = 0,
+  explicit AqlValue(velocypack::Slice slice, velocypack::ValueLength length,
                     arangodb::ResourceMonitor* rm = nullptr);
 
   // construct range type
@@ -557,8 +559,7 @@ struct AqlValue final {
 
   // helpers for supervised values
   // @brief set the first 2 bytes for SupervisedSlice and SupervisedString
-  void setSupervisedData(AqlValueType, MemoryOriginType,
-                         velocypack::ValueLength);
+  void setSupervisedData(AqlValueType, velocypack::ValueLength);
 
   static uint8_t* allocateSupervised(arangodb::ResourceMonitor& rm,
                                      std::uint64_t len);
@@ -574,8 +575,8 @@ struct AqlValue final {
   }
 };
 
-static_assert(std::is_copy_constructible_v<AqlValue>);
-static_assert(std::is_copy_assignable_v<AqlValue>);
+static_assert(std::is_trivially_copy_constructible_v<AqlValue>);
+static_assert(std::is_trivially_copy_assignable_v<AqlValue>);
 static_assert(std::is_trivially_move_constructible_v<AqlValue>);
 static_assert(std::is_trivially_move_assignable_v<AqlValue>);
 static_assert(std::is_trivially_destructible_v<AqlValue>);
