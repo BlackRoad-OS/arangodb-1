@@ -355,8 +355,8 @@ variable or attribute with an `IN` condition.)");
 
   // try to replace ANY == array comparisons with IN
   registerRule(
-      "replace-any-eq-with-in", replaceAnyWithInRule,
-      OptimizerRule::replaceAnyWithInRule,
+      "replace-any-eq-with-in", replaceAnyEqWithInRule,
+      OptimizerRule::replaceAnyEqWithInRule,
       OptimizerRule::makeFlags(OptimizerRule::Flags::CanBeDisabled),
       R"(Replace `ANY ==` array comparison expressions with equivalent `IN`
 expressions to enable further optimizations and index usage.)");

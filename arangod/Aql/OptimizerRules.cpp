@@ -45,6 +45,7 @@
 #include "Aql/ExecutionNode/EnumeratePathsNode.h"
 #include "Aql/ExecutionNode/ExecutionNode.h"
 #include "Aql/ExecutionNode/FilterNode.h"
+#include "Aql/ExecutionNode/NoResultsNode.h"
 #include "Aql/ExecutionNode/GatherNode.h"
 #include "Aql/ExecutionNode/IResearchViewNode.h"
 #include "Aql/ExecutionNode/IndexNode.h"
@@ -60,7 +61,6 @@
 #include "Aql/ExecutionNode/ScatterNode.h"
 #include "Aql/ExecutionNode/ShortestPathNode.h"
 #include "Aql/ExecutionNode/SortNode.h"
-#include "Aql/ExecutionNode/SubqueryEndExecutionNode.h"
 #include "Aql/ExecutionNode/SubqueryNode.h"
 #include "Aql/ExecutionNode/SubqueryStartExecutionNode.h"
 #include "Aql/ExecutionNode/TraversalNode.h"
@@ -1519,6 +1519,14 @@ void arangodb::aql::removeUnnecessaryFiltersRule(
       // filter is always true
       // remove filter node and merge with following node
       toUnlink.emplace(n);
+      modified = true;
+    } else if (root->isFalse() &&
+               rule.level == OptimizerRule::removeUnnecessaryFiltersRule2) {
+      // filter is always false - replace with NoResultsNode
+      // Only do this in the second pass (level 210) after all transformations
+      // This allows isFalse() to catch IN [] expressions created by rules
+      auto noRes = plan->createNode<NoResultsNode>(plan.get(), plan->nextId());
+      plan->replaceNode(n, noRes);
       modified = true;
     }
     // before 3.6, if the filter is always false (i.e. root->isFalse()), at this
@@ -6147,8 +6155,6 @@ struct AnySimplifier {
   ///
   /// @param node The ANY == node to transform (must be
   /// NODE_TYPE_OPERATOR_BINARY_ARRAY_EQ)
-  /// @return The transformed IN node, or the original node if transformation is
-  /// not possible
   AstNode* simplifyAnyEq(AstNode const* node) const {
     if (node == nullptr) {
       return nullptr;
@@ -6237,9 +6243,9 @@ struct AnySimplifier {
   }
 };
 
-void arangodb::aql::replaceAnyWithInRule(Optimizer* opt,
-                                         std::unique_ptr<ExecutionPlan> plan,
-                                         OptimizerRule const& rule) {
+void arangodb::aql::replaceAnyEqWithInRule(Optimizer* opt,
+                                           std::unique_ptr<ExecutionPlan> plan,
+                                           OptimizerRule const& rule) {
   containers::SmallVector<ExecutionNode*, 8> nodes;
   plan->findNodesOfType(nodes, EN::FILTER, true);
 
@@ -6268,7 +6274,7 @@ void arangodb::aql::replaceAnyWithInRule(Optimizer* opt,
     if (newRoot != root) {
       auto expr = std::make_unique<Expression>(plan->getAst(), newRoot);
 
-      TRI_IF_FAILURE("OptimizerRules::replaceAnyWithInRuleOom") {
+      TRI_IF_FAILURE("OptimizerRules::replaceAnyEqWithInRuleOom") {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_DEBUG);
       }
 
