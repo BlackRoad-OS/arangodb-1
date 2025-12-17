@@ -78,11 +78,13 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
            if (state == ArangodServer::State::IN_START) {
              // drop privileges before starting features
              server.getFeature<PrivilegeFeature>().dropPrivilegesPermanently();
-             // Register crash handler data sources
-             CrashHandler::addDataSource(
-                 &server.getFeature<ApiRecordingFeature>());
-             CrashHandler::addDataSource(
-                 &server.getFeature<async_registry::Feature>());
+             // Register crash handler data sources if crash handler is enabled
+             if (server.getFeature<CrashHandlerFeature>().isEnabled()) {
+               CrashHandler::addDataSource(
+                   &server.getFeature<ApiRecordingFeature>());
+               CrashHandler::addDataSource(
+                   &server.getFeature<async_registry::Feature>());
+             }
            }
          },
          {}});
@@ -112,6 +114,9 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
         [&ret](auto& server, TypeTag<CheckVersionFeature>) {
           return std::make_unique<CheckVersionFeature>(server, &ret,
                                                        kNonServerFeatures);
+        },
+        [&crashHandler](auto& server, TypeTag<CrashHandlerFeature>) {
+          return std::make_unique<CrashHandlerFeature>(server, &crashHandler);
         },
         [](auto& server, TypeTag<ClusterUpgradeFeature>) {
           return std::make_unique<ClusterUpgradeFeature>(
@@ -218,7 +223,9 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
         }});
 
     server.getFeature<DatabasePathFeature>().setCrashHandlerDatabaseDirectory(
-        [&](std::string& path) { crashHandler.setDatabaseDirectory(path); });
+        [&server](std::string& path) {
+          server.getFeature<CrashHandlerFeature>().setDatabaseDirectory(path);
+        });
 
     try {
       server.run(argc, argv);
