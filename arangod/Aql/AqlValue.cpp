@@ -40,9 +40,7 @@
 #include <velocypack/Buffer.h>
 #include <velocypack/Slice.h>
 
-#include <atomic>
 #include <bit>
-#include <type_traits>
 
 #ifndef velocypack_malloc
 #error velocypack_malloc must be defined
