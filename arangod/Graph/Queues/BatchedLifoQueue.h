@@ -18,7 +18,7 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Heiko Kernbach
+/// @author Julia Volmer
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
@@ -29,12 +29,13 @@
 #include "Graph/Queues/ExpansionMarker.h"
 
 #include <queue>
+#include <variant>
 
 namespace arangodb {
 namespace graph {
 
 template<class StepType>
-class LifoQueue {
+class BatchedLifoQueue {
  public:
   static constexpr bool RequiresWeight = false;
   using Step = StepType;
@@ -42,38 +43,47 @@ class LifoQueue {
   // cluster relevant)
   // -> loose ends to the end
 
-  explicit LifoQueue(arangodb::ResourceMonitor& resourceMonitor)
+  explicit BatchedLifoQueue(arangodb::ResourceMonitor& resourceMonitor)
       : _resourceMonitor{resourceMonitor} {}
-  ~LifoQueue() { this->clear(); }
+  ~BatchedLifoQueue() { this->clear(); }
 
-  bool isBatched() { return false; }
+  bool isBatched() { return true; }
 
   void clear() {
     if (!_queue.empty()) {
-      _resourceMonitor.decreaseMemoryUsage(_queue.size() * sizeof(Step));
+      _resourceMonitor.decreaseMemoryUsage(sizeof(QueueEntry<Step>) *
+                                           _queue.size());
       _queue.clear();
     }
   }
 
   void append(Step step) {
-    arangodb::ResourceUsageScope guard(_resourceMonitor, sizeof(Step));
+    arangodb::ResourceUsageScope guard(_resourceMonitor,
+                                       sizeof(QueueEntry<Step>));
     // if push_front() throws, no harm is done, and the memory usage increase
     // will be rolled back
-    _queue.push_front(std::move(step));
+    _queue.push_front({std::move(step)});
     guard.steal();  // now we are responsible for tracking the memory
   }
 
-  void append(Expansion expansion) { TRI_ASSERT(false); }
+  void append(Expansion expansion) {
+    arangodb::ResourceUsageScope guard(_resourceMonitor,
+                                       sizeof(QueueEntry<Step>));
+    // if push_front() throws, no harm is done, and the memory usage increase
+    // will be rolled back
+    _queue.push_front({std::move(expansion)});
+    guard.steal();  // now we are responsible for tracking the memory
+  }
 
   void setStartContent(std::vector<Step> startSteps) {
-    arangodb::ResourceUsageScope guard(_resourceMonitor,
-                                       sizeof(Step) * startSteps.size());
+    arangodb::ResourceUsageScope guard(
+        _resourceMonitor, sizeof(QueueEntry<Step>) * startSteps.size());
     TRI_ASSERT(_queue.empty());
     for (auto& s : startSteps) {
       // For LIFO just append to the back,
       // The handed in vector will then be processed from start to end.
       // And appending would queue BEFORE items in the queue.
-      _queue.push_back(std::move(s));
+      _queue.push_back({std::move(s)});
     }
     guard.steal();  // now we are responsible for tracking the memory
   }
@@ -81,7 +91,11 @@ class LifoQueue {
   bool firstIsVertexFetched() const {
     if (!isEmpty()) {
       auto const& first = _queue.front();
-      return first.vertexFetched();
+      if (std::holds_alternative<Step>(first)) {
+        return std::get<Step>(first).vertexFetched();
+      } else {
+        return false;  // next batch needs to be fetched
+      }
     }
     return false;
   }
@@ -89,7 +103,9 @@ class LifoQueue {
   bool hasProcessableElement() const {
     if (!isEmpty()) {
       auto const& first = _queue.front();
-      return first.isProcessable();
+      if (std::holds_alternative<Step>(first)) {
+        return std::get<Step>(first).isProcessable();
+      }
     }
 
     return false;
@@ -103,9 +119,12 @@ class LifoQueue {
     TRI_ASSERT(!hasProcessableElement());
 
     std::vector<Step*> steps;
-    for (auto& step : _queue) {
-      if (!step.isProcessable()) {
-        steps.emplace_back(&step);
+    for (auto& item : _queue) {
+      if (std::holds_alternative<Step>(item)) {
+        auto step = std::get<Step>(item);
+        if (!step.isProcessable()) {
+          steps.emplace_back(&step);
+        }
       }
     }
 
@@ -115,41 +134,48 @@ class LifoQueue {
   Step const& peek() const {
     // Currently only implemented and used in WeightedQueue
     TRI_ASSERT(false);
-    auto const& first = _queue.front();
-    return first;
   }
 
   QueueEntry<Step> pop() {
     TRI_ASSERT(!isEmpty());
-    Step first = std::move(_queue.front());
-    LOG_TOPIC("9cd64", TRACE, Logger::GRAPHS)
-        << "<LifoQueue> Pop: " << first.toString();
-    _resourceMonitor.decreaseMemoryUsage(sizeof(Step));
+    auto first = std::move(_queue.front());
+    LOG_TOPIC("9cda4", TRACE, Logger::GRAPHS)
+        << "<BatchedLifoQueue> Pop: "
+        << (std::holds_alternative<Step>(first)
+                ? std::get<Step>(first).toString()
+                : "next batch");
+    _resourceMonitor.decreaseMemoryUsage(sizeof(QueueEntry<Step>));
     _queue.pop_front();
-    return {first};
+    return first;
   }
 
   std::vector<Step*> getStepsWithoutFetchedVertex() {
     std::vector<Step*> steps{};
-    for (auto& step : _queue) {
-      if (!step.vertexFetched()) {
-        steps.emplace_back(&step);
+    for (auto& item : _queue) {
+      if (std::holds_alternative<Step>(item)) {
+        auto& step = std::get<Step>(item);
+        if (!step.vertexFetched()) {
+          steps.emplace_back(&step);
+        }
       }
     }
     return steps;
   }
 
   void getStepsWithoutFetchedEdges(std::vector<Step*>& steps) {
-    for (auto& step : _queue) {
-      if (!step.edgeFetched() && !step.isUnknown()) {
-        steps.emplace_back(&step);
+    for (auto& item : _queue) {
+      if (std::holds_alternative<Step>(item)) {
+        auto step = std::get<Step>(item);
+        if (!step.edgeFetched() && !step.isUnknown()) {
+          steps.emplace_back(&step);
+        }
       }
     }
   }
 
  private:
   /// @brief queue datastore
-  std::deque<Step> _queue;
+  std::deque<QueueEntry<Step>> _queue;
 
   /// @brief query context
   arangodb::ResourceMonitor& _resourceMonitor;

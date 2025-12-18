@@ -13,7 +13,11 @@ from dataclasses import replace
 from typing import List
 import click
 
-from src.config_lib import TestDefinitionFile, Sanitizer, TestArguments
+from src.config_lib import (
+    TestDefinitionFile,
+    BuildVariant,
+    TestArguments,
+)
 from src.filters import FilterCriteria
 from src.output_generators.base import (
     GeneratorConfig,
@@ -138,7 +142,10 @@ def load_test_definitions(
 
 
 def create_generator_config(
-    sanitizer: str,
+    tsan: bool,
+    alubsan: bool,
+    no_sanitizer: bool,
+    coverage: bool,
     test_image: str,
     arangosh_args: str,
     extra_args: str,
@@ -158,16 +165,25 @@ def create_generator_config(
     Returns:
         GeneratorConfig object
     """
-    # Parse and validate sanitizer
-    sanitizer_enum = None
-    if sanitizer:
-        sanitizer_enum = Sanitizer.from_string(sanitizer)
+    # Build list of requested build variants
+    build_variants = []
+
+    if no_sanitizer or (not tsan and not alubsan and not coverage):
+        # Include non-instrumented build if explicitly requested or no variants specified
+        build_variants.append(BuildVariant.NORMAL)
+    if tsan:
+        build_variants.append(BuildVariant.TSAN)
+    if alubsan:
+        build_variants.append(BuildVariant.ALUBSAN)
+    if coverage:
+        build_variants.append(BuildVariant.COVERAGE)
+
+    assert build_variants, "build_variants must not be empty (logic error)"
 
     # Create filter criteria
     filter_criteria = FilterCriteria(
         gtest=gtest,
         full=full,
-        sanitizer=sanitizer_enum,
         v8=not arangod_without_v8,
     )
 
@@ -195,6 +211,7 @@ def create_generator_config(
         test_execution=test_execution,
         circleci=circleci_config,
         validate_only=validate_only,
+        build_variants=build_variants,
     )
 
 
@@ -209,9 +226,24 @@ def create_generator_config(
     help="Output filename for generated config",
 )
 @click.option(
-    "-s",
-    "--sanitizer",
-    help="Sanitizer to use (tsan, asan, ubsan, alubsan)",
+    "--tsan",
+    is_flag=True,
+    help="Enable Thread Sanitizer (TSAN)",
+)
+@click.option(
+    "--alubsan",
+    is_flag=True,
+    help="Enable Address+Leak+UndefinedBehavior Sanitizer (ALUBSAN)",
+)
+@click.option(
+    "--no-sanitizer",
+    is_flag=True,
+    help="Enable non-sanitizer build (can be combined with --tsan/--alubsan/--coverage)",
+)
+@click.option(
+    "--coverage",
+    is_flag=True,
+    help="Enable coverage build",
 )
 @click.option(
     "-t",
@@ -267,7 +299,10 @@ def main(
     base_config: str,
     definitions: tuple,
     output: str,
-    sanitizer: str,
+    tsan: bool,
+    alubsan: bool,
+    no_sanitizer: bool,
+    coverage: bool,
     test_image: str,
     driver_branch_overrides: str,
     arangosh_args: str,
@@ -298,7 +333,10 @@ def main(
 
         # Create generator config
         config = create_generator_config(
-            sanitizer=sanitizer,
+            tsan=tsan,
+            alubsan=alubsan,
+            no_sanitizer=no_sanitizer,
+            coverage=coverage,
             test_image=test_image,
             arangosh_args=arangosh_args,
             extra_args=extra_args,
