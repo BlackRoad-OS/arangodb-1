@@ -19,22 +19,32 @@ class LogContext:
     def __init__(self) -> None:
         self._local = threading.local()
 
+    def _ensure_context(self) -> Dict[str, Any]:
+        """Ensure thread-local context exists and return it."""
+        try:
+            return self._local.context
+        except AttributeError:
+            self._local.context = {}
+            return self._local.context
+
     def set_context(self, **kwargs: Any) -> None:
         """Set context variables for current thread."""
-        if not hasattr(self._local, "context"):
-            self._local.context = {}
-        self._local.context.update(kwargs)
+        context = self._ensure_context()
+        context.update(kwargs)
 
     def get_context(self) -> Dict[str, Any]:
         """Get current thread context."""
-        if not hasattr(self._local, "context"):
+        try:
+            return dict(self._local.context.copy())
+        except AttributeError:
             return {}
-        return dict(self._local.context.copy())
 
     def clear_context(self) -> None:
         """Clear context for current thread."""
-        if hasattr(self._local, "context"):
+        try:
             self._local.context.clear()
+        except AttributeError:
+            pass  # No context to clear
 
     @contextmanager
     def context(self, **kwargs: Any) -> Iterator[None]:

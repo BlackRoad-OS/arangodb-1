@@ -4,7 +4,7 @@ This module provides functionality to correlate sanitizer log files with individ
 test cases using file modification timestamps and test execution windows.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass

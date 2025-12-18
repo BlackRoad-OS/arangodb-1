@@ -5,7 +5,7 @@ Provides detailed verbose output with timestamps, test phases, and comprehensive
 
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from _pytest.reports import TestReport
@@ -321,14 +321,17 @@ class ArmadilloReporter:
             # Check if test was skipped in any phase
             if self.test_skipped.get(report.nodeid, False):
                 outcome = "skipped"
-            # Check if there's crash info attached to the report (from makereport hook)
-            # or check crash state directly
-            elif (
-                hasattr(report, "crash_info") and report.crash_info
-            ) or self.process_supervisor.has_any_crash():
+            # Check crash state directly from ProcessSupervisor
+            elif self.process_supervisor.has_any_crash():
                 outcome = "failed"  # Crashed tests should show as failed
             else:
-                outcome = report.outcome
+                # Use the call phase report outcome (stored earlier) since teardown
+                # phase report.outcome reflects teardown success, not test success
+                call_report = self.test_reports.get(report.nodeid)
+                if call_report:
+                    outcome = call_report.outcome
+                else:
+                    outcome = report.outcome
 
             # Print test result
             if outcome == "passed":
@@ -445,9 +448,13 @@ class ArmadilloReporter:
         markers = []
         if nodeid in self.test_reports:
             report = self.test_reports[nodeid]
-            if hasattr(report, "keywords"):
-                # Extract marker names
-                markers = [key for key in report.keywords if not key.startswith("_")]
+            # Keywords attribute may not exist on all report types
+            keywords = getattr(report, "keywords", {})
+            markers = [key for key in keywords if not key.startswith("_")]
+
+        # Get test start/end times for sanitizer matching
+        started_at = self._test_start_times.get(nodeid)
+        finished_at = started_at + timedelta(seconds=total_duration) if started_at else None
 
         # Record to collector
         self.result_collector.record_test_result(
@@ -459,6 +466,8 @@ class ArmadilloReporter:
             teardown_duration=teardown_duration,
             markers=markers,
             details=details,
+            started_at=started_at,
+            finished_at=finished_at,
         )
 
     def export_results(
@@ -559,9 +568,9 @@ class ArmadilloReporter:
         total_sanitizers = 0
         if server_health:
             for health in server_health.values():
-                if hasattr(health, "sanitizer_files"):
-                    for files in health.sanitizer_files.values():
-                        total_sanitizers += len(files)
+                # Count sanitizer errors from ServerHealthInfo.sanitizer_errors
+                for san_errors in health.sanitizer_errors.values():
+                    total_sanitizers += len(san_errors)
 
         matched_count = sum(len(matches) for matches in sanitizer_matches.values())
         unmatched_count = total_sanitizers - matched_count

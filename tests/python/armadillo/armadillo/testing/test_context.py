@@ -51,6 +51,7 @@ class IsolatedTestContext:
         self._test_name = test_name or f"test_{id(self)}"
         self._enable_persistence = enable_persistence
         self._cleanup_on_exit = cleanup_on_exit
+        self._temp_dir: Optional[str] = None  # Initialize to None for proper state tracking
         if work_dir:
             self._work_dir = work_dir
             self._owns_work_dir = False
@@ -162,7 +163,7 @@ class IsolatedTestContext:
                 pass
 
             # Clean up work directory if we own it
-            if self._owns_work_dir and hasattr(self, "_temp_dir"):
+            if self._owns_work_dir and self._temp_dir is not None:
                 try:
                     shutil.rmtree(self._temp_dir, ignore_errors=True)
                 except (OSError, PermissionError):

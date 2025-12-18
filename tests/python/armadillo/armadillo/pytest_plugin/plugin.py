@@ -6,6 +6,7 @@ import signal
 import time
 import traceback
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Optional, Dict, Union
 
@@ -227,6 +228,9 @@ class ArmadilloPlugin:
         # Track failures across all pytest phases for complete failure information
         self._test_failures: Dict[str, list] = {}  # nodeid -> List[TestFailureInfo]
 
+        # Registry for crash info by test nodeid (instead of dynamic report attributes)
+        self._crash_info_registry: Dict[str, Dict[str, Any]] = {}  # nodeid -> crash_states
+
     def pytest_configure(self, config: pytest.Config) -> None:
         """Configure pytest for Armadillo."""
         # In pytest subprocess, config needs to be loaded from environment variables
@@ -408,6 +412,10 @@ def _get_plugin(obj: Union[Config, Session, Item]) -> ArmadilloPlugin:
     """Get plugin from pytest object (config, session, or item).
 
     Helper to retrieve plugin from stash regardless of hook object type.
+
+    Pytest's hook objects have inconsistent APIs. Session and Item objects have
+    a 'config' attribute that we need to access to get the stash, while Config
+    objects store the stash directly. This is a documented pytest pattern.
     """
     if hasattr(obj, "config"):
         plugin: ArmadilloPlugin = obj.config.stash[plugin_key]
@@ -635,13 +643,10 @@ def _cleanup_temp_dir_if_needed(_session: Session, exitstatus: int) -> None:
 
     try:
         # Get the session work directory from the plugin's app context
-        # Note: hasattr check is legitimate here - _session_app_context is created
-        # in pytest_sessionstart hook, so it may not exist during early cleanup
+        # Note: _session_app_context is initialized to None in __init__, but only
+        # populated in pytest_sessionstart hook, so it may still be None during early cleanup
         plugin = _get_plugin(_session)
-        if (
-            not hasattr(plugin, "_session_app_context")
-            or plugin._session_app_context is None
-        ):
+        if plugin._session_app_context is None:
             logger.debug("No session app context - skipping temp cleanup")
             return
 
@@ -752,11 +757,12 @@ def pytest_sessionfinish(session: Session, exitstatus: int) -> None:
             # Perform sanitizer matching for console output
             from ..utils.sanitizer_matcher import match_all_sanitizers
 
+            # Extract sanitizer file paths from ServerHealthInfo.sanitizer_errors
             sanitizer_files = {}
             for dep_id, health in plugin._server_health.items():
-                if hasattr(health, "sanitizer_files"):
-                    for server_id, files in health.sanitizer_files.items():
-                        sanitizer_files[server_id] = files
+                for server_id, san_errors in health.sanitizer_errors.items():
+                    if san_errors:
+                        sanitizer_files[server_id] = [err.file_path for err in san_errors]
 
             sanitizer_matches = {}
             if sanitizer_files and plugin.reporter.result_collector:
@@ -931,9 +937,7 @@ def pytest_runtest_makereport(item: Item, call: Any) -> Any:
         report.longrepr = crash_message
         report.outcome = "failed"
 
-        # Store crash info in the report for result collection
-        if not hasattr(report, "crash_info"):
-            report.crash_info = crash_states
+        plugin._crash_info_registry[item.nodeid] = crash_states
 
         logger.error(
             "Test %s failed due to server crash: %s", item.nodeid, crash_message
@@ -1370,7 +1374,9 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
     }
 
     # Check for crashes or timeouts that override everything
-    if hasattr(report, "crash_info") and report.crash_info:
+    # Look up crash info from registry
+    crash_info = plugin._crash_info_registry.get(item.nodeid)
+    if crash_info:
         exec_outcome = ExecutionOutcome.CRASHED
     elif plugin.execution_state.timeout_detected_in_test == item.nodeid:
         exec_outcome = ExecutionOutcome.TIMEOUT
@@ -1388,19 +1394,16 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
     if report.longrepr:
         details = str(report.longrepr)
 
-    # Get markers
-    markers = []
-    if hasattr(report, "keywords"):
-        markers = [key for key in report.keywords if not key.startswith("_")]
+    # Get markers (keywords attribute may not exist on all report types)
+    keywords = getattr(report, "keywords", {})
+    markers = [key for key in keywords if not key.startswith("_")]
 
     # Get timestamps from reporter if available
     started_at = None
     finished_at = None
-    if plugin.reporter and hasattr(plugin.reporter, "_test_start_times"):
+    if plugin.reporter:
         started_at = plugin.reporter._test_start_times.get(item.nodeid)
         if started_at:
-            from datetime import timedelta
-
             finished_at = started_at + timedelta(seconds=duration)
 
     # Get aggregated failure info from all phases
@@ -1420,15 +1423,17 @@ def _record_test_to_collector(item: Item, report: Any, plugin: ArmadilloPlugin) 
         duration=duration,
         markers=markers,
         details=details,
-        crash_info=getattr(report, "crash_info", None),
+        crash_info=crash_info,
         started_at=started_at,
         finished_at=finished_at,
         failure_info=failure_info,
     )
 
-    # Clean up failure tracking for this test
+    # Clean up failure tracking and crash info for this test
     if item.nodeid in plugin._test_failures:
         del plugin._test_failures[item.nodeid]
+    if item.nodeid in plugin._crash_info_registry:
+        del plugin._crash_info_registry[item.nodeid]
 
 
 def _capture_deployment_health(
