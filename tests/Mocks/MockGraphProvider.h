@@ -293,8 +293,7 @@ class MockGraphProvider {
   void destroyEngines(){};
   auto startVertex(VertexType vertex, size_t depth = 0, double weight = 0.0)
       -> Step;
-  auto fetchVertices(std::vector<Step*> const& looseEnds)
-      -> futures::Future<std::vector<Step*>>;
+  auto fetchVertices(std::vector<Step*> const& looseEnds) -> std::vector<Step*>;
   // dummy function, needed for OneSidedEnumerator::Provider
   static auto fetchEdges(const std::vector<Step*>& fetchedVertices) -> Result;
 
@@ -303,6 +302,24 @@ class MockGraphProvider {
   auto expand(Step const& from, size_t previous) -> std::vector<Step>;
   auto expand(Step const& from, size_t previous,
               std::function<void(Step)> callback) -> void;
+  using CursorId = size_t;
+  auto addExpansionIterator(CursorId id, Step const& from,
+                            std::function<void()> const& callback) -> void {
+    _startedIterators.emplace(id);
+    callback();
+    return;
+  }
+  auto expandToNextBatch(CursorId id, Step const& step, size_t previous,
+                         std::function<void(Step)> const& callback) -> bool {
+    // expand everything and remove step from _startedIterators
+    auto iterator = _startedIterators.find(id);
+    if (iterator == _startedIterators.end()) {
+      return false;
+    }
+    expand(step, previous, callback);
+    _startedIterators.erase(iterator);
+    return true;
+  }
   auto clear() -> void;
 
   void addVertexToBuilder(Step::Vertex const& vertex,
@@ -351,6 +368,7 @@ class MockGraphProvider {
   arangodb::aql::TraversalStats _stats;
   // Optional callback to compute the weight of an edge.
   std::optional<WeightCallback> _weightCallback;
+  std::unordered_set<CursorId> _startedIterators;
 };
 }  // namespace graph
 }  // namespace tests

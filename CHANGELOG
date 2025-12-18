@@ -7,6 +7,11 @@ devel
   follower shards on each DBserver and `arangodb_shard_followers_out_of_sync_number`
   to track follower shards that are out of sync with their leader.
 
+* Make single-server traversal executor with DFS receive neighbours in batches
+  to be able to stop the retrieval early in case a limit has been reached.
+
+* Fix concurrent reuse of builders and string buffers when using async-prefetch
+
 * Rebuilt included rclone v1.65.2 with go1.24.11 and non-vulnerable
   dependencies.
 
