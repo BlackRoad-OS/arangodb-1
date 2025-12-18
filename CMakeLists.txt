@@ -177,7 +177,7 @@ endif()
 # depend on JavaScript.
 # setting the option to OFF is highly experimental option and not well tested.
 # use at your own risk!
-option(USE_V8 "build with V8/JavaScript support" ON)
+option(USE_V8 "build with V8/JavaScript support" OFF)
 if(USE_V8)
   add_definitions("-DUSE_V8=1")
 endif()
