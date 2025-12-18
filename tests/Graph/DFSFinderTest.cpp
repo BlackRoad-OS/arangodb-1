@@ -41,10 +41,6 @@
 #include "Graph/Options/TwoSidedEnumeratorOptions.h"
 #include "Graph/PathManagement/PathStore.h"
 #include "Graph/Queues/LifoQueue.h"
-
-// Needed in case of enabled tracing
-#include "Graph/PathManagement/PathStoreTracer.h"
-#include "Graph/Queues/QueueTracer.h"
 #include "Graph/algorithm-aliases.h"
 
 #include <velocypack/HashedStringRef.h>
@@ -62,8 +58,8 @@ class DFSFinderTest
   // using DFSFinder = DFSEnumerator<MockGraphProvider,
   // VertexUniquenessLevel::PATH>;
   using DFSFinder =
-      TracedDFSEnumerator<MockGraphProvider, VertexUniquenessLevel::PATH,
-                          EdgeUniquenessLevel::PATH>;
+      DFSEnumerator<MockGraphProvider, VertexUniquenessLevel::PATH,
+                    EdgeUniquenessLevel::PATH>;
 
  protected:
   bool activateLogging{false};
@@ -346,6 +342,10 @@ TEST_P(DFSFinderTest, path_depth_1) {
     pathStructureValid(result.slice(), 1);
     pathEquals(result.slice(), {1, 2});
 
+    // do one more round to finish the path finding
+    EXPECT_FALSE(finder.isDone());
+    hasPath = finder.getNextPath();
+    EXPECT_FALSE(hasPath);
     EXPECT_TRUE(finder.isDone());
   }
 
@@ -382,6 +382,10 @@ TEST_P(DFSFinderTest, path_depth_2) {
     pathStructureValid(result.slice(), 2);
     pathEquals(result.slice(), {1, 2, 3});
 
+    // do one more round to finish the path finding
+    EXPECT_FALSE(finder.isDone());
+    hasPath = finder.getNextPath();
+    EXPECT_FALSE(hasPath);
     EXPECT_TRUE(finder.isDone());
   }
 
@@ -416,6 +420,10 @@ TEST_P(DFSFinderTest, path_depth_3) {
     pathStructureValid(result.slice(), 3);
     pathEquals(result.slice(), {1, 2, 3, 4});
 
+    // do one more round to finish the path finding
+    EXPECT_FALSE(finder.isDone());
+    hasPath = finder.getNextPath();
+    EXPECT_FALSE(hasPath);
     EXPECT_TRUE(finder.isDone());
   }
 
@@ -470,6 +478,10 @@ TEST_P(DFSFinderTest, path_diamond) {
 
     pathStructureValid(result.slice(), 2);
 
+    // do one more round to finish the path finding
+    EXPECT_FALSE(finder.isDone());
+    hasPath = finder.getNextPath();
+    EXPECT_FALSE(hasPath);
     EXPECT_TRUE(finder.isDone());
   }
 
@@ -537,6 +549,10 @@ TEST_P(DFSFinderTest, path_depth_1_to_2) {
 
     pathStructureValid(result.slice(), 1);
     pathEquals(result.slice(), {10, 11});
+    // do one more round to finish the path finding
+    EXPECT_FALSE(finder.isDone());
+    hasPath = finder.getNextPath();
+    EXPECT_FALSE(hasPath);
     EXPECT_TRUE(finder.isDone());
   }
 
@@ -594,6 +610,11 @@ TEST_P(DFSFinderTest, path_depth_1_to_2_skip) {
 
     pathStructureValid(result.slice(), 1);
     pathEquals(result.slice(), {10, 11});
+
+    // do one more round to finish the path finding
+    EXPECT_FALSE(finder.isDone());
+    hasPath = finder.getNextPath();
+    EXPECT_FALSE(hasPath);
     EXPECT_TRUE(finder.isDone());
   }
 

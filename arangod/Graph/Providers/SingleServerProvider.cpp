@@ -26,12 +26,16 @@
 
 #include "Aql/ExecutionBlock.h"
 #include "Aql/QueryContext.h"
+#include "Aql/TraversalStats.h"
 #include "Futures/Future.h"
 #include "Futures/Utilities.h"
-#include "Graph/Cursors/RefactoredSingleServerEdgeCursor.h"
+#include "Graph/Providers/SingleServer/SingleServerNeighbourProvider.h"
 #include "Graph/Steps/SingleServerProviderStep.h"
 #include "Logger/LogMacros.h"
 #include "Transaction/Helpers.h"
+#include "VocBase/vocbase.h"
+#include "ApplicationFeatures/ApplicationServer.h"
+#include "RestServer/QueryRegistryFeature.h"
 
 #ifdef USE_ENTERPRISE
 #include "Enterprise/Graph/Steps/SmartGraphStep.h"
@@ -70,7 +74,7 @@ template<class Step>
 void SingleServerProvider<Step>::addEdgeToLookupMap(
     typename Step::Edge const& edge, arangodb::velocypack::Builder& builder) {
   if (edge.isValid()) {
-    _cache.insertEdgeIntoLookupMap(edge.getID(), builder);
+    _edgeLookup.insertEdgeIntoLookupMap(edge.getID(), builder);
   }
 }
 
@@ -83,10 +87,17 @@ SingleServerProvider<Step>::SingleServerProvider(
       _trx(std::make_unique<arangodb::transaction::Methods>(
           queryContext.newTrxContext())),
       _opts(std::move(opts)),
-      _cache(_trx.get(), &queryContext, resourceMonitor,
-             _opts.collectionToShardMap(), _opts.getVertexProjections(),
-             _opts.getEdgeProjections(), _opts.produceVertices()),
-      _stats{},
+      _stats(std::make_unique<aql::TraversalStats>()),
+      _cache(resourceMonitor),
+      _vertexLookup(_trx.get(), &queryContext, _opts.getVertexProjections(),
+                    _opts.collectionToShardMap(), _stats,
+                    ServerState::instance()->isSingleServer() &&
+                        !queryContext.vocbase()
+                             .server()
+                             .getFeature<QueryRegistryFeature>()
+                             .requireWith(),
+                    _opts.produceVertices()),
+      _edgeLookup(_trx.get(), _opts.getEdgeProjections()),
       _neighbours{_opts, _trx.get(), _monitor,
                   aql::ExecutionBlock::DefaultBatchSize} {}
 
@@ -159,11 +170,95 @@ auto SingleServerProvider<Step>::expand(
 }
 
 template<class Step>
+auto SingleServerProvider<Step>::expandToNextBatch(
+    CursorId id, Step const& step, size_t previous,
+    std::function<void(Step)> const& callback) -> bool {
+  TRI_ASSERT(!step.isLooseEnd());
+  auto const& vertex = step.getVertex();
+
+  auto cursorIt = _neighboursStack.find(id);
+  TRI_ASSERT(cursorIt != _neighboursStack.end());
+  auto& cursor = cursorIt->second;
+
+  LOG_TOPIC("c9179", TRACE, Logger::GRAPHS)
+      << "<SingleServerProvider> Expanding (next batch) " << vertex.getID();
+
+  if (not cursor.hasMore(step.getDepth())) {
+    _neighboursStack.erase(cursorIt);
+    return false;
+  }
+
+  auto count = 0;
+  auto batch = cursor.next(*this, _stats);
+  for (auto const& neighbour : *batch) {
+    count++;
+    VPackSlice edge = neighbour.edge();
+    VertexType id = _cache.persistString(([&]() -> auto {
+      if (edge.isString()) {
+        return VertexType(edge);
+      } else {
+        VertexType other(transaction::helpers::extractFromFromDocument(edge));
+        if (other == vertex.getID()) {  // TODO: Check getId - discuss
+          other = VertexType(transaction::helpers::extractToFromDocument(edge));
+        }
+        return other;
+      }
+    })());
+    LOG_TOPIC("c916e", TRACE, Logger::GRAPHS)
+        << "<SingleServerProvider> Neighbor of " << vertex.getID() << " -> "
+        << id;
+
+    EdgeDocumentToken edgeToken{neighbour.eid};
+    callback(Step{id, std::move(edgeToken), previous, step.getDepth() + 1,
+                  _opts.weightEdge(step.getWeight(), edge),
+                  neighbour.cursorId});
+    // TODO [GraphRefactor]: Why is cursorID set, but never used?
+    // Note: There is one implementation that used, it, but there is a high
+    // probability we do not need it anymore after refactoring is complete.
+  }
+  if (count == 0 && not cursor.hasMore(step.getDepth())) {
+    _neighboursStack.erase(cursorIt);
+    return false;
+  }
+  return true;
+}
+
+template<class Step>
+auto SingleServerProvider<Step>::addExpansionIterator(
+    CursorId id, Step const& step, std::function<void()> const& callback)
+    -> void {
+  TRI_ASSERT(!step.isLooseEnd());
+  auto const& vertex = step.getVertex();
+
+  LOG_TOPIC("c9189", TRACE, Logger::GRAPHS)
+      << "<SingleServerProvider> Add expansion iterator " << vertex.getID();
+
+  // create neighbour provider without using cache because:
+  // 1. cache does not make sense when we create a new provider and with it a
+  // new cache for each vertex (what we do here)
+  // 2. cache results currently in a resource manager crash when used with this
+  // stack
+  auto cursor = SingleServerNeighbourProvider<Step>{
+      _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize,
+      false};
+  cursor.rearm(step, _stats);
+  if (_ast != nullptr) {
+    cursor.prepareIndexExpressions(_ast);
+  }
+  _neighboursStack.emplace(id, std::move(cursor));
+  callback();
+}
+
+template<class Step>
 void SingleServerProvider<Step>::addVertexToBuilder(
     typename Step::Vertex const& vertex, arangodb::velocypack::Builder& builder,
     bool writeIdIfNotFound) {
-  _cache.insertVertexIntoResult(_stats, vertex.getID(), builder,
-                                writeIdIfNotFound);
+  if (_opts.produceVertices()) {
+    _vertexLookup.insertVertexIntoResult(vertex.getID(), builder,
+                                         writeIdIfNotFound);
+  } else {
+    builder.add(VPackSlice::nullSlice());
+  }
 }
 
 template<class Step>
@@ -172,24 +267,25 @@ auto SingleServerProvider<Step>::clear() -> void {
   // We need to make sure that no one holds references to the cache (!)
   _cache.clear();
   _neighbours.clear();
+  _neighboursStack.clear();
 }
 
 template<class Step>
 void SingleServerProvider<Step>::insertEdgeIntoResult(
     EdgeDocumentToken edge, arangodb::velocypack::Builder& builder) {
-  _cache.insertEdgeIntoResult(edge, builder);
+  _edgeLookup.insertEdgeIntoResult(edge, builder);
 }
 
 template<class Step>
 void SingleServerProvider<Step>::insertEdgeIdIntoResult(
     EdgeDocumentToken edge, arangodb::velocypack::Builder& builder) {
-  _cache.insertEdgeIdIntoResult(edge, builder);
+  _edgeLookup.insertEdgeIdIntoResult(edge, builder);
 }
 
 template<class Step>
 std::string SingleServerProvider<Step>::getEdgeId(
     typename Step::Edge const& edge) {
-  return _cache.getEdgeId(edge.getID());
+  return _edgeLookup.getEdgeId(edge.getID());
 }
 
 template<class Step>
@@ -204,6 +300,7 @@ EdgeType SingleServerProvider<Step>::getEdgeIdRef(
 template<class Step>
 void SingleServerProvider<Step>::prepareIndexExpressions(aql::Ast* ast) {
   _neighbours.prepareIndexExpressions(ast);
+  _ast = ast;
 }
 
 template<class Step>
@@ -249,18 +346,17 @@ TRI_vocbase_t const& SingleServerProvider<Step>::vocbase() const {
 
 template<class Step>
 arangodb::aql::TraversalStats SingleServerProvider<Step>::stealStats() {
-  auto t = _stats;
-  _stats.clear();
+  auto t = *_stats;
+  _stats->clear();
   return t;
 }
 
 template<class StepType>
 auto SingleServerProvider<StepType>::fetchVertices(
-    const std::vector<Step*>& looseEnds)
-    -> futures::Future<std::vector<Step*>> {
+    const std::vector<Step*>& looseEnds) -> std::vector<Step*> {
   // We will never need to fetch anything
   TRI_ASSERT(false);
-  return fetch(looseEnds);
+  return std::vector<Step*>{};
 }
 
 template<class StepType>
