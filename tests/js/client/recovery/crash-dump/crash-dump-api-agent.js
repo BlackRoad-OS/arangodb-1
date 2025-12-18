@@ -31,7 +31,7 @@
 const jsunity = require('jsunity');
 const request = require('@arangodb/request');
 const IM = global.instanceManager;
-const crashesEndpoint = '/_admin/crashes';
+const crashesEndpoint = '/_admin/crashes/';
 
 if (runSetup === true) {
   'use strict';

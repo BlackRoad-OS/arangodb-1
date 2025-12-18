@@ -264,28 +264,24 @@ void ApiRecordingFeature::cleanupLoop() {
 }
 
 velocypack::SharedSlice ApiRecordingFeature::getCrashData() const {
-  velocypack::Builder builder;
+  velocypack::Builder body;
 
-  builder.openObject();
+  {
+    VPackObjectBuilder bodyBuilder{&body};
+    body.add("apiCalls", velocypack::Value(velocypack::ValueType::Array));
+    doForApiCallRecords([&body](ApiCallRecord const& record) {
+      velocypack::serialize(body, record);
+    });
+    body.close();
 
-  // Serialize API call records
-  builder.add("apiCalls", velocypack::Value(velocypack::ValueType::Array));
-  doForApiCallRecords([&builder](ApiCallRecord const& record) {
-    velocypack::serialize(builder, record);
-  });
-  builder.close();  // close apiCalls array
+    body.add("aqlQueries", velocypack::Value(velocypack::ValueType::Array));
+    doForAqlQueryRecords([&body](AqlQueryRecord const& record) {
+      velocypack::serialize(body, record);
+    });
+    body.close();
+  }
 
-  // Serialize AQL query records
-  builder.add("aqlQueries", velocypack::Value(velocypack::ValueType::Array));
-  doForAqlQueryRecords([&builder](AqlQueryRecord const& record) {
-    velocypack::serialize(builder, record);
-  });
-  builder.close();  // close aqlQueries array
-
-  builder.close();  // close root object
-
-  // Return a SharedSlice that steals the builder's buffer
-  return std::move(builder).sharedSlice();
+  return std::move(body).sharedSlice();
 }
 
 std::string_view ApiRecordingFeature::getDataSourceName() const {

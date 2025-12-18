@@ -5,9 +5,9 @@ devel
   `ApiRecordingFeature` as a data source to include recent API calls
   and AQL queries in crash dumps. New REST API endpoints for crash dump
   management:
-  - `GET /_admin/server/crashes`: List all crash dumps
-  - `GET /_admin/server/crashes/{id}`: Get contents of a specific crash dump
-  - `DELETE /_admin/server/crashes/{id}`: Delete a specific crash dump
+  - `GET /_admin/crashes`: List all crash dumps
+  - `GET /_admin/crashes/{id}`: Get contents of a specific crash dump
+  - `DELETE /_admin/crashes/{id}`: Delete a specific crash dump
 
 * FE-636: bump rollup from 2.79.1 to 2.79.2.
 
