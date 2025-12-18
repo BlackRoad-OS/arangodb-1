@@ -244,13 +244,14 @@ def pytest_runtest_setup(item: Any) -> None:
 
 def pytest_runtest_teardown(item: Any, nextitem: Any) -> None:
     """Teardown after each test."""
-    # Force garbage collection
-    import gc
+    # Unit tests are fully mocked and don't create real resources (processes, files, sockets)
+    # so we don't need delays or aggressive GC between tests. This significantly speeds up
+    # the test suite (~5s saved on 500 tests by removing the 10ms sleep per test).
 
-    gc.collect()
-
-    # Small delay to allow cleanup
-    time.sleep(0.01)
+    # Force garbage collection only when needed for tests that create heavy objects
+    if "needs_gc" in item.keywords:
+        import gc
+        gc.collect()
 
 
 def pytest_sessionstart(session: Any) -> None:
@@ -264,10 +265,9 @@ def pytest_sessionfinish(session: Any, exitstatus: int) -> None:
     # Final cleanup
     logging.shutdown()
 
-    # Wait for threads to finish
-    time.sleep(0.1)
+    # Unit tests don't create real threads, so no need to wait
+    # Integration tests (if they exist separately) may need thread cleanup
 
     # Force final garbage collection
     import gc
-
     gc.collect()
