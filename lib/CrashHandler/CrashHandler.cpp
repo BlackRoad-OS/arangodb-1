@@ -151,9 +151,6 @@ std::string databaseDirectoryPath;
 /// @brief maximum number of crash directories to keep
 static constexpr size_t maxCrashDirectories{10};
 
-/// @brief stores the data sources
-std::vector<arangodb::CrashHandlerDataSource const*> dataSources;
-
 /// @brief stores crash data for later use by the crash handler thread
 void storeCrashData(std::string_view context, int signal, uint64_t threadId,
                     uint64_t threadNumber, siginfo_t* info, void* ucontext) {
@@ -569,8 +566,8 @@ void actuallyDumpCrashInfo() {
           databaseDirectoryPath, uuid);
       arangodb::basics::FileUtils::createDirectory(crashDirectory);
 
-      // Dump data from all registerd and alive data sources
-      for (auto const* dataSource : dataSources) {
+      // Dump data from all registered and alive data sources
+      for (auto const* dataSource : arangodb::getCrashHanbdlerDataSources()) {
         std::string filename = arangodb::basics::FileUtils::buildFilename(
             crashDirectory,
             std::format("{}.json", dataSource->getDataSourceName()));
@@ -846,17 +843,6 @@ bool CrashHandler::deleteCrashStatic(std::string_view crashId) {
   // Remove the directory and all its contents
   auto res = TRI_RemoveDirectory(crashDir.c_str());
   return res == TRI_ERROR_NO_ERROR;
-}
-
-void CrashHandler::addDataSource(CrashHandlerDataSource const* dataSource) {
-  ::dataSources.push_back(dataSource);
-}
-
-void CrashHandler::removeDataSource(CrashHandlerDataSource const* dataSource) {
-  auto it = std::find(::dataSources.begin(), ::dataSources.end(), dataSource);
-  if (it != ::dataSources.end()) {
-    ::dataSources.erase(it);
-  }
 }
 
 void CrashHandler::logBacktrace() {

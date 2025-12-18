@@ -77,13 +77,16 @@ class CrashHandler : public CrashHandlerInterface {
   void setDatabaseDirectory(std::string path) override {
     setDatabaseDirectoryStatic(std::move(path));
   }
+
   std::vector<std::string> listCrashes() override {
     return listCrashesStatic();
   }
+
   std::unordered_map<std::string, std::string> getCrashContents(
       std::string_view crashId) override {
     return getCrashContentsStatic(crashId);
   }
+
   bool deleteCrash(std::string_view crashId) override {
     return deleteCrashStatic(crashId);
   }
@@ -140,12 +143,6 @@ class CrashHandler : public CrashHandlerInterface {
   /// @brief deletes a specific crash directory
   /// Returns true if successful, false if not found
   static bool deleteCrashStatic(std::string_view crashId);
-
-  /// @brief adds a data source to the crash handler
-  static void addDataSource(CrashHandlerDataSource const* dataSource);
-
-  /// @brief removes a data source from the crash handler
-  static void removeDataSource(CrashHandlerDataSource const* dataSource);
 
  private:
   /// @brief installs the crash handler globally

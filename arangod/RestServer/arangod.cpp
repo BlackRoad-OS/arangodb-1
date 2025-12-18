@@ -80,10 +80,8 @@ static int runServer(int argc, char** argv, ArangoGlobalContext& context) {
              server.getFeature<PrivilegeFeature>().dropPrivilegesPermanently();
              // Register crash handler data sources if crash handler is enabled
              if (server.getFeature<CrashHandlerFeature>().isEnabled()) {
-               CrashHandler::addDataSource(
-                   &server.getFeature<ApiRecordingFeature>());
-               CrashHandler::addDataSource(
-                   &server.getFeature<async_registry::Feature>());
+              addCrashHandlerDataSource(&server.getFeature<ApiRecordingFeature>());
+              addCrashHandlerDataSource(&server.getFeature<async_registry::Feature>());
              }
            }
          },

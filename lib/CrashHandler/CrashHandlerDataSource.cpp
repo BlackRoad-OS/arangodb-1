@@ -21,26 +21,27 @@
 /// @author Jure Bajic
 ////////////////////////////////////////////////////////////////////////////////
 
-#pragma once
-
-#include <string_view>
-#include <vector>
+#include "CrashHandler/CrashHandlerDataSource.h"
 
 #include <velocypack/SharedSlice.h>
 
 namespace arangodb {
 
-class CrashHandlerDataSource {
- public:
-  virtual ~CrashHandlerDataSource();
+namespace {
+/// @brief stores the data sources
+std::vector<arangodb::CrashHandlerDataSource const*> dataSources;
+}  // namespace
 
-  virtual velocypack::SharedSlice getCrashData() const = 0;
+void addCrashHandlerDataSource(CrashHandlerDataSource const* dataSource) {
+  dataSources.push_back(dataSource);
+}
 
-  virtual std::string_view getDataSourceName() const = 0;
-};
+std::vector<CrashHandlerDataSource const*>& getCrashHanbdlerDataSources() {
+  return dataSources;
+}
 
-void addCrashHandlerDataSource(CrashHandlerDataSource const* dataSource);
-
-std::vector<CrashHandlerDataSource const*>& getCrashHanbdlerDataSources();
+CrashHandlerDataSource::~CrashHandlerDataSource() {
+  std::ranges::remove(dataSources, this);
+}
 
 }  // namespace arangodb
