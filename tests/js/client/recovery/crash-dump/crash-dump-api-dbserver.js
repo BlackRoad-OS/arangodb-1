@@ -111,6 +111,8 @@ function recoverySuite () {
                  'Crash dump should contain Coroutines.json');
       assertTrue(contents.files.hasOwnProperty('backtrace.txt'),
                  'Crash dump should contain backtrace.txt');
+      assertTrue(contents.files.hasOwnProperty('system_info.txt'),
+                 'Crash dump should contain system_info.txt');
 
       // Clean up - delete the crash
       const deleteResponse = request({ 

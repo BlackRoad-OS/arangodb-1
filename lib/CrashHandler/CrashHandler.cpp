@@ -53,6 +53,7 @@
 #include "BuildId/BuildId.h"
 #include "CrashHandler/CrashHandlerDataSource.h"
 #include "Basics/FileUtils.h"
+#include "Basics/NumberOfCores.h"
 #include "Basics/PhysicalMemory.h"
 #include "Basics/SizeLimitedString.h"
 #include "Basics/StringUtils.h"
@@ -527,6 +528,31 @@ void logProcessInfo() {
   LOG_TOPIC("ded81", INFO, arangodb::Logger::CRASH) << buffer.view();
 }
 
+void dumpSystemInfo(std::string const& crashDirectory) {
+  auto const sysInfoFilename = arangodb::basics::FileUtils::buildFilename(
+      crashDirectory, "system_info.txt");
+  std::string sysInfo;
+  sysInfo += "ArangoDB Version: ";
+  sysInfo += arangodb::rest::Version::getServerVersion();
+  sysInfo += "\n";
+  sysInfo += "Platform: ";
+  sysInfo += arangodb::rest::Version::getPlatform();
+  sysInfo += "\n";
+  sysInfo += "Number of Cores: ";
+  sysInfo += std::to_string(arangodb::NumberOfCores::getValue());
+  sysInfo += "\n";
+  sysInfo += "Effective Number of Cores: ";
+  sysInfo += std::to_string(arangodb::NumberOfCores::getEffectiveValue());
+  sysInfo += "\n";
+  sysInfo += "Physical Memory: ";
+  sysInfo += std::to_string(arangodb::PhysicalMemory::getValue());
+  sysInfo += " bytes\n";
+  sysInfo += "Effective Physical Memory: ";
+  sysInfo += std::to_string(arangodb::PhysicalMemory::getEffectiveValue());
+  sysInfo += " bytes\n";
+  arangodb::basics::FileUtils::spit(sysInfoFilename, sysInfo);
+}
+
 void actuallyDumpCrashInfo() {
   // Handle the crash logging in this dedicated thread
   // We can safely do all the work here since we're not in a signal
@@ -582,6 +608,9 @@ void actuallyDumpCrashInfo() {
       arangodb::basics::FileUtils::spit(
           backtraceFilename, ::backtraceBuffer.get(),
           ::backtraceBufferUsed.load(std::memory_order_acquire));
+
+      // Dump system information
+      dumpSystemInfo(crashDirectory);
     }
   } catch (...) {
     // Ignore exceptions in crash handling
