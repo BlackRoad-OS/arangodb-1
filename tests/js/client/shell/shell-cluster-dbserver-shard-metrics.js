@@ -86,11 +86,12 @@ function ClusterDBServerShardMetricsTestSuite() {
            Object.values(shardMap).some(count => count < docsPerShard)) {
 
       const query = `
-        FOR i IN 1..@batchSize
+        FOR i IN @from,..@to
           RETURN { key: CONCAT('key', i), shardId: SHARD_ID(@collection, { _key: CONCAT('test', i) }) }
       `;
       const results = db._query(query, {
-        'batchSize': batchSize,
+        'from': keyIndex,
+        'to': keyIndex + batchSize,
         'collection': collection.name()
       }).toArray();
 
@@ -152,7 +153,7 @@ function ClusterDBServerShardMetricsTestSuite() {
 
   const getMetricsAndEventuallyAssert = function(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated, expectedFollowersOutOfSync = 0) {
     for(let i = 0; i < 100; i++) {
-      internal.wait(1);
+      internal.wait(0.1);
       const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
       if (shardsNumMetricValue !== expectedShardsNum && expectedShardsNum !== null) {
         continue;
@@ -239,10 +240,9 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       // Test stability of metrics by asserting that all inserted values
       // of a metric are same as the first entry
-      assertEqual(metricsMap[shardsNumMetric].length, 40);
-      Object.entries(metricsMap).forEach(([key, value]) => {
-        assertEqual(value[0], value[value.length - 1],
-          `Metric ${key} is not stable`);
+      Object.entries(metricsMap).forEach(([metricName, values]) => {
+        assertEqual(values.length, 40);
+        values.forEach(value => assertEqual(value, values[0], `Metric ${metricName} is not stable it has values: ${values}`));
       });
     },
 
@@ -252,10 +252,9 @@ function ClusterDBServerShardMetricsTestSuite() {
       db._createDatabase(dbName);
       db._useDatabase(dbName);
       const testCollShards = 2;
-      const testCollReplication = 3;
       db._create(collectionName, {
         numberOfShards: testCollShards,
-        replicationFactor: testCollReplication,
+        replicationFactor: 3,
       });
 
       // Calculate expected counts after setup
@@ -293,11 +292,9 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
-      const testCollShards = 1;
-      const testCollReplication = 3;
       db._create(collectionName, {
-        numberOfShards: testCollShards,
-        replicationFactor: testCollReplication,
+        numberOfShards: 1,
+        replicationFactor: 2,
       });
       // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
@@ -330,7 +327,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       // - eventually the number of out of sync should be at least 1
       // - eventually the number of not replicated shards should be at least 1
       for(let i = 0; i < 100; i++) {
-        internal.wait(1);
+        internal.wait(0.1);
         const shardsNumMetricValue = getDBServerMetricSum(onlineServers, shardsNumMetric);
         if (shardsNumMetricValue !== totalLeaderCount) {
           continue;
@@ -373,11 +370,9 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
-      const testCollShards = 1;
-      const testCollReplication = 2;
       db._create(collectionName, {
-        numberOfShards: testCollShards,
-        replicationFactor: testCollReplication,
+        numberOfShards: 1,
+        replicationFactor: 2,
       });
 
       // Calculate expected counts after setup
@@ -404,7 +399,8 @@ function ClusterDBServerShardMetricsTestSuite() {
       const onlineServers = dbServers.filter(server => server.id !== dbServersWithoutLeader[1].id);
 
       let followersOutOfSyncNumMetricValue;
-      for(let i = 0; i < 500; i++) {
+      for(let i = 0; i < 100; i++) {
+        internal.wait(0.1);
         followersOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, followersOutOfSyncNumMetric);
         if (followersOutOfSyncNumMetricValue === 0) {
           continue;
@@ -424,11 +420,9 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
-      const testCollShards = 2;
-      const testCollReplication = 3;
       let col = db._create(collectionName, {
-        numberOfShards: testCollShards,
-        replicationFactor: testCollReplication,
+        numberOfShards: 2,
+        replicationFactor: 3,
       });
       // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);
@@ -459,11 +453,9 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       db._createDatabase(dbName);
       db._useDatabase(dbName);
-      const testCollShards = 1;
-      const testCollReplication = 2;
       let col = db._create(collectionName, {
-        numberOfShards: testCollShards,
-        replicationFactor: testCollReplication,
+        numberOfShards: 1,
+        replicationFactor: 2,
       });
       // Data is necessary to trigger replication
       db._query(`FOR i IN 0..100 INSERT {value: i} IN ${collectionName}`);

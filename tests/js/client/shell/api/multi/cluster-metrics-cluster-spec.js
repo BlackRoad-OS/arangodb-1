@@ -405,6 +405,39 @@ describe('_admin/metrics', () => {
       return servers.get(role).map((_, i) => loadMetrics(role, i)).reduce(joinMetrics, {});
      };
 
+    // Polls metrics every pollInterval seconds until the predicate returns true or maxWaitTime is exceeded
+    const waitForMetrics = (predicate, maxWaitTime = 30, pollInterval = 0.1) => {
+      let elapsed = 0;
+      while (elapsed < maxWaitTime) {
+        const dbMetrics = loadAllMetrics("dbserver");
+        if (predicate(dbMetrics)) {
+          return;
+        }
+        internal.wait(pollInterval, false);
+        elapsed += pollInterval;
+      }
+      expect.fail(`Timed out after ${maxWaitTime}s waiting for metrics to match expected values`);
+    };
+
+    // Waits for shard metrics to match expected values
+    const waitForShardMetrics = (expectedShards, expectedLeaders, expectedFollowers, maxWaitTime = 30) => {
+      waitForMetrics((dbMetrics) => {
+        const shardCount = dbMetrics[MetricNames.SHARD_COUNT];
+        const leaderCount = dbMetrics[MetricNames.SHARD_LEADER_COUNT];
+        const followerCount = dbMetrics[MetricNames.SHARD_FOLLOWER_COUNT];
+        const outOfSyncCount = dbMetrics[MetricNames.SHARD_OUT_OF_SYNC_COUNT];
+        const followersOutOfSyncCount = dbMetrics[MetricNames.FOLLOWERS_OUT_OF_SYNC_COUNT];
+        const notReplicatedCount = dbMetrics[MetricNames.SHARD_NOT_REPLICATED_COUNT];
+
+        return shardCount >= expectedShards &&
+               leaderCount >= expectedLeaders &&
+               followerCount >= expectedFollowers &&
+               outOfSyncCount === 0 &&
+               followersOutOfSyncCount === 0 &&
+               notReplicatedCount === 0;
+      }, maxWaitTime);
+    };
+
     const runTest = (action, watchers) => {
       const coordBefore = loadAllMetrics("coordinator");
       watchers.forEach(w => {w.beforeCoordinator(coordBefore);});
@@ -437,7 +470,8 @@ describe('_admin/metrics', () => {
       try {
         runTest(() => {
           db._create("UnitTestCollection", {numberOfShards: 9, replicationFactor: 2}, undefined, {waitForSyncReplication: true});
-          require("internal").wait(10.0); // database servers update their shard count in phaseOne. So lets wait until all have done their next phaseOne.
+          // Wait for maintenance to update shard metrics (9 shards * 2 replicas = 18 total, 9 leaders, 9 followers)
+          waitForShardMetrics(18, 9, 9);
         },
         [new MaintenanceWatcher(), new ShardCountWatcher(18), new ShardLeaderCountWatcher(9), 
          new ShardFollowerCountWatcher(9), new ShardOutOfSyncCountWatcher(0), new ShardNotReplicatedCountWatcher(0)]
@@ -462,7 +496,9 @@ describe('_admin/metrics', () => {
       try {
         // Create a collection with shards
         db._create("ConsistencyTestCollection", {numberOfShards: 5, replicationFactor: 2}, undefined, {waitForSyncReplication: true});
-        require("internal").wait(5); // Wait for maintenance to update metrics
+        
+        // Wait for maintenance to update metrics (5 shards * 2 replicas = 10 total, 5 leaders, 5 followers)
+        waitForShardMetrics(10, 5, 5);
 
         // Read metrics multiple times and verify they're consistent
         const readings = [];
