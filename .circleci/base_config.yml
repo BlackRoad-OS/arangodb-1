@@ -16,7 +16,7 @@ parameters:
     default: true
   arangod-without-v8:
     type: boolean
-    default: false
+    default: true
   extra_args:
     type: string
     default: ""
@@ -466,7 +466,7 @@ jobs:
         default: true
       build-v8:
         type: boolean
-        default: true
+        default: false
       publish-artifacts:
         type: boolean
         default: true
