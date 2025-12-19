@@ -1402,6 +1402,17 @@ bool AstNode::isTrue() const {
       // ! false => true
       return true;
     }
+  } else if (type == NODE_TYPE_OPERATOR_BINARY_IN ||
+             type == NODE_TYPE_OPERATOR_BINARY_NIN) {
+    // Handle empty IN arrays: x.name NOT IN [] → true
+    if (numMembers() >= 2) {
+      TRI_ASSERT(numMembers() == 2);
+      AstNode const* rhs = getMember(1);
+      if (rhs != nullptr && rhs->type == NODE_TYPE_ARRAY &&
+          rhs->numMembers() == 0) {
+        return (type == NODE_TYPE_OPERATOR_BINARY_NIN);
+      }
+    }
   }
 
   return false;

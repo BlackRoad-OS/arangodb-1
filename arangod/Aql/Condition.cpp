@@ -1467,28 +1467,121 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
       if (op->type == NODE_TYPE_OPERATOR_BINARY_IN) {
         ++inComparisons;
         auto deduplicated = deduplicateInOperation(op);
+
+        // Optimize IN with single value to equality: x IN [5] → x == 5
+        if (deduplicated->numMembers() == 2) {
+          auto rhs = deduplicated->getMemberUnchecked(1);
+          if (rhs->type == NODE_TYPE_ARRAY && rhs->isConstant() &&
+              rhs->numMembers() == 1) {
+            auto lhs = deduplicated->getMemberUnchecked(0);
+            auto optimized = plan->getAst()->createNodeBinaryOperator(
+                NODE_TYPE_OPERATOR_BINARY_EQ, lhs, rhs->getMemberUnchecked(0));
+            andNode->changeMember(j, optimized);
+            --inComparisons;
+            continue;
+          }
+        }
+
         andNode->changeMember(j, deduplicated);
       }
     }
     andNumMembers = andNode->numMembers();
 
-    // Remove false conditions from AND node
-    for (size_t j = andNumMembers; j > 0; --j) {
-      auto op = andNode->getMemberUnchecked(j - 1);
-
+    // Check for false conditions in AND node
+    // If any condition is false, the entire AND is false
+    bool andIsFalse = false;
+    for (size_t j = 0; j < andNumMembers; ++j) {
+      auto op = andNode->getMemberUnchecked(j);
       if (op->isFalse()) {
-        andNode->removeMemberUncheckedUnordered(j - 1);
-        --andNumMembers;
+        andIsFalse = true;
+        break;
       }
     }
 
-    // Remove true conditions from AND node
-    for (size_t j = andNumMembers; j > 0; --j) {
-      auto op = andNode->getMemberUnchecked(j - 1);
+    if (andIsFalse) {
+      // Entire AND branch is impossible, remove from OR
+      _root->removeMemberUncheckedUnordered(r);
+      retry = true;
+      n = _root->numMembers();
+      continue;
+    }
 
-      if (op->isTrue()) {
-        andNode->removeMemberUncheckedUnordered(j - 1);
-        --andNumMembers;
+    // Remove true conditions from AND node (but keep if it's the only
+    // condition)
+    if (andNumMembers > 1) {
+      for (size_t j = andNumMembers; j > 0; --j) {
+        auto op = andNode->getMemberUnchecked(j - 1);
+
+        if (op->isTrue()) {
+          andNode->removeMemberUncheckedUnordered(j - 1);
+          --andNumMembers;
+        }
+      }
+    }
+
+    // Remove exact duplicate conditions (IN operations and comparisons)
+    for (size_t j = andNumMembers; j > 1; --j) {
+      auto op1 = andNode->getMemberUnchecked(j - 1);
+
+      // Only check deterministic operations to avoid side effects
+      if (!op1->isDeterministic()) {
+        continue;
+      }
+
+      for (size_t k = j - 1; k > 0; --k) {
+        auto op2 = andNode->getMemberUnchecked(k - 1);
+
+        if (!op2->isDeterministic()) {
+          continue;
+        }
+
+        // Check if conditions are structurally identical
+        if (op1->type == op2->type && op1->numMembers() == op2->numMembers()) {
+          bool isDuplicate = false;
+
+          // For IN operations, check if they're identical
+          if (op1->type == NODE_TYPE_OPERATOR_BINARY_IN &&
+              op1->numMembers() == 2 && op2->numMembers() == 2) {
+            auto lhs1 = op1->getMember(0);
+            auto rhs1 = op1->getMember(1);
+            auto lhs2 = op2->getMember(0);
+            auto rhs2 = op2->getMember(1);
+
+            // Compare LHS (attribute) and RHS (array)
+            if (compareAstNodes(lhs1, lhs2, false) == 0 &&
+                rhs1->type == NODE_TYPE_ARRAY &&
+                rhs2->type == NODE_TYPE_ARRAY &&
+                rhs1->numMembers() == rhs2->numMembers()) {
+              isDuplicate = true;
+              // Compare array values
+              for (size_t m = 0; m < rhs1->numMembers(); ++m) {
+                if (compareAstNodes(rhs1->getMember(m), rhs2->getMember(m),
+                                    true) != 0) {
+                  isDuplicate = false;
+                  break;
+                }
+              }
+            }
+          } else if (op1->isComparisonOperator() && op1->numMembers() == 2) {
+            // For comparison operators, check if both sides match
+            auto lhs1 = op1->getMember(0);
+            auto rhs1 = op1->getMember(1);
+            auto lhs2 = op2->getMember(0);
+            auto rhs2 = op2->getMember(1);
+
+            if (compareAstNodes(lhs1, lhs2, false) == 0 &&
+                compareAstNodes(rhs1, rhs2, true) == 0) {
+              isDuplicate = true;
+            }
+          }
+
+          if (isDuplicate) {
+            // Remove the duplicate (keep the first one)
+            andNode->removeMemberUncheckedUnordered(j - 1);
+            --andNumMembers;
+            break;  // Found duplicate, move to next condition
+          }
+        }
       }
     }
 
@@ -1500,9 +1593,11 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
       continue;
     }
 
-    if (andNumMembers <= 1) {
-      // simple AND item with 0 or 1 members. nothing to do
-      ++r;
+    // Simplify AND node with single member: OR(AND(x)) → OR(x)
+    if (andNumMembers == 1) {
+      auto singleMember = andNode->getMemberUnchecked(0);
+      _root->changeMember(r, singleMember);
+      retry = true;
       n = _root->numMembers();
       continue;
     }
@@ -1656,10 +1751,21 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
                 // merge IN with IN on same attribute
                 TRI_ASSERT(rightNode->numMembers() == 2);
 
+                auto mergedArray = mergeInOperations(leftNode, rightNode);
                 auto merged = _ast->createNodeBinaryOperator(
                     NODE_TYPE_OPERATOR_BINARY_IN,
-                    leftNode->getMemberUnchecked(0),
-                    mergeInOperations(leftNode, rightNode));
+                    leftNode->getMemberUnchecked(0), mergedArray);
+
+                // Optimize IN with single value to equality: x IN [5] → x == 5
+                if (mergedArray->type == NODE_TYPE_ARRAY &&
+                    mergedArray->isConstant() &&
+                    mergedArray->numMembers() == 1) {
+                  auto lhs = leftNode->getMemberUnchecked(0);
+                  merged = plan->getAst()->createNodeBinaryOperator(
+                      NODE_TYPE_OPERATOR_BINARY_EQ, lhs,
+                      mergedArray->getMemberUnchecked(0));
+                }
+
                 andNode->removeMemberUncheckedUnordered(rightPos);
                 andNode->changeMember(leftPos, merged);
                 goto restartThisOrItem;
@@ -1697,6 +1803,15 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
 
                 // use the new array of values
                 leftNode->changeMember(1, inNode);
+
+                // Optimize IN with single value to equality: x IN [5] → x == 5
+                if (inNode->numMembers() == 1) {
+                  auto lhs = leftNode->getMemberUnchecked(0);
+                  auto optimized = plan->getAst()->createNodeBinaryOperator(
+                      NODE_TYPE_OPERATOR_BINARY_EQ, lhs,
+                      inNode->getMemberUnchecked(0));
+                  andNode->changeMember(leftPos, optimized);
+                }
 
                 // remove the other operator
                 andNode->removeMemberUncheckedUnordered(rightPos);
@@ -1783,6 +1898,108 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
     // number of root sub-nodes has probably changed.
     // now recalculate the number and don't modify r!
     n = _root->numMembers();
+  }
+
+  // After processing all AND branches, check for empty OR (impossible
+  // condition)
+  if (_root->numMembers() == 0) {
+    // OR with no branches is impossible (always false)
+    // This will be handled by isEmpty() check
+    return;
+  }
+
+  // Remove duplicate OR branches: OR(AND(x>5, y>3), AND(x>5, y>3)) →
+  // OR(AND(x>5, y>3))
+  n = _root->numMembers();
+  for (size_t i = n; i > 1; --i) {
+    auto branch1 = _root->getMemberUnchecked(i - 1);
+    if (branch1->type != NODE_TYPE_OPERATOR_NARY_AND) {
+      continue;
+    }
+
+    for (size_t j = i - 1; j > 0; --j) {
+      auto branch2 = _root->getMemberUnchecked(j - 1);
+      if (branch2->type != NODE_TYPE_OPERATOR_NARY_AND) {
+        continue;
+      }
+
+      // Check if branches are identical
+      if (branch1->numMembers() != branch2->numMembers()) {
+        continue;
+      }
+
+      // Compare all conditions in both branches
+      bool isDuplicate = true;
+      for (size_t k = 0; k < branch1->numMembers(); ++k) {
+        auto cond1 = branch1->getMemberUnchecked(k);
+        auto cond2 = branch2->getMemberUnchecked(k);
+
+        // Quick structural check
+        if (cond1->type != cond2->type ||
+            cond1->numMembers() != cond2->numMembers()) {
+          isDuplicate = false;
+          break;
+        }
+
+        // For deterministic conditions, do deeper comparison
+        if (cond1->isDeterministic() && cond2->isDeterministic()) {
+          if (cond1->type == NODE_TYPE_OPERATOR_BINARY_IN &&
+              cond1->numMembers() == 2 && cond2->numMembers() == 2) {
+            auto lhs1 = cond1->getMember(0);
+            auto rhs1 = cond1->getMember(1);
+            auto lhs2 = cond2->getMember(0);
+            auto rhs2 = cond2->getMember(1);
+
+            if (compareAstNodes(lhs1, lhs2, false) != 0 ||
+                rhs1->type != NODE_TYPE_ARRAY ||
+                rhs2->type != NODE_TYPE_ARRAY ||
+                rhs1->numMembers() != rhs2->numMembers()) {
+              isDuplicate = false;
+              break;
+            }
+
+            for (size_t m = 0; m < rhs1->numMembers(); ++m) {
+              if (compareAstNodes(rhs1->getMember(m), rhs2->getMember(m),
+                                  true) != 0) {
+                isDuplicate = false;
+                break;
+              }
+            }
+            if (!isDuplicate) break;
+          } else if (cond1->isComparisonOperator() &&
+                     cond1->numMembers() == 2) {
+            auto lhs1 = cond1->getMember(0);
+            auto rhs1 = cond1->getMember(1);
+            auto lhs2 = cond2->getMember(0);
+            auto rhs2 = cond2->getMember(1);
+
+            if (compareAstNodes(lhs1, lhs2, false) != 0 ||
+                compareAstNodes(rhs1, rhs2, true) != 0) {
+              isDuplicate = false;
+              break;
+            }
+          } else {
+            // For other types, use string comparison as fallback
+            // This is less precise but catches obvious duplicates
+            if (cond1->toString() != cond2->toString()) {
+              isDuplicate = false;
+              break;
+            }
+          }
+        } else {
+          // Non-deterministic - skip comparison to avoid side effects
+          isDuplicate = false;
+          break;
+        }
+      }
+
+      if (isDuplicate) {
+        // Remove the duplicate branch (keep the first one)
+        _root->removeMemberUncheckedUnordered(i - 1);
+        --n;
+        break;  // Found duplicate, move to next branch
+      }
+    }
   }
 }
 
