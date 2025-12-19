@@ -1633,14 +1633,6 @@ void AqlValue::deallocateSupervised(uint8_t* base, std::uint64_t len) noexcept {
   ::operator delete(static_cast<void*>(base));
 }
 
-bool operator==(AqlValue const& a, AqlValue const& b) noexcept {
-  return std::equal_to<AqlValue>{}(a, b);
-}
-
-bool operator!=(AqlValue const& a, AqlValue const& b) noexcept {
-  return !std::equal_to<AqlValue>{}(a, b);
-}
-
 }  // namespace arangodb::aql
 
 namespace std {
