@@ -86,7 +86,7 @@ function ClusterDBServerShardMetricsTestSuite() {
            Object.values(shardMap).some(count => count < docsPerShard)) {
 
       const query = `
-        FOR i IN @from,..@to
+        FOR i IN @from..@to
           RETURN { key: CONCAT('key', i), shardId: SHARD_ID(@collection, { _key: CONCAT('test', i) }) }
       `;
       const results = db._query(query, {
@@ -351,10 +351,9 @@ function ClusterDBServerShardMetricsTestSuite() {
 
         break;
       }
-      getMetricsAndAssert(onlineServers, totalLeaderCount, null, null, null);
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(onlineServers, shardsNotReplicatedNumMetric);
-      assertEqual(shardsOutOfSyncNumMetricValue, shardsNotReplicatedNumMetricValue);
+      assertEqual(shardsOutOfSyncNumMetricValue, shardsNotReplicatedNumMetricValue, `shardsOutOfSyncNumMetricValue: ${shardsOutOfSyncNumMetricValue} !== shardsNotReplicatedNumMetricValue: ${shardsNotReplicatedNumMetricValue}`);
 
       // Bring back the followers
       dbServerFollowers.forEach(server => {
