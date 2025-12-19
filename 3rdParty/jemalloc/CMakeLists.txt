@@ -76,6 +76,7 @@ if (LINUX OR DARWIN)
         CXXFLAGS=${JEMALLOC_CXX_FLAGS}
         CPPFLAGS=${JEMALLOC_CPPFLAGS}
         --prefix=${CMAKE_CURRENT_BINARY_DIR}
+        --with-lg-page=16
         --with-malloc-conf=${JEMALLOC_CONFIG}
         --with-version=${JEMALLOC_VERSION}-0-g0
         ${JEMALLOC_PROF}
