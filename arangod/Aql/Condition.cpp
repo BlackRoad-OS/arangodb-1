@@ -1582,17 +1582,8 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
       continue;
     }
 
-    // OR(AND(x)) → OR(x), except keep AND(true)
-    if (andNumMembers == 1) {
-      auto singleMember = andNode->getMemberUnchecked(0);
-      if (!singleMember->isTrue()) {
-        _root->changeMember(r, singleMember);
-        retry = true;
-        n = _root->numMembers();
-        continue;
-      }
-    }
-
+    // Keep DNF structure: OR(AND(x)) stays as-is
+    // Unwrapping would break the invariant that all OR children are AND nodes
     if (andNumMembers == 1) {
       ++r;
       continue;
