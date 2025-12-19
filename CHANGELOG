@@ -1,6 +1,8 @@
 devel
 -----
 
+* Return proper exit code if `arangoimport` fails.
+
 * Make cluster traversal executor with DFS receive neighbours in batches
   to be able to stop the retrieval early in case a limit has been reached.
 
