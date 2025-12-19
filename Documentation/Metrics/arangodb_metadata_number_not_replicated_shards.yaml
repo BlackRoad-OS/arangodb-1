@@ -1,5 +1,5 @@
 name: arangodb_metadata_number_not_replicated_shards
-introducedIn: "3.12.7"
+introducedIn: "3.12.8"
 help: |
   Number of not replicated shards
 unit: number

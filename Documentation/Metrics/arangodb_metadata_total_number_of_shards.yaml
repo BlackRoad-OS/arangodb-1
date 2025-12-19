@@ -1,5 +1,5 @@
 name: arangodb_metadata_total_number_of_shards
-introducedIn: "3.12.7"
+introducedIn: "3.12.8"
 help: |
   Global number of shards.
 unit: number

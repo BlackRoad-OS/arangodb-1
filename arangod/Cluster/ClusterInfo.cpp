@@ -1965,12 +1965,7 @@ auto ClusterInfo::loadPlan() -> consensus::index_t {
     _planProt.isValid = true;
   }
 
-  updateMetadataMetrics();
-
-  // Update coordinator specific shard metrics computed from Plan
-  if (_metadataMetrics.has_value()) {
-    updateCoordinatorPlanMetrics();
-  }
+  updateMetadataMetricsFromPlan();
 
   _clusterFeature.addDirty(changeSet.dbs);
 
@@ -2235,9 +2230,10 @@ auto ClusterInfo::loadCurrent() -> consensus::index_t {
   }
 
   // Now set the new value:
-  WRITE_LOCKER(writeLocker, _currentProt.lock);
+  {
+    WRITE_LOCKER(writeLocker, _currentProt.lock);
 
-  _current.swap(newCurrent);
+    _current.swap(newCurrent);
   std::uint64_t memoryUsage = 0;
   for (auto const& it : _current) {
     TRI_ASSERT(it.second != nullptr);
@@ -2264,12 +2260,19 @@ auto ClusterInfo::loadCurrent() -> consensus::index_t {
     _shardsToCurrentServers.swap(newShardsToCurrentServers);
   }
 
-  // Update coordinator-specific shard metrics computed from Current
-  if (_metadataMetrics.has_value()) {
-    updateCoordinatorCurrentMetrics();
+    _currentProt.isValid = true;
   }
 
-  _currentProt.isValid = true;
+  // Update coordinator-specific shard metrics computed from Current.
+  // We only need a read-lock on `_currentProt.lock` for the metrics
+  // computation to avoid holding the write lock for the duration of the
+  // comparison with Plan (which would risk deadlocks). Acquire a read lock
+  // here and call the metrics helper which expects a read lock.
+  if (_metadataMetrics.has_value()) {
+    READ_LOCKER(readLocker, _currentProt.lock);
+    updateCoordinatorCurrentShardMetrics();
+  }
+
   _clusterFeature.addDirty(changeSet.dbs);
 
   {
@@ -2800,7 +2803,7 @@ Result ClusterInfo::getShardStatisticsGlobalByServer(
 /// This should only be called on coordinators, and should be called while
 /// holding the _planProt write lock (or after data has been swapped in
 /// loadPlan)
-void ClusterInfo::updateMetadataMetrics() {
+void ClusterInfo::updateMetadataMetricsFromPlan() {
   // Only update on coordinators
   if (!_metadataMetrics.has_value()) {
     return;
@@ -2836,6 +2839,43 @@ void ClusterInfo::updateMetadataMetrics() {
   _metadataMetrics->numberOfCollections.store(numCollections,
                                               std::memory_order_relaxed);
   _metadataMetrics->numberOfShards.store(numShards, std::memory_order_relaxed);
+
+  // Update coordinator-specific shard metrics computed from Plan
+  // Note: Plan-only path no longer updates per-shard coordinator metrics
+  // (these are derived from Current). Keep iteration for consistency checks
+  // but do not accumulate plan-derived follower/total counts here.
+
+  // iterate planned shards map. Caller should hold _planProt.lock
+  for (auto const& entry : _shards) {
+    auto const& shardVecPtr = entry.second;
+    if (!shardVecPtr) {
+      continue;
+    }
+    for (auto const& shard : *shardVecPtr) {
+      auto it = _shardsToPlanServers.find(shard);
+      TRI_ASSERT(it != _shardsToPlanServers.end() && it->second);
+      if (it == _shardsToPlanServers.end() || !it->second) {
+        // This should be impossible: _shards and _shardsToPlanServers must be
+        // consistent. Keep defensive behaviour in release builds, but assert
+        // in maintainer builds to catch the underlying bug.
+        LOG_TOPIC("c0abc", ERR, Logger::CLUSTER)
+            << "Inconsistent cluster state: no plan servers recorded for shard '"
+            << shard << "' while iterating _shards";
+        // We cannot reliably determine `notReplicated` from Plan alone here;
+        // leave the metric update to the Current-derived update routine.
+        continue;
+      }
+      auto const& servers = *it->second;
+      TRI_ASSERT(!servers.empty());
+    }
+  }
+
+  // The following coordinator-level shard metrics are only reliably
+  // determined from Current (actual reported state) and are updated by the
+  // Current-derived metrics updater. For Plan-only updates we leave them at
+  // a neutral value (0) or skip updating them here to avoid double-reporting.
+  _metadataMetrics->numberOutOfSyncShards.store(0, std::memory_order_relaxed);
+  _metadataMetrics->numberNotReplicatedShards.store(0, std::memory_order_relaxed);
 }
 
 // Build the VPackSlice that contains the `isBuilding` entry
@@ -6348,62 +6388,11 @@ ClusterInfo::MetadataMetrics::MetadataMetrics(metrics::MetricsFeature& metrics)
       << "ClusterInfo::MetadataMetrics should be exposed only on a coordinator";
 }
 
-// Update coordinator-level plan metrics.
-// NOTE: caller is expected to hold the appropriate locks (e.g. in loadPlan
-// the _planProt.lock write lock is held when this is invoked).
-void ClusterInfo::updateCoordinatorPlanMetrics() {
-  if (!_metadataMetrics.has_value()) {
-    return;
-  }
-
-  uint64_t totalShards = 0;
-  uint64_t leaders = 0;
-  uint64_t followers = 0;
-  uint64_t notReplicated = 0;
-
-  // iterate planned shards map. Caller should hold _planProt.lock
-  for (auto const& entry : _shards) {
-    auto const& shardVecPtr = entry.second;
-    if (!shardVecPtr) {
-      continue;
-    }
-    for (auto const& shard : *shardVecPtr) {
-      ++totalShards;
-      auto it = _shardsToPlanServers.find(shard);
-      if (it == _shardsToPlanServers.end() || !it->second) {
-        // no plan servers recorded
-        ++notReplicated;
-        continue;
-      }
-      auto const& servers = *it->second;
-      if (!servers.empty()) {
-        ++leaders;
-        if (servers.size() > 1) {
-          followers += (servers.size() - 1);
-        } else {
-          ++notReplicated;
-        }
-      } else {
-        ++notReplicated;
-      }
-    }
-  }
-
-  _metadataMetrics->totalNumberOfShards.store(totalShards,
-                                              std::memory_order_relaxed);
-  // For plan-only update we set follower/leader counts computed from plan
-  _metadataMetrics->numberFollowerShards.store(followers,
-                                               std::memory_order_relaxed);
-  _metadataMetrics->numberOutOfSyncShards.store(0, std::memory_order_relaxed);
-  _metadataMetrics->numberNotReplicatedShards.store(notReplicated,
-                                                   std::memory_order_relaxed);
-}
-
 // Update coordinator-level current metrics.
 // Caller is expected to hold _currentProt.lock (write) when invoked.
 // This routine will read Plan maps under a read-lock to compare planned vs
 // actual state.
-void ClusterInfo::updateCoordinatorCurrentMetrics() {
+void ClusterInfo::updateCoordinatorCurrentShardMetrics() {
   if (!_metadataMetrics.has_value()) {
     return;
   }
@@ -6416,24 +6405,29 @@ void ClusterInfo::updateCoordinatorCurrentMetrics() {
   // read plan under read lock to compare leaders/replication factors
   READ_LOCKER(readLocker, _planProt.lock);
 
-  for (auto const& it : _shardsToCurrentServers) {
-    auto const& shardId = it.first;
-    auto const& serversPtr = it.second;
+  // Iterate over Plan shards (source of truth) and compare to Current. This
+  // avoids counting stale entries that may remain in Current for deleted
+  // shards/collections.
+  for (auto const& pit : _shardsToPlanServers) {
+    auto const& shardId = pit.first;
+    auto const& plannedServersPtr = pit.second;
     ++totalShards;
+
+    size_t plannedN = (plannedServersPtr ? plannedServersPtr->size() : 0);
+    std::string_view plannedLeader{};
+    if (plannedN > 0) {
+      plannedLeader = plannedServersPtr->at(0);
+    }
+
+    // lookup current
+    auto cit = _shardsToCurrentServers.find(shardId);
+    auto const& serversPtr = (cit != _shardsToCurrentServers.end() ? cit->second
+                                     : nullptr);
+    TRI_ASSERT(serversPtr != nullptr);
+    TRI_ASSERT(serversPtr->size() > 0);
     size_t currentN = (serversPtr ? serversPtr->size() : 0);
     if (currentN > 0) {
       followers += (currentN - 1);
-    }
-
-    // compare to plan
-    auto pit = _shardsToPlanServers.find(shardId);
-    size_t plannedN = 0;
-    std::string_view plannedLeader{};
-    if (pit != _shardsToPlanServers.end() && pit->second) {
-      plannedN = pit->second->size();
-      if (plannedN > 0) {
-        plannedLeader = pit->second->at(0);
-      }
     }
 
     // current leader
@@ -6442,17 +6436,44 @@ void ClusterInfo::updateCoordinatorCurrentMetrics() {
       currentLeader = serversPtr->at(0);
     }
 
-    // out of sync: leader changed or missing
+    // out of sync: leader changed/missing or any planned follower missing
+    bool shardOutOfSync = false;
     if (plannedN == 0) {
-      // No plan present: treat as out-of-sync
-      ++outOfSync;
+      // No plan present (empty planned servers): treat as out-of-sync
+      shardOutOfSync = true;
     } else if (currentLeader.empty()) {
-      ++outOfSync;
+      shardOutOfSync = true;
     } else if (!plannedLeader.empty() && plannedLeader != currentLeader) {
+      shardOutOfSync = true;
+    } else {
+      // Check that all planned followers are present in Current. If any
+      // planned follower is missing, treat as out-of-sync.
+      if (plannedN > 1) {
+        // build a small lookup for current servers
+        absl::flat_hash_set<std::string_view> curSet;
+        if (serversPtr) {
+          for (auto const& s : *serversPtr) {
+            curSet.insert(s);
+          }
+        }
+        for (size_t i = 1; i < plannedN; ++i) {
+          auto const& plannedFollower = plannedServersPtr->at(i);
+          if (curSet.find(plannedFollower) == curSet.end()) {
+            shardOutOfSync = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (shardOutOfSync) {
       ++outOfSync;
     }
 
-    if (plannedN > currentN) {
+    // notReplicated: either the plan expects only a single replica, or the
+    // current state has only the leader (only one in-sync replica). Both
+    // cases indicate the shard is not (fully) replicated.
+    if (plannedN <= 1 || currentN <= 1) {
       ++notReplicated;
     }
   }

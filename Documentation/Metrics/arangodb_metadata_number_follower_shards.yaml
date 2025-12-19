@@ -1,5 +1,5 @@
 name: arangodb_metadata_number_follower_shards
-introducedIn: "3.12.7"
+introducedIn: "3.12.8"
 help: |
   Number of follower shards
 unit: number
