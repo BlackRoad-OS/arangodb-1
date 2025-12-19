@@ -671,6 +671,137 @@ function NewAqlReplaceAnyWithINTestSuite() {
                 " FILTER x.name IN [] RETURN x.value";
             var inResult = executeWithOrRule(inQuery, {});
             assertEqual(withRule, inResult, "Results with ANY == should match IN query");
+        },
+
+        testSingleValueOptimization: function () {
+            var query = "FOR x IN " + replace.name() +
+                " FILTER ['Alice'] ANY == x.name SORT x.value RETURN x.value";
+
+            var explainWithRule = db._createStatement({
+                query: query,
+                bindVars: {},
+                options: {optimizer: {rules: ["-all", "+replace-any-eq-with-in"]}}
+            }).explain();
+
+            var planWithRule = explainWithRule.plan;
+
+            assertTrue(planWithRule.rules.indexOf(ruleName) !== -1,
+                "Plan with rule should contain replace-any-eq-with-in");
+
+            var expected = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+            var withRule = executeWithRule(query, {});
+            var withoutRule = executeWithoutRule(query, {});
+
+            assertEqual(expected, withRule);
+            assertEqual(withRule, withoutRule, "Results with and without rule should match");
+
+            var eqQuery = "FOR x IN " + replace.name() +
+                " FILTER x.name == 'Alice' SORT x.value RETURN x.value";
+            var eqResult = db._query(eqQuery).toArray();
+            assertEqual(withRule, eqResult, "Single-value ANY == should match == query");
+        },
+
+        testChainedOptimizations: function () {
+            var query = "FOR x IN " + replace.name() +
+                " FILTER ['Alice', 'Alice', 'Bob'] ANY == x.name " +
+                "   AND x.value > 5 " +
+                "   AND x.value < 15 " +
+                "SORT x.value RETURN x.value";
+
+            var explainWithAllRules = db._createStatement({
+                query: query,
+                bindVars: {},
+                options: {optimizer: {rules: ["-all", "+replace-any-eq-with-in", "+use-indexes"]}}
+            }).explain();
+
+            var planWithAllRules = explainWithAllRules.plan;
+
+            assertTrue(planWithAllRules.rules.indexOf(ruleName) !== -1,
+                "Plan should contain replace-any-eq-with-in");
+            assertTrue(planWithAllRules.rules.indexOf("use-indexes") !== -1,
+                "Plan should contain use-indexes");
+
+            var indexNodes = findExecutionNodes(planWithAllRules, "IndexNode");
+            assertTrue(indexNodes.length > 0,
+                "Should use index after ANY == transformation");
+
+            var expected = [6, 7, 8, 9, 10, 11, 12, 13, 14];
+            var withRule = executeWithRule(query, {});
+            var withoutRule = executeWithoutRule(query, {});
+
+            assertEqual(expected, withRule);
+            assertEqual(withRule, withoutRule, "Results with and without rule should match");
+        },
+
+        testResultsMatchBetweenAnyAndIn: function () {
+            var testCases = [
+                {
+                    any: "['Alice'] ANY == x.name",
+                    in: "x.name IN ['Alice']"
+                },
+                {
+                    any: "['Alice', 'Bob', 'Carol'] ANY == x.name",
+                    in: "x.name IN ['Alice', 'Bob', 'Carol']"
+                },
+                {
+                    any: "[1, 2] ANY == x.a.b",
+                    in: "x.a.b IN [1, 2]"
+                },
+                {
+                    any: "[] ANY == x.name",
+                    in: "x.name IN []"
+                }
+            ];
+
+            testCases.forEach(function(testCase) {
+                var anyQuery = "FOR x IN " + replace.name() +
+                    " FILTER " + testCase.any + " SORT x.value RETURN x.value";
+                var inQuery = "FOR x IN " + replace.name() +
+                    " FILTER " + testCase.in + " SORT x.value RETURN x.value";
+
+                var anyResult = db._query(anyQuery, {}, 
+                    {optimizer: {rules: ["-all", "+replace-any-eq-with-in"]}}).toArray();
+                var inResult = db._query(inQuery, {}, 
+                    {optimizer: {rules: ["-all"]}}).toArray();
+
+                assertEqual(anyResult, inResult,
+                    "ANY == and IN should produce same results for: " + testCase.any);
+            });
+        },
+
+        testIndexUsageComparison: function () {
+            var anyQuery = "FOR x IN " + replace.name() +
+                " FILTER ['Alice', 'Bob'] ANY == x.name RETURN x";
+            var inQuery = "FOR x IN " + replace.name() +
+                " FILTER x.name IN ['Alice', 'Bob'] RETURN x";
+
+            var anyPlan = db._createStatement({
+                query: anyQuery,
+                bindVars: {},
+                options: {optimizer: {rules: ["-all", "+replace-any-eq-with-in", "+use-indexes"]}}
+            }).explain();
+
+            var inPlan = db._createStatement({
+                query: inQuery,
+                bindVars: {},
+                options: {optimizer: {rules: ["-all", "+use-indexes"]}}
+            }).explain();
+
+            var anyIndexNodes = findExecutionNodes(anyPlan.plan, "IndexNode");
+            var inIndexNodes = findExecutionNodes(inPlan.plan, "IndexNode");
+
+            assertTrue(anyIndexNodes.length > 0,
+                "ANY == (transformed to IN) should use index");
+            assertTrue(inIndexNodes.length > 0,
+                "IN should use index");
+
+            var anyResult = db._query(anyQuery, {}, 
+                {optimizer: {rules: ["-all", "+replace-any-eq-with-in", "+use-indexes"]}}).toArray();
+            var inResult = db._query(inQuery, {}, 
+                {optimizer: {rules: ["-all", "+use-indexes"]}}).toArray();
+
+            assertEqual(anyResult.length, inResult.length,
+                "ANY == and IN should return same number of results");
         }
     };
 }

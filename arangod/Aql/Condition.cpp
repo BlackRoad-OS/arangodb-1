@@ -1468,7 +1468,7 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
         ++inComparisons;
         auto deduplicated = deduplicateInOperation(op);
 
-        // Optimize IN with single value to equality: x IN [5] → x == 5
+        // x IN [a] → x == a
         if (deduplicated->numMembers() == 2) {
           auto rhs = deduplicated->getMemberUnchecked(1);
           if (rhs->type == NODE_TYPE_ARRAY && rhs->isConstant() &&
@@ -1487,8 +1487,7 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
     }
     andNumMembers = andNode->numMembers();
 
-    // Check for false conditions in AND node
-    // If any condition is false, the entire AND is false
+    // Remove AND branch if any condition is false
     bool andIsFalse = false;
     for (size_t j = 0; j < andNumMembers; ++j) {
       auto op = andNode->getMemberUnchecked(j);
@@ -1499,15 +1498,13 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
     }
 
     if (andIsFalse) {
-      // Entire AND branch is impossible, remove from OR
       _root->removeMemberUncheckedUnordered(r);
       retry = true;
       n = _root->numMembers();
       continue;
     }
 
-    // Remove true conditions from AND node (but keep if it's the only
-    // condition)
+    // Remove redundant true conditions
     if (andNumMembers > 1) {
       for (size_t j = andNumMembers; j > 0; --j) {
         auto op = andNode->getMemberUnchecked(j - 1);
@@ -1519,11 +1516,10 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
       }
     }
 
-    // Remove exact duplicate conditions (IN operations and comparisons)
+    // Remove duplicate conditions
     for (size_t j = andNumMembers; j > 1; --j) {
       auto op1 = andNode->getMemberUnchecked(j - 1);
 
-      // Only check deterministic operations to avoid side effects
       if (!op1->isDeterministic()) {
         continue;
       }
@@ -1535,11 +1531,9 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
           continue;
         }
 
-        // Check if conditions are structurally identical
         if (op1->type == op2->type && op1->numMembers() == op2->numMembers()) {
           bool isDuplicate = false;
 
-          // For IN operations, check if they're identical
           if (op1->type == NODE_TYPE_OPERATOR_BINARY_IN &&
               op1->numMembers() == 2 && op2->numMembers() == 2) {
             auto lhs1 = op1->getMember(0);
@@ -1547,13 +1541,11 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto lhs2 = op2->getMember(0);
             auto rhs2 = op2->getMember(1);
 
-            // Compare LHS (attribute) and RHS (array)
             if (compareAstNodes(lhs1, lhs2, false) == 0 &&
                 rhs1->type == NODE_TYPE_ARRAY &&
                 rhs2->type == NODE_TYPE_ARRAY &&
                 rhs1->numMembers() == rhs2->numMembers()) {
               isDuplicate = true;
-              // Compare array values
               for (size_t m = 0; m < rhs1->numMembers(); ++m) {
                 if (compareAstNodes(rhs1->getMember(m), rhs2->getMember(m),
                                     true) != 0) {
@@ -1563,7 +1555,6 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
               }
             }
           } else if (op1->isComparisonOperator() && op1->numMembers() == 2) {
-            // For comparison operators, check if both sides match
             auto lhs1 = op1->getMember(0);
             auto rhs1 = op1->getMember(1);
             auto lhs2 = op2->getMember(0);
@@ -1576,16 +1567,14 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
           }
 
           if (isDuplicate) {
-            // Remove the duplicate (keep the first one)
             andNode->removeMemberUncheckedUnordered(j - 1);
             --andNumMembers;
-            break;  // Found duplicate, move to next condition
+            break;
           }
         }
       }
     }
 
-    // If AND node is now empty, remove it from OR
     if (andNumMembers == 0) {
       _root->removeMemberUncheckedUnordered(r);
       retry = true;
@@ -1593,12 +1582,19 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
       continue;
     }
 
-    // Simplify AND node with single member: OR(AND(x)) → OR(x)
+    // OR(AND(x)) → OR(x), except keep AND(true)
     if (andNumMembers == 1) {
       auto singleMember = andNode->getMemberUnchecked(0);
-      _root->changeMember(r, singleMember);
-      retry = true;
-      n = _root->numMembers();
+      if (!singleMember->isTrue()) {
+        _root->changeMember(r, singleMember);
+        retry = true;
+        n = _root->numMembers();
+        continue;
+      }
+    }
+
+    if (andNumMembers == 1) {
+      ++r;
       continue;
     }
 
@@ -1900,16 +1896,11 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
     n = _root->numMembers();
   }
 
-  // After processing all AND branches, check for empty OR (impossible
-  // condition)
   if (_root->numMembers() == 0) {
-    // OR with no branches is impossible (always false)
-    // This will be handled by isEmpty() check
     return;
   }
 
-  // Remove duplicate OR branches: OR(AND(x>5, y>3), AND(x>5, y>3)) →
-  // OR(AND(x>5, y>3))
+  // Remove duplicate OR branches
   n = _root->numMembers();
   for (size_t i = n; i > 1; --i) {
     auto branch1 = _root->getMemberUnchecked(i - 1);
@@ -1923,25 +1914,21 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
         continue;
       }
 
-      // Check if branches are identical
       if (branch1->numMembers() != branch2->numMembers()) {
         continue;
       }
 
-      // Compare all conditions in both branches
       bool isDuplicate = true;
       for (size_t k = 0; k < branch1->numMembers(); ++k) {
         auto cond1 = branch1->getMemberUnchecked(k);
         auto cond2 = branch2->getMemberUnchecked(k);
 
-        // Quick structural check
         if (cond1->type != cond2->type ||
             cond1->numMembers() != cond2->numMembers()) {
           isDuplicate = false;
           break;
         }
 
-        // For deterministic conditions, do deeper comparison
         if (cond1->isDeterministic() && cond2->isDeterministic()) {
           if (cond1->type == NODE_TYPE_OPERATOR_BINARY_IN &&
               cond1->numMembers() == 2 && cond2->numMembers() == 2) {
@@ -1979,22 +1966,18 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
               break;
             }
           } else {
-            // For other types, use string comparison as fallback
-            // This is less precise but catches obvious duplicates
             if (cond1->toString() != cond2->toString()) {
               isDuplicate = false;
               break;
             }
           }
         } else {
-          // Non-deterministic - skip comparison to avoid side effects
           isDuplicate = false;
           break;
         }
       }
 
       if (isDuplicate) {
-        // Remove the duplicate branch (keep the first one)
         _root->removeMemberUncheckedUnordered(i - 1);
         --n;
         break;  // Found duplicate, move to next branch
