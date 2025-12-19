@@ -25,8 +25,6 @@
 #pragma once
 
 #include "Aql/AqlValueFwd.h"
-#include "Aql/RegisterId.h"
-#include "Aql/RegIdFlatSet.h"
 #include "Basics/Endian.h"
 #include "Basics/ResourceUsage.h"
 #include "IResearch/Misc.h"
@@ -583,9 +581,6 @@ static_assert(std::is_trivially_move_assignable_v<AqlValue>);
 static_assert(std::is_trivially_destructible_v<AqlValue>);
 static_assert(std::is_standard_layout_v<AqlValue>);
 static_assert(sizeof(AqlValue) == 16);
-
-bool operator==(AqlValue const& a, AqlValue const& b) noexcept;
-bool operator!=(AqlValue const& a, AqlValue const& b) noexcept;
 
 class AqlValueGuard {
  public:

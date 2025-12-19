@@ -42,15 +42,13 @@ inline DocumentData makeDocDataFromSlice(Slice s) {
 inline void expectEqualBothWays(AqlValue const& a, AqlValue const& b) {
   std::equal_to<AqlValue> eq;
   EXPECT_TRUE(eq(a, b));
-  EXPECT_TRUE(a == b);
-  EXPECT_FALSE(a != b);
+  EXPECT_TRUE(eq(b, a));  // Verify symmetry
 }
 
 inline void expectNotEqualBothWays(AqlValue const& a, AqlValue const& b) {
   std::equal_to<AqlValue> eq;
   EXPECT_FALSE(eq(a, b));
-  EXPECT_FALSE(a == b);
-  EXPECT_TRUE(a != b);
+  EXPECT_FALSE(eq(b, a));  // Verify symmetry
 }
 }  // namespace
 
