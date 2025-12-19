@@ -189,8 +189,8 @@ set(LZ4_INCLUDE_DIR "${LZ4_ROOT}/lib")
 set(SNOWBALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/snowball")
 set(UNWIND_ROOT "invalid")
 set(BFD_ROOT "invalid")
-set(IRESEARCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/iresearch")
-set(IRESEARCH_BUILD_DIR "${CMAKE_BINARY_DIR}/3rdParty/iresearch")
+set(IRESEARCH_ROOT "${PROJECT_SOURCE_DIR}/lib/iresearch")
+set(IRESEARCH_BUILD_DIR "${CMAKE_BINARY_DIR}/lib/iresearch")
 
 unset(IRESEARCH_INCLUDE)
 list(APPEND IRESEARCH_INCLUDE
@@ -198,8 +198,6 @@ list(APPEND IRESEARCH_INCLUDE
   "${IRESEARCH_ROOT}/external"
   "${IRESEARCH_BUILD_DIR}/core"
 )
-
-UpdateModule(${GIT_EXECUTABLE} "iresearch" ${CMAKE_CURRENT_SOURCE_DIR} "README.md")
 
 mark_as_advanced(
   IRESEARCH_BUILD_DIR
@@ -215,9 +213,9 @@ list(APPEND CMAKE_MODULE_PATH
 
 # copy pre-built files over to the build directory
 # this is required to avoid triggering file generation via bison and perl during the build procedure
-file(GLOB_RECURSE IRESEARCH_PREBUILT RELATIVE "${IRESEARCH_ROOT}.build" FOLLOW_SYMLINKS "${IRESEARCH_ROOT}.build/*")
+file(GLOB_RECURSE IRESEARCH_PREBUILT RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/iresearch.build" FOLLOW_SYMLINKS "${CMAKE_CURRENT_SOURCE_DIR}/iresearch.build/*")
 foreach(ELEMENT ${IRESEARCH_PREBUILT})
-  configure_file("${IRESEARCH_ROOT}.build/${ELEMENT}" "${IRESEARCH_BUILD_DIR}/${ELEMENT}" COPYONLY)
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/iresearch.build/${ELEMENT}" "${IRESEARCH_BUILD_DIR}/${ELEMENT}" COPYONLY)
 endforeach()
 
 add_subdirectory("${IRESEARCH_ROOT}" "${IRESEARCH_BUILD_DIR}")

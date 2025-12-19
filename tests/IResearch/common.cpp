@@ -73,7 +73,7 @@
 #include "utils/string.hpp"
 #include <filesystem>
 
-#include "../3rdParty/iresearch/tests/tests_config.hpp"
+#include "iresearch/tests/tests_config.hpp"
 
 #ifdef USE_V8
 #include <libplatform/libplatform.h>
@@ -471,7 +471,7 @@ std::string testResourceDir;
 
 static void findIResearchTestResources() {
   std::string toBeFound = basics::FileUtils::buildFilename(
-      "3rdParty", "iresearch", "tests", "resources");
+      "iresearch", "tests", "resources");
 
   // peek into environment variable first
   char const* dir = getenv("IRESEARCH_TEST_RESOURCE_DIR");
