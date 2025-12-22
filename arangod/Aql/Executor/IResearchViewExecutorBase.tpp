@@ -76,8 +76,7 @@ inline velocypack::Slice getStoredValue(
 
   auto attrs = splitPostfixAttrs(sort.postfix);
   slice = slice.get(attrs.begin(), attrs.end());
-  if (slice.isNone())
-    return velocypack::Slice::nullSlice();
+  if (slice.isNone()) return velocypack::Slice::nullSlice();
 
   return slice;
 }
@@ -103,8 +102,8 @@ class BufferHeapSortContext {
                                : lhs_stored->score > rhs_stored->score;
         }
       } else {
-        auto res = basics::VelocyPackHelper::compare(lhs_stored->slice.slice(),
-                                                     rhs_stored->slice.slice(), true);
+        auto res = basics::VelocyPackHelper::compare(
+            lhs_stored->slice.slice(), rhs_stored->slice.slice(), true);
         if (res != 0) {
           return (kSortMultiplier[size_t{cmp.ascending}] * res) < 0;
         }
@@ -128,8 +127,8 @@ class BufferHeapSortContext {
         }
       } else {
         auto value = stored(cmp);
-        auto res =
-            basics::VelocyPackHelper::compare(lhs_values->slice.slice(), value, true);
+        auto res = basics::VelocyPackHelper::compare(lhs_values->slice.slice(),
+                                                     value, true);
         if (res != 0) {
           return (kSortMultiplier[size_t{cmp.ascending}] * res) < 0;
         }
@@ -259,10 +258,11 @@ void IndexReadBuffer<ValueType, copySorted>::finalizeHeapSortDocument(
         slice = getStoredValue(valueSlot, cmp);
       }
 
-      //  COR-74, BTS-2283: Using SharedSlice in HeapSortValue struct since it creates a
-      //  copy of the slice representing the stored value and receives ownership of that copy.
-      //  As a result, we get different items in the heap sort vector unlike before where
-      //  we had the same Slice in all buckets of the heap sort vector.
+      //  COR-74, BTS-2283: Using SharedSlice in HeapSortValue struct since it
+      //  creates a copy of the slice representing the stored value and receives
+      //  ownership of that copy. As a result, we get different items in the
+      //  heap sort vector unlike before where we had the same Slice in all
+      //  buckets of the heap sort vector.
       velocypack::SharedSlice ss;
       velocypack::Builder builder(slice);
       ss = builder.sharedSlice();
@@ -272,8 +272,9 @@ void IndexReadBuffer<ValueType, copySorted>::finalizeHeapSortDocument(
       } else {
         _heapSortValues.push_back(HeapSortValue{.slice = ss});
       }
-      TRI_ASSERT(getStoredValue(valueSlot, cmp).binaryEquals(
-        _heapSortValues[heapSortValuesIndex].slice.slice()));
+      TRI_ASSERT(getStoredValue(valueSlot, cmp)
+                     .binaryEquals(
+                         _heapSortValues[heapSortValuesIndex].slice.slice()));
       ++storedSliceIdx;
     }
     ++heapSortValuesIndex;

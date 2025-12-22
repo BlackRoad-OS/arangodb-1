@@ -96,7 +96,7 @@ union DocumentValue {
 };
 
 struct HeapSortValue {
-  irs::score_t score {0.0};
+  irs::score_t score;
   velocypack::SharedSlice slice;
 };
 
