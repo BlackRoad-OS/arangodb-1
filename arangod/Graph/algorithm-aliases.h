@@ -29,6 +29,7 @@
 #include "Graph/Enumerators/WeightedShortestPathEnumerator.h"
 #include "Graph/Enumerators/YenEnumerator.h"
 
+#include "Graph/Queues/BatchedLifoQueue.h"
 #include "Graph/Queues/FifoQueue.h"
 #include "Graph/Queues/LifoQueue.h"
 #include "Graph/Queues/WeightedQueue.h"
@@ -36,7 +37,12 @@
 #include "Graph/PathManagement/PathStore.h"
 #include "Graph/PathManagement/PathValidator.h"
 #include "Graph/PathManagement/PathValidatorTabooWrapper.h"
+#include "Graph/Steps/ClusterProviderStep.h"
 #include "Graph/Types/UniquenessLevel.h"
+
+#ifdef USE_ENTERPRISE
+#include "Enterprise/Graph/Providers/SmartGraphProvider.h"
+#endif
 
 namespace arangodb::graph {
 
@@ -113,7 +119,13 @@ template<class ProviderType, VertexUniquenessLevel vertexUniqueness,
 struct DFSConfiguration {
   using Provider = ProviderType;
   using Step = typename Provider::Step;
-  using Queue = LifoQueue<Step>;
+  // smart traversal queue on coordinator needs to be non-batched
+  // for that, SmartGraphProvider fns addExpansionIterator and
+  // expandToNextBatch need to be implemented
+  using Queue = typename std::conditional<
+      std::is_same_v<ProviderType,
+                     enterprise::SmartGraphProvider<ClusterProviderStep>>,
+      LifoQueue<Step>, BatchedLifoQueue<Step>>::type;
   using Store = PathStore<Step>;
   using Validator =
       PathValidator<Provider, Store, vertexUniqueness, edgeUniqueness>;

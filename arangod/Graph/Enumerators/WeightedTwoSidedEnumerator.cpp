@@ -175,7 +175,7 @@ auto WeightedTwoSidedEnumerator<ProviderType>::Ball::fetchResults(
 template<class ProviderType>
 auto WeightedTwoSidedEnumerator<ProviderType>::Ball::hasBeenVisited(
     Step const& step) -> bool {
-  if (_visitedNodes.contains(step.getVertex().getID())) {
+  if (_visitedNodes.contains(step.getVertex())) {
     return true;
   }
   return false;
@@ -202,10 +202,11 @@ auto WeightedTwoSidedEnumerator<ProviderType>::Ball::validateSingletonPath(
     CandidatesStore& candidates) -> void {
   ensureQueueHasProcessableElement();
   auto tmp = _queue.pop();
+  TRI_ASSERT(std::holds_alternative<Step>(tmp));
 
   TRI_ASSERT(_queue.isEmpty());
 
-  auto posPrevious = _interior.append(std::move(tmp));
+  auto posPrevious = _interior.append(std::move(std::get<Step>(tmp)));
   auto& step = _interior.getStepReference(posPrevious);
   ValidationResult res = _validator.validatePath(step);
 
@@ -220,13 +221,15 @@ auto WeightedTwoSidedEnumerator<ProviderType>::Ball::
         -> void {
   ensureQueueHasProcessableElement();
   auto tmp = _queue.pop();
+  TRI_ASSERT(std::holds_alternative<Step>(tmp));
+  auto tmpStep = std::get<Step>(tmp);
 
   // if the other side has explored this vertex, don't add it again
-  if (other.hasBeenVisited(tmp)) {
+  if (other.hasBeenVisited(tmpStep)) {
     _haveSeenOtherSide = true;
   }
 
-  auto posPrevious = _interior.append(std::move(tmp));
+  auto posPrevious = _interior.append(std::move(tmpStep));
   auto& step = _interior.getStepReference(posPrevious);
 
   TRI_ASSERT(step.getWeight() >= _diameter);
@@ -234,10 +237,10 @@ auto WeightedTwoSidedEnumerator<ProviderType>::Ball::
   ValidationResult res = _validator.validatePath(step);
 
   if (!res.isFiltered()) {
-    _visitedNodes[step.getVertex().getID()].emplace_back(posPrevious);
+    _visitedNodes[step.getVertex()].emplace_back(posPrevious);
   }
 
-  if (!res.isPruned() && step.getVertex().getID() != other.getCenter()) {
+  if (!res.isPruned() && step.getVertex() != other.getCenter()) {
     // We do not want to go further than the center of the other side!
     _provider.expand(step, posPrevious, [&](Step n) -> void {
       // TODO: maybe the pathStore could be asked whether a vertex has been
@@ -269,7 +272,7 @@ template<class ProviderType>
 auto WeightedTwoSidedEnumerator<ProviderType>::Ball::matchResultsInShell(
     Step const& otherStep, CandidatesStore& candidates,
     PathValidatorType const& otherSideValidator) -> void {
-  auto positions = _visitedNodes.at(otherStep.getVertex().getID());
+  auto positions = _visitedNodes.at(otherStep.getVertex());
 
   for (auto const& position : positions) {
     auto ourStep = _interior.getStepReference(position);

@@ -27,6 +27,7 @@
 #include "Aql/OutputAqlItemRow.h"
 #include "Aql/Query.h"
 #include "Aql/SingleRowFetcher.h"
+#include "Basics/ThreadLocalLeaser.h"
 #include "Graph/Providers/ClusterProvider.h"
 #include "Graph/Providers/SingleServerProvider.h"
 #include "Graph/Queues/FifoQueue.h"
@@ -233,8 +234,8 @@ auto EnumeratePathsExecutor<FinderType>::fetchPaths(
                     source) &&
         getVertexId(_infos.getTargetVertex(), _inputRow, _targetBuilder,
                     target)) {
-      _finder.reset(arangodb::velocypack::HashedStringRef(source),
-                    arangodb::velocypack::HashedStringRef(target));
+      _finder.reset(VertexRef{arangodb::velocypack::HashedStringRef(source)},
+                    VertexRef{arangodb::velocypack::HashedStringRef(target)});
       return true;
     }
   }
@@ -244,10 +245,9 @@ auto EnumeratePathsExecutor<FinderType>::fetchPaths(
 template<class FinderType>
 auto EnumeratePathsExecutor<FinderType>::doOutputPath(OutputAqlItemRow& output)
     -> void {
-  transaction::BuilderLeaser tmp{&_trx};
-  tmp->clear();
+  auto tmp = ThreadLocalBuilderLeaser::lease();
 
-  if (_finder.getNextPath(*tmp.builder())) {
+  if (_finder.getNextPath(*tmp.get())) {
     AqlValue path{tmp->slice()};
     AqlValueGuard guard{path, true};
     output.moveValueInto(_infos.getOutputRegister(), _inputRow, &guard);
