@@ -343,7 +343,7 @@ void MaintenanceFeature::initializeMetrics() {
   _action_done_counter =
       &metricsFeature.add(arangodb_maintenance_action_done_total{});
 
-  const char* instrumentedActions[] = {
+  static constexpr const char* instrumentedActions[] = {
       CREATE_COLLECTION, CREATE_DATABASE, UPDATE_COLLECTION, SYNCHRONIZE_SHARD,
       DROP_COLLECTION,   DROP_DATABASE,   DROP_INDEX};
 

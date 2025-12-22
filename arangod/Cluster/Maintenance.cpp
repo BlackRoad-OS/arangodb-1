@@ -1932,6 +1932,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
     // initialize database statistics for this database, resetting whatever was
     // previously
     feature._databaseShardsStats[dbName] = ShardStatistics{};
+    ShardStatistics newDatabaseStats;
     auto lit = local.find(dbName);
     VPackSlice ldb;
     if (lit == local.end()) {
@@ -2064,7 +2065,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
         TRI_ASSERT(shSlice.isObject());
         auto const colName =
             shSlice.get(StaticStrings::DataSourcePlanId).copyString();
-        feature._databaseShardsStats[dbName].increaseNumberOfShards();
+        newDatabaseStats.increaseNumberOfShards();
 
         if (replicationVersion == replication::Version::TWO &&
             !isReplication2Leader(shName, logs->second, shardsToLogs->second)) {
@@ -2153,14 +2154,12 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
               continue;
             }
 
-            feature._databaseShardsStats[dbName].increaseNumberOfLeaderShards();
+            newDatabaseStats.increaseNumberOfLeaderShards();
             if (!shardInSync) {
-              feature._databaseShardsStats[dbName]
-                  .increaseNumberOfOutOfSyncShards();
+              newDatabaseStats.increaseNumberOfOutOfSyncShards();
             }
             if (!shardReplicated) {
-              feature._databaseShardsStats[dbName]
-                  .increaseNumberOfNotReplicatedShards();
+              newDatabaseStats.increaseNumberOfNotReplicatedShards();
             }
 
             auto cp = std::vector<std::string>{AgencyCommHelper::path(),
@@ -2315,8 +2314,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                     }
                   }
                   if (!shardInSync) {
-                    feature._databaseShardsStats[dbName]
-                        .increaseNumberOfFollowersOutOfSync();
+                    newDatabaseStats.increaseNumberOfFollowersOutOfSync();
                   }
                 }
               }
@@ -2448,6 +2446,7 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
           << "': " << ex.what();
       throw;
     }
+    feature._databaseShardsStats[dbName] = std::move(newDatabaseStats);
   }  // next database
 
   // Let's find database errors for databases which do not occur in Local
@@ -2807,7 +2806,8 @@ arangodb::Result arangodb::maintenance::phaseTwo(
     VPackBuilder& report,
     MaintenanceFeature::ShardActionMap const& shardActionMap,
     ReplicatedLogStatusMapByDatabase const& localLogs,
-    ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
+    ShardIdToLogIdMapByDatabase const& localShardIdToLogId,
+    std::unordered_set<DatabaseID>& droppedDatabases) {
   auto start = std::chrono::steady_clock::now();
 
   MaintenanceFeature::errors_t allErrors;
@@ -2825,9 +2825,9 @@ arangodb::Result arangodb::maintenance::phaseTwo(
       VPackObjectBuilder agency(&report);
       // Update Current
       try {
-        result =
-            reportInCurrent(feature, plan, dirty, cur, local, allErrors,
-                            serverId, report, localLogs, localShardIdToLogId);
+        result = reportInCurrent(feature, plan, dirty, cur, local, allErrors,
+                                 serverId, report, localLogs,
+                                 localShardIdToLogId, droppedDatabases);
       } catch (std::exception const& e) {
         LOG_TOPIC("c9a75", ERR, Logger::MAINTENANCE)
             << "Error reporting in current: " << e.what();
