@@ -95,9 +95,9 @@ union DocumentValue {
   size_t result;
 };
 
-union HeapSortValue {
-  irs::score_t score;
-  velocypack::Slice slice;
+struct HeapSortValue {
+  irs::score_t score {0.0};
+  velocypack::SharedSlice slice;
 };
 
 struct ExecutorValue {
