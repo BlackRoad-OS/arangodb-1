@@ -111,7 +111,7 @@ void OneSidedEnumerator<Configuration>::clearProvider() {
 }
 
 template<class Configuration>
-auto OneSidedEnumerator<Configuration>::popFromQueue() -> QueueEntry<Step> {
+auto OneSidedEnumerator<Configuration>::popFromQueue() -> std::optional<Step> {
   TRI_ASSERT(!_queue.isEmpty());
   if (!ServerState::instance()->isSingleServer() &&
       !_queue.firstIsVertexFetched()) {
@@ -126,26 +126,13 @@ template<class Configuration>
 auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
     -> void {
   auto tmp = popFromQueue();
-  if (std::holds_alternative<Expansion>(tmp)) {
-    auto expansion = std::get<Expansion>(tmp);
-    _queue.append(std::move(std::get<Expansion>(
-        tmp)));  // push it back because iteration could not yet be over
-    auto& step = _interior.getStepReference(expansion.from);
-    auto stepsAdded =
-        _provider.expandToNextBatch(expansion.id, step, expansion.from,
-                                    [&](Step n) -> void { _queue.append(n); });
-    if (not stepsAdded) {  // means that nothing was added to the queue in
-                           // expandToNextBatch
-      _queue.pop();        // now we can pop NextBatch item savely
-    }
-    LOG_TRAVERSAL << "Expanded " << inspection::json(step) << " | "
-                  << inspection::json(_queue);
-    return;
+  if (not tmp.has_value()) {
+    return;  // queue is empty
   }
-  TRI_ASSERT(std::holds_alternative<Step>(tmp));
-  LOG_TRAVERSAL << "Popped   " << inspection::json(std::get<Step>(tmp)) << " | "
+  auto value = tmp.value();
+  LOG_TRAVERSAL << "Popped   " << inspection::json(value) << " | "
                 << inspection::json(_queue);
-  auto posPrevious = _interior.append(std::move(std::get<Step>(tmp)));
+  auto posPrevious = _interior.append(std::move(value));
   auto& step = _interior.getStepReference(posPrevious);
 
   if constexpr (std::is_same_v<ResultList, std::vector<Step>>) {
@@ -177,10 +164,10 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
       _results.emplace_back(step);
     }
     if (step.getDepth() < _options.getMaxDepth() && !res.isPruned()) {
-      if (_queue.isBatched()) {
-        auto cursorId = _nextCursorId++;
-        _provider.addExpansionIterator(cursorId, step, posPrevious);
-        _queue.append(Expansion{cursorId, posPrevious});
+      // currently batching only works with cluster case
+      if (_queue.isBatched() && ServerState::instance()->isSingleServer()) {
+        auto& cursor = _provider.createNeighbourCursor(step, posPrevious);
+        _queue.append(cursor);
         LOG_TRAVERSAL << "Pushed   " << inspection::json(step) << " | "
                       << inspection::json(_queue);
       } else {

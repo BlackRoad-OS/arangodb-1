@@ -70,6 +70,12 @@ struct SingleServerNeighbourCursor {
      next
    */
   auto hasMore() -> bool;
+  auto markForDeletion() -> void { _deletable = true; }
+
+ public:
+  template<typename S, typename Inspector>
+  friend auto inspect(Inspector& f, SingleServerNeighbourCursor<S>& x);
+  bool _deletable = false;
 
  private:
   std::unique_ptr<SingleServerEdgeCursor<Step>> _cursor;
@@ -82,5 +88,9 @@ struct SingleServerNeighbourCursor {
   RefactoredTraverserCache& _traverserCache;
   SingleServerBaseProviderOptions& _opts;
 };
+template<typename Step, typename Inspector>
+auto inspect(Inspector& f, SingleServerNeighbourCursor<Step>& x) {
+  return f.object(x).fields(f.field("step", x._step));
+}
 
 }  // namespace arangodb::graph

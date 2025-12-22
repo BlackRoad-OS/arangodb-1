@@ -35,6 +35,7 @@
 #include "Basics/VelocyPackHelper.h"
 #include "Futures/Future.h"
 #include "Futures/Utilities.h"
+#include "Graph/Cursors/ClusterNeighbourCursor.h"
 #include "Logger/LogMacros.h"
 #include "Network/Methods.h"
 #include "Network/NetworkFeature.h"
@@ -602,6 +603,14 @@ auto ClusterProvider<StepImpl>::expand(
   } else {
     throw std::out_of_range{"ClusterProvider::_vertexConnectedEdges"};
   }
+}
+
+template<class StepImpl>
+auto ClusterProvider<StepImpl>::createNeighbourCursor(Step const& step,
+                                                      size_t position)
+    -> ClusterNeighbourCursor<Step>& {
+  _neighbourCursors.emplace_back(ClusterNeighbourCursor<Step>{});
+  return _neighbourCursors.back();
 }
 
 template<class StepImpl>

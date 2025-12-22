@@ -71,7 +71,10 @@ class WeightedQueue {
     std::push_heap(_queue.begin(), _queue.end(), _cmpHeap);
   }
 
-  void append(Expansion expansion) { TRI_ASSERT(false); }
+  template<NeighbourCursor<Step> Cursor>
+  void append(Cursor& expansion) {
+    TRI_ASSERT(false);
+  }
 
   void setStartContent(std::vector<Step> startSteps) {
     // NOTE: This is not optimal.
@@ -132,7 +135,7 @@ class WeightedQueue {
     return first;
   }
 
-  QueueEntry<Step> pop() {
+  std::optional<Step> pop() {
     TRI_ASSERT(!isEmpty());
     // std::pop_heap will move the front element (the one we would like to
     // steal) to the back of the vector, keeping the tree intact otherwise. Now

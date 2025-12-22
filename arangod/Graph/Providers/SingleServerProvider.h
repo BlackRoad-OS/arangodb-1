@@ -25,6 +25,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <list>
 #include "Graph/Cache/RefactoredTraverserCache.h"
 #include "Graph/Cursors/SingleServerNeighbourCursor.h"
 #include "Graph/EdgeDocumentToken.h"
@@ -38,6 +39,7 @@
 
 #include "Aql/TraversalStats.h"
 #include "Basics/ResourceUsage.h"
+#include "Graph/Queues/ExpansionMarker.h"
 
 namespace arangodb {
 struct ResourceMonitor;
@@ -71,6 +73,7 @@ class SingleServerProvider {
  public:
   using Options = SingleServerBaseProviderOptions;
   using Step = StepType;
+  using NeighbourProvider = SingleServerNeighbourCursor<Step>;
 
   SingleServerProvider(arangodb::aql::QueryContext& queryContext, Options opts,
                        arangodb::ResourceMonitor& resourceMonitor);
@@ -93,6 +96,8 @@ class SingleServerProvider {
                          std::function<void(Step)> const& callback) -> bool;
   auto addExpansionIterator(CursorId id, Step const& from, size_t previous)
       -> void;
+  auto createNeighbourCursor(Step const& step, size_t position)
+      -> SingleServerNeighbourCursor<Step>&;
   auto clear() -> void;
 
   void insertEdgeIntoResult(EdgeDocumentToken edge,
@@ -161,6 +166,7 @@ class SingleServerProvider {
   SingleServerNeighbourProvider<Step> _neighbours;
   std::unordered_map<CursorId, SingleServerNeighbourCursor<Step>>
       _neighbourCursors;
+  std::list<SingleServerNeighbourCursor<Step>> _newNeighbourCursors;
   aql::Ast* _ast = nullptr;  // ast from TraversalExecutor
 };
 }  // namespace graph

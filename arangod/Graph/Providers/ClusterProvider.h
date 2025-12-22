@@ -28,11 +28,13 @@
 #include "Graph/Providers/BaseProviderOptions.h"
 #include "Graph/Providers/BaseStep.h"
 #include "Graph/Providers/TypeAliases.h"
+#include "Graph/Cursors/ClusterNeighbourCursor.h"
 
 #include "Aql/TraversalStats.h"
 #include "Basics/ResourceUsage.h"
 #include "Basics/StringHeap.h"
 #include "Containers/FlatHashMap.h"
+#include "Graph/Queues/ExpansionMarker.h"
 #include "Graph/Steps/ClusterProviderStep.h"
 #include "Network/Methods.h"
 
@@ -68,6 +70,7 @@ class ClusterProvider {
  public:
   using Options = ClusterBaseProviderOptions;
   using Step = StepImpl;
+  using NeighbourProvider = ClusterNeighbourCursor<Step>;
 
  public:
   ClusterProvider(arangodb::aql::QueryContext& queryContext,
@@ -95,6 +98,8 @@ class ClusterProvider {
       -> void;
   auto expandToNextBatch(CursorId id, Step const& step, size_t previous,
                          std::function<void(Step)> const& callback) -> bool;
+  auto createNeighbourCursor(Step const& step, size_t position)
+      -> ClusterNeighbourCursor<Step>&;
 
   void addVertexToBuilder(VertexRef const& vertex,
                           arangodb::velocypack::Builder& builder);
@@ -156,6 +161,7 @@ class ClusterProvider {
 
   using EngineRequest = std::pair<ServerID, futures::Future<network::Response>>;
   std::unordered_map<CursorId, std::vector<EngineRequest>> _edgeRequests;
+  std::vector<ClusterNeighbourCursor<Step>> _neighbourCursors;
 };
 }  // namespace graph
 }  // namespace arangodb

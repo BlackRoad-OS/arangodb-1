@@ -29,6 +29,7 @@
 #include "Aql/TraversalStats.h"
 #include "Futures/Future.h"
 #include "Futures/Utilities.h"
+#include "Graph/Cursors/SingleServerNeighbourCursor.h"
 #include "Graph/Providers/SingleServer/SingleServerNeighbourProvider.h"
 #include "Graph/Steps/SingleServerProviderStep.h"
 #include "Logger/LogMacros.h"
@@ -217,6 +218,19 @@ auto SingleServerProvider<Step>::addExpansionIterator(CursorId id,
       _cache,   aql::ExecutionBlock::DefaultBatchSize,
   };
   _neighbourCursors.emplace(id, std::move(cursor));
+}
+
+template<class Step>
+auto SingleServerProvider<Step>::createNeighbourCursor(Step const& step,
+                                                       size_t position)
+    -> SingleServerNeighbourCursor<Step>& {
+  _newNeighbourCursors.remove_if(
+      [](SingleServerNeighbourCursor<Step> const& cursor) {
+        return cursor._deletable;
+      });
+  return _newNeighbourCursors.emplace_back(SingleServerNeighbourCursor<Step>{
+      step, position, _ast, *this, _opts, _trx.get(), _monitor, _stats, _cache,
+      aql::ExecutionBlock::DefaultBatchSize});
 }
 
 template<class Step>
