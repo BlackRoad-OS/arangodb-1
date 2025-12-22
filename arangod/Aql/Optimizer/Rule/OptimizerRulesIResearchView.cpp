@@ -433,8 +433,7 @@ bool optimizeScoreSort(IResearchViewNode& viewNode, ExecutionPlan* plan) {
         TRI_ASSERT(a.afData.field);
         auto const fieldSize = a.afData.field->size();
 
-        // TRI_ASSERT(fieldSize > a.afData.postfix);
-        for (size_t i = fieldSize; i < (fieldSize + a.afData.postfix); ++i) {
+        for (size_t i = fieldSize; i < a.attr.size(); ++i) {
           if (i != a.afData.postfix + 1) {
             sortBucket.postfix += ".";
           }
