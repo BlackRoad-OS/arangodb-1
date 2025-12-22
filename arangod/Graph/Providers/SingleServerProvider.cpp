@@ -183,68 +183,39 @@ auto SingleServerProvider<Step>::expandToNextBatch(
   LOG_TOPIC("c9179", TRACE, Logger::GRAPHS)
       << "<SingleServerProvider> Expanding (next batch) " << vertex.getID();
 
-  if (not cursor.hasMore(step.getDepth())) {
+  if (not cursor.hasMore()) {
     _neighbourCursors.erase(cursorIt);
     return false;
   }
 
-  auto count = 0;
-  auto batch = cursor.next(*this, _stats);
-  for (auto const& neighbour : *batch) {
-    count++;
-    VPackSlice edge = neighbour.edge();
-    VertexType id = _cache.persistString(([&]() -> auto {
-      if (edge.isString()) {
-        return VertexType(edge);
-      } else {
-        VertexType other(transaction::helpers::extractFromFromDocument(edge));
-        if (other == vertex.getID()) {  // TODO: Check getId - discuss
-          other = VertexType(transaction::helpers::extractToFromDocument(edge));
-        }
-        return other;
-      }
-    })());
-    LOG_TOPIC("c916e", TRACE, Logger::GRAPHS)
-        << "<SingleServerProvider> Neighbor of " << vertex.getID() << " -> "
-        << id;
-
-    EdgeDocumentToken edgeToken{neighbour.eid};
-    callback(Step{VertexRef{id}, std::move(edgeToken), previous,
-                  step.getDepth() + 1, _opts.weightEdge(step.getWeight(), edge),
-                  neighbour.cursorId});
-    // TODO [GraphRefactor]: Why is cursorID set, but never used?
-    // Note: There is one implementation that used, it, but there is a high
-    // probability we do not need it anymore after refactoring is complete.
-  }
-  if (count == 0 && not cursor.hasMore(step.getDepth())) {
+  auto batch = cursor.next();
+  if (batch.empty() && not cursor.hasMore()) {
     _neighbourCursors.erase(cursorIt);
     return false;
+  }
+  for (auto&& neighbour : batch) {
+    callback(neighbour);
   }
   return true;
 }
 
 template<class Step>
 auto SingleServerProvider<Step>::addExpansionIterator(CursorId id,
-                                                      Step const& step)
-    -> void {
+                                                      Step const& step,
+                                                      size_t previous) -> void {
   TRI_ASSERT(!step.isLooseEnd());
   auto const& vertex = step.getVertex();
 
   LOG_TOPIC("c9189", TRACE, Logger::GRAPHS)
       << "<SingleServerProvider> Add expansion iterator " << vertex.getID();
 
-  // create neighbour provider without using cache because:
-  // 1. cache does not make sense when we create a new provider and with it a
-  // new cache for each vertex (what we do here)
-  // 2. cache results currently in a resource manager crash when used with this
-  // stack
-  auto cursor = SingleServerNeighbourProvider<Step>{
-      _opts, _trx.get(), _monitor, aql::ExecutionBlock::DefaultBatchSize,
-      false};
-  cursor.rearm(step, _stats);
-  if (_ast != nullptr) {
-    cursor.prepareIndexExpressions(_ast);
-  }
+  auto cursor = SingleServerNeighbourCursor<Step>{
+      step,     previous,
+      _ast,     *this,
+      _opts,    _trx.get(),
+      _monitor, _stats,
+      _cache,   aql::ExecutionBlock::DefaultBatchSize,
+  };
   _neighbourCursors.emplace(id, std::move(cursor));
 }
 

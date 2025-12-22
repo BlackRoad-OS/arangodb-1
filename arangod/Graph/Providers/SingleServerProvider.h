@@ -26,6 +26,7 @@
 
 #include <unordered_map>
 #include "Graph/Cache/RefactoredTraverserCache.h"
+#include "Graph/Cursors/SingleServerNeighbourCursor.h"
 #include "Graph/EdgeDocumentToken.h"
 #include "Graph/Providers/BaseProviderOptions.h"
 #include "Graph/Providers/BaseStep.h"
@@ -90,7 +91,8 @@ class SingleServerProvider {
   using CursorId = size_t;
   auto expandToNextBatch(CursorId id, Step const& step, size_t previous,
                          std::function<void(Step)> const& callback) -> bool;
-  auto addExpansionIterator(CursorId id, Step const& from) -> void;
+  auto addExpansionIterator(CursorId id, Step const& from, size_t previous)
+      -> void;
   auto clear() -> void;
 
   void insertEdgeIntoResult(EdgeDocumentToken edge,
@@ -157,7 +159,7 @@ class SingleServerProvider {
   EdgeLookup _edgeLookup;
 
   SingleServerNeighbourProvider<Step> _neighbours;
-  std::unordered_map<CursorId, SingleServerNeighbourProvider<Step>>
+  std::unordered_map<CursorId, SingleServerNeighbourCursor<Step>>
       _neighbourCursors;
   aql::Ast* _ast = nullptr;  // ast from TraversalExecutor
 };

@@ -179,7 +179,7 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
     if (step.getDepth() < _options.getMaxDepth() && !res.isPruned()) {
       if (_queue.isBatched()) {
         auto cursorId = _nextCursorId++;
-        _provider.addExpansionIterator(cursorId, step);
+        _provider.addExpansionIterator(cursorId, step, posPrevious);
         _queue.append(Expansion{cursorId, posPrevious});
         LOG_TRAVERSAL << "Pushed   " << inspection::json(step) << " | "
                       << inspection::json(_queue);
