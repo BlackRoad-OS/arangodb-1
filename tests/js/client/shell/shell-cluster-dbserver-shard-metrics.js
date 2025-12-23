@@ -156,31 +156,26 @@ function ClusterDBServerShardMetricsTestSuite() {
       internal.wait(0.1);
       const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
       if (shardsNumMetricValue !== expectedShardsNum && expectedShardsNum !== null) {
-        print(`shardsNumMetricValue: ${shardsNumMetricValue} !== expectedShardsNum: ${expectedShardsNum}`);
         continue;
       } 
 
       const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
       if (shardsLeaderNumMetricValue !== expectedShardsLeaderNum && expectedShardsLeaderNum !== null) {
-        print(`shardsLeaderNumMetricValue: ${shardsLeaderNumMetricValue} !== expectedShardsLeaderNum: ${expectedShardsLeaderNum}`);
         continue;
       }
 
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
       if (shardsOutOfSyncNumMetricValue !== expectedShardsOutOfSync) {
-        print(`shardsOutOfSyncNumMetricValue: ${shardsOutOfSyncNumMetricValue} !== expectedShardsOutOfSync: ${expectedShardsOutOfSync}`);
         continue;
       }
 
       const followersOutOfSyncNumMetricValue = getDBServerMetricSum(servers, followersOutOfSyncNumMetric);
       if (followersOutOfSyncNumMetricValue !== expectedFollowersOutOfSync) {
-        print(`followersOutOfSyncNumMetricValue: ${followersOutOfSyncNumMetricValue} !== expectedFollowersOutOfSync: ${expectedFollowersOutOfSync}`);
         continue;
       }
 
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
       if (shardsNotReplicatedNumMetricValue !== expectedShardsNotReplicated) {
-        print(`shardsNotReplicatedNumMetricValue: ${shardsNotReplicatedNumMetricValue} !== expectedShardsNotReplicated: ${expectedShardsNotReplicated}`);
         continue;
       }
 
