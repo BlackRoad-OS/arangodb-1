@@ -728,104 +728,59 @@ ArangoCollection.prototype.exists = function (id, options) {
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief gets a random element from the collection
 // //////////////////////////////////////////////////////////////////////////////
-if (SYS_IS_V8_BUILD) {
-  ArangoCollection.prototype.any = function () {
-    let requestResult = this._database._connection.PUT(
-      this._prefixurl('/_api/simple/any'), { collection: this._name });
-    arangosh.checkRequestResult(requestResult);
-    return requestResult.document;
-  };
-} else {
-  ArangoCollection.prototype.any = function () {
-    let query = "FOR doc IN @@coll SORT RAND() LIMIT 1 RETURN doc";
-    let cursor = require('internal').db._query(query, {"@coll": this.name()});
-    if (cursor.hasNext()) {
-      return cursor.next();
-    }
-    return null;
-  };
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-// / arangod/RestHandler/RestSimpleQueryHandler.cpp::buildExampleQuery
-// //////////////////////////////////////////////////////////////////////////////
-
-let buildExampleQuery = function(col, exampleDoc, skip, limit) {
-  let bindVars = {'@collection': col};
-  let query = "FOR doc IN @@collection";
-  let count = 0;
-  for (const [key, value] of Object.entries(exampleDoc)) {
-    if (count > 0) {
-      query += " and ";
-    } else {
-      query += " FILTER ";
-    }
-    let bVName = `value${count}`;
-    let attName = `att${count}`;
-        query += ` doc.@${attName} == @${bVName}`;
-    bindVars[bVName] = value;
-    bindVars[attName] = key;
-    count += 1;
+ArangoCollection.prototype.any = function () {
+  let query = "FOR doc IN @@coll SORT RAND() LIMIT 1 RETURN doc";
+  let cursor = this._database._query(query, {"@coll": this.name()});
+  if (cursor.hasNext()) {
+    return cursor.next();
   }
-  if (limit > 0 || skip > 0) {
-    query += ` LIMIT ${skip}, ${(limit > 0) ? limit : "null"}`;
-  }
-  return {
-    query,
-    bindVars
-  };
+  return null;
 };
 
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief constructs a query-by-example for a collection
 // //////////////////////////////////////////////////////////////////////////////
 
-if (SYS_IS_V8_BUILD) {
-  ArangoCollection.prototype.firstExample = function (example) {
-    let e;
-    if (arguments.length === 1) {
-      // example is given as only argument
-      e = example;
-    } else {
-      // example is given as list
-      e = {};
+ArangoCollection.prototype.firstExample = function (example) {
+  let e;
+  if (arguments.length === 1) {
+    // example is given as only argument
+    e = example;
+  } else {
+    // example is given as list
+    e = {};
 
-      for (let i = 0;  i < arguments.length;  i += 2) {
-        e[arguments[i]] = arguments[i + 1];
-      }
+    for (let i = 0;  i < arguments.length;  i += 2) {
+      e[arguments[i]] = arguments[i + 1];
     }
+  }
 
-    let data = {
-      collection: this.name(),
-      example: e
-    };
+  if (e === null || typeof e !== 'object' || Array.isArray(e)) {
+    throw new ArangoError({
+      errorNum: internal.errors.ERROR_ARANGO_DOCUMENT_TYPE_INVALID.code,
+      errorMessage: "invalid document type for example"
+    });
+  }
 
-    let requestResult = this._database._connection.PUT(
-      this._prefixurl('/_api/simple/first-example'),
-      data
-    );
+  let bindVars = { '@collection': this.name() };
+  let filters = [];
+  Object.keys(e).forEach(function (key) {
+    let value = e[key];
+    filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+  });
 
-    if (requestResult !== null
-        && requestResult.error === true
-        && requestResult.errorNum === internal.errors.ERROR_HTTP_NOT_FOUND.code) {
-      return null;
-    }
+  let query = 'FOR doc IN @@collection';
+  if (filters.length > 0) {
+    query += ' ' + filters.join(' ') + ' ';
+  }
+  query += 'LIMIT 1 RETURN doc';
 
-    arangosh.checkRequestResult(requestResult);
-
-    return requestResult.document;
-  };
-} else {
-  ArangoCollection.prototype.firstExample = function (example) {
-    let query = buildExampleQuery(this.name(), example, 0, 1);
-    query.query += " RETURN doc";
-    let cursor = require('internal').db._query(query);
-    if (cursor.hasNext()) {
-      return cursor.next();
-    }
-    return null;
-  };
-}
+  let cursor = this._database._query(query, bindVars);
+  if (cursor.hasNext()) {
+    return cursor.next();
+  }
+  return null;
+};
 
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief saves a document in the collection
@@ -1326,147 +1281,190 @@ ArangoCollection.prototype.outEdges = function (vertex) {
 // / @brief removes documents matching an example
 // //////////////////////////////////////////////////////////////////////////////
 
-if (SYS_IS_V8_BUILD) {
-  ArangoCollection.prototype.removeByExample = function (example,
-                                                         waitForSync, limit) {
-    let data = {
-      collection: this._name,
-      example: example,
-      waitForSync: waitForSync,
-      limit: limit
-    };
-
-    if (typeof waitForSync === 'object') {
-      if (typeof limit !== 'undefined') {
-        throw 'too many parameters';
-      }
-      data = {
-        collection: this._name,
-        example: example,
-        options: waitForSync
-      };
+ArangoCollection.prototype.removeByExample = function (example,
+                                                       waitForSync, limit) {
+  let options = {};
+  if (typeof waitForSync === 'object') {
+    if (typeof limit !== 'undefined') {
+      throw 'too many parameters';
     }
+    options = waitForSync;
+  } else {
+    if (waitForSync !== undefined) {
+      options.waitForSync = waitForSync;
+    }
+    if (limit !== undefined) {
+      options.limit = limit;
+    }
+  }
 
-    let requestResult = this._database._connection.PUT(
-      this._prefixurl('/_api/simple/remove-by-example'), data);
-    arangosh.checkRequestResult(requestResult);
-    return requestResult.deleted;
-  };
-} else {
-  ArangoCollection.prototype.removeByExample = function (example,
-                                                         waitForSync, limit) {
-    let query = buildExampleQuery(this.name(), example, 0, limit);
-    var opts = {
-      waitForSync: waitForSync
-    };
-    query['query'] += ' REMOVE doc IN @@collection OPTIONS ' + JSON.stringify(opts);
-    return require('internal').db._query(query).getExtra().stats.writesExecuted;
-  };
-}
+  if (example === null || typeof example !== 'object' || Array.isArray(example)) {
+    throw new ArangoError({
+      errorNum: internal.errors.ERROR_ARANGO_DOCUMENT_TYPE_INVALID.code,
+      errorMessage: "invalid document type for example"
+    });
+  }
+
+  let bindVars = { '@collection': this.name() };
+  let filters = [];
+  Object.keys(example).forEach(function (key) {
+    let value = example[key];
+    filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+  });
+
+  let query = 'FOR doc IN @@collection';
+  if (filters.length > 0) {
+    query += ' ' + filters.join(' ') + ' ';
+  }
+  if (options.limit > 0) {
+    query += ' LIMIT ' + parseInt(options.limit, 10) + ' ';
+  }
+  query += 'REMOVE doc IN @@collection';
+
+  let cursor = this._database._query(query, bindVars, options);
+  return cursor.getExtra().stats.removed || 0;
+};
+
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief replaces documents matching an example
 // //////////////////////////////////////////////////////////////////////////////
 
-if (SYS_IS_V8_BUILD) {
-  ArangoCollection.prototype.replaceByExample = function (example,
-                                                          newValue, waitForSync, limit) {
-    let data = {
-      collection: this._name,
-      example: example,
-      newValue: newValue,
-      waitForSync: waitForSync,
-      limit: limit
-    };
-
-    if (typeof waitForSync === 'object') {
-      if (typeof limit !== 'undefined') {
-        throw 'too many parameters';
-      }
-      data = {
-        collection: this._name,
-        example: example,
-        newValue: newValue,
-        options: waitForSync
-      };
+ArangoCollection.prototype.replaceByExample = function (example,
+                                                        newValue, waitForSync, limit) {
+  let options = {};
+  if (typeof waitForSync === 'object') {
+    if (typeof limit !== 'undefined') {
+      throw 'too many parameters';
     }
-    let requestResult = this._database._connection.PUT(
-      this._prefixurl('/_api/simple/replace-by-example'), data);
-    arangosh.checkRequestResult(requestResult);
-    return requestResult.replaced;
-  };
-} else {
-  ArangoCollection.prototype.replaceByExample = function (example,
-                                                          newValue, waitForSync, limit) {
-    let query = buildExampleQuery(this.name(), example, 0, limit);
-    var opts = {
-      waitForSync: waitForSync,
-      mergeObjects: false
-    };
-    query['query'] += ' REPLACE doc WITH @newValue IN @@collection OPTIONS ' + JSON.stringify(opts);
-    query.bindVars['newValue'] = newValue;
-    return require('internal').db._query(query).getExtra().stats.writesExecuted;
-  };
-}
+    options = waitForSync;
+  } else {
+    if (waitForSync !== undefined) {
+      options.waitForSync = waitForSync;
+    }
+    if (limit !== undefined) {
+      options.limit = limit;
+    }
+  }
+
+  if (example === null || typeof example !== 'object' || Array.isArray(example)) {
+    throw new ArangoError({
+      errorNum: internal.errors.ERROR_ARANGO_DOCUMENT_TYPE_INVALID.code,
+      errorMessage: "invalid document type for example"
+    });
+  }
+
+  if (newValue === null || typeof newValue !== 'object' || Array.isArray(newValue)) {
+    throw new ArangoError({
+      errorNum: internal.errors.ERROR_ARANGO_DOCUMENT_TYPE_INVALID.code,
+      errorMessage: "invalid document type for newValue"
+    });
+  }
+
+  let bindVars = { '@collection': this.name(), 'newValue': newValue };
+  let filters = [];
+  Object.keys(example).forEach(function (key) {
+    let value = example[key];
+    filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+  });
+
+  let query = 'FOR doc IN @@collection';
+  if (filters.length > 0) {
+    query += ' ' + filters.join(' ') + ' ';
+  }
+  if (options.limit > 0) {
+    query += ' LIMIT ' + parseInt(options.limit, 10) + ' ';
+  }
+  query += 'REPLACE doc WITH @newValue IN @@collection';
+
+  let cursor = this._database._query(query, bindVars, options);
+  return cursor.getExtra().stats.replaced || 0;
+};
+
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief updates documents matching an example
 // //////////////////////////////////////////////////////////////////////////////
 
-if (SYS_IS_V8_BUILD) {
-  ArangoCollection.prototype.updateByExample = function (example,
-                                                         newValue, keepNull, waitForSync, limit) {
-    let data = {
-      collection: this._name,
-      example: example,
-      newValue: newValue,
-      keepNull: keepNull,
-      waitForSync: waitForSync,
-      limit: limit
-    };
-    if (typeof keepNull === 'object') {
-      if (typeof waitForSync !== 'undefined') {
-        throw 'too many parameters';
-      }
-      data = {
-        collection: this._name,
-        example: example,
-        newValue: newValue,
-        options: keepNull
-      };
+ArangoCollection.prototype.updateByExample = function (example,
+                                                       newValue, keepNull, waitForSync, limit) {
+  let options = {};
+  if (typeof keepNull === 'object') {
+    if (typeof waitForSync !== 'undefined') {
+      throw 'too many parameters';
     }
-    let requestResult = this._database._connection.PUT(
-      this._prefixurl('/_api/simple/update-by-example'), data);
-    arangosh.checkRequestResult(requestResult);
-    return requestResult.updated;
-  };
-} else {
-  ArangoCollection.prototype.updateByExample = function (example,
-                                                         newValue, keepNull, waitForSync, limit) {
-    let query = buildExampleQuery(this.name(), example, 0, limit);
-    var opts = {
-      waitForSync: waitForSync,
-      keepNull: keepNull,
-      mergeObjects: false
-    };
-    query['query'] += ' UPDATE doc WITH @newValue IN @@collection OPTIONS ' + JSON.stringify(opts);
-    query.bindVars['newValue'] = newValue;
-    return require('internal').db._query(query).getExtra().stats.writesExecuted;
-  };
-}
+    options = keepNull;
+  } else {
+    if (keepNull !== undefined) {
+      options.keepNull = keepNull;
+    }
+    if (waitForSync !== undefined) {
+      options.waitForSync = waitForSync;
+    }
+    if (limit !== undefined) {
+      options.limit = limit;
+    }
+  }
+
+  if (example === null || typeof example !== 'object' || Array.isArray(example)) {
+    throw new ArangoError({
+      errorNum: internal.errors.ERROR_ARANGO_DOCUMENT_TYPE_INVALID.code,
+      errorMessage: "invalid document type for example"
+    });
+  }
+
+  if (newValue === null || typeof newValue !== 'object' || Array.isArray(newValue)) {
+    throw new ArangoError({
+      errorNum: internal.errors.ERROR_ARANGO_DOCUMENT_TYPE_INVALID.code,
+      errorMessage: "invalid document type for newValue"
+    });
+  }
+
+  let bindVars = { '@collection': this.name(), 'newValue': newValue };
+  let filters = [];
+  Object.keys(example).forEach(function (key) {
+    let value = example[key];
+    filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+  });
+
+  let query = 'FOR doc IN @@collection';
+  if (filters.length > 0) {
+    query += ' ' + filters.join(' ') + ' ';
+  }
+  if (options.limit > 0) {
+    query += ' LIMIT ' + parseInt(options.limit, 10) + ' ';
+  }
+  query += 'UPDATE doc WITH @newValue IN @@collection';
+  if (options.keepNull !== undefined) {
+    query += ' OPTIONS { keepNull: ' + (options.keepNull ? 'true' : 'false') + ' }';
+  }
+
+  let cursor = this._database._query(query, bindVars, options);
+  return cursor.getExtra().stats.updated || 0;
+};
+
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief looks up documents by keys
 // //////////////////////////////////////////////////////////////////////////////
 
 ArangoCollection.prototype.documents = function (keys) {
-  let data = {
-    collection: this._name,
-    keys: keys || []
-  };
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return { documents: [] };
+  }
 
-  let requestResult = this._database._connection.PUT(
-    this._prefixurl('/_api/simple/lookup-by-keys'), data);
+  // Convert keys to document IDs
+  let docIds = keys.map(key => {
+    if (typeof key === 'string' && key.includes('/')) {
+      return key; // Already a document ID
+    }
+    return this._name + '/' + key;
+  });
+
+  // Use the document API to lookup documents
+  let url = this._documentcollectionurl() + '?onlyget=true&ignoreRevs=false';
+  let requestResult = this._database._connection.PUT(url, docIds);
   arangosh.checkRequestResult(requestResult);
+  
   return {
-    documents: requestResult.documents
+    documents: Array.isArray(requestResult) ? requestResult : []
   };
 };
 
@@ -1478,18 +1476,37 @@ ArangoCollection.prototype.lookupByKeys = ArangoCollection.prototype.documents;
 // //////////////////////////////////////////////////////////////////////////////
 
 ArangoCollection.prototype.removeByKeys = function (keys) {
-  let data = {
-    collection: this._name,
-    keys: keys || []
-  };
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return { removed: 0, ignored: 0 };
+  }
 
-  let requestResult = this._database._connection.PUT(
-    this._prefixurl('/_api/simple/remove-by-keys'), data);
+  // Convert keys to document IDs
+  let docIds = keys.map(key => {
+    if (typeof key === 'string' && key.includes('/')) {
+      return key; // Already a document ID
+    }
+    return this._name + '/' + key;
+  });
+
+  // Use the document API to remove documents
+  let url = this._documentcollectionurl();
+  let requestResult = this._database._connection.DELETE(url, docIds);
   arangosh.checkRequestResult(requestResult);
-  return {
-    removed: requestResult.removed,
-    ignored: requestResult.ignored
-  };
+  
+  // Count removed and ignored from the result
+  let removed = 0;
+  let ignored = 0;
+  if (Array.isArray(requestResult)) {
+    requestResult.forEach(result => {
+      if (result.error) {
+        ignored++;
+      } else {
+        removed++;
+      }
+    });
+  }
+  
+  return { removed, ignored };
 };
 
 // //////////////////////////////////////////////////////////////////////////////
