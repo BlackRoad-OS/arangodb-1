@@ -2321,7 +2321,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                 // We are the follower
                 if (s.isArray() && shardMap.contains(shName)) {
                   bool shardInSync{false};
-                  auto const plannedServers = shardMap.at(shName);
                   for (const auto& it : VPackArrayIterator(s)) {
                     if (it.stringView() == serverId) {
                       shardInSync = true;
