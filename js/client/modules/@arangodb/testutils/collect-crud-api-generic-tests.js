@@ -219,29 +219,40 @@ const generateTestSuite = (collectionWrapper, testNamePostfix = "") => {
         return 0;
       };
       {
-        // Try to find one by key using document API
+        // Try to find one by key
+        // This defaults to a SingleRemoteOperation
+        const lookupUrl = "/_api/simple/lookup-by-keys";
         assertNotUndefined(keys.slice(0, 1));
-        const docId = collection.name() + '/' + keys.slice(0, 1)[0];
-        const result = arango.GET_RAW('/_api/document/' + encodeURIComponent(docId));
+        const body = {
+          collection: collection.name(),
+          keys: keys.slice(0, 1)
+        };
+        const result = arango.PUT_RAW(lookupUrl, body);
 
         assertEqual(200, result.code);
-        const response = result.parsedBody;
+        const response = result.parsedBody.documents;
+        assertEqual(1, response.length);
 
         for (const [key, value] of Object.entries(documents[0])) {
-          assertEqual(response[key], value,
-            `Mismatch user data of ${JSON.stringify(response)} does not match the insert ${JSON.stringify(documents[0])}`);
+          assertEqual(response[0][key], value,
+            `Mismatch user data of ${JSON.stringify(response[0])} does not match the insert ${JSON.stringify(documents[0])}`);
         }
       }
       // The response does not have to be sorted by input keys.
       documents.sort(sortByKey);
       {
-        // Try to find them by keys using document API
-        const docIds = keys.map(key => collection.name() + '/' + key);
-        const lookupUrl = '/_api/document/' + encodeURIComponent(collection.name()) + '?onlyget=true';
-        const result = arango.PUT_RAW(lookupUrl, docIds);
+        // Try to find them by keys
+        // This defaults to an IndexLookup
+        const lookupUrl = "/_api/simple/lookup-by-keys";
+        const body = {
+          collection: collection.name(),
+          keys
+        };
+
+        const result = arango.PUT_RAW(lookupUrl, body);
 
         assertEqual(200, result.code);
-        const response = Array.isArray(result.parsedBody) ? result.parsedBody : [];
+        const response = result.parsedBody.documents;
         response.sort(sortByKey);
         assertEqual(response.length, documents.length);
         for (let i = 0; i < documents.length; ++i) {
@@ -253,14 +264,17 @@ const generateTestSuite = (collectionWrapper, testNamePostfix = "") => {
       }
 
       {
-        // Try to remove them by keys using document API
-        const docIds = keys.map(key => collection.name() + '/' + key);
-        const removeUrl = '/_api/document/' + encodeURIComponent(collection.name());
-        const result = arango.DELETE_RAW(removeUrl, docIds);
-        if (result.code !== 202 && result.code !== 200) {
+        // Try to remove them by keys
+        const removeUrl = "/_api/simple/remove-by-keys";
+        const body = {
+          collection: collection.name(),
+          keys
+        };
+        const result = arango.PUT_RAW(removeUrl, body);
+        if (result.code !== 200) {
           console.warn(`Remove returned with: ${JSON.stringify(result)}`);
         }
-        assertTrue(result.code === 200 || result.code === 202);
+        assertEqual(200, result.code);
         // Validate all documents are successfully removed
         assertEqual(0, collection.count());
       }
