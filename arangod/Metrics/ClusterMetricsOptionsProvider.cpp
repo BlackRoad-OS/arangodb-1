@@ -20,25 +20,24 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-#pragma once
+#include "ClusterMetricsOptionsProvider.h"
 
+#include "ProgramOptions/Parameters.h"
 #include "ProgramOptions/ProgramOptions.h"
 
-namespace arangodb {
+namespace arangodb::metrics {
 
-template<typename OptionsT>
-struct OptionsProvider {
-  using OptionsType = OptionsT;
+using namespace arangodb::options;
 
-  virtual ~OptionsProvider() = default;
+void ClusterMetricsOptionsProvider::declareOptions(
+    std::shared_ptr<ProgramOptions> options, ClusterMetricsOptions& opts) {
+  options
+      ->addOption("--server.cluster-metrics-timeout",
+                  "Cluster metrics polling timeout (in seconds).",
+                  new UInt32Parameter(&opts.timeout),
+                  arangodb::options::makeDefaultFlags(
+                      arangodb::options::Flags::Uncommon))
+      .setIntroducedIn(3'10'00);
+}
 
-  // Declare options, binding them to the provided options struct
-  virtual void declareOptions(std::shared_ptr<options::ProgramOptions> opts,
-                              OptionsT& options) = 0;
-
-  // Optional callback to validate options
-  virtual void validateOptions(std::shared_ptr<options::ProgramOptions> opts,
-                               OptionsT& options) {}
-};
-
-}  // namespace arangodb
+}  // namespace arangodb::metrics

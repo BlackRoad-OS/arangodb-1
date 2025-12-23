@@ -22,23 +22,21 @@
 
 #pragma once
 
-#include "ProgramOptions/ProgramOptions.h"
+#include "ApplicationFeatures/OptionsProvider.h"
+#include "ClusterMetricsOptions.h"
+#include <memory>
 
-namespace arangodb {
+namespace arangodb::options {
+class ProgramOptions;
+}
 
-template<typename OptionsT>
-struct OptionsProvider {
-  using OptionsType = OptionsT;
+namespace arangodb::metrics {
 
-  virtual ~OptionsProvider() = default;
+struct ClusterMetricsOptionsProvider : OptionsProvider<ClusterMetricsOptions> {
+  ClusterMetricsOptionsProvider() = default;
 
-  // Declare options, binding them to the provided options struct
-  virtual void declareOptions(std::shared_ptr<options::ProgramOptions> opts,
-                              OptionsT& options) = 0;
-
-  // Optional callback to validate options
-  virtual void validateOptions(std::shared_ptr<options::ProgramOptions> opts,
-                               OptionsT& options) {}
+  void declareOptions(std::shared_ptr<options::ProgramOptions> opts,
+                      ClusterMetricsOptions& options) override;
 };
 
-}  // namespace arangodb
+}  // namespace arangodb::metrics
