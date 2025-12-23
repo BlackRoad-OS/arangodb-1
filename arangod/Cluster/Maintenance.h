@@ -136,7 +136,8 @@ arangodb::Result diffPlanLocal(
     std::vector<std::shared_ptr<ActionDescription>>& actions,
     MaintenanceFeature::ShardActionMap const& shardActionMap,
     ReplicatedLogStatusMapByDatabase const& localLogs,
-    ShardIdToLogIdMapByDatabase const& localShardIdToLogId);
+    ShardIdToLogIdMapByDatabase const& localShardIdToLogId,
+    arangodb::MaintenanceFeature& feature);
 
 /**
  * @brief          Difference Plan and local for phase 1 of Maintenance run

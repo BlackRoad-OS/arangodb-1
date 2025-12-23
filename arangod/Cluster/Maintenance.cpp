@@ -771,7 +771,8 @@ arangodb::Result arangodb::maintenance::diffPlanLocal(
     std::vector<std::shared_ptr<ActionDescription>>& actions,
     MaintenanceFeature::ShardActionMap const& shardActionMap,
     ReplicatedLogStatusMapByDatabase const& localLogsByDatabase,
-    ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
+    ShardIdToLogIdMapByDatabase const& localShardIdToLogId,
+    arangodb::MaintenanceFeature& feature) {
   // You are entering the functional sector.
   // Vous entrez dans le secteur fonctionel.
   // Sie betreten den funktionalen Sektor.
@@ -1149,6 +1150,21 @@ arangodb::Result arangodb::maintenance::diffPlanLocal(
     }
   }
 
+  // Remove databases which are in neither plan nor current
+  for (auto it = feature._databaseShardsStats.begin();
+       it != feature._databaseShardsStats.end();) {
+    auto const planIt = plan.find(it->first);
+    auto const currentIt = current.find(it->first);
+    auto const localIt = local.find(it->first);
+    if (planIt == plan.end() && currentIt == current.end() &&
+        localIt != local.end()) {
+      LOG_DEVEL << "Removing: " << it->first;
+      it = feature._databaseShardsStats.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
   // You are leaving the functional sector.
   // Vous sortez du secteur fonctionnel.
   // Sie verlassen den funktionalen Sektor.
@@ -1197,7 +1213,7 @@ arangodb::Result arangodb::maintenance::executePlan(
         feature.server().getFeature<EngineSelectorFeature>().engine();
     diffPlanLocal(engine, plan, planIndex, current, currentIndex, dirty, local,
                   serverId, errors, makeDirty, callNotify, actions,
-                  shardActionMap, localLogs, localShardIdToLogId);
+                  shardActionMap, localLogs, localShardIdToLogId, feature);
     feature.addDirty(makeDirty, callNotify);
   }
 
@@ -2806,8 +2822,7 @@ arangodb::Result arangodb::maintenance::phaseTwo(
     VPackBuilder& report,
     MaintenanceFeature::ShardActionMap const& shardActionMap,
     ReplicatedLogStatusMapByDatabase const& localLogs,
-    ShardIdToLogIdMapByDatabase const& localShardIdToLogId,
-    std::unordered_set<DatabaseID>& droppedDatabases) {
+    ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
   auto start = std::chrono::steady_clock::now();
 
   MaintenanceFeature::errors_t allErrors;
@@ -2825,9 +2840,9 @@ arangodb::Result arangodb::maintenance::phaseTwo(
       VPackObjectBuilder agency(&report);
       // Update Current
       try {
-        result = reportInCurrent(feature, plan, dirty, cur, local, allErrors,
-                                 serverId, report, localLogs,
-                                 localShardIdToLogId, droppedDatabases);
+        result =
+            reportInCurrent(feature, plan, dirty, cur, local, allErrors,
+                            serverId, report, localLogs, localShardIdToLogId);
       } catch (std::exception const& e) {
         LOG_TOPIC("c9a75", ERR, Logger::MAINTENANCE)
             << "Error reporting in current: " << e.what();
