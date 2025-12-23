@@ -123,31 +123,31 @@ function ClusterDBServerShardMetricsTestSuite() {
 
   const getMetricsAndAssert = function(servers, expectedShardsNum, expectedShardsLeaderNum = null, expectedShardsOutOfSync = null, expectedShardsNotReplicated = null, expectedFollowersOutOfSync = null) {
     const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
-    assertEqual(shardsNumMetricValue, expectedShardsNum);
+    assertEqual(shardsNumMetricValue, expectedShardsNum, `shardsNumMetricValue: ${shardsNumMetricValue} !== expectedShardsNum: ${expectedShardsNum}`);
 
     if (expectedShardsLeaderNum !== null) {
       const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
-      assertEqual(shardsLeaderNumMetricValue, expectedShardsLeaderNum);
+      assertEqual(shardsLeaderNumMetricValue, expectedShardsLeaderNum, `shardsLeaderNumMetricValue: ${shardsLeaderNumMetricValue} !== expectedShardsLeaderNum: ${expectedShardsLeaderNum}`);
     }
 
     if (expectedShardsLeaderNum !== null) {
       const shardsFollowerNumMetricValue = getDBServerMetricSum(servers, shardsFollowerNumMetric);
-      assertEqual(shardsFollowerNumMetricValue, expectedShardsNum - expectedShardsLeaderNum);
+      assertEqual(shardsFollowerNumMetricValue, expectedShardsNum - expectedShardsLeaderNum, `shardsFollowerNumMetricValue: ${shardsFollowerNumMetricValue} !== expectedShardsNum - expectedShardsLeaderNum: ${expectedShardsNum - expectedShardsLeaderNum}`);
     }
 
     if (expectedShardsOutOfSync !== null) {
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
-      assertEqual(shardsOutOfSyncNumMetricValue, expectedShardsOutOfSync);
+      assertEqual(shardsOutOfSyncNumMetricValue, expectedShardsOutOfSync, `shardsOutOfSyncNumMetricValue: ${shardsOutOfSyncNumMetricValue} !== expectedShardsOutOfSync: ${expectedShardsOutOfSync}`);
     }
 
     if (expectedFollowersOutOfSync !== null) {
       const followersOutOfSyncNumMetricValue = getDBServerMetricSum(servers, followersOutOfSyncNumMetric);
-      assertEqual(followersOutOfSyncNumMetricValue, expectedFollowersOutOfSync);
+      assertEqual(followersOutOfSyncNumMetricValue, expectedFollowersOutOfSync, `followersOutOfSyncNumMetricValue: ${followersOutOfSyncNumMetricValue} !== expectedFollowersOutOfSync: ${expectedFollowersOutOfSync}`);
     }
 
     if (expectedShardsNotReplicated !== null) {
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
-      assertEqual(shardsNotReplicatedNumMetricValue, expectedShardsNotReplicated);
+      assertEqual(shardsNotReplicatedNumMetricValue, expectedShardsNotReplicated, `shardsNotReplicatedNumMetricValue: ${shardsNotReplicatedNumMetricValue} !== expectedShardsNotReplicated: ${expectedShardsNotReplicated}`);
     }
   };
 
@@ -156,26 +156,31 @@ function ClusterDBServerShardMetricsTestSuite() {
       internal.wait(0.1);
       const shardsNumMetricValue = getDBServerMetricSum(servers, shardsNumMetric);
       if (shardsNumMetricValue !== expectedShardsNum && expectedShardsNum !== null) {
+        print(`shardsNumMetricValue: ${shardsNumMetricValue} !== expectedShardsNum: ${expectedShardsNum}`);
         continue;
-      }
+      } 
 
       const shardsLeaderNumMetricValue = getDBServerMetricSum(servers, shardsLeaderNumMetric);
       if (shardsLeaderNumMetricValue !== expectedShardsLeaderNum && expectedShardsLeaderNum !== null) {
+        print(`shardsLeaderNumMetricValue: ${shardsLeaderNumMetricValue} !== expectedShardsLeaderNum: ${expectedShardsLeaderNum}`);
         continue;
       }
 
       const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(servers, shardsOutOfSyncNumMetric);
       if (shardsOutOfSyncNumMetricValue !== expectedShardsOutOfSync) {
+        print(`shardsOutOfSyncNumMetricValue: ${shardsOutOfSyncNumMetricValue} !== expectedShardsOutOfSync: ${expectedShardsOutOfSync}`);
         continue;
       }
 
       const followersOutOfSyncNumMetricValue = getDBServerMetricSum(servers, followersOutOfSyncNumMetric);
       if (followersOutOfSyncNumMetricValue !== expectedFollowersOutOfSync) {
+        print(`followersOutOfSyncNumMetricValue: ${followersOutOfSyncNumMetricValue} !== expectedFollowersOutOfSync: ${expectedFollowersOutOfSync}`);
         continue;
       }
 
       const shardsNotReplicatedNumMetricValue = getDBServerMetricSum(servers, shardsNotReplicatedNumMetric);
       if (shardsNotReplicatedNumMetricValue !== expectedShardsNotReplicated) {
+        print(`shardsNotReplicatedNumMetricValue: ${shardsNotReplicatedNumMetricValue} !== expectedShardsNotReplicated: ${expectedShardsNotReplicated}`);
         continue;
       }
 
@@ -188,7 +193,11 @@ function ClusterDBServerShardMetricsTestSuite() {
   return {
     tearDown: function () {
       db._useDatabase("_system");
-      db._dropDatabase(dbName);
+      try {
+        db._dropDatabase(dbName);
+      } catch (e) {
+        // Ignore errors
+      }
     },
 
     testShardCountMetricStability: function () {
@@ -482,6 +491,74 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       // The metrics should remain the same
       getMetricsAndAssert(dbServers, totalShardCount, totalLeaderCount, 0, 0);
+    },
+
+    testShardMetricsAfterCollectionDeletion: function () {
+      const dbServers = getDBServers();
+
+      // Get baseline metrics before creating anything
+      const baselineShardCount = getDbShardCount("_system");
+      const baselineLeaderCount = getDbLeaderCount("_system");
+      getMetricsAndEventuallyAssert(dbServers, baselineShardCount, baselineLeaderCount, 0, 0);
+
+      // Create database and collection
+      db._createDatabase(dbName);
+      db._useDatabase(dbName);
+
+      const newDatabaseShardsCount = getDbShardCount(dbName);
+      const newDatabaseLeaderCount = getDbLeaderCount(dbName);
+
+      const testCollShards = 3;
+      const testCollReplication = 2;
+      db._create(collectionName, {
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
+      });
+
+      // Calculate expected counts after creating collection
+      const expectedShardCount = baselineShardCount + (testCollShards * testCollReplication) + newDatabaseShardsCount;
+      const expectedLeaderCount = baselineLeaderCount + testCollShards + newDbLeaderCount;
+      getMetricsAndEventuallyAssert(dbServers, expectedShardCount, expectedLeaderCount, 0, 0);
+
+      // Drop the collection
+      db._drop(collectionName);
+
+      // Metrics should return to baseline (only _system shards remain, dbName has no collections)
+      getMetricsAndEventuallyAssert(dbServers, baselineShardCount + newDatabaseShardsCount, baselineLeaderCount + newDatabaseLeaderCount, 0, 0);
+    },
+
+    testShardMetricsAfterDatabaseDeletion: function () {
+      const dbServers = getDBServers();
+
+      // Get baseline metrics before creating anything
+      const baselineShardCount = getDbShardCount("_system");
+      const baselineLeaderCount = getDbLeaderCount("_system");
+      getMetricsAndEventuallyAssert(dbServers, baselineShardCount, baselineLeaderCount, 0, 0);
+
+      // Create database and collection
+      db._createDatabase(dbName);
+      db._useDatabase(dbName);
+
+      const newDatabaseShardsCount = getDbShardCount(dbName);
+      const newDatabaseLeaderCount = getDbLeaderCount(dbName);
+
+      const testCollShards = 3;
+      const testCollReplication = 2;
+      db._create(collectionName, {
+        numberOfShards: testCollShards,
+        replicationFactor: testCollReplication,
+      });
+
+      // Calculate expected counts after creating collection
+      const expectedShardCount = baselineShardCount + (testCollShards * testCollReplication) + newDatabaseShardsCount;
+      const expectedLeaderCount = baselineLeaderCount + testCollShards + newDatabaseLeaderCount;
+      getMetricsAndEventuallyAssert(dbServers, expectedShardCount, expectedLeaderCount, 0, 0);
+
+      db._useDatabase("_system");
+      db._dropDatabase(dbName);
+
+      // Metrics should return to baseline
+      getMetricsAndEventuallyAssert(dbServers, baselineShardCount, baselineLeaderCount, 0, 0);
     },
 
   };
