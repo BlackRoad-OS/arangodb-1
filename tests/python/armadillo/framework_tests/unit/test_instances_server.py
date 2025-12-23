@@ -10,8 +10,8 @@ from typing import Any
 from unittest.mock import Mock, patch
 from pathlib import Path
 
-from armadillo.instances.server import ArangoServer, ServerPaths
-from armadillo.core.types import ServerRole, ClusterConfig, TimeoutConfig
+from armadillo.instances.server import ArangoServer
+from armadillo.core.types import ServerRole, ServerPaths, TimeoutConfig
 from armadillo.core.context import ApplicationContext
 from armadillo.core.value_objects import ServerId
 

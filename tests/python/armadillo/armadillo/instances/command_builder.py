@@ -1,30 +1,20 @@
 """ArangoDB server command line builder for different roles and configurations."""
 
-from typing import List, Optional, Protocol
+from typing import List, Protocol
 from pathlib import Path
-from dataclasses import dataclass
-from ..core.types import ServerRole, ServerConfig
+from ..core.types import ServerPaths, ServerConfig
+from ..core.enums import ServerRole
 from ..core.config import ConfigProvider
 from ..core.log import Logger
 from ..core.value_objects import ServerId
 
 
-@dataclass
-class ServerCommandParams:
-    """Parameters for building server commands."""
-
-    server_id: ServerId
-    role: ServerRole
-    port: int
-    data_dir: Path
-    app_dir: Path
-    config: Optional[ServerConfig] = None
-
-
 class CommandBuilder(Protocol):
     """Protocol for command builders to enable dependency injection."""
 
-    def build_command(self, params: ServerCommandParams) -> List[str]:
+    def build_command(
+        self, server_id: ServerId, config: ServerConfig, paths: ServerPaths
+    ) -> List[str]:
         """Build command line arguments for server startup."""
 
     def get_repository_root(self) -> Path:
@@ -38,9 +28,12 @@ class ServerCommandBuilder:
         self._config_provider = config_provider
         self._logger = logger
 
-    def build_command(self, params: ServerCommandParams) -> List[str]:
+    def build_command(
+        self, server_id: ServerId, config: ServerConfig, paths: ServerPaths
+    ) -> List[str]:
         """Build ArangoDB command line arguments."""
         repository_root = self.get_repository_root()
+
         if self._config_provider.bin_dir:
             arangod_path = str(self._config_provider.bin_dir / "arangod")
         else:
@@ -48,19 +41,21 @@ class ServerCommandBuilder:
         command = [
             arangod_path,
             "--configuration",
-            self._get_config_file_for_role(params.role),
+            self._get_config_file_for_role(config.role),
             "--define",
             f"TOP_DIR={repository_root}",
             "--server.endpoint",
-            f"tcp://0.0.0.0:{params.port}",
+            f"tcp://0.0.0.0:{config.port}",
             "--database.directory",
-            str(params.data_dir),
+            str(paths.data_dir),
             "--javascript.app-path",
-            str(params.app_dir),
+            str(paths.app_dir),
+            "--log.file",
+            str(paths.log_file),
         ]
-        if params.role == ServerRole.SINGLE:
+        if config.role == ServerRole.SINGLE:
             command.extend(["--server.storage-engine", "rocksdb"])
-        elif params.role == ServerRole.AGENT:
+        elif config.role == ServerRole.AGENT:
             command.extend(
                 [
                     "--agency.activate",
@@ -71,7 +66,7 @@ class ServerCommandBuilder:
                     "true",
                 ]
             )
-        elif params.role in [ServerRole.COORDINATOR, ServerRole.DBSERVER]:
+        elif config.role in [ServerRole.COORDINATOR, ServerRole.DBSERVER]:
             command.extend(
                 [
                     "--cluster.create-waits-for-sync-replication",
@@ -80,14 +75,14 @@ class ServerCommandBuilder:
                     "1",
                 ]
             )
-        if params.config and params.config.args:
-            for key, value in params.config.args.items():
+        if config.args:
+            for key, value in config.args.items():
                 if isinstance(value, list):
                     for item in value:
                         command.extend([f"--{key}", str(item)])
                 elif value is not None:
                     command.extend([f"--{key}", str(value)])
-        self._logger.debug(">>> ARANGOD COMMAND FOR %s <<<", str(params.server_id))
+        self._logger.debug(">>> ARANGOD COMMAND FOR %s <<<", str(server_id))
         self._logger.debug("Command: %s", " ".join(command))
         self._logger.debug(">>> END ARANGOD COMMAND <<<")
         return command

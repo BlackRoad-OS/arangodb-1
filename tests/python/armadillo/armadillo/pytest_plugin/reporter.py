@@ -14,7 +14,8 @@ from _pytest.main import Session
 from _pytest.nodes import Item
 
 from ..core.log import get_logger
-from ..core.types import ExecutionOutcome, ServerHealthInfo
+from ..core.types import ServerHealthInfo
+from ..core.enums import ExecutionOutcome
 from ..core.value_objects import DeploymentId
 from ..core.process import ProcessSupervisor
 from ..results.collector import ResultCollector

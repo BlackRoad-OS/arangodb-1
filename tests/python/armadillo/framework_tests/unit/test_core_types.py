@@ -3,10 +3,8 @@
 import pytest
 from pathlib import Path
 
+from armadillo.core.enums import ServerRole, ExecutionOutcome
 from armadillo.core.types import (
-    DeploymentMode,
-    ServerRole,
-    ExecutionOutcome,
     ServerConfig,
     ClusterConfig,
     TimeoutConfig,
@@ -22,21 +20,17 @@ from armadillo.core.types import (
 class TestServerConfig:
     """Test ServerConfig dataclass."""
 
-    def test_server_config_with_optional_fields(self) -> None:
-        """Test ServerConfig with optional fields."""
+    def test_server_config_with_args(self) -> None:
+        """Test ServerConfig with args."""
         config = ServerConfig(
             role=ServerRole.COORDINATOR,
             port=8530,
-            data_dir=Path("/tmp/data"),
-            log_file=Path("/tmp/log.txt"),
             args={"server.threads": "4"},
-            memory_limit_mb=1024,
-            startup_timeout=60.0,
         )
 
+        assert config.role == ServerRole.COORDINATOR
+        assert config.port == 8530
         assert config.args == {"server.threads": "4"}
-        assert config.memory_limit_mb == 1024
-        assert config.startup_timeout == 60.0
 
 
 class TestClusterConfig:
@@ -99,5 +93,3 @@ class TestHealthStatus:
         assert status.response_time == 5.0
         assert status.error_message == "Connection timeout"
         assert status.details == {"status_code": 500}
-
-

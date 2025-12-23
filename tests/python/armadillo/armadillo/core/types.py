@@ -1,38 +1,25 @@
 """Core type definitions for the Armadillo framework."""
 
-from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Protocol
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass
 
 from pydantic import BaseModel, Field, model_validator
 
-
-class DeploymentMode(Enum):
-    """ArangoDB deployment mode."""
-
-    SINGLE_SERVER = "single_server"
-    CLUSTER = "cluster"
+from .enums import DeploymentMode, ServerRole, ExecutionOutcome
+from .value_objects import ServerId
 
 
-class ServerRole(Enum):
-    """ArangoDB server role."""
+class FilesystemProtocol(Protocol):
+    """Protocol for filesystem services used by types module.
 
-    SINGLE = "single"
-    AGENT = "agent"
-    DBSERVER = "dbserver"
-    COORDINATOR = "coordinator"
+    Defines minimal interface to avoid circular imports with utils.filesystem.
+    """
 
-
-class ExecutionOutcome(Enum):
-    """Test execution outcome."""
-
-    PASSED = "passed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    ERROR = "error"
-    TIMEOUT = "timeout"
-    CRASHED = "crashed"
+    def server_dir(self, server_id: str) -> Path:
+        """Get server directory path."""
+        ...
 
 
 class CrashInfo(BaseModel):
@@ -42,6 +29,18 @@ class CrashInfo(BaseModel):
     timestamp: float
     stderr: Optional[str] = None
     signal: Optional[int] = None
+
+
+@dataclass
+class ServerConfig:
+    """Configuration for creating a server instance.
+
+    Simple data container replacing ServerConfig for server factory.
+    """
+
+    role: ServerRole
+    port: int
+    args: Dict[str, Union[str, List[str], int, float, bool]]
 
 
 def _get_exit_code_context(exit_code: int) -> str:
@@ -190,18 +189,52 @@ class ServerHealthInfo(BaseModel):
         return "\n".join(lines), error_count
 
 
-class ServerConfig(BaseModel):
-    """Configuration for a single ArangoDB server."""
+class ServerPaths(BaseModel):
+    """Server directory paths derived from base directory.
 
-    role: ServerRole
-    port: int
-    data_dir: Path
-    log_file: Path
-    args: Dict[str, Union[str, List[str], int, float, bool]] = Field(
-        default_factory=dict
-    )
-    memory_limit_mb: Optional[int] = None
-    startup_timeout: float = 30.0
+    Single source of truth for path structure. All paths are derived
+    from base_dir using standard layout.
+    """
+
+    base_dir: Path
+
+    @property
+    def data_dir(self) -> Path:
+        """Data directory - always base_dir/data"""
+        return self.base_dir / "data"
+
+    @property
+    def app_dir(self) -> Path:
+        """Application directory - always base_dir/apps"""
+        return self.base_dir / "apps"
+
+    @property
+    def log_file(self) -> Path:
+        """Log file - always base_dir/log"""
+        return self.base_dir / "log"
+
+    def ensure_directories(self) -> None:
+        """Create all required directories."""
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.app_dir.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def from_config(
+        cls,
+        server_id: ServerId,
+        filesystem: FilesystemProtocol,
+    ) -> "ServerPaths":
+        """Create server paths from filesystem service.
+
+        Args:
+            server_id: Unique server identifier
+            filesystem: Filesystem service for path derivation
+
+        Returns:
+            ServerPaths instance with standard layout
+        """
+        base_dir = filesystem.server_dir(str(server_id))
+        return cls(base_dir=base_dir)
 
 
 class ClusterConfig(BaseModel):

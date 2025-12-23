@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from .types import ServerRole
+from .enums import ServerRole
 
 
 @dataclass(frozen=True)

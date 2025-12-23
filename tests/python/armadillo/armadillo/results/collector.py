@@ -8,7 +8,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass, field
-from ..core.types import ExecutionOutcome, CrashInfo, ServerHealthInfo, SanitizerError
+from ..core.types import CrashInfo, ServerHealthInfo, SanitizerError
+from ..core.enums import ExecutionOutcome
 from ..core.value_objects import ServerId, DeploymentId
 from ..core.errors import ResultProcessingError, SerializationError, FilesystemError
 from ..core.log import get_logger

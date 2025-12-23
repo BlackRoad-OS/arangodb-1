@@ -19,7 +19,8 @@ from .errors import (
 )
 from .time import clamp_timeout, timeout_scope
 from .log import get_logger, log_process_event
-from .types import ProcessStats, CrashInfo, ServerRole
+from .types import ProcessStats, CrashInfo
+from .enums import ServerRole
 from .value_objects import ServerId, ServerContext
 
 logger = get_logger(__name__)

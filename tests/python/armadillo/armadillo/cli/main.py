@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from rich.console import Console
 from rich.table import Table
 from ..core.log import configure_logging, get_logger
-from ..core.types import DeploymentMode
+from ..core.enums import DeploymentMode
 from .commands.test import test_app
 from .commands.analyze import analyze_app
 

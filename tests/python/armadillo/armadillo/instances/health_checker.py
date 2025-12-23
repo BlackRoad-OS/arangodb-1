@@ -2,16 +2,15 @@
 
 import time
 import asyncio
-from typing import Protocol, Optional, TYPE_CHECKING
+from typing import Protocol, Optional
 import aiohttp
+
 from ..core.log import Logger
 from ..core.value_objects import ServerId
 from ..core.types import HealthStatus, TimeoutConfig
 from ..core.errors import HealthCheckError, NetworkError
+from ..core.process import ProcessSupervisor
 from ..utils.auth import AuthProvider
-
-if TYPE_CHECKING:
-    from ..core.process import ProcessSupervisor
 
 
 class HealthChecker(Protocol):
@@ -31,7 +30,7 @@ class ServerHealthChecker:
         self,
         logger: Logger,
         auth_provider: AuthProvider,
-        process_supervisor: "ProcessSupervisor",
+        process_supervisor: ProcessSupervisor,
         timeout_config: Optional[TimeoutConfig] = None,
     ) -> None:
         self._logger = logger

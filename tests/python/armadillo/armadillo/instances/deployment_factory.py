@@ -6,9 +6,9 @@ while DeploymentController manages lifecycle and health monitoring.
 """
 
 from typing import Any, Dict, List, Optional, Union
-from pathlib import Path
 
-from ..core.types import ServerRole, ClusterConfig, ServerConfig
+from ..core.types import ClusterConfig
+from ..core.enums import ServerRole
 from ..core.context import ApplicationContext
 from ..core.value_objects import ServerId, DeploymentId
 from .server import ArangoServer
@@ -51,32 +51,6 @@ class DeploymentFactory:
             default_args.update(custom_args)
 
         return default_args
-
-    @staticmethod
-    def _create_server_config(
-        role: ServerRole,
-        port: int,
-        data_dir: Path,
-        args: Dict[str, Any],
-    ) -> ServerConfig:
-        """Create ServerConfig with the given parameters.
-
-        Args:
-            role: Server role
-            port: Port number (0 for auto-allocation)
-            data_dir: Data directory path
-            args: Server arguments
-
-        Returns:
-            ServerConfig instance
-        """
-        return ServerConfig(
-            role=role,
-            port=port,
-            data_dir=data_dir,
-            log_file=data_dir.parent / "arangodb.log",
-            args=args,
-        )
 
     @staticmethod
     def _build_agent_args(
@@ -181,14 +155,8 @@ class DeploymentFactory:
                 merged_args, port, count, agency_endpoints
             )
 
-            config = DeploymentFactory._create_server_config(
-                role=ServerRole.AGENT,
-                port=port,
-                data_dir=app_context.filesystem.server_dir(str(server_id)) / "data",
-                args=agent_args,
-            )
             server = ArangoServer.create_cluster_server(
-                server_id, ServerRole.AGENT, port, app_context, config=config
+                server_id, ServerRole.AGENT, port, app_context, args=agent_args
             )
             servers[server_id] = server
 
@@ -223,14 +191,8 @@ class DeploymentFactory:
                 merged_args, port, agency_endpoints
             )
 
-            config = DeploymentFactory._create_server_config(
-                role=ServerRole.DBSERVER,
-                port=port,
-                data_dir=app_context.filesystem.server_dir(str(server_id)) / "data",
-                args=dbserver_args,
-            )
             server = ArangoServer.create_cluster_server(
-                server_id, ServerRole.DBSERVER, port, app_context, config=config
+                server_id, ServerRole.DBSERVER, port, app_context, args=dbserver_args
             )
             servers[server_id] = server
 
@@ -265,14 +227,12 @@ class DeploymentFactory:
                 merged_args, port, agency_endpoints
             )
 
-            config = DeploymentFactory._create_server_config(
-                role=ServerRole.COORDINATOR,
-                port=port,
-                data_dir=app_context.filesystem.server_dir(str(server_id)) / "data",
-                args=coordinator_args,
-            )
             server = ArangoServer.create_cluster_server(
-                server_id, ServerRole.COORDINATOR, port, app_context, config=config
+                server_id,
+                ServerRole.COORDINATOR,
+                port,
+                app_context,
+                args=coordinator_args,
             )
             servers[server_id] = server
 
@@ -300,18 +260,12 @@ class DeploymentFactory:
             ... )
         """
         merged_args = DeploymentFactory._build_server_args(app_context, server_args)
-        config = DeploymentFactory._create_server_config(
-            role=ServerRole.SINGLE,
-            port=0,  # Will be auto-allocated
-            data_dir=app_context.filesystem.server_dir(str(deployment_id)) / "data",
-            args=merged_args,
-        )
 
         server_id = ServerId(str(deployment_id))
         server = ArangoServer.create_single_server(
             server_id,
             app_context,
-            config=config,
+            args=merged_args,
         )
 
         return SingleServerDeployment(deployment_id=deployment_id, server=server)

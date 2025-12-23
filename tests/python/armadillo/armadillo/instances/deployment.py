@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from ..core.value_objects import ServerId, DeploymentId
-from ..core.types import ServerRole
+from ..core.enums import ServerRole
 from .server import ArangoServer
 
 

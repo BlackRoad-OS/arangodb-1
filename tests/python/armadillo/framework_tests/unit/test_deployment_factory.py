@@ -19,7 +19,6 @@ from armadillo.core.value_objects import ServerId, DeploymentId
 from armadillo.core.types import (
     ServerRole,
     ClusterConfig,
-    ServerConfig,
     ArmadilloConfig,
     DeploymentMode,
 )
@@ -62,7 +61,7 @@ class TestCreateSingleServer:
             assert server.role == ServerRole.SINGLE
 
     def test_port_is_zero_for_auto_allocation(self, app_context):
-        """Port is set to 0 for auto-allocation."""
+        """Port is auto-allocated for single server."""
         deployment_id = DeploymentId("test-port")
 
         with patch.object(ArangoServer, "create_single_server") as mock_create:
@@ -71,10 +70,11 @@ class TestCreateSingleServer:
 
             DeploymentFactory.create_single_server(deployment_id, app_context)
 
-            # Verify ServerConfig was created with port=0
+            # Verify args were passed (port is auto-allocated by factory method)
             call_args = mock_create.call_args
-            config = call_args.kwargs["config"]
-            assert config.port == 0
+            args = call_args.kwargs["args"]
+            # Args should have authentication default
+            assert args["server.authentication"] == "false"
 
     def test_server_args_properly_merged(self, app_context):
         """Server args are properly merged (framework defaults + custom)."""
@@ -89,10 +89,9 @@ class TestCreateSingleServer:
                 deployment_id, app_context, server_args=custom_args
             )
 
-            # Verify merged args were passed to ServerConfig
+            # Verify merged args were passed
             call_args = mock_create.call_args
-            config = call_args.kwargs["config"]
-            args = config.args
+            args = call_args.kwargs["args"]
 
             # Should have default authentication
             assert args["server.authentication"] == "false"
@@ -111,8 +110,8 @@ class TestCreateSingleServer:
             DeploymentFactory.create_single_server(deployment_id, app_context)
 
             call_args = mock_create.call_args
-            config = call_args.kwargs["config"]
-            assert config.args["server.authentication"] == "false"
+            args = call_args.kwargs["args"]
+            assert args["server.authentication"] == "false"
 
     def test_custom_args_override_defaults(self, app_context):
         """Custom args take precedence over defaults."""
@@ -128,8 +127,8 @@ class TestCreateSingleServer:
             )
 
             call_args = mock_create.call_args
-            config = call_args.kwargs["config"]
-            assert config.args["server.authentication"] == "true"
+            args = call_args.kwargs["args"]
+            assert args["server.authentication"] == "true"
 
     def test_none_server_args_uses_defaults(self, app_context):
         """None server_args should use default configuration."""
@@ -144,9 +143,9 @@ class TestCreateSingleServer:
             )
 
             call_args = mock_create.call_args
-            config = call_args.kwargs["config"]
+            args = call_args.kwargs["args"]
             # Should have default authentication
-            assert config.args["server.authentication"] == "false"
+            assert args["server.authentication"] == "false"
 
     def test_empty_dict_server_args_uses_defaults(self, app_context):
         """Empty dict server_args should use default configuration."""
@@ -161,9 +160,9 @@ class TestCreateSingleServer:
             )
 
             call_args = mock_create.call_args
-            config = call_args.kwargs["config"]
+            args = call_args.kwargs["args"]
             # Should have default authentication
-            assert config.args["server.authentication"] == "false"
+            assert args["server.authentication"] == "false"
 
 
 class TestCreateCluster:
@@ -175,7 +174,7 @@ class TestCreateCluster:
         cluster_config = ClusterConfig(agents=1, dbservers=1, coordinators=1)
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -192,7 +191,7 @@ class TestCreateCluster:
         cluster_config = ClusterConfig(agents=3, dbservers=2, coordinators=1)
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -216,7 +215,7 @@ class TestCreateCluster:
         cluster_config = ClusterConfig(agents=2, dbservers=2, coordinators=2)
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -244,9 +243,9 @@ class TestCreateCluster:
 
         created_servers = []
 
-        def capture_server(sid, role, port, ctx, config):
+        def capture_server(sid, role, port, ctx, args):
             server = Mock(spec=ArangoServer, server_id=sid, role=role, port=port)
-            created_servers.append((role, port, config))
+            created_servers.append((role, port, args))
             return server
 
         with patch.object(
@@ -254,17 +253,17 @@ class TestCreateCluster:
         ):
             DeploymentFactory.create_cluster(deployment_id, app_context, cluster_config)
 
-            # Get agent configs
-            agent_configs = [
-                (role, port, cfg)
-                for role, port, cfg in created_servers
+            # Get agent args
+            agent_args_list = [
+                (role, port, args)
+                for role, port, args in created_servers
                 if role == ServerRole.AGENT
             ]
-            assert len(agent_configs) == 3
+            assert len(agent_args_list) == 3
 
             # Verify all agents have agency.endpoint with all 3 endpoints
-            for role, port, config in agent_configs:
-                agency_endpoints = config.args["agency.endpoint"]
+            for role, port, args in agent_args_list:
+                agency_endpoints = args["agency.endpoint"]
                 assert len(agency_endpoints) == 3
                 # All should point to tcp://127.0.0.1:<port>
                 for endpoint in agency_endpoints:
@@ -278,9 +277,9 @@ class TestCreateCluster:
 
         created_servers = []
 
-        def capture_server(sid, role, port, ctx, config):
+        def capture_server(sid, role, port, ctx, args):
             server = Mock(spec=ArangoServer, server_id=sid, role=role, port=port)
-            created_servers.append((role, config))
+            created_servers.append((role, args))
             return server
 
         with patch.object(
@@ -291,9 +290,9 @@ class TestCreateCluster:
             )
 
             # All servers should have custom args
-            for role, config in created_servers:
-                assert config.args["custom.setting"] == "value"
-                assert config.args["server.authentication"] == "false"
+            for role, args in created_servers:
+                assert args["custom.setting"] == "value"
+                assert args["server.authentication"] == "false"
 
     def test_minimum_cluster_configuration(self, app_context):
         """Minimum cluster (1 agent, 1 dbserver, 1 coordinator) creates exactly 3 servers."""
@@ -301,7 +300,7 @@ class TestCreateCluster:
         cluster_config = ClusterConfig(agents=1, dbservers=1, coordinators=1)
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -325,7 +324,7 @@ class TestCreateCluster:
         cluster_config = ClusterConfig(agents=5, dbservers=10, coordinators=3)
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -356,9 +355,9 @@ class TestCreateCluster:
 
         created_servers = []
 
-        def capture_server(sid, role, port, ctx, config):
+        def capture_server(sid, role, port, ctx, args):
             server = Mock(spec=ArangoServer, server_id=sid, role=role, port=port)
-            created_servers.append((role, config))
+            created_servers.append((role, args))
             return server
 
         with patch.object(
@@ -369,8 +368,8 @@ class TestCreateCluster:
             )
 
             # All servers should have default authentication
-            for role, config in created_servers:
-                assert config.args["server.authentication"] == "false"
+            for role, args in created_servers:
+                assert args["server.authentication"] == "false"
 
     def test_empty_dict_server_args_in_cluster(self, app_context):
         """Empty dict server_args in cluster should use defaults."""
@@ -379,9 +378,9 @@ class TestCreateCluster:
 
         created_servers = []
 
-        def capture_server(sid, role, port, ctx, config):
+        def capture_server(sid, role, port, ctx, args):
             server = Mock(spec=ArangoServer, server_id=sid, role=role, port=port)
-            created_servers.append((role, config))
+            created_servers.append((role, args))
             return server
 
         with patch.object(
@@ -392,8 +391,8 @@ class TestCreateCluster:
             )
 
             # All servers should have default authentication
-            for role, config in created_servers:
-                assert config.args["server.authentication"] == "false"
+            for role, args in created_servers:
+                assert args["server.authentication"] == "false"
 
 
 class TestDeploymentBehavior:
@@ -632,36 +631,6 @@ class TestBuildCoordinatorArgs:
         assert args["cluster.agency-endpoint"] == "tcp://127.0.0.1:8529"
 
 
-class TestCreateServerConfig:
-    """Test _create_server_config helper method."""
-
-    def test_creates_server_config_with_parameters(self, app_context):
-        """Creates ServerConfig with the given parameters."""
-        role = ServerRole.SINGLE
-        port = 8529
-        data_dir = Path("/tmp/test/data")
-        args = {"server.authentication": "false"}
-
-        config = DeploymentFactory._create_server_config(role, port, data_dir, args)
-
-        assert isinstance(config, ServerConfig)
-        assert config.role == role
-        assert config.port == port
-        assert config.data_dir == data_dir
-        assert config.args == args
-
-    def test_sets_log_file_in_parent_directory(self, app_context):
-        """Sets log file in parent directory of data_dir."""
-        role = ServerRole.SINGLE
-        port = 8529
-        data_dir = Path("/tmp/test/server/data")
-        args = {}
-
-        config = DeploymentFactory._create_server_config(role, port, data_dir, args)
-
-        assert config.log_file == Path("/tmp/test/server/arangodb.log")
-
-
 class TestCreateAgents:
     """Test _create_agents helper method."""
 
@@ -672,7 +641,7 @@ class TestCreateAgents:
         count = 3
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -690,7 +659,7 @@ class TestCreateAgents:
         count = 2
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -728,7 +697,7 @@ class TestCreateAgents:
         app_context.port_allocator.allocate_port = track_port
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -751,7 +720,7 @@ class TestCreateDbservers:
         agency_endpoints = ["tcp://127.0.0.1:8529"]
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -769,7 +738,7 @@ class TestCreateDbservers:
         agency_endpoints = ["tcp://127.0.0.1:8529"]
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -801,7 +770,7 @@ class TestCreateCoordinators:
         agency_endpoints = ["tcp://127.0.0.1:8529"]
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 
@@ -819,7 +788,7 @@ class TestCreateCoordinators:
         agency_endpoints = ["tcp://127.0.0.1:8529"]
 
         with patch.object(ArangoServer, "create_cluster_server") as mock_create:
-            mock_create.side_effect = lambda sid, role, port, ctx, config: Mock(
+            mock_create.side_effect = lambda sid, role, port, ctx, args: Mock(
                 spec=ArangoServer, server_id=sid, role=role, port=port
             )
 

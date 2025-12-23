@@ -1,7 +1,9 @@
 """Server instance factory for creating ArangoDB servers from deployment plans."""
 
 from typing import Dict, Optional
-from ..core.types import ServerRole, ServerConfig
+
+from ..core.types import ServerConfig
+from ..core.enums import ServerRole
 from ..core.errors import ServerError
 from ..core.value_objects import ServerId
 from ..core.protocols import ServerFactory  # Import Protocol from protocols module
@@ -104,7 +106,7 @@ class StandardServerFactory:
             role=server_config.role,
             port=port_value,
             app_context=self._app_context,
-            config=server_config,
+            args=server_config.args,
         )
 
         return server

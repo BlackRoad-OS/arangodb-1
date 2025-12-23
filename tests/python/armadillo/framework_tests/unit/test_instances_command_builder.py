@@ -5,12 +5,9 @@ from pathlib import Path
 from typing import Any, Generator
 from unittest.mock import Mock
 
-from armadillo.core.types import ServerRole, ServerConfig
+from armadillo.core.types import ServerRole, ServerPaths, ServerConfig
 from armadillo.core.value_objects import ServerId
-from armadillo.instances.command_builder import (
-    ServerCommandBuilder,
-    ServerCommandParams,
-)
+from armadillo.instances.command_builder import ServerCommandBuilder
 
 
 class TestServerCommandBuilder:
@@ -52,14 +49,13 @@ class TestServerCommandBuilder:
 
     def test_build_command_single_server(self, setup_repo_structure: Path) -> None:
         """Test building command for single server."""
-        params = ServerCommandParams(
-            server_id=ServerId("test_single"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.SINGLE,
             port=8529,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
+            args={},
         )
-        command = self.builder.build_command(params)
+        command = self.builder.build_command(ServerId("test_single"), config, paths)
 
         assert isinstance(command, list)
         assert len(command) > 0
@@ -85,20 +81,24 @@ class TestServerCommandBuilder:
         assert "--database.directory" in command
         assert "--javascript.app-path" in command
 
+        # Should contain log file
+        assert "--log.file" in command
+        log_file_idx = command.index("--log.file") + 1
+        assert command[log_file_idx] == "/fake/server/log"
+
         # Single server specific
         assert "--server.storage-engine" in command
         assert "rocksdb" in command
 
     def test_build_command_agent_server(self, setup_repo_structure: Path) -> None:
         """Test building command for agent server."""
-        params = ServerCommandParams(
-            server_id=ServerId("test_agent"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.AGENT,
             port=8531,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
+            args={},
         )
-        command = self.builder.build_command(params)
+        command = self.builder.build_command(ServerId("test_agent"), config, paths)
 
         # Should contain agent configuration
         assert "etc/testing/arangod-agent.conf" in command
@@ -112,14 +112,13 @@ class TestServerCommandBuilder:
 
     def test_build_command_coordinator_server(self, setup_repo_structure: Path) -> None:
         """Test building command for coordinator server."""
-        params = ServerCommandParams(
-            server_id=ServerId("test_coord"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.COORDINATOR,
             port=8530,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
+            args={},
         )
-        command = self.builder.build_command(params)
+        command = self.builder.build_command(ServerId("test_coord"), config, paths)
 
         # Should contain coordinator configuration
         assert "etc/testing/arangod-coordinator.conf" in command
@@ -132,14 +131,13 @@ class TestServerCommandBuilder:
 
     def test_build_command_dbserver(self, setup_repo_structure: Path) -> None:
         """Test building command for dbserver."""
-        params = ServerCommandParams(
-            server_id=ServerId("test_db"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.DBSERVER,
             port=8532,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
+            args={},
         )
-        command = self.builder.build_command(params)
+        command = self.builder.build_command(ServerId("test_db"), config, paths)
 
         # Should contain dbserver configuration
         assert "etc/testing/arangod-dbserver.conf" in command
@@ -150,23 +148,15 @@ class TestServerCommandBuilder:
 
     def test_build_command_with_custom_config(self, setup_repo_structure: Path) -> None:
         """Test building command with custom server configuration."""
-        custom_config = ServerConfig(
-            role=ServerRole.SINGLE,
-            port=8529,
-            data_dir=Path("/fake/data"),
-            log_file=Path("/fake/logs/arangod.log"),
-            args={"log.level": "debug", "server.authentication": "false"},
-        )
+        custom_args = {"log.level": "debug", "server.authentication": "false"}
 
-        params = ServerCommandParams(
-            server_id=ServerId("test_custom"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.SINGLE,
             port=8529,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
-            config=custom_config,
+            args=custom_args,
         )
-        command = self.builder.build_command(params)
+        command = self.builder.build_command(ServerId("test_custom"), config, paths)
 
         command_str = " ".join(command)
 
@@ -176,7 +166,9 @@ class TestServerCommandBuilder:
         assert "--server.authentication" in command_str
         assert "false" in command_str
 
-    def test_get_repository_root_from_build_bin(self, setup_repo_structure: Path) -> None:
+    def test_get_repository_root_from_build_bin(
+        self, setup_repo_structure: Path
+    ) -> None:
         """Test repository root detection from build/bin directory."""
         repo_root = setup_repo_structure
 
@@ -249,14 +241,13 @@ class TestServerCommandBuilder:
 
     def test_logs_command_for_debugging(self, setup_repo_structure: Path) -> None:
         """Test that command building logs the command for debugging."""
-        params = ServerCommandParams(
-            server_id=ServerId("test_logging"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.SINGLE,
             port=8529,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
+            args={},
         )
-        self.builder.build_command(params)
+        self.builder.build_command(ServerId("test_logging"), config, paths)
 
         # Should have called logger with command information
         self.mock_logger.debug.assert_called()
@@ -285,18 +276,19 @@ class TestServerCommandBuilder:
             command_line_found
         ), f"Expected command line not found in log calls: {[call.args for call in log_calls]}"
 
-    def test_binary_path_fallback_when_no_bin_dir(self, setup_repo_structure: Path) -> None:
+    def test_binary_path_fallback_when_no_bin_dir(
+        self, setup_repo_structure: Path
+    ) -> None:
         """Test fallback to 'arangod' in PATH when no bin_dir configured."""
         self.mock_config.bin_dir = None
 
-        params = ServerCommandParams(
-            server_id=ServerId("test_fallback"),
+        paths = ServerPaths(base_dir=Path("/fake/server"))
+        config = ServerConfig(
             role=ServerRole.SINGLE,
             port=8529,
-            data_dir=Path("/fake/data"),
-            app_dir=Path("/fake/apps"),
+            args={},
         )
-        command = self.builder.build_command(params)
+        command = self.builder.build_command(ServerId("test_fallback"), config, paths)
 
         # Should use 'arangod' directly (will likely fail in real usage)
         assert command[0] == "arangod"

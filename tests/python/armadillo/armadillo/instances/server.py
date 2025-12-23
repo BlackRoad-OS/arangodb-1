@@ -5,16 +5,17 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 import aiohttp
 
 from ..core.types import (
     ServerRole,
-    ServerConfig,
+    ServerPaths,
     HealthStatus,
     ServerStats,
     ArmadilloConfig,
+    ServerConfig,
 )
 from ..core.errors import ServerStartupError, ServerShutdownError
 from ..core.context import ApplicationContext
@@ -22,64 +23,12 @@ from ..core.value_objects import ServerId, ServerContext
 from ..core.process import ProcessInfo
 from ..core.log import get_logger, log_server_event, Logger
 from ..core.time import clamp_timeout, timeout_scope
-from ..utils.filesystem import FilesystemService
 from ..utils.auth import AuthProvider
 from ..utils.sanitizer import create_sanitizer_handler
 from .command_builder import CommandBuilder, ServerCommandBuilder
 from .health_checker import HealthChecker, ServerHealthChecker
-from .command_builder import ServerCommandParams
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class ServerPaths:
-    """File system paths for an ArangoDB server."""
-
-    base_dir: Path
-    data_dir: Path
-    app_dir: Path
-    log_file: Path
-    config: Optional[ServerConfig] = None  # Store config for command building
-
-    @classmethod
-    def from_config(
-        cls,
-        server_id: ServerId,
-        config: Optional[ServerConfig],
-        filesystem: FilesystemService,
-    ) -> "ServerPaths":
-        """Create server paths from configuration.
-
-        Args:
-            server_id: Unique server identifier
-            config: Optional server configuration
-            filesystem: Filesystem service for path derivation
-        """
-        if config and config.data_dir:
-            data_dir = Path(config.data_dir)
-            base_dir = data_dir.parent
-            return cls(
-                base_dir=base_dir,
-                data_dir=data_dir,
-                app_dir=base_dir / "apps",
-                log_file=(
-                    Path(config.log_file)
-                    if config.log_file
-                    else data_dir / "arangodb.log"
-                ),
-                config=config,
-            )
-
-        # Default directory structure
-        base_dir = filesystem.server_dir(str(server_id))
-        return cls(
-            base_dir=base_dir,
-            data_dir=base_dir / "data",
-            app_dir=base_dir / "apps",
-            log_file=base_dir / "arangodb.log",
-            config=config,
-        )
 
 
 @dataclass
@@ -135,8 +84,7 @@ class ArangoServer:
         self,
         server_id: ServerId,
         *,
-        role: ServerRole,
-        port: int,
+        config: ServerConfig,
         paths: ServerPaths,
         app_context: ApplicationContext,
     ) -> None:
@@ -144,28 +92,28 @@ class ArangoServer:
 
         Args:
             server_id: Unique server identifier
-            role: Server role
-            port: Port number
+            config: Server instance configuration (role, port, args)
             paths: Server file system paths
             app_context: Application context with all dependencies
         """
-        if not isinstance(port, int):
-            raise TypeError(f"Port must be an integer, got {type(port)}: {port}")
+        if not isinstance(config.port, int):
+            raise TypeError(
+                f"Port must be an integer, got {type(config.port)}: {config.port}"
+            )
 
         self.server_id = server_id
-        self.role = role
-        self.port = port
+        self.config = config
         self.paths = paths
         self._app_context = app_context
-        self.endpoint = f"http://127.0.0.1:{self.port}"
+        self.endpoint = f"http://127.0.0.1:{self.config.port}"
         self._runtime = ServerRuntimeState()
 
         log_server_event(
             self._app_context.logger,
             "created",
             server_id=server_id,
-            role=role.value,
-            port=self.port,
+            role=config.role.value,
+            port=self.config.port,
         )
 
     @classmethod
@@ -174,7 +122,7 @@ class ArangoServer:
         server_id: ServerId,
         app_context: ApplicationContext,
         port: Optional[int] = None,
-        config: Optional[ServerConfig] = None,
+        args: Optional[Dict[str, Any]] = None,
     ) -> "ArangoServer":
         """Create a single server instance with sensible defaults.
 
@@ -184,7 +132,7 @@ class ArangoServer:
             server_id: Unique server identifier
             app_context: Application context with all dependencies
             port: Optional port number (auto-allocated if None)
-            config: Optional server configuration with custom args
+            args: Optional server arguments dict (for custom args)
 
         Returns:
             Configured ArangoServer instance ready to start
@@ -195,11 +143,15 @@ class ArangoServer:
             >>> server.start()
         """
         actual_port = port or app_context.port_allocator.allocate_port()
-        paths = ServerPaths.from_config(server_id, config, app_context.filesystem)
-        return cls(
-            server_id,
+        paths = ServerPaths.from_config(server_id, app_context.filesystem)
+        config = ServerConfig(
             role=ServerRole.SINGLE,
             port=actual_port,
+            args=args or {},
+        )
+        return cls(
+            server_id,
+            config=config,
             paths=paths,
             app_context=app_context,
         )
@@ -211,7 +163,7 @@ class ArangoServer:
         role: ServerRole,
         port: int,
         app_context: ApplicationContext,
-        config: Optional[ServerConfig] = None,
+        args: Optional[Dict[str, Any]] = None,
     ) -> "ArangoServer":
         """Create a cluster server instance (agent, dbserver, coordinator).
 
@@ -222,7 +174,7 @@ class ArangoServer:
             role: Server role (AGENT, DBSERVER, COORDINATOR)
             port: Port number (must be pre-allocated for cluster coordination)
             app_context: Application context with all dependencies
-            config: Optional server-specific configuration
+            args: Optional server arguments dict (for custom args)
 
         Returns:
             Configured ArangoServer instance ready to start
@@ -232,9 +184,17 @@ class ArangoServer:
             >>> agent = ArangoServer.create_cluster_server(ServerId("agent1"), ServerRole.AGENT, 8529, ctx)
             >>> agent.start()
         """
-        paths = ServerPaths.from_config(server_id, config, app_context.filesystem)
+        paths = ServerPaths.from_config(server_id, app_context.filesystem)
+        config = ServerConfig(
+            role=role,
+            port=port,
+            args=args or {},
+        )
         return cls(
-            server_id, role=role, port=port, paths=paths, app_context=app_context
+            server_id,
+            config=config,
+            paths=paths,
+            app_context=app_context,
         )
 
     def get_context(self) -> ServerContext:
@@ -242,10 +202,26 @@ class ArangoServer:
         process_info = self._runtime.process_info
         return ServerContext(
             server_id=self.server_id,
-            role=self.role,
+            role=self.config.role,
             pid=process_info.pid if process_info else None,
-            port=self.port,
+            port=self.config.port,
         )
+
+    # Backward compatibility properties
+    @property
+    def role(self) -> ServerRole:
+        """Get server role from config."""
+        return self.config.role
+
+    @property
+    def port(self) -> int:
+        """Get server port from config."""
+        return self.config.port
+
+    @property
+    def args(self) -> Dict[str, Any]:
+        """Get server arguments from config."""
+        return self.config.args
 
     # Internal properties for dependency access
     @property
@@ -297,8 +273,7 @@ class ArangoServer:
         try:
             with timeout_scope(effective_timeout, f"start_server_{self.server_id}"):
                 # Ensure directories exist before starting server
-                self.paths.data_dir.mkdir(parents=True, exist_ok=True)
-                self.paths.app_dir.mkdir(parents=True, exist_ok=True)
+                self.paths.ensure_directories()
 
                 # Build command line
                 command = self._build_command()
@@ -518,15 +493,9 @@ class ArangoServer:
 
     def _build_command(self) -> List[str]:
         """Build ArangoDB command line using injected command builder."""
-        params = ServerCommandParams(
-            server_id=self.server_id,
-            role=self.role,
-            port=self.port,
-            data_dir=self.paths.data_dir,
-            app_dir=self.paths.app_dir,
-            config=self.paths.config,
+        return self._get_command_builder().build_command(
+            self.server_id, self.config, self.paths
         )
-        return self._get_command_builder().build_command(params)
 
     def _prepare_environment(
         self, binary_path: str, repository_root: Path
@@ -541,7 +510,9 @@ class ArangoServer:
             Environment variables dict, or None if no special env needed
         """
         # Get explicit sanitizer from config if present
-        explicit_sanitizer = getattr(self._config, "sanitizer", None)
+        explicit_sanitizer = (
+            self._config.sanitizer if hasattr(self._config, "sanitizer") else None
+        )
 
         # Create sanitizer handler
         sanitizer_handler = create_sanitizer_handler(
@@ -598,7 +569,7 @@ class ArangoServer:
             return self._runtime.process_info.pid
         return None
 
-    def create_sanitizer_handler(self):
+    def create_sanitizer_handler(self) -> Optional[object]:
         """Create sanitizer handler for this server.
 
         Returns:
@@ -610,7 +581,9 @@ class ArangoServer:
         binary_path = Path(self._runtime.process_info.command[0])
         log_dir = self.paths.base_dir
         repo_root = self._get_command_builder().get_repository_root()
-        explicit_sanitizer = getattr(self._config, "sanitizer", None)
+        explicit_sanitizer = (
+            self._config.sanitizer if hasattr(self._config, "sanitizer") else None
+        )
 
         return create_sanitizer_handler(
             binary_path=binary_path,

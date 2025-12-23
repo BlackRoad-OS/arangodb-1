@@ -6,7 +6,8 @@ from typing import Dict, List, Tuple, Optional, Any
 
 import requests
 
-from ..core.types import ServerRole, TimeoutConfig
+from ..core.types import TimeoutConfig
+from ..core.enums import ServerRole
 from ..core.config import get_config
 from ..core.log import Logger
 from ..core.value_objects import ServerId

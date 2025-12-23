@@ -10,11 +10,8 @@ comprehensive monitoring, and result processing.
 __version__ = "1.0.0"
 
 # Core exports
+from .core.enums import DeploymentMode, ServerRole, ExecutionOutcome
 from .core.types import (
-    DeploymentMode,
-    ServerRole,
-    ExecutionOutcome,
-    ServerConfig,
     ClusterConfig,
     TimeoutConfig,
     InfrastructureConfig,
@@ -26,7 +23,6 @@ __all__ = [
     "DeploymentMode",
     "ServerRole",
     "ExecutionOutcome",
-    "ServerConfig",
     "ClusterConfig",
     "TimeoutConfig",
     "InfrastructureConfig",

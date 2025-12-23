@@ -9,8 +9,9 @@ Design Principle:
 """
 
 from typing import Protocol, Dict, TypeVar, Any
-from .types import ServerConfig
+
 from .value_objects import ServerId
+from .types import ServerConfig
 
 # Type variable for server instances - allows Protocol to work with any server type
 # without creating circular dependencies
