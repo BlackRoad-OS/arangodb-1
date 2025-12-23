@@ -92,8 +92,6 @@
 #include "RestHandler/RestQueryPlanCacheHandler.h"
 #include "RestHandler/RestQueryHandler.h"
 #include "RestHandler/RestShutdownHandler.h"
-#include "RestHandler/RestSimpleHandler.h"
-#include "RestHandler/RestSimpleQueryHandler.h"
 #include "RestHandler/RestStatusHandler.h"
 #include "RestHandler/RestSupervisionStateHandler.h"
 #include "RestHandler/RestTelemetricsHandler.h"
@@ -654,30 +652,13 @@ void GeneralServerFeature::defineRemainingHandlers(
   f.addPrefixHandler(RestVocbaseBaseHandler::INDEX_PATH,
                      RestHandlerCreator<RestIndexHandler>::createNoData);
 
-  f.addPrefixHandler(RestVocbaseBaseHandler::SIMPLE_QUERY_ALL_PATH,
-                     RestHandlerCreator<RestSimpleQueryHandler>::createData<
-                         aql::QueryRegistry*>,
-                     queryRegistry);
-
-  f.addPrefixHandler(RestVocbaseBaseHandler::SIMPLE_QUERY_ALL_KEYS_PATH,
-                     RestHandlerCreator<RestSimpleQueryHandler>::createData<
-                         aql::QueryRegistry*>,
-                     queryRegistry);
-
-  f.addPrefixHandler(RestVocbaseBaseHandler::SIMPLE_QUERY_BY_EXAMPLE,
-                     RestHandlerCreator<RestSimpleQueryHandler>::createData<
-                         aql::QueryRegistry*>,
-                     queryRegistry);
-
-  f.addPrefixHandler(
-      RestVocbaseBaseHandler::SIMPLE_LOOKUP_PATH,
-      RestHandlerCreator<RestSimpleHandler>::createData<aql::QueryRegistry*>,
-      queryRegistry);
-
-  f.addPrefixHandler(
-      RestVocbaseBaseHandler::SIMPLE_REMOVE_PATH,
-      RestHandlerCreator<RestSimpleHandler>::createData<aql::QueryRegistry*>,
-      queryRegistry);
+#ifdef USE_V8
+  if (server().isEnabled<V8DealerFeature>()) {
+    // the tasks feature depends on V8. only enable it if JavaScript is enabled
+    f.addPrefixHandler(RestVocbaseBaseHandler::TASKS_PATH,
+                       RestHandlerCreator<RestTasksHandler>::createNoData);
+  }
+#endif
 
   f.addPrefixHandler(RestVocbaseBaseHandler::UPLOAD_PATH,
                      RestHandlerCreator<RestUploadHandler>::createNoData);

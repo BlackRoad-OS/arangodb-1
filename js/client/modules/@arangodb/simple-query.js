@@ -53,35 +53,33 @@ SimpleQueryAll.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name()
-    };
+    var query = 'FOR doc IN @@collection';
+    var bindVars = { '@collection': this._collection.name() };
+    var cursorOptions = {};
 
-    if (this._limit !== null) {
-      data.limit = this._limit;
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
+      }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
     }
 
-    if (this._skip !== null) {
-      data.skip = this._skip;
-    }
+    query += ' RETURN doc';
 
     if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
+      cursorOptions.batchSize = this._batchSize;
     }
+    cursorOptions.count = true;
 
-    // for _api/simple/all stream becomes a top-level option
-    data.stream = true;
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/all', data);
-
-    arangosh.checkRequestResult(requestResult);
-
-    this._execution = new ArangoQueryCursor(this._collection._database, 
-                                            requestResult, true);
-
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
     }
   }
 };
@@ -96,47 +94,44 @@ SimpleQueryByExample.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name(),
-      example: this._example
-    };
+    var bindVars = { '@collection': this._collection.name() };
+    var filters = [];
+    var self = this;
+    Object.keys(this._example).forEach(function (key) {
+      var value = self._example[key];
+      filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+    });
 
-    if (this._limit !== null) {
-      data.limit = this._limit;
+    var query = 'FOR doc IN @@collection';
+    if (filters.length > 0) {
+      query += ' ' + filters.join(' ') + ' ';
     }
 
-    if (this._skip !== null) {
-      data.skip = this._skip;
-    }
-
-    if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
-    }
-
-    var method = 'by-example';
-    if (this.hasOwnProperty('_type')) {
-      data.index = this._index;
-
-      switch (this._type) {
-        case 'hash':
-          method = 'by-example-hash';
-          break;
-        case 'skiplist':
-          method = 'by-example-skiplist';
-          break;
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
       }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
     }
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/' + method, data);
+    query += ' RETURN doc';
 
-    arangosh.checkRequestResult(requestResult);
+    var cursorOptions = {};
+    if (this._batchSize !== null) {
+      cursorOptions.batchSize = this._batchSize;
+    }
+    cursorOptions.count = true;
 
-    this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
-      this._countTotal = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
+      this._countTotal = this._execution.count;
     }
   }
 };
@@ -151,44 +146,52 @@ SimpleQueryByCondition.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name(),
-      condition: this._condition
-    };
-
-    if (this._limit !== null) {
-      data.limit = this._limit;
+    // Convert condition object to AQL FILTER conditions
+    var bindVars = { '@collection': this._collection.name() };
+    var filters = [];
+    var varCount = 0;
+    var self = this;
+    
+    // Condition is typically an object with attribute-value pairs or AQL expressions
+    if (typeof this._condition === 'object' && !Array.isArray(this._condition)) {
+      Object.keys(this._condition).forEach(function (key) {
+        var value = self._condition[key];
+        var varName = 'cond' + varCount++;
+        filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == @' + varName);
+        bindVars[varName] = value;
+      });
     }
 
-    if (this._skip !== null) {
-      data.skip = this._skip;
+    var query = 'FOR doc IN @@collection';
+    if (filters.length > 0) {
+      query += ' FILTER ' + filters.join(' && ') + ' ';
     }
 
-    if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
-    }
-
-    var method = 'by-condition';
-    if (this.hasOwnProperty('_type')) {
-      data.index = this._index;
-
-      switch (this._type) {
-        case 'skiplist':
-          method = 'by-condition-skiplist';
-          break;
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
       }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
     }
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/' + method, data);
+    query += ' RETURN doc';
 
-    arangosh.checkRequestResult(requestResult);
+    var cursorOptions = {};
+    if (this._batchSize !== null) {
+      cursorOptions.batchSize = this._batchSize;
+    }
+    cursorOptions.count = true;
 
-    this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
-      this._countTotal = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
+      this._countTotal = this._execution.count;
     }
   }
 };
@@ -197,81 +200,53 @@ SimpleQueryByCondition.prototype.execute = function (batchSize) {
 // / @brief executes a range query
 // //////////////////////////////////////////////////////////////////////////////
 
-if (SYS_IS_V8_BUILD) {
-  SimpleQueryRange.prototype.execute = function (batchSize) {
-    if (this._execution === null) {
-      if (batchSize !== undefined && batchSize > 0) {
-        this._batchSize = batchSize;
-      }
-
-      var data = {
-        collection: this._collection.name(),
-        attribute: this._attribute,
-        right: this._right,
-        left: this._left,
-        closed: this._type === 1
-      };
-
-      if (this._limit !== null) {
-        data.limit = this._limit;
-      }
-
-      if (this._skip !== null) {
-        data.skip = this._skip;
-      }
-
-      if (this._batchSize !== null) {
-        data.batchSize = this._batchSize;
-      }
-
-      var requestResult = this._collection._database._connection.PUT(
-        '/_api/simple/range', data);
-
-      arangosh.checkRequestResult(requestResult);
-
-      this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
-
-      if (requestResult.hasOwnProperty('count')) {
-        this._countQuery = requestResult.count;
-      }
+var limitString = function (skip, limit) {
+  if (skip > 0 || limit > 0) {
+    if (limit <= 0) {
+      limit = 99999999999;
     }
-  };
-} else {
-  var limitString = function (skip, limit) {
-    if (skip > 0 || limit > 0) {
-      if (limit <= 0) {
-        limit = 99999999999;
-      }
-      return 'LIMIT ' + parseInt(skip, 10) + ', ' + parseInt(limit, 10) + ' ';
-    }
-    return '';
-  };
-  SimpleQueryRange.prototype.execute = function (batchSize) {
-    if (this._execution === null) {
-      if (batchSize !== undefined && batchSize > 0) {
-        this._batchSize = batchSize;
-      }
-      var query = 'FOR doc IN @@collection ';
-      var bindVars = {
-        '@collection': this._collection.name(),
-        attribute: this._attribute,
-        left: this._left,
-        right: this._right
-      };
+    return 'LIMIT ' + parseInt(skip, 10) + ', ' + parseInt(limit, 10) + ' ';
+  }
+  return '';
+};
 
-      if (this._type === 0) {
-        query += 'FILTER doc.@attribute >= @left && doc.@attribute < @right ';
-      } else if (this._type === 1) {
-        query += 'FILTER doc.@attribute >= @left && doc.@attribute <= @right ';
-      } else {
-        throw 'unknown type';
-      }
-
-      query += limitString(this._skip, this._limit) + ' RETURN doc';
-      this._execution = require('internal').db._query({ query, bindVars});
+SimpleQueryRange.prototype.execute = function (batchSize) {
+  if (this._execution === null) {
+    if (batchSize !== undefined && batchSize > 0) {
+      this._batchSize = batchSize;
     }
-  };
-}
+    var query = 'FOR doc IN @@collection ';
+    var bindVars = {
+      '@collection': this._collection.name(),
+      attribute: this._attribute,
+      left: this._left,
+      right: this._right
+    };
+
+    if (this._type === 0) {
+      query += 'FILTER doc.@attribute >= @left && doc.@attribute < @right ';
+    } else if (this._type === 1) {
+      query += 'FILTER doc.@attribute >= @left && doc.@attribute <= @right ';
+    } else {
+      throw 'unknown type';
+    }
+
+    query += limitString(this._skip, this._limit) + ' RETURN doc';
+    
+    var cursorOptions = {};
+    if (this._batchSize !== null) {
+      cursorOptions.batchSize = this._batchSize;
+    }
+    cursorOptions.count = true;
+    
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
+
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
+    }
+  }
+};
+
 // //////////////////////////////////////////////////////////////////////////////
 // / @brief executes a near query
 // //////////////////////////////////////////////////////////////////////////////
@@ -282,41 +257,46 @@ SimpleQueryNear.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name(),
-      latitude: this._latitude,
-      longitude: this._longitude
-    };
-
-    if (this._limit !== null) {
-      data.limit = this._limit;
-    }
-
-    if (this._skip !== null) {
-      data.skip = this._skip;
-    }
-
+    var query = 'FOR doc IN @@collection';
+    var bindVars = { '@collection': this._collection.name() };
+    
     if (this._index !== null) {
-      data.geo = this._index;
+      query += ' USE INDEX @index';
+      bindVars.index = this._index;
     }
-
-    if (this._distance !== null) {
-      data.distance = this._distance;
+    
+    query += ' FILTER GEO_DISTANCE([@lat, @lon], doc.@attribute) <= @distance';
+    bindVars.lat = this._latitude;
+    bindVars.lon = this._longitude;
+    bindVars.attribute = this._attribute || 'location';
+    bindVars.distance = this._distance !== null ? this._distance : 1000000;
+    
+    query += ' SORT GEO_DISTANCE([@lat, @lon], doc.@attribute) ASC';
+    
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
+      }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
     }
+    
+    query += ' RETURN doc';
 
+    var cursorOptions = {};
     if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
+      cursorOptions.batchSize = this._batchSize;
     }
+    cursorOptions.count = true;
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/near', data);
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    arangosh.checkRequestResult(requestResult);
-
-    this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
-
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
     }
   }
 };
@@ -331,42 +311,49 @@ SimpleQueryWithin.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name(),
-      latitude: this._latitude,
-      longitude: this._longitude,
-      radius: this._radius
-    };
-
-    if (this._limit !== null) {
-      data.limit = this._limit;
-    }
-
-    if (this._skip !== null) {
-      data.skip = this._skip;
-    }
-
+    var query = 'FOR doc IN @@collection';
+    var bindVars = { '@collection': this._collection.name() };
+    
     if (this._index !== null) {
-      data.geo = this._index;
+      query += ' USE INDEX @index';
+      bindVars.index = this._index;
     }
-
+    
+    var radius = this._radius;
     if (this._distance !== null) {
-      data.distance = this._distance;
+      radius = this._distance;
     }
+    
+    query += ' FILTER GEO_DISTANCE([@lat, @lon], doc.@attribute) <= @radius';
+    bindVars.lat = this._latitude;
+    bindVars.lon = this._longitude;
+    bindVars.attribute = this._attribute || 'location';
+    bindVars.radius = radius;
+    
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
+      }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
+    }
+    
+    query += ' RETURN doc';
 
+    var cursorOptions = {};
     if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
+      cursorOptions.batchSize = this._batchSize;
     }
+    cursorOptions.count = true;
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/within', data);
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    arangosh.checkRequestResult(requestResult);
-
-    this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
-
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
     }
   }
 };
@@ -381,43 +368,45 @@ SimpleQueryWithinRectangle.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name(),
-      latitude1: this._latitude1,
-      longitude1: this._longitude1,
-      latitude2: this._latitude2,
-      longitude2: this._longitude2
-    };
-
-    if (this._limit !== null) {
-      data.limit = this._limit;
-    }
-
-    if (this._skip !== null) {
-      data.skip = this._skip;
-    }
-
+    var query = 'FOR doc IN @@collection';
+    var bindVars = { '@collection': this._collection.name() };
+    
     if (this._index !== null) {
-      data.geo = this._index;
+      query += ' USE INDEX @index';
+      bindVars.index = this._index;
     }
-
-    if (this._distance !== null) {
-      data.distance = this._distance;
+    
+    query += ' FILTER GEO_CONTAINS([[@lat1, @lon1], [@lat2, @lon2]], doc.@attribute)';
+    bindVars.lat1 = this._latitude1;
+    bindVars.lon1 = this._longitude1;
+    bindVars.lat2 = this._latitude2;
+    bindVars.lon2 = this._longitude2;
+    bindVars.attribute = this._attribute || 'location';
+    
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
+      }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
     }
+    
+    query += ' RETURN doc';
 
+    var cursorOptions = {};
     if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
+      cursorOptions.batchSize = this._batchSize;
     }
+    cursorOptions.count = true;
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/within-rectangle', data);
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    arangosh.checkRequestResult(requestResult);
-
-    this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
-
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
     }
   }
 };
@@ -431,37 +420,42 @@ SimpleQueryFulltext.prototype.execute = function (batchSize) {
       this._batchSize = batchSize;
     }
 
-    var data = {
-      collection: this._collection.name(),
-      attribute: this._attribute,
-      query: this._query
-    };
-
-    if (this._limit !== null) {
-      data.limit = this._limit;
-    }
-
+    var query = 'FOR doc IN @@collection';
+    var bindVars = { '@collection': this._collection.name() };
+    
     if (this._index !== null) {
-      data.index = this._index;
+      query += ' USE INDEX @index';
+      bindVars.index = this._index;
     }
-
-    if (this._skip !== null) {
-      data.skip = this._skip;
+    
+    query += ' FILTER FULLTEXT(doc, @attribute, @query)';
+    bindVars.attribute = this._attribute;
+    bindVars.query = this._query;
+    
+    if (this._skip !== null && this._skip > 0) {
+      query += ' LIMIT @skip';
+      bindVars.skip = this._skip;
+      if (this._limit !== null && this._limit > 0) {
+        query += ', @limit';
+        bindVars.limit = this._limit;
+      }
+    } else if (this._limit !== null && this._limit > 0) {
+      query += ' LIMIT @limit';
+      bindVars.limit = this._limit;
     }
+    
+    query += ' RETURN doc';
 
+    var cursorOptions = {};
     if (this._batchSize !== null) {
-      data.batchSize = this._batchSize;
+      cursorOptions.batchSize = this._batchSize;
     }
+    cursorOptions.count = true;
 
-    var requestResult = this._collection._database._connection.PUT(
-      '/_api/simple/fulltext', data);
+    this._execution = this._collection._database._query(query, bindVars, cursorOptions);
 
-    arangosh.checkRequestResult(requestResult);
-
-    this._execution = new ArangoQueryCursor(this._collection._database, requestResult);
-
-    if (requestResult.hasOwnProperty('count')) {
-      this._countQuery = requestResult.count;
+    if (this._execution.hasOwnProperty('count')) {
+      this._countQuery = this._execution.count;
     }
   }
 };
