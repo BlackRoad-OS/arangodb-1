@@ -2313,6 +2313,11 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                   }
                 }
               } else {
+                TRI_ASSERT(replicationVersion != replication::Version::TWO)
+                    << "Follower out-of-sync tracking is not implemented for "
+                       "replication2. Database: "
+                    << dbName << ", shard: " << shName;
+
                 // We are the follower
                 if (s.isArray() && shardMap.contains(shName)) {
                   bool shardInSync{false};

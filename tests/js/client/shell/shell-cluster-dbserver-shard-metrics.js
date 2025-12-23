@@ -494,7 +494,7 @@ function ClusterDBServerShardMetricsTestSuite() {
       const dbFreeDBServer = dbServers.filter(server => server.id !== leaderServer && server.id !== fromServer);
       const toServer = dbFreeDBServer[0].id;
       assertEqual(dbFreeDBServer.length, 1);
-      assertNotEqual(fromServer, dbFreeDBServer);
+      assertNotEqual(fromServer, toServer);
 
       // Move the shard (swap leader and follower) and wait for completion
       const moveResult = moveShard(dbName, collectionName, shardId, 
