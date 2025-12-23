@@ -31,7 +31,6 @@
 #include "Basics/StaticStrings.h"
 #include "Basics/StringUtils.h"
 #include "Basics/VelocyPackHelper.h"
-#include "Basics/overload.h"
 #include "Cluster/ClusterFeature.h"
 #include "Cluster/ClusterInfo.h"
 #include "Cluster/FollowerInfo.h"
@@ -43,15 +42,12 @@
 #include "Logger/LogMacros.h"
 #include "Logger/Logger.h"
 #include "Logger/LoggerStream.h"
-#include "Metrics/Counter.h"
-#include "Metrics/Gauge.h"
 #include "Metrics/Histogram.h"
 #include "Metrics/LogScale.h"
 #include "Replication2/LoggerContext.h"
 #include "Replication2/ReplicatedLog/AgencyLogSpecification.h"
 #include "Replication2/ReplicatedLog/AgencySpecificationInspectors.h"
 #include "Replication2/ReplicatedLog/LogStatus.h"
-#include "Replication2/ReplicatedState/StateStatus.h"
 #include "Replication2/Version.h"
 #include "RestServer/DatabaseFeature.h"
 #include "StorageEngine/EngineSelectorFeature.h"
@@ -67,7 +63,6 @@
 
 #include <absl/strings/escaping.h>
 
-#include <algorithm>
 #include <array>
 
 using namespace arangodb;
@@ -1158,7 +1153,6 @@ arangodb::Result arangodb::maintenance::diffPlanLocal(
     auto const localIt = local.find(it->first);
     if (planIt == plan.end() && currentIt == current.end() &&
         localIt != local.end()) {
-      LOG_DEVEL << "Removing: " << it->first;
       it = feature._databaseShardsStats.erase(it);
     } else {
       ++it;
@@ -2344,7 +2338,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                       VPackSlice lshard = localdb.get(shSlice.stringView());
                       TRI_ASSERT(lshard.isObject());
                       if (lshard.isObject()) {  // just in case
-                        LOG_DEVEL << "LADIDA: " << lshard.toJson();
                         theLeader = lshard.get(THE_LEADER);
                         if (theLeader.isString() &&
                             theLeader.stringView() ==
