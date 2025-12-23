@@ -16,6 +16,7 @@ target_link_libraries(arango_metrics_base
 
 add_library(arango_metrics STATIC
   MetricsFeature.cpp
+  MetricsOptionsProvider.cpp
   ClusterMetricsFeature.cpp
   ${PROJECT_SOURCE_DIR}/arangod/RestHandler/RestMetricsHandler.cpp
   ${PROJECT_SOURCE_DIR}/arangod/RestHandler/RestUsageMetricsHandler.cpp)
