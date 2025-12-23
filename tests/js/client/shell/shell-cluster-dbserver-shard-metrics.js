@@ -185,6 +185,22 @@ function ClusterDBServerShardMetricsTestSuite() {
     getMetricsAndAssert(servers, expectedShardsNum, expectedShardsLeaderNum, expectedShardsOutOfSync, expectedShardsNotReplicated, expectedFollowersOutOfSync);
   };
 
+  // Helper function to eventually assert a single metric with a custom comparison function
+  // compareFn takes the metric value and returns true if the assertion should pass
+  const eventuallyAssertMetric = function(servers, metricName, compareFn, errorMessage) {
+    let metricValue;
+    for (let i = 0; i < 100; i++) {
+      internal.wait(0.1);
+      metricValue = getDBServerMetricSum(servers, metricName);
+      if (compareFn(metricValue)) {
+        return metricValue;
+      }
+    }
+    // Final assertion with error message
+    assertTrue(compareFn(metricValue), `${errorMessage}: got ${metricValue}`);
+    return metricValue;
+  };
+
   return {
     tearDown: function () {
       db._useDatabase("_system");
@@ -279,8 +295,9 @@ function ClusterDBServerShardMetricsTestSuite() {
       const onlineServers = dbServers.filter(server => server.id !== dbServerWithoutLeader.id);
       // The server we crashed had two followers, so we have 2 out of sync shards
       // also other system shards might also be out of sync
-      const shardsOutOfSyncNumMetricValue = getDBServerMetricSum(onlineServers, shardsOutOfSyncNumMetric);
-      assertTrue(shardsOutOfSyncNumMetricValue >= 2);
+      eventuallyAssertMetric(onlineServers, shardsOutOfSyncNumMetric,
+        (value) => value >= 2,
+        "Expected at least 2 shards out of sync");
       // One server is down, so we lose testCollShards shards (one replica per shard)
       const onlineShardCount = totalShardCount - testCollShards;
       getMetricsAndAssert(onlineServers, onlineShardCount, totalLeaderCount, null, 0);
