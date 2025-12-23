@@ -112,7 +112,6 @@
 #include "RocksDBEngine/RocksDBSyncThread.h"
 #include "RocksDBEngine/RocksDBTypes.h"
 #include "RocksDBEngine/RocksDBUpgrade.h"
-#include "RocksDBEngine/RocksDBV8Functions.h"
 #include "RocksDBEngine/RocksDBValue.h"
 #include "RocksDBEngine/RocksDBWalAccess.h"
 #include "RocksDBEngine/SimpleRocksDBTransactionState.h"
@@ -2402,14 +2401,6 @@ Result RocksDBEngine::compactAll(bool changeLevel,
 void RocksDBEngine::addOptimizerRules(aql::OptimizerRulesFeature& feature) {
   RocksDBOptimizerRules::registerResources(feature);
 }
-
-#ifdef USE_V8
-/// @brief Add engine-specific V8 functions
-void RocksDBEngine::addV8Functions() {
-  // there are no specific V8 functions here
-  RocksDBV8Functions::registerResources(*this);
-}
-#endif
 
 /// @brief Add engine-specific REST handlers
 void RocksDBEngine::addRestHandlers(rest::RestHandlerFactory& handlerFactory) {

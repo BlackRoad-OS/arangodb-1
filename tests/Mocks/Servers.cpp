@@ -56,9 +56,6 @@
 #include "FeaturePhases/ClusterFeaturePhase.h"
 #include "FeaturePhases/DatabaseFeaturePhase.h"
 #include "RestServer/VectorIndexFeature.h"
-#ifdef USE_V8
-#include "FeaturePhases/V8FeaturePhase.h"
-#endif
 #include "GeneralServer/AuthenticationFeature.h"
 #include "GeneralServer/ServerSecurityFeature.h"
 #include "IResearch/AgencyMock.h"
@@ -102,10 +99,6 @@
 #include "Transaction/ManagerFeature.h"
 #include "Transaction/Methods.h"
 #include "Transaction/StandaloneContext.h"
-#ifdef USE_V8
-#include "V8/V8SecurityFeature.h"
-#include "V8Server/V8DealerFeature.h"
-#endif
 #include "VocBase/LogicalCollection.h"
 #include "VocBase/vocbase.h"
 #include "utils/log.hpp"
@@ -196,21 +189,10 @@ static void SetupCommunicationFeaturePhase(MockServer& server) {
   SetupClusterFeaturePhase(server);
   server.addFeature<HttpEndpointProvider, HttpEndpointProviderMock>(false);
   server.addFeature<CommunicationFeaturePhase>(false);
-  // This phase is empty...
-}
-
-static void SetupV8Phase(MockServer& server) {
-  SetupCommunicationFeaturePhase(server);
-#ifdef USE_V8
-  server.addFeature<V8FeaturePhase>(false);
-  server.addFeature<V8DealerFeature>(
-      false, server.template getFeature<arangodb::metrics::MetricsFeature>());
-  server.addFeature<V8SecurityFeature>(false);
-#endif
 }
 
 static void SetupAqlPhase(MockServer& server) {
-  SetupV8Phase(server);
+  SetupCommunicationFeaturePhase(server);
   server.addFeature<AqlFeaturePhase>(false);
   server.addFeature<QueryRegistryFeature>(
       false, server.template getFeature<arangodb::metrics::MetricsFeature>());
@@ -424,7 +406,7 @@ MockMetricsServer::MockMetricsServer(bool start) : MockServer() {
 
 MockV8Server::MockV8Server(bool start) : MockServer() {
   // setup required application features
-  SetupV8Phase(*this);
+  SetupCommunicationFeaturePhase(*this);
   addFeature<NetworkFeature>(
       true, _server.getFeature<metrics::MetricsFeature>(),
       network::ConnectionPool::Config{
@@ -500,7 +482,7 @@ std::shared_ptr<aql::Query> MockAqlServer::createFakeQuery(
 }
 
 MockRestServer::MockRestServer(bool start) : MockServer() {
-  SetupV8Phase(*this);
+  SetupCommunicationFeaturePhase(*this);
   addFeature<QueryRegistryFeature>(
       false, getFeature<arangodb::metrics::MetricsFeature>());
   addFeature<NetworkFeature>(

@@ -37,12 +37,6 @@ add_subdirectory(BuildId)
 # Link directories
 # ----------------------------------------
 
-if (USE_V8)
-  foreach (LINK_DIR ${V8_LINK_DIRECTORIES})
-    link_directories("${LINK_DIR}")
-  endforeach()
-endif ()
-
 add_library(arango_tests_basics OBJECT
   ${CMAKE_CURRENT_SOURCE_DIR}/Mocks/ClusterInfoMock.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/Mocks/FakeScheduler.cpp
@@ -251,6 +245,7 @@ set(ARANGODB_TESTS_SOURCES
   RocksDBEngine/KeyTest.cpp
   RocksDBEngine/MemoryUsageTest.cpp
   RocksDBEngine/TransactionManagerTest.cpp
+  Scheduler/ThreadPoolTest.cpp
   Sharding/ShardDistributionReporterTest.cpp
   SimpleHttpClient/ConnectionCacheTest.cpp
   SimpleHttpClient/HttpResponseCheckerTest.cpp
@@ -269,14 +264,6 @@ set(ARANGODB_TESTS_SOURCES
   VocBase/VersionTest.cpp
   VocBase/VocbaseTest.cpp
 )
-
-if (USE_V8)
-  set(ARANGODB_TESTS_SOURCES ${ARANGODB_TESTS_SOURCES}
-    Scheduler/ThreadPoolTest.cpp
-    V8Server/V8AnalyzersTest.cpp
-    V8Server/V8UsersTest.cpp
-    V8Server/V8ViewsTest.cpp)
-endif()
 
 if (USE_PERF_TESTS)
   set(ARANGODB_TESTS_SOURCES ${ARANGODB_TESTS_SOURCES}
@@ -355,10 +342,6 @@ target_link_libraries(arangodbtests
   velocypack_utils
 )
 
-if (USE_V8)
-  target_link_libraries(arangodbtests arango_v8server)
-endif ()
-
 if (USE_ENTERPRISE)
   target_link_libraries(arangodbtests arango_rclone)
 endif ()
@@ -384,15 +367,6 @@ target_include_directories(arangodbtests PRIVATE
 target_include_directories(arangodbtests SYSTEM PRIVATE
   ${CMAKE_SOURCE_DIR}/3rdParty/fakeit-gtest
 )
-
-if (USE_V8)
-  target_include_directories(arangodbtests SYSTEM PRIVATE
-    ${V8_INTERNAL_INCLUDE_DIR})
-endif ()
-
-if (USE_V8)
-  target_link_libraries(arangodbtests v8_interface)
-endif ()
 
 if (NOT USE_PRECOMPILED_V8)
   add_dependencies(arangodbtests v8_build)

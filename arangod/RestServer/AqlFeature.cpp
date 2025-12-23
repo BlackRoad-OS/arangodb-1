@@ -54,12 +54,7 @@ namespace arangodb {
 
 AqlFeature::AqlFeature(Server& server) : ArangodFeature{server, *this} {
   setOptional(false);
-#ifdef USE_V8
-  startsAfter<V8FeaturePhase>();
-#else
   startsAfter<application_features::ClusterFeaturePhase>();
-#endif
-
   startsAfter<QueryRegistryFeature>();
 }
 
