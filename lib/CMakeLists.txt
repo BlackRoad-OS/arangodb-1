@@ -225,6 +225,8 @@ add_library(arango_basic_logger STATIC
         Logger/LogTopic.cpp
         Logger/Logger.cpp
         Logger/LoggerFeature.cpp
+        Logger/LoggerOptions.cpp
+        Logger/LoggerOptionsProvider.cpp
         Logger/LoggerStream.cpp
         Logger/LogTimeFormat.cpp
 )
