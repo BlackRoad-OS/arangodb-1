@@ -2,6 +2,7 @@ add_library(arango_agency STATIC
   AddFollower.cpp
   AgencyComm.cpp
   AgencyFeature.cpp
+  AgencyOptionsProvider.cpp
   AgencyPaths.cpp
   Agent.cpp
   AgentCallback.cpp
@@ -29,7 +30,7 @@ add_library(arango_agency STATIC
   Store.cpp
   Supervision.cpp)
 
-if (USE_V8) 
+if (USE_V8)
   target_sources(arango_agency PRIVATE
     v8-agency.cpp)
 endif()

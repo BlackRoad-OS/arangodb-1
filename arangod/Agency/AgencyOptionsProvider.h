@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
-/// Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
+/// Copyright 2014-2025 ArangoDB GmbH, Cologne, Germany
 /// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 ///
 /// Licensed under the Business Source License 1.1 (the "License");
@@ -18,41 +18,29 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Kaveh Vahedipour
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
-#include "Agency/AgencyOptions.h"
-#include "RestServer/arangod.h"
+#include "ApplicationFeatures/OptionsProvider.h"
+#include "AgencyOptions.h"
+#include <memory>
 
-namespace arangodb {
-namespace consensus {
-class Agent;
+namespace arangodb::options {
+class ProgramOptions;
 }
 
-class AgencyFeature : public ArangodFeature {
- public:
-  static constexpr std::string_view name() { return "Agency"; }
+namespace arangodb {
 
-  explicit AgencyFeature(Server& server);
-  ~AgencyFeature();
+struct AgencyOptionsProvider : OptionsProvider<AgencyOptions> {
+  AgencyOptionsProvider() = default;
 
-  void collectOptions(std::shared_ptr<options::ProgramOptions>) override final;
-  void validateOptions(std::shared_ptr<options::ProgramOptions>) override final;
-  void prepare() override final;
-  void start() override final;
-  void beginShutdown() override final;
-  void stop() override final;
-  void unprepare() override final;
+  void declareOptions(std::shared_ptr<options::ProgramOptions> opts,
+                      AgencyOptions& options) override;
 
-  bool activated() const noexcept { return _options.activated; }
-
-  consensus::Agent* agent() const;
-
- private:
-  AgencyOptions _options;
-  std::unique_ptr<consensus::Agent> _agent;
+  void validateOptions(std::shared_ptr<options::ProgramOptions> opts,
+                       AgencyOptions& options) override;
 };
 
 }  // namespace arangodb
+
