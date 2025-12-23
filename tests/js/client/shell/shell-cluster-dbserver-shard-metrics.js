@@ -517,7 +517,7 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       // Calculate expected counts after creating collection
       const expectedShardCount = baselineShardCount + (testCollShards * testCollReplication) + newDatabaseShardsCount;
-      const expectedLeaderCount = baselineLeaderCount + testCollShards + newDbLeaderCount;
+      const expectedLeaderCount = baselineLeaderCount + testCollShards + newDatabaseLeaderCount;
       getMetricsAndEventuallyAssert(dbServers, expectedShardCount, expectedLeaderCount, 0, 0);
 
       // Drop the collection
