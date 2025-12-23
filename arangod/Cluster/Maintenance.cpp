@@ -2331,6 +2331,33 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                   }
                   if (!shardInSync) {
                     newDatabaseStats.increaseNumberOfFollowersOutOfSync();
+                  } else {
+                    // If the leader is not yet known then the shards is also
+                    // not in sync
+                    VPackSlice localdb;
+                    if (lit != local.end()) {
+                      localdb = lit->second->slice();
+                    }
+                    if (localdb.isObject() && shSlice.isString() &&
+                        localdb.hasKey(shSlice.stringView())) {
+                      VPackSlice theLeader = VPackSlice::emptyStringSlice();
+                      VPackSlice lshard = localdb.get(shSlice.stringView());
+                      TRI_ASSERT(lshard.isObject());
+                      if (lshard.isObject()) {  // just in case
+                        LOG_DEVEL << "LADIDA: " << lshard.toJson();
+                        theLeader = lshard.get(THE_LEADER);
+                        if (theLeader.isString() &&
+                            theLeader.stringView() ==
+                                maintenance::ResignShardLeadership::
+                                    LeaderNotYetKnownString) {
+                          shardInSync = false;
+                        }
+                      }
+                    }
+
+                    if (!shardInSync) {
+                      newDatabaseStats.increaseNumberOfFollowersOutOfSync();
+                    }
                   }
                 }
               }
