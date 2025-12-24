@@ -150,9 +150,9 @@ function NewAqlReplaceAnyWithINTestSuite() {
             if (!IM.debugCanUseFailAt()) {
                 return;
             }
-            IM.debugSetFailAt("OptimizerRules::replaceAnyWithInRuleOom");
+            IM.debugSetFailAt("OptimizerRules::replaceAnyEqWithInRuleOom");
             try {
-                db._query("FOR i IN 1..10 FILTER ['Alice', 'Bob'] ANY == i RETURN i");
+                db._query("FOR x IN " + replace.name() + " FILTER ['Alice', 'Bob'] ANY == x.name RETURN x");
                 fail();
             } catch (err) {
                 assertEqual(internal.errors.ERROR_DEBUG.code, err.errorNum);
