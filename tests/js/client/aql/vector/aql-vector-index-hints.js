@@ -113,6 +113,18 @@ function VectorIndexHintsSuite() {
           nLists: 3,
         },
       });
+
+      collection.ensureIndex({
+        name: "vector_l2_with_filter",
+        type: "vector",
+        fields: ["vector"],
+        storedValues: ["value"],
+        params: {
+          metric: "l2",
+          dimension: dimension,
+          nLists: 3,
+        },
+      });
     },
 
     tearDownAll: function () {
@@ -200,6 +212,34 @@ function VectorIndexHintsSuite() {
         const indexName = getVectorIndexName(query, bindVars);
         
         assertEqual("vector_l2_secondary", indexName);
+    },
+
+    testVectorL2HintWithFilterNotForced: function () {
+        const query = `
+          FOR doc IN ${collName} OPTIONS { indexHint: "vector_l2_with_filter" }
+            FILTER doc.value > 10
+            SORT APPROX_NEAR_L2(doc.vector, @qp)
+            LIMIT 5
+            RETURN doc
+        `;
+        const bindVars = { qp: randomPoint };
+        const indexName = getVectorIndexName(query, bindVars);
+        
+        assertEqual("vector_l2_with_filter", indexName);
+    },
+
+    testVectorL2HintWithFilterForced: function () {
+        const query = `
+          FOR doc IN ${collName} OPTIONS { indexHint: "vector_l2_with_filter", forceIndexHint: true }
+            FILTER doc.value > 10
+            SORT APPROX_NEAR_L2(doc.vector, @qp)
+            LIMIT 5
+            RETURN doc
+        `;
+        const bindVars = { qp: randomPoint };
+        const indexName = getVectorIndexName(query, bindVars);
+        
+        assertEqual("vector_l2_with_filter", indexName);
     },
   };
 }
