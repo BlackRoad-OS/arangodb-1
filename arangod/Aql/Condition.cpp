@@ -1541,14 +1541,14 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto lhs2 = op2->getMember(0);
             auto rhs2 = op2->getMember(1);
 
-            if (compareAstNodes(lhs1, lhs2, false) == 0 &&
+            if (lhs1->toString() == lhs2->toString() &&
                 rhs1->type == NODE_TYPE_ARRAY &&
                 rhs2->type == NODE_TYPE_ARRAY &&
                 rhs1->numMembers() == rhs2->numMembers()) {
               isDuplicate = true;
               for (size_t m = 0; m < rhs1->numMembers(); ++m) {
-                if (compareAstNodes(rhs1->getMember(m), rhs2->getMember(m),
-                                    true) != 0) {
+                if (compareAstNodes<true>(rhs1->getMember(m),
+                                          rhs2->getMember(m), false) != 0) {
                   isDuplicate = false;
                   break;
                 }
@@ -1560,8 +1560,8 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto lhs2 = op2->getMember(0);
             auto rhs2 = op2->getMember(1);
 
-            if (compareAstNodes(lhs1, lhs2, false) == 0 &&
-                compareAstNodes(rhs1, rhs2, true) == 0) {
+            if (lhs1->toString() == lhs2->toString() &&
+                compareAstNodes<true>(rhs1, rhs2, false) == 0) {
               isDuplicate = true;
             }
           }
@@ -1928,7 +1928,7 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto lhs2 = cond2->getMember(0);
             auto rhs2 = cond2->getMember(1);
 
-            if (compareAstNodes(lhs1, lhs2, false) != 0 ||
+            if (lhs1->toString() != lhs2->toString() ||
                 rhs1->type != NODE_TYPE_ARRAY ||
                 rhs2->type != NODE_TYPE_ARRAY ||
                 rhs1->numMembers() != rhs2->numMembers()) {
@@ -1937,8 +1937,8 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             }
 
             for (size_t m = 0; m < rhs1->numMembers(); ++m) {
-              if (compareAstNodes(rhs1->getMember(m), rhs2->getMember(m),
-                                  true) != 0) {
+              if (compareAstNodes<true>(rhs1->getMember(m), rhs2->getMember(m),
+                                        false) != 0) {
                 isDuplicate = false;
                 break;
               }
@@ -1951,8 +1951,8 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto lhs2 = cond2->getMember(0);
             auto rhs2 = cond2->getMember(1);
 
-            if (compareAstNodes(lhs1, lhs2, false) != 0 ||
-                compareAstNodes(rhs1, rhs2, true) != 0) {
+            if (lhs1->toString() != lhs2->toString() ||
+                compareAstNodes<true>(rhs1, rhs2, false) != 0) {
               isDuplicate = false;
               break;
             }

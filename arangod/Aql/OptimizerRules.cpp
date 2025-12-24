@@ -24,9 +24,8 @@
 
 #include "OptimizerRules.h"
 
-#include "ApplicationFeatures/ApplicationServer.h"
-#include "Aql/Ast.h"
 #include "Aql/Aggregator.h"
+#include "Aql/Ast.h"
 #include "Aql/AqlFunctionFeature.h"
 #include "Aql/AstHelper.h"
 #include "Aql/AttributeNamePath.h"
@@ -61,9 +60,9 @@
 #include "Aql/ExecutionNode/ScatterNode.h"
 #include "Aql/ExecutionNode/ShortestPathNode.h"
 #include "Aql/ExecutionNode/SortNode.h"
+#include "Aql/ExecutionNode/SubqueryEndExecutionNode.h"
 #include "Aql/ExecutionNode/SubqueryNode.h"
 #include "Aql/ExecutionNode/SubqueryStartExecutionNode.h"
-#include "Aql/ExecutionNode/SubqueryEndExecutionNode.h"
 #include "Aql/ExecutionNode/TraversalNode.h"
 #include "Aql/ExecutionNode/MaterializeNode.h"
 #include "Aql/ExecutionNode/UpdateNode.h"
@@ -82,16 +81,12 @@
 #include "Aql/SortElement.h"
 #include "Aql/SortInformation.h"
 #include "Aql/TraversalConditionFinder.h"
+#include "Aql/TypedAstNodes.h"
 #include "Aql/Variable.h"
 #include "Aql/types.h"
-#include "Basics/AttributeNameParser.h"
 #include "Basics/NumberUtils.h"
-#include "Basics/ScopeGuard.h"
 #include "Basics/StaticStrings.h"
 #include "Basics/SupervisedBuffer.h"
-#include "Containers/FlatHashSet.h"
-#include "Containers/SmallUnorderedMap.h"
-#include "Containers/SmallVector.h"
 #include "Geo/GeoParams.h"
 #include "Graph/ShortestPathOptions.h"
 #include "Graph/TraverserOptions.h"
@@ -6112,13 +6107,18 @@ struct AnySimplifier {
     TRI_ASSERT(node->numMembers() == 3);
 
     // Member 2 is always the quantifier - must be ANY for this transformation
-    auto quantifier = node->getMember(2);
-    if (quantifier == nullptr || !Quantifier::isAny(quantifier)) {
+    auto quantifierNode = node->getMember(2);
+    if (quantifierNode == nullptr ||
+        quantifierNode->type != NODE_TYPE_QUANTIFIER) {
+      return std::nullopt;
+    }
+
+    ast::QuantifierNode quantifier(quantifierNode);
+    if (!quantifier.isAny()) {
       return std::nullopt;
     }
 
     // Members 0 and 1 are the left and right expressions
-    // We need to find which one is the array and which one is the attribute
     auto lhs = node->getMember(0);
     auto rhs = node->getMember(1);
 
@@ -6141,7 +6141,6 @@ struct AnySimplifier {
       array = rhs;
       attr = lhs;
     } else {
-      // Neither combination works - cannot transform
       return std::nullopt;
     }
 
@@ -6225,9 +6224,16 @@ struct AnySimplifier {
                   node->type == NODE_TYPE_OPERATOR_BINARY_GE)) {
         result = ast.createNodeBinaryOperator(node->type, newChildren[0],
                                               newChildren[1]);
+      } else if (node->type == NODE_TYPE_OPERATOR_NARY_OR) {
+        result = ast.createNodeNaryOperator(node->type);
+        for (auto* child : newChildren) {
+          result->addMember(child);
+        }
       } else {
         // For other node types, clone and replace children
         result = ast.shallowCopyForModify(node);
+        auto sg =
+            arangodb::scopeGuard([&]() noexcept { FINALIZE_SUBTREE(result); });
         for (size_t i = 0; i < numMembers; ++i) {
           result->changeMember(i, newChildren[i]);
         }
