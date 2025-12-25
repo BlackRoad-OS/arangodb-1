@@ -265,7 +265,7 @@ void IndexReadBuffer<ValueType, copySorted>::finalizeHeapSortDocument(
       //  buckets of the heap sort vector.
       velocypack::SharedSlice ss;
       velocypack::Builder builder(slice);
-      ss = builder.sharedSlice();
+      ss = std::move(builder).sharedSlice();
 
       if constexpr (fullHeap) {
         _heapSortValues[heapSortValuesIndex].slice = ss;
