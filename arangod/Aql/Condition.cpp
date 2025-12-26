@@ -1547,8 +1547,8 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
                 rhs1->numMembers() == rhs2->numMembers()) {
               isDuplicate = true;
               for (size_t m = 0; m < rhs1->numMembers(); ++m) {
-                if (compareAstNodes<true>(rhs1->getMember(m),
-                                          rhs2->getMember(m), false) != 0) {
+                if (compareAstNodes<false>(rhs1->getMember(m),
+                                           rhs2->getMember(m), false) != 0) {
                   isDuplicate = false;
                   break;
                 }
@@ -1561,7 +1561,7 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto rhs2 = op2->getMember(1);
 
             if (lhs1->toString() == lhs2->toString() &&
-                compareAstNodes<true>(rhs1, rhs2, false) == 0) {
+                compareAstNodes<false>(rhs1, rhs2, false) == 0) {
               isDuplicate = true;
             }
           }
@@ -1937,8 +1937,8 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             }
 
             for (size_t m = 0; m < rhs1->numMembers(); ++m) {
-              if (compareAstNodes<true>(rhs1->getMember(m), rhs2->getMember(m),
-                                        false) != 0) {
+              if (compareAstNodes<false>(rhs1->getMember(m), rhs2->getMember(m),
+                                         false) != 0) {
                 isDuplicate = false;
                 break;
               }
@@ -1952,7 +1952,7 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
             auto rhs2 = cond2->getMember(1);
 
             if (lhs1->toString() != lhs2->toString() ||
-                compareAstNodes<true>(rhs1, rhs2, false) != 0) {
+                compareAstNodes<false>(rhs1, rhs2, false) != 0) {
               isDuplicate = false;
               break;
             }
