@@ -1,30 +1,6 @@
 /*jshint globalstrict:false, strict:false, maxlen: 500 */
 /*global assertEqual, assertTrue, fail */
 
-// //////////////////////////////////////////////////////////////////////////////
-// / DISCLAIMER
-// /
-// / Copyright 2014-2025 Arango GmbH, Cologne, Germany
-// / Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
-// /
-// / Licensed under the Business Source License 1.1 (the "License");
-// / you may not use this file except in compliance with the License.
-// / You may obtain a copy of the License at
-// /
-// /     https://github.com/arangodb/arangodb/blob/devel/LICENSE
-// /
-// / Unless required by applicable law or agreed to in writing, software
-// / distributed under the License is distributed on an "AS IS" BASIS,
-// / WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// / See the License for the specific language governing permissions and
-// / limitations under the License.
-// /
-// / Copyright holder is ArangoDB GmbH, Cologne, Germany
-// /
-/// @author Julia Puget
-/// @author Copyright 2014, triAGENS GmbH, Cologne, Germany
-// //////////////////////////////////////////////////////////////////////////////
-
 var internal = require("internal");
 var jsunity = require("jsunity");
 var helper = require("@arangodb/aql-helper");
@@ -802,6 +778,21 @@ function NewAqlReplaceAnyWithINTestSuite() {
 
             assertEqual(anyResult.length, inResult.length,
                 "ANY == and IN should return same number of results");
+        },
+
+        testAnyOrBranchesOnSameAttribute: function () {
+            var query = "FOR doc IN " + replace.name() +
+                " FILTER [5] ANY == doc.value OR [15] ANY == doc.value RETURN doc";
+            
+            var result = db._query(query).toArray();
+            assertEqual(2, result.length, "Should return 2 documents with value 5 or 15");
+            
+            var values = result.map(d => d.value).sort((a, b) => a - b);
+            assertEqual([5, 15], values);
+            
+            var plan = db._createStatement({query: query}).explain();
+            var foundRule = plan.plan.rules.indexOf("replace-any-eq-with-in") !== -1;
+            assertTrue(foundRule, "replace-any-eq-with-in rule should fire");
         }
     };
 }
