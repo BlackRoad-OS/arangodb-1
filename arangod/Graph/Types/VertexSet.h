@@ -18,25 +18,15 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Max Neunhoeffer
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
+#include "Containers/FlatHashMap.h"
 #include "Graph/Types/VertexRef.h"
 
-namespace arangodb {
-namespace graph {
-
+namespace arangodb::graph {
 using VertexSet = arangodb::containers::HashSet<VertexRef, std::hash<VertexRef>,
                                                 std::equal_to<VertexRef>>;
 
-template<typename T>
-concept HasForbidden = requires(T t) {
-  {
-    t.setForbiddenVertices(std::make_shared<VertexSet>())
-    } -> std::same_as<void>;
-};
-
-}  // namespace graph
-}  // namespace arangodb
+}
