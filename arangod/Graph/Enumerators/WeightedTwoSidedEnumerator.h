@@ -34,6 +34,8 @@
 #include "Graph/Queues/WeightedQueue.h"
 #include "Graph/Types/ForbiddenVertices.h"
 #include "Graph/Types/UniquenessLevel.h"
+#include "Graph/Types/VertexRef.h"
+#include "Graph/Types/VertexSet.h"
 #include "Containers/FlatHashMap.h"
 
 #include <limits>
@@ -41,10 +43,6 @@
 #include <deque>
 
 namespace arangodb {
-
-using VertexRef = arangodb::velocypack::HashedStringRef;
-using VertexSet = arangodb::containers::HashSet<VertexRef, std::hash<VertexRef>,
-                                                std::equal_to<VertexRef>>;
 
 namespace aql {
 class TraversalStats;
@@ -94,8 +92,6 @@ class WeightedTwoSidedEnumerator {
   using CalculatedCandidate = std::tuple<double, Step, Step>;
 
   enum Direction { FORWARD, BACKWARD };
-
-  using VertexRef = arangodb::velocypack::HashedStringRef;
 
   using Edge = ProviderType::Step::EdgeType;
   using EdgeSet =
@@ -267,8 +263,7 @@ class WeightedTwoSidedEnumerator {
     ProviderType _provider;
 
     PathValidatorType _validator;
-    containers::FlatHashMap<typename Step::VertexType, std::vector<size_t>>
-        _visitedNodes;
+    containers::FlatHashMap<VertexRef, std::vector<size_t>> _visitedNodes;
     Direction _direction;
     GraphOptions _graphOptions;
     double _diameter = -std::numeric_limits<double>::infinity();
