@@ -66,6 +66,18 @@ endif()
 add_library(fasttext-shared SHARED ${SOURCE_FILES} ${HEADER_FILES})
 add_library(fasttext-static STATIC ${SOURCE_FILES} ${HEADER_FILES})
 add_library(fasttext-static_pic STATIC ${SOURCE_FILES} ${HEADER_FILES})
+
+# Suppress warnings for external library
+if (MSVC)
+  target_compile_options(fasttext-static PRIVATE "/W0")
+  target_compile_options(fasttext-shared PRIVATE "/W0")
+  target_compile_options(fasttext-static_pic PRIVATE "/W0")
+else ()
+  target_compile_options(fasttext-static PRIVATE "-Wno-sign-compare")
+  target_compile_options(fasttext-shared PRIVATE "-Wno-sign-compare")
+  target_compile_options(fasttext-static_pic PRIVATE "-Wno-sign-compare")
+endif ()
+
 set_target_properties(fasttext-shared PROPERTIES OUTPUT_NAME fasttext
   SOVERSION "${fasttext_VERSION_MAJOR}")
 set_target_properties(fasttext-static PROPERTIES OUTPUT_NAME fasttext)

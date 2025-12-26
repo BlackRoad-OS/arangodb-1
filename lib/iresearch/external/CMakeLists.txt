@@ -73,6 +73,7 @@ if (MSVC)
     iresearch-ofst
     # MSVC2015-2017 require "/bigobj" to compile debug build
     PRIVATE "$<$<CONFIG:Debug>:/bigobj>"
+    PRIVATE "/W0"
   )
 else ()
   CHECK_C_COMPILER_FLAG(-fPIC SUPPORT_FPIC)
@@ -82,6 +83,11 @@ else ()
       PRIVATE "-fPIC"
     )
   endif ()
+  target_compile_options(
+    iresearch-ofst
+    PRIVATE "-Wno-sign-compare"
+    PRIVATE "-Wno-missing-field-initializers"
+  )
 endif ()
 
 # force c++17 for ofst as transitional step

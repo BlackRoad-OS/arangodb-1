@@ -90,6 +90,16 @@ target_include_directories(text PRIVATE
   ${FROZEN_INCLUDE_DIR})
 set_property(TARGET text PROPERTY CXX_STANDARD ${CXX_STD})
 target_compile_options(text PRIVATE -DBOOST_TEXT_SOURCE)
+
+# Suppress warnings for external library
+if (MSVC)
+  target_compile_options(text PRIVATE "/W0")
+else ()
+  target_compile_options(text PRIVATE
+    "-Wno-missing-field-initializers"
+    "-Wno-ignored-qualifiers"
+  )
+endif ()
 if (link_flags)
     target_link_libraries(text PUBLIC ${link_flags})
     target_compile_options(text PUBLIC ${compile_flags})

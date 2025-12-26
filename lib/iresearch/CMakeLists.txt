@@ -220,7 +220,14 @@ if (USE_URING AND NOT MSVC)
 endif ()
 
 # find Boost
-find_package(BoostLocal REQUIRED)
+set(IRESEARCH_EXTERNAL_INCLUDES
+  ${EXTERNAL_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS} # ensure Boost paths take precedence over other system libraries as Boost may be defined elsewhere
+  ${Lz4_INCLUDE_DIR}
+  ${Fasttext_INCLUDE_DIR}
+  ${FROZEN_INCLUDE_DIR})
+
+include_directories(SYSTEM ${IRESEARCH_EXTERNAL_INCLUDES})
 
 # set pthread library
 if (NOT MSVC)

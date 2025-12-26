@@ -378,6 +378,11 @@ if (MSVC)
     PRIVATE "$<$<CONFIG:Debug>:/bigobj>"
     PRIVATE "/EHa"
     )
+else ()
+  # Suppress missing field initializer warnings (treated as errors with -Werror)
+  target_compile_options(iresearch-static
+    PRIVATE "-Wno-missing-field-initializers"
+  )
 endif ()
 
 set_target_properties(iresearch-static

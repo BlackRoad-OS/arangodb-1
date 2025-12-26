@@ -194,6 +194,14 @@ SET(COMPILER_SOURCES
 
 ADD_EXECUTABLE(snowball ${COMPILER_SOURCES})
 
+# Suppress unused variable warning for generator_ada.c
+if(NOT MSVC)
+  set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/compiler/generator_ada.c
+    PROPERTIES COMPILE_FLAGS "-Wno-unused-but-set-variable"
+  )
+endif()
+
 SET(SNOWBALL_RUNTIME
   ${CMAKE_CURRENT_SOURCE_DIR}/runtime/api.c
   ${CMAKE_CURRENT_SOURCE_DIR}/runtime/utilities.c
