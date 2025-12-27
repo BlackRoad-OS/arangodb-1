@@ -34,16 +34,14 @@
 #include "Graph/PathManagement/PathValidator.h"
 #include "Graph/Queues/WeightedQueue.h"
 #include "Graph/Types/UniquenessLevel.h"
+#include "Graph/Types/VertexRef.h"
+#include "Graph/Types/VertexSet.h"
 
 #include <limits>
 #include <set>
 #include <deque>
 
 namespace arangodb {
-
-using VertexRef = arangodb::velocypack::HashedStringRef;
-using VertexSet = arangodb::containers::HashSet<VertexRef, std::hash<VertexRef>,
-                                                std::equal_to<VertexRef>>;
 
 namespace aql {
 class TraversalStats;
@@ -113,8 +111,6 @@ class WeightedShortestPathEnumerator {
   using CalculatedCandidate = std::tuple<double, Step, Step>;
 
   enum Direction { FORWARD, BACKWARD };
-
-  using VertexRef = arangodb::velocypack::HashedStringRef;
 
   using Edge = ProviderType::Step::EdgeType;
   using EdgeSet =
@@ -208,8 +204,7 @@ class WeightedShortestPathEnumerator {
                         // without deleting its Step with the wrong
                         // weight from the queue.
     };
-    containers::FlatHashMap<typename Step::VertexType, VertexInfo>
-        _foundVertices;
+    containers::FlatHashMap<VertexRef, VertexInfo> _foundVertices;
     Direction _direction;
     GraphOptions _graphOptions;
     double _diameter = -std::numeric_limits<double>::infinity();
