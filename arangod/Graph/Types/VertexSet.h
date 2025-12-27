@@ -18,36 +18,15 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Michael Hackstein
-/// @author Heiko Kernbach
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
-#include <cstdint>
-#include <limits>
-#include <numeric>
-#include <ostream>
+#include "Containers/FlatHashMap.h"
+#include "Graph/Types/VertexRef.h"
 
-namespace arangodb {
-namespace graph {
+namespace arangodb::graph {
+using VertexSet = arangodb::containers::HashSet<VertexRef, std::hash<VertexRef>,
+                                                std::equal_to<VertexRef>>;
 
-class TraceEntry {
- public:
-  TraceEntry();
-  ~TraceEntry();
-
-  void addTiming(double timeTaken) noexcept;
-
-  friend auto operator<<(std::ostream& out, TraceEntry const& entry)
-      -> std::ostream&;
-
- private:
-  double _min{std::numeric_limits<double>::max()};
-  double _max{0};
-  double _total{0};
-  uint64_t _count{0};
-};
-
-}  // namespace graph
-}  // namespace arangodb
+}

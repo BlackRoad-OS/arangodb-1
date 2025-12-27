@@ -18,45 +18,35 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Michael Hackstein
-/// @author Heiko Kernbach
+/// @author Julia Volmer
 ////////////////////////////////////////////////////////////////////////////////
+#pragma once
 
-#include "TraceEntry.h"
+#include <variant>
+#include "Inspection/Types.h"
 
-#include <iomanip>
+namespace arangodb::graph {
 
-using namespace arangodb;
-using namespace arangodb::graph;
+using CursorId = std::size_t;
 
-namespace arangodb {
-namespace graph {
-
-TraceEntry::TraceEntry() {}
-TraceEntry::~TraceEntry() = default;
-void TraceEntry::addTiming(double timeTaken) noexcept {
-  _count++;
-  _total += timeTaken;
-  if (_min > timeTaken) {
-    _min = timeTaken;
-  }
-  if (_max < timeTaken) {
-    _max = timeTaken;
-  }
+/**
+   Marker struct for queues to do an expansion when such a type is popped.
+ **/
+struct Expansion {
+  CursorId id;
+  std::size_t from;
+};
+template<typename Inspector>
+auto inspect(Inspector& f, Expansion& x) {
+  return f.object(x).fields(f.field("from", x.from));
 }
 
-auto operator<<(std::ostream& out, TraceEntry const& entry) -> std::ostream& {
-  if (entry._count == 0) {
-    out << "not called";
-  } else {
-    out << "calls: " << entry._count << " min: " << std::setprecision(2)
-        << std::fixed << entry._min * 1000.0
-        << "ms max: " << entry._max * 1000.0
-        << "ms avg: " << entry._total / entry._count * 1000.0
-        << "ms total: " << entry._total * 1000.0 << "ms";
-  }
-  return out;
+template<typename Step>
+struct QueueEntry : std::variant<Step, Expansion> {};
+template<typename Step, typename Inspector>
+auto inspect(Inspector& f, QueueEntry<Step>& x) {
+  return f.variant(x).unqualified().alternatives(
+      inspection::inlineType<Step>(), inspection::inlineType<Expansion>());
 }
 
-}  // namespace graph
-}  // namespace arangodb
+}  // namespace arangodb::graph
