@@ -400,7 +400,6 @@ struct AqlValue final {
   /// explicit calls to destroy()
   AqlValue(AqlValue const&) noexcept = default;
   AqlValue& operator=(AqlValue const&) noexcept = default;
-  AqlValue(AqlValue const&, arangodb::ResourceMonitor&);
   AqlValue(AqlValue&&) noexcept = default;
   AqlValue& operator=(AqlValue&&) noexcept = default;
 
