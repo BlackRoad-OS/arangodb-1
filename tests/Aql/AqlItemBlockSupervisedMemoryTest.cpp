@@ -33,7 +33,7 @@ class AqlItemBlockSupervisedMemoryTest : public ::testing::Test {
     std::string content(size, 'x');
     velocypack::Builder b;
     b.add(arangodb::velocypack::Value(content));
-    return AqlValue(b.slice(), 0, &monitor);
+    return AqlValue(b.slice(), &monitor);
   }
 };
 
@@ -59,7 +59,7 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   // For supervised slices, memory is already accounted in ResourceMonitor
   EXPECT_EQ(monitor.current(), initialMemory);
 
-  block.reset(nullptr); // Destroy the block; all memory should be released
+  block.reset(nullptr);  // Destroy the block; all memory should be released
 
   EXPECT_EQ(monitor.current(), 0U);
 }
@@ -334,7 +334,6 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_EQ(monitor.current(), 0U);
 }
 
-
 // WHAT IT CHECKS:
 // 1. If referenceValuesFromRow() creates bad entry (memoryUsage=0)
 // 2. destroyValue() on one row still works correctly
@@ -419,7 +418,6 @@ TEST_F(AqlItemBlockSupervisedMemoryTest,
   EXPECT_LE(monitor.current(), memoryAfterDestroy)
       << "Memory should not increase after erasing external copy";
 }
-
 
 // WHAT IT CHECKS:
 // 1. A supervised slice is created via string_view

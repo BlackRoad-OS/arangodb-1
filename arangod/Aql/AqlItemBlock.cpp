@@ -130,7 +130,7 @@ void AqlItemBlock::initFromSlice(VPackSlice slice) {
   auto storeSingleValue = [this](size_t row, RegisterId::value_t column,
                                  VPackArrayIterator& it,
                                  std::vector<AqlValue>& madeHere) {
-    AqlValue a(it.value(), 0, &resourceMonitor());
+    AqlValue a(it.value(), &resourceMonitor());
     it.next();
     try {
       if (column == 0) {

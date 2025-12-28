@@ -678,7 +678,7 @@ TEST_F(AqlItemBlockTest, cloneDataAndMoveShadow_SupervisedSlices) {
   for (size_t i = 0; i < 3; i++) {
     velocypack::Builder b;
     b.add(velocypack::Value(content));
-    AqlValue supervised = AqlValue(b.slice(), 0, &monitor);
+    AqlValue supervised = AqlValue(b.slice(), &monitor);
     block->setValue(i, 0, supervised);
     memSize = supervised.memoryUsage();
   }
