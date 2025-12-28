@@ -2381,7 +2381,7 @@ ExecutionNode* ExecutionPlan::fromNodeWindow(ExecutionNode* previous,
       Expression expr(_ast, value);
       AqlValue val = expr.execute(&exprContext, mustDestroy);
       if (!mustDestroy && val.isPointer()) {  // force a copy
-        preceding = AqlValue(val.slice(), 0, &_ast->query().resourceMonitor());
+        preceding = AqlValue(val.slice(), &_ast->query().resourceMonitor());
       } else {
         preceding = val.clone();
       }
@@ -2389,7 +2389,7 @@ ExecutionNode* ExecutionPlan::fromNodeWindow(ExecutionNode* previous,
       Expression expr(_ast, value);
       AqlValue val = expr.execute(&exprContext, mustDestroy);
       if (!mustDestroy && val.isPointer()) {  // force a copy
-        following = AqlValue(val.slice(), 0, &_ast->query().resourceMonitor());
+        following = AqlValue(val.slice(), &_ast->query().resourceMonitor());
       } else {
         following = val.clone();
       }

@@ -431,7 +431,7 @@ std::tuple<AqlValue, AqlValue> EnumerateListObjectExecutor::keyValueExtractor(
     velocypack::ObjectIteratorPair innerValue) {
   ResourceMonitor* rm = &_infos.getQuery().resourceMonitor();
   // innerValue.key is a Slice, so use Slice constructor
-  AqlValue key = AqlValue(innerValue.key, 0, rm);
+  AqlValue key = AqlValue(innerValue.key, rm);
   AqlValue value;
   if (innerValue.key.stringView() == arangodb::StaticStrings::IdString &&
       innerValue.value.isCustom()) {
@@ -442,7 +442,7 @@ std::tuple<AqlValue, AqlValue> EnumerateListObjectExecutor::keyValueExtractor(
                  rm);
   } else {
     // innerValue.value is a Slice
-    value = AqlValue(innerValue.value, 0, rm);
+    value = AqlValue(innerValue.value, rm);
   }
 
   return std::tuple<AqlValue, AqlValue>{key, value};

@@ -933,8 +933,7 @@ void ExecutionEngine::initializeConstValueBlock(
 
               block->emplaceValue(
                   0, reg.value(),
-                  AqlValue(slice, 0,
-                           &plan.getAst()->query().resourceMonitor()));
+                  AqlValue(slice, &plan.getAst()->query().resourceMonitor()));
             }
           }
         });
