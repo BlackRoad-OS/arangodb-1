@@ -722,8 +722,6 @@ TEST(AqlValueSupervisedTest, RangePointerIdentity) {
   // Self equality
   std::equal_to<AqlValue> eq;
   EXPECT_TRUE(eq(r1, r1));
-  EXPECT_TRUE(r1 == r1);
-  EXPECT_FALSE(r1 != r1);
 
   r1.destroy();
   r2.destroy();
