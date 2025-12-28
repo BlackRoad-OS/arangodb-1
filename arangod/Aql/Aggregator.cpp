@@ -186,13 +186,16 @@ struct AggregatorMin final : public Aggregator {
          AqlValue::Compare(_vpackOptions, value, cmpValue, true) > 0)) {
       // the value `null` itself will not be used in MIN() to compare lower than
       // e.g. value `false`
-      if (value.requiresDestruction()) {
-        value.destroy();
-      } else {
-        value.erase();  // clears inline values because destroy() doesn't call
-                        // erase() for this case
+      auto memoryUsage = value.memoryUsage();
+      int64_t memDelta = cmpValue.memoryUsage() - memoryUsage;
+      if (memDelta > 0) {
+        resourceUsageScope().increase(memDelta);
       }
+      value.destroy();
       value = cmpValue.clone();
+      if (memDelta < 0) {
+        resourceUsageScope().decrease(std::abs(memDelta));
+      }
     }
   }
 
@@ -225,13 +228,16 @@ struct AggregatorMax final : public Aggregator {
   void reduce(AqlValue const& cmpValue) override {
     if (value.isEmpty() ||
         AqlValue::Compare(_vpackOptions, value, cmpValue, true) < 0) {
-      if (value.requiresDestruction()) {
-        value.destroy();
-      } else {
-        value.erase();  // clears inline values because destroy() doesn't call
-                        // erase() for this case
+      auto memoryUsage = value.memoryUsage();
+      int64_t memDelta = cmpValue.memoryUsage() - memoryUsage;
+      if (memDelta > 0) {
+        resourceUsageScope().increase(memDelta);
       }
+      value.destroy();
       value = cmpValue.clone();
+      if (memDelta < 0) {
+        resourceUsageScope().decrease(std::abs(memDelta));
+      }
     }
   }
 
@@ -361,7 +367,7 @@ struct AggregatorAverageStep1 final : public AggregatorAverage {
       builder.add(VPackValue(count));
     }
     builder.close();
-    return AqlValue(builder.slice(), 0, &_resourceMonitor);
+    return AqlValue(builder.slice(), &_resourceMonitor);
   }
 
   mutable arangodb::velocypack::Builder builder;
@@ -496,7 +502,7 @@ struct AggregatorVarianceBaseStep1 final : public AggregatorVarianceBase {
     }
     builder.close();
 
-    return AqlValue(builder.slice(), 0, &_resourceMonitor);
+    return AqlValue(builder.slice(), &_resourceMonitor);
   }
 
   mutable arangodb::velocypack::Builder builder;
@@ -688,7 +694,7 @@ struct AggregatorUnique : public Aggregator {
     }
     // close the array and return a slice
     builder.close();
-    return AqlValue(builder.slice(), 0, &_resourceMonitor);
+    return AqlValue(builder.slice(), &_resourceMonitor);
   }
 
   MemoryBlockAllocator allocator;
@@ -774,7 +780,7 @@ struct AggregatorSortedUnique : public Aggregator {
       builder.add(it);
     }
     builder.close();
-    return AqlValue(builder.slice(), 0, &_resourceMonitor);
+    return AqlValue(builder.slice(), &_resourceMonitor);
   }
 
   MemoryBlockAllocator allocator;
@@ -1032,7 +1038,7 @@ struct AggregatorMergeLists : public Aggregator {
       builder.openArray();
     }
     builder.close();
-    return AqlValue(builder.slice(), 0, &_resourceMonitor);
+    return AqlValue(builder.slice(), &_resourceMonitor);
   }
 
   mutable arangodb::velocypack::Builder builder;
