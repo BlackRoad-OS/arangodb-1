@@ -24,6 +24,7 @@
 #pragma once
 
 #include "Aql/AqlValue.h"
+#include "Aql/RegIdFlatSet.h"
 #include "Aql/RegisterId.h"
 #include "Basics/ResourceUsage.h"
 #include "Containers/FlatHashMap.h"
