@@ -201,7 +201,7 @@ function withClauseTestSuite() {
     testNamedGraphWithClauseNotNeeded: function() {
       const startNode = "VertexCollection1/A";
       const query = `FOR v,e,p IN 1..1 ANY "${startNode}" GRAPH ${graphName}
-                       RETURN p.vertices[*]._id`;
+                       LET x = p.vertices[*]._id SORT x RETURN x`;
 
       var actual = db._query(query).toArray();
       assertEqual(actual, [
@@ -216,15 +216,12 @@ function withClauseTestSuite() {
           [ 
               "VertexCollection1/A", 
               "VertexCollection2/ONE" 
-          ]]);
+          ]].sort());
     },
 
     ////////////////////////////////////////////////////////////////////////////////
     /// @brief WITH clause not needed: vertexCollections option gives the only
     ///        required vertex collection.
-    ///        If the OPTIONS are not given, the query works too, but the query
-    ///        engine automatically adds all vertex collections to the query, as
-    ///        they are part of the named graph definition including EdgeCollection
     ////////////////////////////////////////////////////////////////////////////////
     testWithClauseNotNeededOptions: function() {
       const startNode = "VertexCollection3/ALPHA";
@@ -241,34 +238,13 @@ function withClauseTestSuite() {
     },
 
     ////////////////////////////////////////////////////////////////////////////////
-    /// @brief Should fail requiring a WITH clause because the usage of the
-    /// vertexCollections clause prevents lookup in the named graph.
-    ////////////////////////////////////////////////////////////////////////////////
-    testWithClauseNotNeededOptionsRestriction: function() {
-      const startNode = "VertexCollection3/ALPHA";
-      const query = `FOR v,e,p IN 1..1 OUTBOUND "${startNode}" ${edgeCollectionName}
-                       OPTIONS { vertexCollections: "${vertexCollectionName1}" }
-                       RETURN p.vertices[*]._id`;
-
-      try {
-        const actual = db._query(query).toArray();
-        
-        if(require("internal").isCluster()) {
-          assertTrue(false);
-        }
-      } catch (err) {
-        assertEqual(internal.errors.ERROR_QUERY_COLLECTION_LOCK_FAILED.code, err.errorNum, JSON.stringify(err));
-      }
-    },
-
-    ////////////////////////////////////////////////////////////////////////////////
     /// @brief test with clause not needed with edge collection if a named graph
     //  exists
     ////////////////////////////////////////////////////////////////////////////////
     testWithClauseNotNeeded: function() {
       const startNode = "VertexCollection1/A";
       const query = `FOR v,e,p IN 1..1 ANY "${startNode}" ${edgeCollectionName}
-                       RETURN SORTED(p.vertices[*]._id)`;
+                       LET x = p.vertices[*]._id SORT x RETURN x`;
 
       var actual = db._query(query).toArray();
       assertEqual(actual, [
@@ -283,7 +259,7 @@ function withClauseTestSuite() {
           [ 
               "VertexCollection1/A", 
               "VertexCollection2/ONE" 
-          ]]);
+          ]].sort());
     },
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -293,7 +269,7 @@ function withClauseTestSuite() {
     testWithClauseNotNeededBindVar: function() {
       const query = `FOR start IN @@vertex1
                        FOR v, e1, p IN 1..1 ANY start._id @@edge
-                         RETURN SORTED(p.vertices[*]._id)`;
+                         LET x = p.vertices[*]._id SORT x RETURN x`;
 
       const bindVars = {
         "@vertex1": vertexCollectionName1,
@@ -321,7 +297,7 @@ function withClauseTestSuite() {
           [ 
               "VertexCollection1/C", 
               "VertexCollection2/TWO" 
-          ]]);
+          ]].sort());
     },
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -331,7 +307,7 @@ function withClauseTestSuite() {
     testWithClauseNotNeededTwoCollections: function() {
       const query = `FOR start IN @@vertex1
                        FOR v, e1, p IN 2..2 ANY start._id @@edge, @@edge2
-                         RETURN p.vertices[*]._id`;
+                         LET x = p.vertices[*]._id SORT x RETURN x`;
 
       const bindVars = {
         "@vertex1": vertexCollectionName1,
@@ -390,6 +366,28 @@ function withClauseTestSuite() {
 
       try {
         const actual = db._query(query, bindVars).toArray();
+        
+        if(require("internal").isCluster()) {
+          assertTrue(false);
+        }
+      } catch (err) {
+        assertEqual(internal.errors.ERROR_QUERY_COLLECTION_LOCK_FAILED.code, err.errorNum, JSON.stringify(err));
+      }
+    },
+
+    ////////////////////////////////////////////////////////////////////////////////
+    /// @brief Should fail requiring a WITH clause because the usage of the
+    /// vertexCollections clause does *not* add vertex collections to the query
+    /// context
+    ////////////////////////////////////////////////////////////////////////////////
+    testWithClauseNeededOptionsRestriction: function() {
+      const startNode = vertexCollectionName1 + "/A";
+      const query = `FOR v,e,p IN 1..1 OUTBOUND "${startNode}" ${edgeCollectionName3}
+                       OPTIONS { vertexCollections: "${vertexCollectionName1}" }
+                       RETURN p.vertices[*]._id`;
+
+      try {
+        const actual = db._query(query).toArray();
         
         if(require("internal").isCluster()) {
           assertTrue(false);

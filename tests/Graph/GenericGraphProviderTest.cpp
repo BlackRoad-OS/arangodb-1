@@ -67,7 +67,7 @@ class GraphProviderTest : public ::testing::Test {
   std::unique_ptr<MockGraphDatabase> singleServer{nullptr};
   std::unique_ptr<mocks::MockServer> server{nullptr};
   std::shared_ptr<arangodb::aql::Query> query{nullptr};
-  std::unique_ptr<std::unordered_map<ServerID, aql::EngineId>> clusterEngines{
+  std::unique_ptr<std::unordered_map<ServerID, EngineId>> clusterEngines{
       nullptr};
   std::unique_ptr<arangodb::transaction::Methods> _trx{};
 
@@ -78,8 +78,8 @@ class GraphProviderTest : public ::testing::Test {
   ResourceUsageAllocator<MonitoredCollectionToShardMap, ResourceMonitor> alloc =
       {resourceMonitor};
   MonitoredCollectionToShardMap _emptyShardMap{alloc};
-  aql::Projections _vertexProjections{};
-  aql::Projections _edgeProjections{};
+  Projections _vertexProjections{};
+  Projections _edgeProjections{};
 
   GraphProviderTest() {}
   ~GraphProviderTest() {}
@@ -233,7 +233,7 @@ class GraphProviderTest : public ::testing::Test {
       }
 
       clusterEngines =
-          std::make_unique<std::unordered_map<ServerID, aql::EngineId>>();
+          std::make_unique<std::unordered_map<ServerID, EngineId>>();
       clusterEngines->emplace("PRMR_0001", engineId);
 
       auto clusterCache =
@@ -261,7 +261,7 @@ TYPED_TEST(GraphProviderTest, no_results_if_graph_is_empty) {
   std::string startString = "v/0";
   VPackHashedStringRef startH{startString.c_str(),
                               static_cast<uint32_t>(startString.length())};
-  auto start = testee.startVertex(startH);
+  auto start = testee.startVertex(arangodb::graph::VertexRef{startH});
 
   if (start.isLooseEnd()) {
     std::vector<decltype(start)*> looseEnds{};
@@ -304,7 +304,7 @@ TYPED_TEST(GraphProviderTest, should_enumerate_a_single_edge) {
   std::string startString = "v/0";
   VPackHashedStringRef startH{startString.c_str(),
                               static_cast<uint32_t>(startString.length())};
-  auto start = testee.startVertex(startH);
+  auto start = testee.startVertex(arangodb::graph::VertexRef{startH});
 
   if (start.isLooseEnd()) {
     std::vector<decltype(start)*> looseEnds{};
@@ -371,7 +371,7 @@ TYPED_TEST(GraphProviderTest, should_enumerate_all_edges) {
   std::string startString = g.vertexToId(0);
   VPackHashedStringRef startH{startString.c_str(),
                               static_cast<uint32_t>(startString.length())};
-  auto start = testee.startVertex(startH);
+  auto start = testee.startVertex(arangodb::graph::VertexRef{startH});
 
   if (start.isLooseEnd()) {
     std::vector<decltype(start)*> looseEnds{};

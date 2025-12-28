@@ -326,18 +326,22 @@ class instance {
     if (this.options.arangodConfig !== undefined) {
       config = this.options.arangodConfig;
     }
-    this.args = _.defaults(this.args, {
+    let default_args = {
       'configuration': fs.join(pu.CONFIG_DIR, config),
       'define': 'TOP_DIR=' + pu.TOP_DIR,
-      'javascript.app-path': this.appDir,
-      'javascript.copy-installation': false,
       'http.trusted-origin': this.options.httpTrustedOrigin || 'all',
       'temp.path': this.tmpDir,
       'server.endpoint': bindEndpoint,
       'database.directory': this.dataDir,
       'temp.intermediate-results-path': this.tmpRocksdbDir,
       'log.file': this.logFile
-    });
+    };
+    if (!this.options.skipServerJS) {
+      // the argparser barely ignores them and breaks others...
+      default_args['javascript.app-path'] = this.appDir;
+      default_args['javascript.copy-installation'] = false;
+    }
+    this.args = _.defaults(this.args, default_args);
     if (this.options.extremeVerbosity) {
       this.args['dump-env'] = true;
     }
@@ -357,12 +361,16 @@ class instance {
     if (this.protocol === 'ssl' && !this.args.hasOwnProperty('ssl.keyfile')) {
       this.args['ssl.keyfile'] = fs.join('etc', 'testing', 'server.pem');
     }
-    if (this.options.encryptionAtRest && !this.args.hasOwnProperty('rocksdb.encryption-keyfile')) {
+    if (this.options.encryptionAtRest &&
+        !this.args.hasOwnProperty('rocksdb.encryption-keyfile') &&
+        !this.args.hasOwnProperty('rocksdb.encryption-keyfolder')) {
       this.args['rocksdb.encryption-keyfile'] = this.restKeyFile;
     }
 
-    if (this.restKeyFile && !this.args.hasOwnProperty('server.jwt-secret')) {
-      this.args['server.jwt-secret'] = this.restKeyFile;
+    if (this.restKeyFile &&
+        !this.args.hasOwnProperty('server.jwt-secret') &&
+        !this.args.hasOwnProperty('server.jwt-secret-folder')) {
+      this.args['server.jwt-secret-keyfile'] = this.restKeyFile;
     }
     else if (this.options.hasOwnProperty('jwtFiles')) {
       this.jwtFiles = this.options['jwtFiles'];
