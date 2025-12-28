@@ -192,7 +192,7 @@ AqlValue functions::CollectionCount(ExpressionContext* expressionContext,
   }
 
   ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
-  return AqlValue(res.slice(), 0, rm);
+  return AqlValue(res.slice(), rm);
 }
 
 }  // namespace arangodb::aql
