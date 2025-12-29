@@ -17,26 +17,24 @@
 /// limitations under the License.
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
-///
-/// @author Max Neunhoeffer
 ////////////////////////////////////////////////////////////////////////////////
-
-#pragma once
 
 #include "Graph/Types/VertexRef.h"
 
-namespace arangodb {
-namespace graph {
+namespace arangodb::graph {
 
-using VertexSet = arangodb::containers::HashSet<VertexRef, std::hash<VertexRef>,
-                                                std::equal_to<VertexRef>>;
+[[nodiscard]] auto VertexRef::collectionName() const
+    -> ResultT<std::string_view> {
+  size_t pos = _vertex.find('/');
+  if (pos == std::string::npos) {
+    // Invalid input. If we get here somehow we managed to store invalid
+    // _from/_to values or the traverser did a let an illegal start through
+    TRI_ASSERT(false);
+    return Result{TRI_ERROR_GRAPH_INVALID_EDGE,
+                  "invalid VertexRef " + _vertex.toString()};
+  }
 
-template<typename T>
-concept HasForbidden = requires(T t) {
-  {
-    t.setForbiddenVertices(std::make_shared<VertexSet>())
-    } -> std::same_as<void>;
-};
+  return _vertex.substr(0, pos).stringView();
+}
 
-}  // namespace graph
-}  // namespace arangodb
+}  // namespace arangodb::graph
