@@ -477,7 +477,7 @@ AqlValue functions::Min(ExpressionContext* expressionContext, AstNode const&,
     return AqlValue(AqlValueHintNull());
   }
   ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
-  return AqlValue(minValue, 0, rm);
+  return AqlValue(minValue, rm);
 }
 
 /// @brief function MAX
@@ -509,7 +509,7 @@ AqlValue functions::Max(ExpressionContext* expressionContext, AstNode const&,
     return AqlValue(AqlValueHintNull());
   }
   ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
-  return AqlValue(maxValue, 0, rm);
+  return AqlValue(maxValue, rm);
 }
 
 /// @brief function SUM
