@@ -220,7 +220,7 @@ auto ShortestPathExecutor<FinderType>::doOutputPath(OutputAqlItemRow& output)
   while (pathLengthAvailable() > 0 && !output.isFull()) {
     if (_infos.usesOutputRegister(
             ShortestPathExecutorInfos<FinderType>::VERTEX)) {
-      AqlValue v{verticesSlice.at(_posInPath), 0,
+      AqlValue v{verticesSlice.at(_posInPath),
                  &_infos.query().resourceMonitor()};
       AqlValueGuard vertexGuard{v, true};
 
@@ -238,7 +238,7 @@ auto ShortestPathExecutor<FinderType>::doOutputPath(OutputAqlItemRow& output)
                                  ShortestPathExecutorInfos<FinderType>::EDGE),
                              _inputRow, &edgeGuard);
       } else {
-        AqlValue e{edgesSlice.at(_posInPath - 1).resolveExternal(), 0,
+        AqlValue e{edgesSlice.at(_posInPath - 1).resolveExternal(),
                    &_infos.query().resourceMonitor()};
         AqlValueGuard edgeGuard{e, true};
 

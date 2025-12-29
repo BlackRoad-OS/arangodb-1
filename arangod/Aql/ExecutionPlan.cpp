@@ -1001,7 +1001,7 @@ ExecutionNode* ExecutionPlan::createCalculation(Variable* out,
     bool mustDestroy;  // can be ignored here; the variable takes ownership of
                        // the value.
     out->setConstantValue(
-        AqlValue(expr->execute(&exprContext, mustDestroy).slice(), 0,
+        AqlValue(expr->execute(&exprContext, mustDestroy).slice(),
                  &_ast->query().resourceMonitor()));
   }
 

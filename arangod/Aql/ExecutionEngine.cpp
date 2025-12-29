@@ -920,7 +920,7 @@ void ExecutionEngine::initializeConstValueBlock(
               // copy here.
               block->emplaceValue(
                   0, reg.value(),
-                  AqlValue(value.slice(), 0,
+                  AqlValue(value.slice(),
                            &plan.getAst()->query().resourceMonitor()));
             }
           } else if (var->type() == Variable::Type::BindParameter) {
