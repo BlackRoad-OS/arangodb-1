@@ -110,7 +110,7 @@ AqlValue functions::MakeDistributeInput(
 
   ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
 
-  return AqlValue{input, 0, rm};
+  return AqlValue{input, rm};
 }
 
 AqlValue functions::MakeDistributeInputWithKeyCreation(
@@ -202,7 +202,7 @@ AqlValue functions::MakeDistributeInputWithKeyCreation(
       objectGuard->add(StaticStrings::ToString,
                        input.get(StaticStrings::ToString));
     }
-    return AqlValue{builder->slice(), 0, rm};
+    return AqlValue{builder->slice(), rm};
   }
 
   if (buildNewObject) {
@@ -216,10 +216,10 @@ AqlValue functions::MakeDistributeInputWithKeyCreation(
       builder->add(cur.key.stringView(), cur.value);
     }
     builder->close();
-    return AqlValue{builder->slice(), 0, rm};
+    return AqlValue{builder->slice(), rm};
   }
 
-  return AqlValue{input, 0, rm};
+  return AqlValue{input, rm};
 }
 
 AqlValue functions::MakeDistributeGraphInput(
@@ -247,7 +247,7 @@ AqlValue functions::MakeDistributeGraphInput(
       builder->close();
     }
 
-    return AqlValue{builder->slice(), 0, rm};
+    return AqlValue{builder->slice(), rm};
   }
 
   // check input value
@@ -279,10 +279,10 @@ AqlValue functions::MakeDistributeGraphInput(
       builder->add(cur.key.stringView(), cur.value);
     }
     builder->close();
-    return AqlValue{builder->slice(), 0, rm};
+    return AqlValue{builder->slice(), rm};
   }
 
-  return AqlValue{input, 0, rm};
+  return AqlValue{input, rm};
 }
 
 #ifdef USE_ENTERPRISE
@@ -310,7 +310,7 @@ AqlValue functions::SelectSmartDistributeGraphInput(
           fromId, expressionContext->vocbase());
   if (res.ok()) {
     ResourceMonitor* rm = expressionContext->getResourceMonitorPtr();
-    return AqlValue{input, 0, rm};
+    return AqlValue{input, rm};
   }
   // From vertex is not smart. Use the other side.
 
