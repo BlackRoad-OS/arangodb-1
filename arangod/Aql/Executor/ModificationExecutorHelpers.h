@@ -95,7 +95,7 @@ OperationOptions convertOptions(ModificationOptions const& in,
                                 Variable const* outVariableOld);
 
 AqlValue getDocumentOrNull(velocypack::Slice elm, std::string const& key,
-                           ResourceMonitor* rm = nullptr);
+                           ResourceMonitor* rm);
 
 }  // namespace ModificationExecutorHelpers
 }  // namespace aql
