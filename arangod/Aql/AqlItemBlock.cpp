@@ -514,6 +514,11 @@ SharedAqlItemBlockPtr AqlItemBlock::cloneDataAndMoveShadow() {
           AqlValue a = stealAndEraseValue(row, col);
           if (a.requiresDestruction()) {
             AqlValueGuard guard{a, true};
+            /*
+            *  NOTE: ShadowRow content is never referenced
+            *  as the SubqueryStartNode always creates clones, so
+            *  we will never use identical data pointer.
+            */
             res->setValue(row, col, a);
             guard.steal();
           } else {
