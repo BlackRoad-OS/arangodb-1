@@ -2402,6 +2402,13 @@ void AstNode::stringify(std::string& buffer, bool failIfLong) const {
     return;
   }
 
+  if (type == NODE_TYPE_QUANTIFIER) {
+    // not used by V8
+    buffer.append(Quantifier::stringify(
+        static_cast<Quantifier::Type>(getIntValue(true))));
+    return;
+  }
+
   THROW_ARANGO_EXCEPTION_MESSAGE(
       TRI_ERROR_INTERNAL,
       absl::StrCat("stringification not supported for node type ",
