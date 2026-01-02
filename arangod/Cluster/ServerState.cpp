@@ -96,8 +96,7 @@ ServerState::ServerState(ArangodServer& server)
       _role(RoleEnum::ROLE_UNDEFINED),
       _shortId(0),
       _rebootId(0),
-      _state(STATE_UNDEFINED)
-{
+      _state(STATE_UNDEFINED) {
   TRI_ASSERT(Instance == nullptr);
   Instance = this;
   setRole(ROLE_UNDEFINED);
