@@ -249,14 +249,6 @@ void BootstrapFeature::start() {
       TRI_ASSERT(false);
     }
   } else {
-    std::string const myId =
-        ServerState::instance()->getId();  // local cluster UUID
-
-    // become leader before running server.js to ensure the leader
-    // is the foxxmaster. Everything else is handled in heartbeat
-    ServerState::instance()->setFoxxmaster(
-        myId);  // could be empty, but set anyway
-
     auth::UserManager* um = AuthenticationFeature::instance()->userManager();
     if (um != nullptr) {
       // only creates root user if it does not exist, will be overwritten on
