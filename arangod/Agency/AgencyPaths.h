@@ -1033,6 +1033,7 @@ class Root : public std::enable_shared_from_this<Root>, public Path {
         return ServersKnown::make_shared(shared_from_this());
       }
 
+      #ifdef USE_V8
       class FoxxmasterQueueupdate
           : public StaticComponent<FoxxmasterQueueupdate, Current> {
        public:
@@ -1047,6 +1048,7 @@ class Root : public std::enable_shared_from_this<Root>, public Path {
           const {
         return FoxxmasterQueueupdate::make_shared(shared_from_this());
       }
+      #endif
 
       class ShardsCopied : public StaticComponent<ShardsCopied, Current> {
        public:
@@ -1061,6 +1063,7 @@ class Root : public std::enable_shared_from_this<Root>, public Path {
         return ShardsCopied::make_shared(shared_from_this());
       }
 
+      #ifdef USE_V8
       class Foxxmaster : public StaticComponent<Foxxmaster, Current> {
        public:
         constexpr char const* component() const noexcept {
@@ -1073,6 +1076,7 @@ class Root : public std::enable_shared_from_this<Root>, public Path {
       std::shared_ptr<Foxxmaster const> foxxmaster() const {
         return Foxxmaster::make_shared(shared_from_this());
       }
+      #endif
 
       class ServersRegistered
           : public StaticComponent<ServersRegistered, Current> {

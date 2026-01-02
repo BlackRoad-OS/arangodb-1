@@ -258,6 +258,7 @@ class ServerState {
   /// @brief set the current state
   void setState(StateEnum);
 
+#ifdef USE_V8
   bool isFoxxmaster() const;
 
   std::string getFoxxmaster() const;
@@ -269,6 +270,7 @@ class ServerState {
   bool getFoxxmasterQueueupdate() const noexcept;
 
   TRI_voc_tick_t getFoxxmasterSince() const noexcept;
+#endif
 
   std::string getPersistedId();
   bool hasPersistedId();
@@ -319,7 +321,9 @@ class ServerState {
   /// @brief write the Current/ServersRegistered entry
   bool registerAtAgencyPhase2(AgencyComm&, bool hadPersistedId);
 
+#ifdef USE_V8
   void setFoxxmasterSinceNow();
+#endif
 
   /// @brief whether or not "value" is a server UUID
   bool isUuid(std::string const& value) const;
@@ -372,6 +376,7 @@ class ServerState {
   /// @brief the current state
   StateEnum _state;
 
+#ifdef USE_V8  
   /// @brief lock for all foxxmaster-related members
   mutable basics::ReadWriteLock _foxxmasterLock;
 
@@ -384,6 +389,7 @@ class ServerState {
 
   // protected by _foxxmasterLock
   bool _foxxmasterQueueupdate;
+#endif
 
 #ifdef ARANGODB_USE_GOOGLE_TESTS
   bool _isGoogleTests = false;

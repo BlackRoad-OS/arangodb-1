@@ -234,7 +234,10 @@ static std::string const healthPrefix = "/Supervision/Health/";
 static std::string const targetShortID = "/Target/MapUniqueToShortID/";
 static std::string const currentServersRegisteredPrefix =
     "/Current/ServersRegistered";
-static std::string const foxxmaster = "/Current/Foxxmaster";
+
+#ifdef USE_V8  
+  static std::string const foxxmaster = "/Current/Foxxmaster";
+#endif
 
 void Supervision::upgradeOne(Builder& builder) {
   // "/arango/Agency/Definition" not exists or is 0
@@ -446,6 +449,7 @@ void handleOnStatusDBServer(
   }
 }
 
+#ifdef USE_V8  
 void handleOnStatusCoordinator(Agent* agent, Node const& snapshot,
                                HealthRecord& persisted,
                                HealthRecord& transisted,
@@ -469,6 +473,7 @@ void handleOnStatusCoordinator(Agent* agent, Node const& snapshot,
     singleWriteTransaction(agent, create, false);
   }
 }
+#endif
 
 void handleOnStatusSingle(Agent* agent, Node const& snapshot,
                           HealthRecord& persisted, HealthRecord& transisted,

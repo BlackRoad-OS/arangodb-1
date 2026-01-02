@@ -96,9 +96,12 @@ ServerState::ServerState(ArangodServer& server)
       _role(RoleEnum::ROLE_UNDEFINED),
       _shortId(0),
       _rebootId(0),
-      _state(STATE_UNDEFINED),
-      _foxxmasterSince(0),
-      _foxxmasterQueueupdate(false) {
+      _state(STATE_UNDEFINED)
+#ifdef USE_V8 
+      ,_foxxmasterSince(0),
+      _foxxmasterQueueupdate(false)
+#endif
+{
   TRI_ASSERT(Instance == nullptr);
   Instance = this;
   setRole(ROLE_UNDEFINED);
@@ -1257,6 +1260,7 @@ bool ServerState::checkCoordinatorState(StateEnum state) {
   return false;
 }
 
+#ifdef USE_V8 
 bool ServerState::isFoxxmaster() const {
   READ_LOCKER(readLocker, _foxxmasterLock);
   return _foxxmaster == getId();
@@ -1295,6 +1299,7 @@ TRI_voc_tick_t ServerState::getFoxxmasterSince() const noexcept {
   READ_LOCKER(readLocker, _foxxmasterLock);
   return _foxxmasterSince;
 }
+#endif
 
 std::ostream& operator<<(std::ostream& stream,
                          arangodb::ServerState::RoleEnum role) {

@@ -561,12 +561,16 @@ void HeartbeatThread::getNewsFromAgencyForCoordinator() {
   auto& cache = _clusterFeature.agencyCache();
   auto [acb, idx] = cache.read(std::vector<std::string>{
       AgencyCommHelper::path("Current/Version"),
+#ifdef USE_V8 
       AgencyCommHelper::path("Current/Foxxmaster"),
       AgencyCommHelper::path("Current/FoxxmasterQueueupdate"),
+#endif
       AgencyCommHelper::path("Plan/Version"),
       AgencyCommHelper::path("Readonly"), AgencyCommHelper::path("Shutdown"),
       AgencyCommHelper::path("Sync/UserVersion"),
+#ifdef USE_V8
       AgencyCommHelper::path("Sync/FoxxQueueVersion"),
+#endif
       AgencyCommHelper::path("Target/FailedServers"), "/.agency"});
   auto result = acb->slice();
   LOG_TOPIC("53262", DEBUG, Logger::HEARTBEAT)
@@ -595,7 +599,7 @@ void HeartbeatThread::getNewsFromAgencyForCoordinator() {
     if (shutdownSlice.isBool() && shutdownSlice.getBool()) {
       _server.beginShutdown();
     }
-
+#ifdef USE_V8
     // mop: order is actually important here...FoxxmasterQueueupdate will
     // be set only when somebody registers some new queue stuff (for example
     // on a different coordinator than this one)... However when we are just
@@ -631,6 +635,7 @@ void HeartbeatThread::getNewsFromAgencyForCoordinator() {
       }
       agency.increment("Current/Version");
     }
+#endif
 
     VPackSlice versionSlice = result[0].get(std::vector<std::string>(
         {AgencyCommHelper::path(), "Plan", "Version"}));
