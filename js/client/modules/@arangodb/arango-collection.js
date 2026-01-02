@@ -766,12 +766,25 @@ ArangoCollection.prototype.firstExample = function (example) {
   let filters = [];
   Object.keys(e).forEach(function (key) {
     let value = e[key];
-    filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+    // Ensure key is a string and process it safely
+    let keyStr = String(key);
+    if (keyStr.length === 0) {
+      // Skip empty keys
+      return;
+    }
+    // Remove backticks, split on dots, and join with backtick-dot-backtick
+    // Filter out empty parts to avoid issues with keys starting with dots
+    let processedKey = keyStr.replace(/\`/g, '').split('.').filter(function(part) { return part.length > 0; }).join('`.`');
+    if (processedKey.length === 0) {
+      // Skip if processing results in empty string
+      return;
+    }
+    filters.push('doc.`' + processedKey + '` == ' + JSON.stringify(value));
   });
 
   let query = 'FOR doc IN @@collection';
   if (filters.length > 0) {
-    query += ' ' + filters.join(' ') + ' ';
+    query += ' FILTER ' + filters.join(' AND ') + ' ';
   }
   query += 'LIMIT 1 RETURN doc';
 
@@ -1309,12 +1322,25 @@ ArangoCollection.prototype.removeByExample = function (example,
   let filters = [];
   Object.keys(example).forEach(function (key) {
     let value = example[key];
-    filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+    // Ensure key is a string and process it safely
+    let keyStr = String(key);
+    if (keyStr.length === 0) {
+      // Skip empty keys
+      return;
+    }
+    // Remove backticks, split on dots, and join with backtick-dot-backtick
+    // Filter out empty parts to avoid issues with keys starting with dots
+    let processedKey = keyStr.replace(/\`/g, '').split('.').filter(function(part) { return part.length > 0; }).join('`.`');
+    if (processedKey.length === 0) {
+      // Skip if processing results in empty string
+      return;
+    }
+    filters.push('doc.`' + processedKey + '` == ' + JSON.stringify(value));
   });
 
   let query = 'FOR doc IN @@collection';
   if (filters.length > 0) {
-    query += ' ' + filters.join(' ') + ' ';
+    query += ' FILTER ' + filters.join(' AND ') + ' ';
   }
   if (options.limit > 0) {
     query += ' LIMIT ' + parseInt(options.limit, 10) + ' ';
@@ -1369,7 +1395,7 @@ ArangoCollection.prototype.replaceByExample = function (example,
 
   let query = 'FOR doc IN @@collection';
   if (filters.length > 0) {
-    query += ' ' + filters.join(' ') + ' ';
+    query += ' FILTER ' + filters.join(' AND ') + ' ';
   }
   if (options.limit > 0) {
     query += ' LIMIT ' + parseInt(options.limit, 10) + ' ';
@@ -1427,7 +1453,7 @@ ArangoCollection.prototype.updateByExample = function (example,
 
   let query = 'FOR doc IN @@collection';
   if (filters.length > 0) {
-    query += ' ' + filters.join(' ') + ' ';
+    query += ' FILTER ' + filters.join(' AND ') + ' ';
   }
   if (options.limit > 0) {
     query += ' LIMIT ' + parseInt(options.limit, 10) + ' ';

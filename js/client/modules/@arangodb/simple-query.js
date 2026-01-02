@@ -99,12 +99,26 @@ SimpleQueryByExample.prototype.execute = function (batchSize) {
     var self = this;
     Object.keys(this._example).forEach(function (key) {
       var value = self._example[key];
-      filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+      // Ensure key is a string and process it safely
+      var keyStr = String(key);
+      if (keyStr.length === 0) {
+        // Skip empty keys
+        return;
+      }
+      // Remove backticks, split on dots, and join with backtick-dot-backtick
+      // Filter out empty parts to avoid issues with keys starting with dots
+      var processedKey = keyStr.replace(/\`/g, '').split('.').filter(function(part) { return part.length > 0; }).join('`.`');
+      if (processedKey.length === 0) {
+        // Skip if processing results in empty string
+        return;
+      }
+      // Always prefix with 'doc.`' to ensure proper variable reference
+      filters.push('doc.`' + processedKey + '` == ' + JSON.stringify(value));
     });
 
     var query = 'FOR doc IN @@collection';
     if (filters.length > 0) {
-      query += ' ' + filters.join(' ') + ' ';
+      query += ' FILTER ' + filters.join(' AND ') + ' ';
     }
 
     if (this._skip !== null && this._skip > 0) {
@@ -156,8 +170,20 @@ SimpleQueryByCondition.prototype.execute = function (batchSize) {
     if (typeof this._condition === 'object' && !Array.isArray(this._condition)) {
       Object.keys(this._condition).forEach(function (key) {
         var value = self._condition[key];
+        // Ensure key is a string and process it safely
+        var keyStr = String(key);
+        if (keyStr.length === 0) {
+          // Skip empty keys
+          return;
+        }
+        // Remove backticks, split on dots, and join with backtick-dot-backtick
+        var processedKey = keyStr.replace(/\`/g, '').split('.').filter(function(part) { return part.length > 0; }).join('`.`');
+        if (processedKey.length === 0) {
+          // Skip if processing results in empty string
+          return;
+        }
         var varName = 'cond' + varCount++;
-        filters.push('doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == @' + varName);
+        filters.push('doc.`' + processedKey + '` == @' + varName);
         bindVars[varName] = value;
       });
     }

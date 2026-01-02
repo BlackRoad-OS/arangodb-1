@@ -124,11 +124,27 @@ SimpleQueryByExample.prototype.execute = function () {
   var self = this;
   Object.keys(this._example).forEach(function (key) {
     var value = self._example[key];
-    filters.push('FILTER doc.`' + key.replace(/\`/g, '').split('.').join('`.`') + '` == ' + JSON.stringify(value));
+    // Ensure key is a string and process it safely
+    var keyStr = String(key);
+    if (keyStr.length === 0) {
+      // Skip empty keys
+      return;
+    }
+    // Remove backticks, split on dots, and join with backtick-dot-backtick
+    // Filter out empty parts to avoid issues with keys starting with dots
+    var processedKey = keyStr.replace(/\`/g, '').split('.').filter(function(part) { return part.length > 0; }).join('`.`');
+    if (processedKey.length === 0) {
+      // Skip if processing results in empty string
+      return;
+    }
+    filters.push('doc.`' + processedKey + '` == ' + JSON.stringify(value));
   });
 
-  var query = 'FOR doc IN @@collection ' + filters.join(' ') + ' ' +
-    limitString(this._skip, this._limit) + ' RETURN doc';
+  var query = 'FOR doc IN @@collection';
+  if (filters.length > 0) {
+    query += ' FILTER ' + filters.join(' AND ') + ' ';
+  }
+  query += limitString(this._skip, this._limit) + ' RETURN doc';
 
   var documents = require('internal').db._query({ query, bindVars}).toArray();
 

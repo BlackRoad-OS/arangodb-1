@@ -220,11 +220,12 @@ const generateTestSuite = (collectionWrapper, testNamePostfix = "") => {
       };
       {
         // Try to find one by key using document API
-        assertNotUndefined(keys.slice(0, 1));
-        const docId = collection.name() + '/' + keys.slice(0, 1)[0];
+        assertTrue(keys.length > 0, "No keys were generated from document insertion");
+        assertNotUndefined(keys[0]);
+        const docId = collection.name() + '/' + keys[0];
         const result = arango.GET_RAW('/_api/document/' + encodeURIComponent(docId));
 
-        assertEqual(200, result.code);
+        assertEqual(200, result.code, `Failed to retrieve document ${docId}. Response: ${JSON.stringify(result)}`);
         const response = result.parsedBody;
 
         for (const [key, value] of Object.entries(documents[0])) {
