@@ -15,6 +15,7 @@ add_library(arangoserver STATIC
   Cluster/AutoRebalance.cpp
   Cluster/ClusterCollectionCreationInfo.cpp
   Cluster/ClusterFeature.cpp
+  Cluster/ClusterOptionsProvider.cpp
   Cluster/ClusterHelpers.cpp
   Cluster/ClusterInfo.cpp
   Cluster/ClusterTrxMethods.cpp
@@ -182,7 +183,7 @@ add_library(arangoserver STATIC
   Transaction/SmartContext.cpp
   Transaction/StandaloneContext.cpp
   Transaction/Status.cpp)
-if (USE_V8) 
+if (USE_V8)
   target_sources(arangoserver PRIVATE
     FeaturePhases/FoxxFeaturePhase.cpp
     FeaturePhases/V8FeaturePhase.cpp
