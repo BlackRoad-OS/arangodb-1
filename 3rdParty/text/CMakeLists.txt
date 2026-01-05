@@ -85,9 +85,23 @@ target_include_directories(text
   $<INSTALL_INTERFACE:include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_include_directories(text PRIVATE
-  ${Boost_INCLUDE_DIRS}
-  PRIVATE $<TARGET_PROPERTY:absl::base,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:absl::base,INTERFACE_INCLUDE_DIRECTORIES>
   ${FROZEN_INCLUDE_DIR})
+# Add Boost include directory
+if(Boost_INCLUDE_DIRS)
+  target_include_directories(text PRIVATE ${Boost_INCLUDE_DIRS})
+elseif(BOOST_VERSION)
+  target_include_directories(text PRIVATE "${CMAKE_SOURCE_DIR}/3rdParty/boost/${BOOST_VERSION}")
+elseif(TARGET boost_boost)
+  # Get include directories from boost_boost target
+  get_target_property(BOOST_INCLUDE_DIR boost_boost INTERFACE_INCLUDE_DIRECTORIES)
+  if(BOOST_INCLUDE_DIR)
+    target_include_directories(text PRIVATE ${BOOST_INCLUDE_DIR})
+  endif()
+else()
+  # Default fallback
+  target_include_directories(text PRIVATE "${CMAKE_SOURCE_DIR}/3rdParty/boost/1.78.0")
+endif()
 set_property(TARGET text PROPERTY CXX_STANDARD ${CXX_STD})
 target_compile_options(text PRIVATE -DBOOST_TEXT_SOURCE)
 
@@ -116,7 +130,8 @@ install(TARGETS text
 install(EXPORT text_export
   FILE text-targets.cmake
   NAMESPACE Boost::
-  DESTINATION lib/cmake/text)
+  DESTINATION lib/cmake/text
+  EXCLUDE_FROM_ALL)
 
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake/text-config.cmake

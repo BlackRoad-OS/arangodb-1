@@ -35,8 +35,8 @@ add_library(arango_static_strings STATIC
   Basics/StaticStrings.cpp
 )
 
-set(FROZEN_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib/iresearch/external/frozen/include")
-set(FUNCTION2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lib/iresearch/external/function2")
+set(FROZEN_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/3rdParty/frozen/include")
+set(FUNCTION2_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/3rdParty/function2")
 
 add_library(arango_basic_errors STATIC
         ApplicationFeatures/ShellColorsFeature.cpp
@@ -487,7 +487,6 @@ set(IRESEARCH_BUILD_DIR "${CMAKE_BINARY_DIR}/lib/iresearch")
 unset(IRESEARCH_INCLUDE)
 list(APPEND IRESEARCH_INCLUDE
   "${IRESEARCH_ROOT}/core"
-  "${IRESEARCH_ROOT}/external"
   "${IRESEARCH_BUILD_DIR}/core"
 )
 

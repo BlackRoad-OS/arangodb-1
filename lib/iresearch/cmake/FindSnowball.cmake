@@ -76,7 +76,8 @@ if (Snowball_INCLUDE_DIR AND Snowball_SRC_DIR_LIBSTEMMER)# AND Snowball_SRC_DIR_
   get_filename_component(Snowball_SRC_DIR_PARENT ${Snowball_SRC_DIR_LIBSTEMMER} DIRECTORY)
   set(STEMMER_SOURCE_DIR ${Snowball_SRC_DIR_PARENT})
   add_subdirectory(
-    ${PROJECT_SOURCE_DIR}/external/snowball
+    ${CMAKE_SOURCE_DIR}/3rdParty/snowball
+    ${CMAKE_BINARY_DIR}/3rdParty/snowball
     EXCLUDE_FROM_ALL # do not build unused targets
   )
   set(Snowball_LIBRARY_DIR ${Snowball_SEARCH_LIB_PATHS})

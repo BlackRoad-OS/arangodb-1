@@ -244,7 +244,7 @@ include(Sanitize)
 
 # set external dirs
 set(EXTERNAL_INCLUDE_DIRS
-  ${PROJECT_SOURCE_DIR}/external
+  ${CMAKE_SOURCE_DIR}/3rdParty
   CACHE INTERNAL
   ""
   )
@@ -292,8 +292,6 @@ file(GLOB_RECURSE IRESEARCH_PREBUILT_LIST RELATIVE "${IRESEARCH_PREBUILT_DIR}" F
 foreach (ELEMENT ${IRESEARCH_PREBUILT_LIST})
   configure_file("${IRESEARCH_PREBUILT_DIR}/${ELEMENT}" "${CMAKE_CURRENT_BINARY_DIR}/${ELEMENT}" COPYONLY)
 endforeach ()
-
-add_subdirectory(external)
 
 if (IRESEARCH_COVERAGE)
   include(Coverage)
