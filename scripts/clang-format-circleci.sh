@@ -28,6 +28,7 @@ done
 find $PATHS \
   \( -name '*.cpp' -o -name '*.hpp' -o -name '*.tpp' \) \
   \! -wholename "lib/Basics/${RANDOM_PREFIX}_sdt.hpp" \
+  \! -wholename "lib/iresearch.build/external/snowball/libstemmer/modules.h" \
   -type f \
   -exec clang-format -i {} \+
 
