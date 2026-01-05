@@ -97,8 +97,8 @@ void AuthenticationFeature::prepare() {
   }
 
   TRI_ASSERT(_authCache == nullptr);
-  _authCache = std::make_unique<auth::TokenCache>(_userManager.get(),
-                                                  _options.authenticationTimeout);
+  _authCache = std::make_unique<auth::TokenCache>(
+      _userManager.get(), _options.authenticationTimeout);
 
   if (_options.jwtSecretProgramOption.empty()) {
     LOG_TOPIC("43396", INFO, Logger::AUTHENTICATION)
@@ -111,7 +111,8 @@ void AuthenticationFeature::prepare() {
   }
 
 #ifdef USE_ENTERPRISE
-  _authCache->setJwtSecrets(_options.jwtSecretProgramOption, _options.jwtPassiveSecrets);
+  _authCache->setJwtSecrets(_options.jwtSecretProgramOption,
+                            _options.jwtPassiveSecrets);
 #else
   _authCache->setJwtSecret(_options.jwtSecretProgramOption);
 #endif
@@ -209,7 +210,8 @@ Result AuthenticationFeature::loadJwtSecretKeyfile() {
     // here.
     std::string contents =
         basics::FileUtils::slurp(_options.jwtSecretKeyfileProgramOption);
-    _options.jwtSecretProgramOption = basics::StringUtils::trim(contents, " \t\n\r");
+    _options.jwtSecretProgramOption =
+        basics::StringUtils::trim(contents, " \t\n\r");
   } catch (std::exception const& ex) {
     std::string msg("unable to read content of jwt-secret file '");
     msg.append(_options.jwtSecretKeyfileProgramOption)
@@ -227,9 +229,11 @@ Result AuthenticationFeature::loadJwtSecretFolder() try {
   TRI_ASSERT(!_options.jwtSecretFolderProgramOption.empty());
 
   LOG_TOPIC("4922f", INFO, arangodb::Logger::AUTHENTICATION)
-      << "loading JWT secrets from folder " << _options.jwtSecretFolderProgramOption;
+      << "loading JWT secrets from folder "
+      << _options.jwtSecretFolderProgramOption;
 
-  auto list = basics::FileUtils::listFiles(_options.jwtSecretFolderProgramOption);
+  auto list =
+      basics::FileUtils::listFiles(_options.jwtSecretFolderProgramOption);
 
   // filter out empty filenames, hidden files, tmp files and symlinks
   list.erase(std::remove_if(list.begin(), list.end(),
@@ -254,8 +258,8 @@ Result AuthenticationFeature::loadJwtSecretFolder() try {
   }
 
   auto slurpy = [&](std::string const& file) {
-    auto p =
-        basics::FileUtils::buildFilename(_options.jwtSecretFolderProgramOption, file);
+    auto p = basics::FileUtils::buildFilename(
+        _options.jwtSecretFolderProgramOption, file);
     std::string contents = basics::FileUtils::slurp(p);
     return basics::StringUtils::trim(contents, " \t\n\r");
   };

@@ -68,7 +68,8 @@ the server to `localhost` to not expose it to the public internet)");
           "The lifetime for tokens (in seconds) that can be obtained from "
           "the `POST /_open/auth` endpoint. Used by the web interface "
           "for JWT-based sessions.",
-          new DoubleParameter(&opts.sessionTimeout, /*base*/ 1.0, /*minValue*/ 1.0,
+          new DoubleParameter(&opts.sessionTimeout, /*base*/ 1.0,
+                              /*minValue*/ 1.0,
                               /*maxValue*/ std::numeric_limits<double>::max(),
                               /*minInclusive*/ false),
           arangodb::options::makeFlags(
