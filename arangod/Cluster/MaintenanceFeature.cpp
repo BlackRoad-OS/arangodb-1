@@ -27,6 +27,7 @@
 
 #include "Cluster/Maintenance.h"
 #include "MaintenanceFeature.h"
+#include "MaintenanceOptionsProvider.h"
 
 #include "Metrics/CounterBuilder.h"
 #include "Metrics/GaugeBuilder.h"
@@ -161,15 +162,8 @@ MaintenanceFeature::MaintenanceFeature(Server& server)
       _clusterFeature(server.hasFeature<ClusterFeature>()
                           ? &server.getFeature<ClusterFeature>()
                           : nullptr),
-      _forceActivation(false),
-      _resignLeadershipOnShutdown(false),
+      _options(),
       _firstRun(true),
-      _maintenanceThreadsMax(
-          (std::max)(static_cast<uint32_t>(minThreadLimit),
-                     static_cast<uint32_t>(NumberOfCores::getValue() / 4 + 1))),
-      _maintenanceThreadsSlowMax(_maintenanceThreadsMax / 2),
-      _secondsActionsBlock(2),
-      _secondsActionsLinger(3600),
       _isShuttingDown(false),
       _nextActionId(1),
       _pauseUntil(std::chrono::steady_clock::duration::zero()) {
@@ -193,118 +187,28 @@ MaintenanceFeature::~MaintenanceFeature() { stop(); }
 
 void MaintenanceFeature::collectOptions(
     std::shared_ptr<ProgramOptions> options) {
-  options->addOption(
-      "--server.maintenance-threads",
-      "The maximum number of threads available for maintenance actions.",
-      new UInt32Parameter(&_maintenanceThreadsMax),
-      arangodb::options::makeFlags(
-          arangodb::options::Flags::DefaultNoComponents,
-          arangodb::options::Flags::OnDBServer,
-          arangodb::options::Flags::Uncommon,
-          arangodb::options::Flags::Dynamic));
-
-  options
-      ->addOption(
-          "--server.maximal-number-sync-shard-actions",
-          "The maximum number of SynchronizeShard actions which may be queued "
-          "at any given time.",
-          new UInt64Parameter(&_maximalNumberOfSyncShardActionsQueued, 1, 1,
-                              std::numeric_limits<uint64_t>::max()),
-          arangodb::options::makeFlags(
-              arangodb::options::Flags::DefaultNoComponents,
-              arangodb::options::Flags::OnDBServer,
-              arangodb::options::Flags::Uncommon))
-      .setIntroducedIn(31205);
-
-  options
-      ->addOption("--server.maintenance-slow-threads",
-                  "The maximum number of threads available for slow "
-                  "maintenance actions (long SynchronizeShard and long "
-                  "EnsureIndex).",
-                  new UInt32Parameter(&_maintenanceThreadsSlowMax),
-                  arangodb::options::makeFlags(
-                      arangodb::options::Flags::DefaultNoComponents,
-                      arangodb::options::Flags::OnDBServer,
-                      arangodb::options::Flags::Uncommon,
-                      arangodb::options::Flags::Dynamic))
-      .setIntroducedIn(30803);
-
-  options->addOption(
-      "--server.maintenance-actions-block",
-      "The minimum number of seconds finished actions block duplicates.",
-      new Int32Parameter(&_secondsActionsBlock),
-      arangodb::options::makeFlags(
-          arangodb::options::Flags::DefaultNoComponents,
-          arangodb::options::Flags::OnDBServer,
-          arangodb::options::Flags::Uncommon));
-
-  options->addOption(
-      "--server.maintenance-actions-linger",
-      "The minimum number of seconds finished actions remain in the deque.",
-      new Int32Parameter(&_secondsActionsLinger),
-      arangodb::options::makeFlags(
-          arangodb::options::Flags::DefaultNoComponents,
-          arangodb::options::Flags::OnDBServer,
-          arangodb::options::Flags::Uncommon));
-
-  options->addOption(
-      "--cluster.resign-leadership-on-shutdown",
-      "Create a resign leader ship job for this DB-Server on shutdown.",
-      new BooleanParameter(&_resignLeadershipOnShutdown),
-      arangodb::options::makeFlags(
-          arangodb::options::Flags::DefaultNoComponents,
-          arangodb::options::Flags::OnDBServer,
-          arangodb::options::Flags::Uncommon));
+  MaintenanceOptionsProvider provider;
+  provider.declareOptions(options, _options);
 }
 
 void MaintenanceFeature::validateOptions(
     std::shared_ptr<ProgramOptions> options) {
-  // Explanation: There must always be at least 3 maintenance threads.
-  // The first one only does actions which are labelled "fast track".
-  // The next few threads do "slower" actions, but never work on very slow
-  // actions which came into being by rescheduling. If they stumble on
-  // an actions which seems to take long, they give up and reschedule
-  // with a special slow priority, such that the action is eventually
-  // executed by the slow threads. We can configure both the total number
-  // of threads as well as the number of slow threads. The number of slow
-  // threads must always be at most N-2 if N is the total number of threads.
-  // The default for the slow threads is N/2, unless the user has used
-  // an override.
-  if (_maintenanceThreadsMax < minThreadLimit) {
-    LOG_TOPIC("37726", WARN, Logger::MAINTENANCE)
-        << "Need at least" << minThreadLimit << "maintenance-threads";
-    _maintenanceThreadsMax = minThreadLimit;
-  } else if (_maintenanceThreadsMax > maxThreadLimit) {
-    LOG_TOPIC("8fb0e", WARN, Logger::MAINTENANCE)
-        << "maintenance-threads limited to " << maxThreadLimit;
-    _maintenanceThreadsMax = maxThreadLimit;
-  }
-  if (!options->processingResult().touched("server.maintenance-slow-threads")) {
-    _maintenanceThreadsSlowMax = _maintenanceThreadsMax / 2;
-  }
-  if (_maintenanceThreadsSlowMax + 2 > _maintenanceThreadsMax) {
-    _maintenanceThreadsSlowMax = _maintenanceThreadsMax - 2;
-    LOG_TOPIC("54251", WARN, Logger::MAINTENANCE)
-        << "maintenance-slow-threads limited to " << _maintenanceThreadsSlowMax;
-  }
-  if (_maintenanceThreadsSlowMax == 0) {
-    _maintenanceThreadsSlowMax = 1;
-    LOG_TOPIC("54252", WARN, Logger::MAINTENANCE)
-        << "maintenance-slow-threads raised to " << _maintenanceThreadsSlowMax;
-  }
+  MaintenanceOptionsProvider provider;
+  provider.validateOptions(options, _options);
 }
 
 void MaintenanceFeature::prepare() {
   if (ServerState::instance()->isDBServer()) {
     LOG_TOPIC("42531", INFO, Logger::MAINTENANCE)
-        << "Using " << _maintenanceThreadsMax
-        << " threads for maintenance, of which " << _maintenanceThreadsSlowMax
+        << "Using " << _options.maintenanceThreadsMax
+        << " threads for maintenance, of which "
+        << _options.maintenanceThreadsSlowMax
         << " may be used for slow operations.";
   }
 }
 
 void MaintenanceFeature::initializeMetrics() {
-  TRI_ASSERT(ServerState::instance()->isDBServer() || _forceActivation);
+  TRI_ASSERT(ServerState::instance()->isDBServer() || _options.forceActivation);
 
   if (_phase1_runtime_msec != nullptr) {
     // Already initialized.
@@ -356,8 +260,8 @@ void MaintenanceFeature::initializeMetrics() {
 void MaintenanceFeature::start() {
   auto serverState = ServerState::instance();
 
-  // _forceActivation is set by the gtest unit tests
-  if (!_forceActivation &&
+  // _options.forceActivation is set by the gtest unit tests
+  if (!_options.forceActivation &&
       (serverState->isAgent() || serverState->isSingleServer())) {
     LOG_TOPIC("deb1a", TRACE, Logger::MAINTENANCE)
         << "Disable maintenance-threads"
@@ -373,7 +277,7 @@ void MaintenanceFeature::start() {
   initializeMetrics();
 
   // start threads
-  for (uint32_t loop = 0; loop < _maintenanceThreadsMax; ++loop) {
+  for (uint32_t loop = 0; loop < _options.maintenanceThreadsMax; ++loop) {
     // First worker will be available only to fast track
     std::unordered_set<std::string> labels;
     if (loop == 0) {
@@ -381,7 +285,8 @@ void MaintenanceFeature::start() {
     }
     // The first two workers are not allowed to execute SLOW_OP_PRIORITY,
     // all the others may:
-    int minPrio = loop < _maintenanceThreadsMax - _maintenanceThreadsSlowMax
+    int minPrio = loop < _options.maintenanceThreadsMax -
+                              _options.maintenanceThreadsSlowMax
                       ? maintenance::NORMAL_PRIORITY
                       : maintenance::SLOW_OP_PRIORITY;
 
@@ -398,7 +303,8 @@ void MaintenanceFeature::start() {
 }  // MaintenanceFeature::start
 
 void MaintenanceFeature::beginShutdown() {
-  if (_resignLeadershipOnShutdown && ServerState::instance()->isDBServer()) {
+  if (_options.resignLeadershipOnShutdown &&
+      ServerState::instance()->isDBServer()) {
     struct callback_data {
       uint64_t _jobId;    // initialized before callback
       bool _completed;    // populated by the callback
