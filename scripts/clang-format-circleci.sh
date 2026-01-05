@@ -29,7 +29,7 @@ done
 # imported as a 3rd party include as far as I can tell
 # and maybe should be moved otherplace
 find $PATHS \
-  \( -name '*.cpp' -o -name '*.hpp' -o -name '*.tpp'\) \
+  \( -name '*.cpp' -o -name '*.hpp' -o -name '*.tpp' \) \
   -type f \
   -exec clang-format -i {} \+
 
