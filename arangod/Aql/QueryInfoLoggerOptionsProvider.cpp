@@ -107,4 +107,3 @@ void QueryInfoLoggerOptionsProvider::declareOptions(
 }
 
 }  // namespace arangodb::aql
-

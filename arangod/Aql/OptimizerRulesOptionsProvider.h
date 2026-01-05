@@ -40,4 +40,3 @@ struct OptimizerRulesOptionsProvider : OptionsProvider<OptimizerRulesOptions> {
 };
 
 }  // namespace arangodb::aql
-

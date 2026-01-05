@@ -32,7 +32,8 @@ class ProgramOptions;
 
 namespace arangodb::aql {
 
-struct QueryInfoLoggerOptionsProvider : OptionsProvider<QueryInfoLoggerOptions> {
+struct QueryInfoLoggerOptionsProvider
+    : OptionsProvider<QueryInfoLoggerOptions> {
   QueryInfoLoggerOptionsProvider() = default;
 
   void declareOptions(std::shared_ptr<options::ProgramOptions> opts,
@@ -40,4 +41,3 @@ struct QueryInfoLoggerOptionsProvider : OptionsProvider<QueryInfoLoggerOptions> 
 };
 
 }  // namespace arangodb::aql
-

@@ -43,4 +43,3 @@ struct AgencyOptionsProvider : OptionsProvider<AgencyOptions> {
 };
 
 }  // namespace arangodb
-

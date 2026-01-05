@@ -56,4 +56,3 @@ struct QueryInfoLoggerOptions {
 };
 
 }  // namespace arangodb::aql
-

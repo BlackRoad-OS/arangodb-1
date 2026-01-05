@@ -32,4 +32,3 @@ struct OptimizerRulesOptions {
 };
 
 }  // namespace arangodb::aql
-

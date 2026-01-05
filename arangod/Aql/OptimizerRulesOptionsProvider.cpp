@@ -64,4 +64,3 @@ state.)");
 }
 
 }  // namespace arangodb::aql
-
