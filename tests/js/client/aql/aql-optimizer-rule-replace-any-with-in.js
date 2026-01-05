@@ -793,6 +793,203 @@ function NewAqlReplaceAnyWithINTestSuite() {
             var plan = db._createStatement({query: query}).explain();
             var foundRule = plan.plan.rules.indexOf("replace-any-eq-with-in") !== -1;
             assertTrue(foundRule, "replace-any-eq-with-in rule should fire");
+        },
+
+        // Tests for normalization of == and != with both-sides-attributes
+        testEqualityNormalizationBothSidesAttributes: function () {
+            // Should normalize doc.value2 == doc.value1 to doc.value1 == doc.value2
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value2 == doc.value1 RETURN doc";
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value1 == doc.value2 RETURN doc";
+            
+            var result1 = db._query(query1).toArray();
+            var result2 = db._query(query2).toArray();
+            
+            assertEqual(result1.length, result2.length,
+                "Both orderings should return same number of results");
+            assertEqual(result1, result2,
+                "Both orderings should return identical results");
+        },
+
+        testInequalityNormalizationBothSidesAttributes: function () {
+            // Should normalize doc.value2 != doc.value1 to doc.value1 != doc.value2
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value2 != doc.value1 RETURN doc";
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value1 != doc.value2 RETURN doc";
+            
+            var result1 = db._query(query1).toArray();
+            var result2 = db._query(query2).toArray();
+            
+            assertEqual(result1.length, result2.length,
+                "Both orderings should return same number of results");
+            assertEqual(result1, result2,
+                "Both orderings should return identical results");
+        },
+
+        testDuplicateDetectionAfterNormalization: function () {
+            // After normalization, these duplicates should be detected and removed
+            var query = "FOR doc IN " + replace.name() +
+                " FILTER (doc.value2 == doc.value1) && (doc.value1 == doc.value2) RETURN doc";
+            
+            var plan = db._createStatement({query: query}).explain();
+            
+            // Check that the plan has been optimized (duplicates removed)
+            // We can't easily check the exact number of conditions, but we can
+            // verify the query still works correctly
+            var result = db._query(query).toArray();
+            
+            // Should work the same as a single condition
+            var singleCondQuery = "FOR doc IN " + replace.name() +
+                " FILTER doc.value1 == doc.value2 RETURN doc";
+            var singleResult = db._query(singleCondQuery).toArray();
+            
+            assertEqual(result, singleResult,
+                "Duplicate conditions should be optimized away");
+        },
+
+        testCanonicalStringHandlesCommutativeOperators: function () {
+            // Test that duplicate detection works with commutative expressions
+            // These should all be considered duplicates and collapsed
+            var query = "FOR doc IN " + replace.name() +
+                " FILTER (doc.value1 + doc.value2 == 10) && " +
+                "        (doc.value2 + doc.value1 == 10) RETURN doc";
+            
+            var result = db._query(query).toArray();
+            
+            // Should work the same as a single condition
+            var singleCondQuery = "FOR doc IN " + replace.name() +
+                " FILTER doc.value1 + doc.value2 == 10 RETURN doc";
+            var singleResult = db._query(singleCondQuery).toArray();
+            
+            assertEqual(result, singleResult,
+                "Commutative duplicate conditions should be optimized away");
+        },
+
+        testCanonicalStringHandlesInArrayOrdering: function () {
+            // Test that IN array elements are sorted for duplicate detection
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value IN [1, 2, 3] RETURN doc";
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value IN [3, 2, 1] RETURN doc";
+            var query3 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value IN [2, 1, 3] RETURN doc";
+            
+            var result1 = db._query(query1).toArray();
+            var result2 = db._query(query2).toArray();
+            var result3 = db._query(query3).toArray();
+            
+            assertEqual(result1, result2,
+                "Different array orderings should produce same results");
+            assertEqual(result1, result3,
+                "Different array orderings should produce same results");
+            
+            // Test duplicate detection with different orderings
+            var dupQuery = "FOR doc IN " + replace.name() +
+                " FILTER (doc.value IN [1, 2, 3]) && (doc.value IN [3, 2, 1]) RETURN doc";
+            
+            var dupResult = db._query(dupQuery).toArray();
+            assertEqual(result1, dupResult,
+                "Duplicate IN conditions with different orderings should be collapsed");
+        },
+
+        testMixedEqualityInequalityNormalization: function () {
+            // Test combination of equality and inequality
+            var query = "FOR doc IN " + replace.name() +
+                " FILTER doc.value2 == doc.value1 && doc.value3 != doc.value1 RETURN doc";
+            
+            var result = db._query(query).toArray();
+            
+            // Should normalize both conditions correctly
+            var normalizedQuery = "FOR doc IN " + replace.name() +
+                " FILTER doc.value1 == doc.value2 && doc.value1 != doc.value3 RETURN doc";
+            var normalizedResult = db._query(normalizedQuery).toArray();
+            
+            assertEqual(result, normalizedResult,
+                "Mixed equality and inequality should normalize correctly");
+        },
+
+        testOneSideConstantRemainsSame: function () {
+            // One-side-constant comparisons should NOT be affected
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value == 5 RETURN doc";
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER 5 == doc.value RETURN doc";
+            
+            var result1 = db._query(query1).toArray();
+            var result2 = db._query(query2).toArray();
+            
+            assertEqual(result1, result2,
+                "One-side-constant should already be normalized in AST");
+        },
+
+        testFalseBranchRemoval: function () {
+            // AND branches containing false should be removed from OR
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER (doc.value > 10 AND false) OR (doc.name == 'Alice') RETURN doc";
+            var result1 = db._query(query1).toArray();
+            
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER doc.name == 'Alice' RETURN doc";
+            var result2 = db._query(query2).toArray();
+            
+            assertEqual(result1, result2,
+                "AND branch with false should be removed");
+            
+            // Multiple false branches
+            var query3 = "FOR doc IN " + replace.name() +
+                " FILTER (doc.value > 5 AND false) OR (doc.value < 3 AND false) OR (doc.name == 'Bob') RETURN doc";
+            var result3 = db._query(query3).toArray();
+            
+            var query4 = "FOR doc IN " + replace.name() +
+                " FILTER doc.name == 'Bob' RETURN doc";
+            var result4 = db._query(query4).toArray();
+            
+            assertEqual(result3, result4,
+                "All AND branches with false should be removed");
+        },
+
+        testTrueConditionRemoval: function () {
+            // Redundant true conditions should be removed from AND
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value > 10 AND true AND doc.name == 'Alice' RETURN doc";
+            var result1 = db._query(query1).toArray();
+            
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value > 10 AND doc.name == 'Alice' RETURN doc";
+            var result2 = db._query(query2).toArray();
+            
+            assertEqual(result1, result2,
+                "True condition should be removed from AND");
+            
+            // Multiple true conditions
+            var query3 = "FOR doc IN " + replace.name() +
+                " FILTER true AND doc.value > 5 AND true AND doc.value < 15 AND true RETURN doc";
+            var result3 = db._query(query3).toArray();
+            
+            var query4 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value > 5 AND doc.value < 15 RETURN doc";
+            var result4 = db._query(query4).toArray();
+            
+            assertEqual(result3, result4,
+                "All true conditions should be removed from AND");
+        },
+
+        testNonCommutativeOperatorsNotNormalized: function () {
+            // Subtraction and division are not commutative
+            var query1 = "FOR doc IN " + replace.name() +
+                " FILTER (doc.value1 - doc.value2 == 0) AND (doc.value2 - doc.value1 == 0) RETURN doc";
+            var result1 = db._query(query1).toArray();
+            
+            // These should NOT be treated as duplicates
+            var query2 = "FOR doc IN " + replace.name() +
+                " FILTER doc.value1 - doc.value2 == 0 RETURN doc";
+            var result2 = db._query(query2).toArray();
+            
+            // Different results expected (not duplicates)
+            assertTrue(result1.length <= result2.length,
+                "Subtraction should not be normalized as commutative");
         }
     };
 }

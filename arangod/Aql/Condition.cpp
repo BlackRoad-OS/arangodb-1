@@ -146,6 +146,10 @@ AstNode* switchSidesInCompare(Ast* ast, AstNode* node) {
     case NODE_TYPE_OPERATOR_BINARY_GE:
       newOperator->type = NODE_TYPE_OPERATOR_BINARY_LE;
       break;
+    case NODE_TYPE_OPERATOR_BINARY_EQ:
+      break;
+    case NODE_TYPE_OPERATOR_BINARY_NE:
+      break;
     default:
       TRI_ASSERT(false) << "normalize condition tries to swap children"
                         << "of wrong node type - this needs to be fixed";
@@ -162,7 +166,9 @@ AstNode* normalizeCompare(Ast* ast, AstNode* node) {
   if (node->type != NODE_TYPE_OPERATOR_BINARY_LE &&
       node->type != NODE_TYPE_OPERATOR_BINARY_LT &&
       node->type != NODE_TYPE_OPERATOR_BINARY_GE &&
-      node->type != NODE_TYPE_OPERATOR_BINARY_GT) {
+      node->type != NODE_TYPE_OPERATOR_BINARY_GT &&
+      node->type != NODE_TYPE_OPERATOR_BINARY_EQ &&
+      node->type != NODE_TYPE_OPERATOR_BINARY_NE) {
     // no binary compare in node
     return node;
   }
@@ -1534,36 +1540,9 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
         if (op1->type == op2->type && op1->numMembers() == op2->numMembers()) {
           bool isDuplicate = false;
 
-          if (op1->type == NODE_TYPE_OPERATOR_BINARY_IN &&
-              op1->numMembers() == 2 && op2->numMembers() == 2) {
-            auto lhs1 = op1->getMember(0);
-            auto rhs1 = op1->getMember(1);
-            auto lhs2 = op2->getMember(0);
-            auto rhs2 = op2->getMember(1);
-
-            if (lhs1->toString() == lhs2->toString() &&
-                rhs1->type == NODE_TYPE_ARRAY &&
-                rhs2->type == NODE_TYPE_ARRAY &&
-                rhs1->numMembers() == rhs2->numMembers()) {
-              isDuplicate = true;
-              for (size_t m = 0; m < rhs1->numMembers(); ++m) {
-                if (compareAstNodes<false>(rhs1->getMember(m),
-                                           rhs2->getMember(m), false) != 0) {
-                  isDuplicate = false;
-                  break;
-                }
-              }
-            }
-          } else if (op1->isComparisonOperator() && op1->numMembers() == 2) {
-            auto lhs1 = op1->getMember(0);
-            auto rhs1 = op1->getMember(1);
-            auto lhs2 = op2->getMember(0);
-            auto rhs2 = op2->getMember(1);
-
-            if (lhs1->toString() == lhs2->toString() &&
-                rhs1->toString() == rhs2->toString()) {
-              isDuplicate = true;
-            }
+          // Detect duplicates using normalized string comparison
+          if (op1->toNormalizedString() == op2->toNormalizedString()) {
+            isDuplicate = true;
           }
 
           if (isDuplicate) {
@@ -1891,11 +1870,18 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
     return;
   }
 
-  // Remove duplicate OR branches
+  // Remove duplicate OR branches using canonical string comparison.
+  // This handles commutative operators, IN array ordering, and nested
+  // expressions by comparing canonical string representations.
   n = _root->numMembers();
   for (size_t i = n; i > 1; --i) {
     auto branch1 = _root->getMemberUnchecked(i - 1);
     if (branch1->type != NODE_TYPE_OPERATOR_NARY_AND) {
+      continue;
+    }
+
+    // Only compare deterministic branches
+    if (!branch1->isDeterministic()) {
       continue;
     }
 
@@ -1905,70 +1891,12 @@ void Condition::optimize(ExecutionPlan* plan, bool multivalued) {
         continue;
       }
 
-      if (branch1->numMembers() != branch2->numMembers()) {
+      if (!branch2->isDeterministic()) {
         continue;
       }
 
-      bool isDuplicate = true;
-      for (size_t k = 0; k < branch1->numMembers(); ++k) {
-        auto cond1 = branch1->getMemberUnchecked(k);
-        auto cond2 = branch2->getMemberUnchecked(k);
-
-        if (cond1->type != cond2->type ||
-            cond1->numMembers() != cond2->numMembers()) {
-          isDuplicate = false;
-          break;
-        }
-
-        if (cond1->isDeterministic() && cond2->isDeterministic()) {
-          if (cond1->type == NODE_TYPE_OPERATOR_BINARY_IN &&
-              cond1->numMembers() == 2 && cond2->numMembers() == 2) {
-            auto lhs1 = cond1->getMember(0);
-            auto rhs1 = cond1->getMember(1);
-            auto lhs2 = cond2->getMember(0);
-            auto rhs2 = cond2->getMember(1);
-
-            if (lhs1->toString() != lhs2->toString() ||
-                rhs1->type != NODE_TYPE_ARRAY ||
-                rhs2->type != NODE_TYPE_ARRAY ||
-                rhs1->numMembers() != rhs2->numMembers()) {
-              isDuplicate = false;
-              break;
-            }
-
-            for (size_t m = 0; m < rhs1->numMembers(); ++m) {
-              if (compareAstNodes<false>(rhs1->getMember(m), rhs2->getMember(m),
-                                         false) != 0) {
-                isDuplicate = false;
-                break;
-              }
-            }
-            if (!isDuplicate) break;
-          } else if (cond1->isComparisonOperator() &&
-                     cond1->numMembers() == 2) {
-            auto lhs1 = cond1->getMember(0);
-            auto rhs1 = cond1->getMember(1);
-            auto lhs2 = cond2->getMember(0);
-            auto rhs2 = cond2->getMember(1);
-
-            if (lhs1->toString() != lhs2->toString() ||
-                rhs1->toString() != rhs2->toString()) {
-              isDuplicate = false;
-              break;
-            }
-          } else {
-            if (cond1->toString() != cond2->toString()) {
-              isDuplicate = false;
-              break;
-            }
-          }
-        } else {
-          isDuplicate = false;
-          break;
-        }
-      }
-
-      if (isDuplicate) {
+      // Detect duplicate OR branches
+      if (branch1->toNormalizedString() == branch2->toNormalizedString()) {
         _root->removeMemberUncheckedUnordered(i - 1);
         --n;
         break;  // Found duplicate, move to next branch
