@@ -163,12 +163,10 @@ auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
       _stats.incrFiltered();
     }
     if (step.getDepth() >= _options.getMinDepth() && !res.isFiltered()) {
-      // Include it in results.
       _results.emplace_back(step);
     }
     if (step.getDepth() < _options.getMaxDepth() && !res.isPruned()) {
-      // currently batching only works with cluster case
-      if (_queue.isBatched() && ServerState::instance()->isSingleServer()) {
+      if (_queue.isBatched()) {
         auto& cursor = _provider.createNeighbourCursor(step, posPrevious);
         _queue.append(cursor);
         LOG_TRAVERSAL << "Pushed   " << inspection::json(step) << " | "

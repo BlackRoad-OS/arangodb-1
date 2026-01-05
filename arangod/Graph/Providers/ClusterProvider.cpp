@@ -609,7 +609,48 @@ template<class StepImpl>
 auto ClusterProvider<StepImpl>::createNeighbourCursor(Step const& step,
                                                       size_t position)
     -> ClusterNeighbourCursor<Step>& {
-  _neighbourCursors.emplace_back(ClusterNeighbourCursor<Step>{});
+  _neighbourCursors.remove_if([](ClusterNeighbourCursor<Step> const& cursor) {
+    return cursor._deletable;
+  });
+
+  auto const* engines = _opts.engines();
+  auto leased = ThreadLocalBuilderLeaser::lease();
+  leased->openObject(true);
+  leased->add("backward", VPackValue(_opts.isBackward()));
+  leased->add("depth", VPackValue(step.getDepth()));
+  if (_opts.expressionContext() != nullptr) {
+    leased->add(VPackValue("variables"));
+    leased->openArray();
+    _opts.expressionContext()->serializeAllVariables(trx()->vpackOptions(),
+                                                     *(leased.get()));
+    leased->close();
+  }
+  leased->add("keys", VPackValue(step.getVertex().getID().toString()));
+  leased->add("batchSize", VPackValue(aql::ExecutionBlock::DefaultBatchSize));
+  leased->close();
+
+  auto* pool =
+      trx()->vocbase().server().template getFeature<NetworkFeature>().pool();
+
+  network::RequestOptions reqOpts;
+  reqOpts.database = trx()->vocbase().name();
+  reqOpts.skipScheduler = true;  // hack to avoid scheduler queue
+
+  std::vector<EngineRequest> requests;
+  requests.reserve(engines->size());
+
+  for (auto const& [server, engineId] : *engines) {
+    requests.emplace_back(EngineRequest{
+        server, network::sendRequestRetry(
+                    pool, "server:" + server, fuerte::RestVerb::Put,
+                    RestVocbaseBaseHandler::TRAVERSER_PATH_EDGE +
+                        StringUtils::itoa(engineId),
+                    leased->bufferRef(), reqOpts)});
+    _stats.incrHttpRequests(1);
+  }
+
+  _neighbourCursors.emplace_back(ClusterNeighbourCursor<Step>{
+      step, position, std::move(requests), _trx.get(), _opts, _stats});
   return _neighbourCursors.back();
 }
 

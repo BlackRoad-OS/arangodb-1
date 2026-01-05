@@ -38,6 +38,7 @@
 #include "Graph/Steps/ClusterProviderStep.h"
 #include "Network/Methods.h"
 
+#include <list>
 #include <vector>
 
 namespace arangodb {
@@ -161,7 +162,7 @@ class ClusterProvider {
 
   using EngineRequest = std::pair<ServerID, futures::Future<network::Response>>;
   std::unordered_map<CursorId, std::vector<EngineRequest>> _edgeRequests;
-  std::vector<ClusterNeighbourCursor<Step>> _neighbourCursors;
+  std::list<ClusterNeighbourCursor<Step>> _neighbourCursors;
 };
 }  // namespace graph
 }  // namespace arangodb
