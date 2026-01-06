@@ -144,6 +144,15 @@ add_subdirectory(s2geometry)
 add_subdirectory(boost)
 set(BOOST_VERSION ${BOOST_VERSION} PARENT_SCOPE)
 
+add_library(boost-static IMPORTED STATIC)
+set_target_properties(boost-static PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/boost/${BOOST_VERSION}"
+  IMPORTED_LOCATION "boost_system;boost_thread"
+)
+
+# explicitly set since suppressing Boost search
+set(Boost_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/boost/${BOOST_VERSION}" PARENT_SCOPE)
+
 ################################################################################
 ## Velocypack
 ################################################################################

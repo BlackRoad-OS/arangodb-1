@@ -1,5 +1,73 @@
 # -*- mode: CMAKE; -*-
 
+# IResearch currently won't run with [-Werror,-Wtautological-constant-out-of-range-compare] as errors.
+# Hence we moved this block here.
+# Need to be included in future builds.
+
+################################################################################
+## IResearch
+################################################################################
+
+## Make IResearch use ICU V 64.2 for index backwards compatibility
+set(ICU_FOUND TRUE)
+set(ICU_INCLUDE_DIR ${ICU64_INCLUDE_DIR})
+set(ICU_LIBRARY_DIR ${ICU64_LIBRARY_DIR})
+set(ICU_STATIC_LIBS ${ICU64_LIBS})
+# add necessary defines for ICU. this will suffix all included ICU functions
+# and the ICU namespace with _64_64
+add_definitions("-DU_HAVE_LIB_SUFFIX=1")
+add_definitions("-DU_LIB_SUFFIX_C_NAME=_64")
+add_definitions("-DIRESEARCH_ICU_NAMESPACE=icu_64_64")
+set(IRESEARCH_EXTERNAL_DEPENDENCIES "iculegacy_build")
+
+if(NOT PERL_FOUND)
+  set(PERL_FOUND TRUE) # suppress error for Perl not-found
+
+  # MSVC will execute ADD_CUSTOM_COMMAND even though OUTPUT is already present
+  if(MSVC)
+    set(PERL_EXECUTABLE echo)
+  endif()
+endif()
+
+set(IRESEARCH_ROOT "${PROJECT_SOURCE_DIR}/lib/iresearch")
+set(IRESEARCH_BUILD_DIR "${CMAKE_BINARY_DIR}/lib/iresearch")
+
+unset(IRESEARCH_INCLUDE)
+list(APPEND IRESEARCH_INCLUDE
+  "${IRESEARCH_ROOT}/core"
+  "${IRESEARCH_BUILD_DIR}/core"
+)
+
+mark_as_advanced(
+  IRESEARCH_BUILD_DIR
+  IRESEARCH_INCLUDE
+  IRESEARCH_ROOT
+)
+
+set(CMAKE_MACOSX_RPATH ON) # suppress cmake warning (use same value as cmake default)
+list(APPEND CMAKE_MODULE_PATH
+  "${PROJECT_SOURCE_DIR}/3rdParty/cmake" # cmake overrides (must be first)
+  "${IRESEARCH_ROOT}/cmake" # to find iResearch dependencies
+)
+
+# copy pre-built files over to the build directory
+# this is required to avoid triggering file generation via bison and perl during the build procedure
+if(EXISTS "${PROJECT_SOURCE_DIR}/lib/iresearch.build")
+  file(GLOB_RECURSE IRESEARCH_PREBUILT RELATIVE "${PROJECT_SOURCE_DIR}/lib/iresearch.build" FOLLOW_SYMLINKS "${PROJECT_SOURCE_DIR}/lib/iresearch.build/*")
+  foreach(ELEMENT ${IRESEARCH_PREBUILT})
+    get_filename_component(DEST_DIR "${IRESEARCH_BUILD_DIR}/${ELEMENT}" DIRECTORY)
+    file(MAKE_DIRECTORY "${DEST_DIR}")
+    configure_file("${PROJECT_SOURCE_DIR}/lib/iresearch.build/${ELEMENT}" "${IRESEARCH_BUILD_DIR}/${ELEMENT}" COPYONLY)
+  endforeach()
+endif()
+
+add_subdirectory(iresearch)
+
+# Set compile definition after target is created
+if(TARGET iresearch-static)
+  target_compile_definitions(iresearch-static PRIVATE -DDISABLE_EXECINFO)
+endif()
+
 ################################################################################
 ## global definitions
 ################################################################################
@@ -440,79 +508,6 @@ add_dependencies(arango exitcodefiles)
 # Enterprise
 if (USE_ENTERPRISE)
   target_include_directories(arango PUBLIC "${PROJECT_SOURCE_DIR}/${ENTERPRISE_INCLUDE_DIR}")
-endif()
-
-################################################################################
-## IResearch
-################################################################################
-
-## Make IResearch use ICU V 64.2 for index backwards compatibility
-set(ICU_FOUND TRUE)
-set(ICU_INCLUDE_DIR ${ICU64_INCLUDE_DIR})
-set(ICU_LIBRARY_DIR ${ICU64_LIBRARY_DIR})
-set(ICU_STATIC_LIBS ${ICU64_LIBS})
-# add necessary defines for ICU. this will suffix all included ICU functions
-# and the ICU namespace with _64_64
-add_definitions("-DU_HAVE_LIB_SUFFIX=1")
-add_definitions("-DU_LIB_SUFFIX_C_NAME=_64")
-add_definitions("-DIRESEARCH_ICU_NAMESPACE=icu_64_64")
-set(IRESEARCH_EXTERNAL_DEPENDENCIES "iculegacy_build")
-
-add_library(boost-static IMPORTED STATIC)
-set_target_properties(boost-static PROPERTIES
-  INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/3rdParty/boost/${BOOST_VERSION}"
-  IMPORTED_LOCATION "boost_system;boost_thread"
-)
-
-# explicitly set since suppressing Boost search
-set(Boost_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/3rdParty/boost/${BOOST_VERSION}")
-
-if(NOT PERL_FOUND)
-  set(PERL_FOUND TRUE) # suppress error for Perl not-found
-
-  # MSVC will execute ADD_CUSTOM_COMMAND even though OUTPUT is already present
-  if(MSVC)
-    set(PERL_EXECUTABLE echo)
-  endif()
-endif()
-
-set(IRESEARCH_ROOT "${PROJECT_SOURCE_DIR}/lib/iresearch")
-set(IRESEARCH_BUILD_DIR "${CMAKE_BINARY_DIR}/lib/iresearch")
-
-unset(IRESEARCH_INCLUDE)
-list(APPEND IRESEARCH_INCLUDE
-  "${IRESEARCH_ROOT}/core"
-  "${IRESEARCH_BUILD_DIR}/core"
-)
-
-mark_as_advanced(
-  IRESEARCH_BUILD_DIR
-  IRESEARCH_INCLUDE
-  IRESEARCH_ROOT
-)
-
-set(CMAKE_MACOSX_RPATH ON) # suppress cmake warning (use same value as cmake default)
-list(APPEND CMAKE_MODULE_PATH
-  "${PROJECT_SOURCE_DIR}/3rdParty/cmake" # cmake overrides (must be first)
-  "${IRESEARCH_ROOT}/cmake" # to find iResearch dependencies
-)
-
-# copy pre-built files over to the build directory
-# this is required to avoid triggering file generation via bison and perl during the build procedure
-if(EXISTS "${PROJECT_SOURCE_DIR}/lib/iresearch.build")
-  file(GLOB_RECURSE IRESEARCH_PREBUILT RELATIVE "${PROJECT_SOURCE_DIR}/lib/iresearch.build" FOLLOW_SYMLINKS "${PROJECT_SOURCE_DIR}/lib/iresearch.build/*")
-  foreach(ELEMENT ${IRESEARCH_PREBUILT})
-    get_filename_component(DEST_DIR "${IRESEARCH_BUILD_DIR}/${ELEMENT}" DIRECTORY)
-    file(MAKE_DIRECTORY "${DEST_DIR}")
-    configure_file("${PROJECT_SOURCE_DIR}/lib/iresearch.build/${ELEMENT}" "${IRESEARCH_BUILD_DIR}/${ELEMENT}" COPYONLY)
-  endforeach()
-endif()
-
-add_subdirectory(iresearch)
-
-# Set compile definition after target is created
-if(TARGET iresearch-static)
-  target_compile_definitions(iresearch-static PRIVATE -DDISABLE_EXECINFO)
 endif()
 
 add_subdirectory(Actor)
