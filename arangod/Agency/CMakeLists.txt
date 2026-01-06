@@ -2,7 +2,6 @@ add_library(arango_agency STATIC
   AddFollower.cpp
   AgencyComm.cpp
   AgencyFeature.cpp
-  AgencyOptionsProvider.cpp
   AgencyPaths.cpp
   Agent.cpp
   AgentCallback.cpp
