@@ -111,27 +111,30 @@ void OneSidedEnumerator<Configuration>::clearProvider() {
 }
 
 template<class Configuration>
-auto OneSidedEnumerator<Configuration>::popFromQueue() -> std::optional<Step> {
-  TRI_ASSERT(!_queue.isEmpty());
-  if (!ServerState::instance()->isSingleServer() &&
-      !_queue.firstIsVertexFetched()) {
-    std::vector<Step*> looseEnds = _queue.getStepsWithoutFetchedVertex();
-    auto preparedEnds = _provider.fetchVertices(looseEnds);
-    TRI_ASSERT(preparedEnds.size() != 0);
-    TRI_ASSERT(_queue.firstIsVertexFetched());
-  }
-  return _queue.pop();
-}
-template<class Configuration>
 auto OneSidedEnumerator<Configuration>::computeNeighbourhoodOfNextVertex()
     -> void {
-  auto tmp = popFromQueue();
+  TRI_ASSERT(!_queue.isEmpty());
+  auto tmp = _queue.pop();
   if (not tmp.has_value()) {
     return;  // queue is empty
   }
   auto value = tmp.value();
   LOG_TRAVERSAL << "Popped   " << inspection::json(value) << " | "
                 << inspection::json(_queue);
+
+  // fetch vertices
+  if (!ServerState::instance()->isSingleServer() && not value.vertexFetched()) {
+    std::vector<Step*> looseEnds = {&value};
+    // important to add current value to front of looseEnds, otherwise
+    // SmartGraphProvider will not fetch vertex properly!
+    auto looseEndsInQueue = _queue.getStepsWithoutFetchedVertex();
+    looseEnds.insert(looseEnds.end(), looseEndsInQueue.begin(),
+                     looseEndsInQueue.end());
+    auto preparedEnds = _provider.fetchVertices(looseEnds);
+    TRI_ASSERT(preparedEnds.size() != 0);
+    TRI_ASSERT(value.vertexFetched());
+  }
+
   auto posPrevious = _interior.append(std::move(value));
   auto& step = _interior.getStepReference(posPrevious);
 

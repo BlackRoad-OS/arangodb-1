@@ -90,18 +90,6 @@ class BatchedLifoQueue {
     guard.steal();  // now we are responsible for tracking the memory
   }
 
-  bool firstIsVertexFetched() const {
-    if (!isEmpty()) {
-      auto const& first = _queue.front();
-      if (std::holds_alternative<Step>(first)) {
-        return std::get<Step>(first).vertexFetched();
-      } else {
-        return true;
-      }
-    }
-    return false;
-  }
-
   bool hasProcessableElement() const {
     if (!isEmpty()) {
       auto const& first = _queue.front();

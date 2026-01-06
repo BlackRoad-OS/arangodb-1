@@ -162,7 +162,6 @@ class OneSidedEnumerator final : public TraversalEnumerator {
  private:
   [[nodiscard]] auto searchDone() const -> bool;
 
-  auto popFromQueue() -> std::optional<Step>;
   auto computeNeighbourhoodOfNextVertex() -> void;
 
   // Ensure that we have fetched all vertices in the _results list.
