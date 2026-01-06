@@ -268,17 +268,20 @@ velocypack::SharedSlice ApiRecordingFeature::getCrashData() const {
 
   {
     VPackObjectBuilder bodyBuilder{&body};
-    body.add("apiCalls", velocypack::Value(velocypack::ValueType::Array));
-    doForApiCallRecords([&body](ApiCallRecord const& record) {
-      velocypack::serialize(body, record);
-    });
-    body.close();
-
-    body.add("aqlQueries", velocypack::Value(velocypack::ValueType::Array));
-    doForAqlQueryRecords([&body](AqlQueryRecord const& record) {
-      velocypack::serialize(body, record);
-    });
-    body.close();
+    {
+      body.add(VPackValue("apiCalls"));
+      VPackArrayBuilder apiCallsGuard{&body};
+      doForApiCallRecords([&body](ApiCallRecord const& record) {
+        velocypack::serialize(body, record);
+      });
+    }
+    {
+      body.add(VPackValue("aqlQueries"));
+      VPackArrayBuilder aqlQueriesGuard{&body};
+      doForAqlQueryRecords([&body](AqlQueryRecord const& record) {
+        velocypack::serialize(body, record);
+      });
+    }
   }
 
   return std::move(body).sharedSlice();

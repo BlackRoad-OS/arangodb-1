@@ -581,7 +581,7 @@ void actuallyDumpCrashInfo() {
     // Flush logs
     arangodb::Logger::flush();
 
-    // Create a crash directory and dump data from all registerd and alive data
+    // Create a crash directory and dump data from all registered and alive data
     // sources
     if (!databaseDirectoryPath.empty()) {
       if (!arangodb::basics::FileUtils::exists(databaseDirectoryPath)) {
@@ -844,7 +844,8 @@ CrashHandler::getCrashContentsStatic(std::string_view crashId) {
 
   auto const files = arangodb::basics::FileUtils::listFiles(crashDir);
   for (auto const& file : files) {
-    auto const filePath = arangodb::basics::FileUtils::buildFilename(crashDir, file);
+    auto const filePath =
+        arangodb::basics::FileUtils::buildFilename(crashDir, file);
     if (arangodb::basics::FileUtils::isRegularFile(filePath)) {
       try {
         contents[file] = arangodb::basics::FileUtils::slurp(filePath);
