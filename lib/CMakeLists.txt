@@ -161,6 +161,7 @@ target_link_libraries(arango_basic_utils
          linenoise-ng
          zlib_interface
          snappy
+         lz4_static
 )
 
 # Enterprise
@@ -475,12 +476,6 @@ if(NOT PERL_FOUND)
   endif()
 endif()
 
-set(USE_IPO ${IPO_ENABLED})
-set(LZ4_ROOT "${PROJECT_SOURCE_DIR}/3rdParty/lz4")
-set(LZ4_INCLUDE_DIR "${LZ4_ROOT}/lib")
-set(SNOWBALL_ROOT "${PROJECT_SOURCE_DIR}/3rdParty/snowball")
-set(UNWIND_ROOT "invalid")
-set(BFD_ROOT "invalid")
 set(IRESEARCH_ROOT "${PROJECT_SOURCE_DIR}/lib/iresearch")
 set(IRESEARCH_BUILD_DIR "${CMAKE_BINARY_DIR}/lib/iresearch")
 
