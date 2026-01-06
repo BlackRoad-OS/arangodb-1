@@ -22,6 +22,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "RestCrashHandler.h"
+#include <velocypack/Builder.h>
 
 #include "ApplicationFeatures/ApplicationServer.h"
 #include "Inspection/VPack.h"
@@ -100,10 +101,17 @@ void RestCrashHandler::handleGetCrash(std::string const& crashId) {
     return;
   }
 
-  VPackBuilder builder;
-  velocypack::serialize(builder, contents);
+  VPackBuilder responseBuilder;
+  {
+    VPackObjectBuilder guard(&responseBuilder);
+    responseBuilder.add("crashId", VPackValue(crashId));
 
-  generateOk(rest::ResponseCode::OK, builder.slice());
+    VPackBuilder builder;
+    velocypack::serialize(builder, contents);
+    responseBuilder.add("files", builder.slice());
+  }
+
+  generateOk(rest::ResponseCode::OK, responseBuilder.slice());
 }
 
 void RestCrashHandler::handleDeleteCrash(std::string const& crashId) {

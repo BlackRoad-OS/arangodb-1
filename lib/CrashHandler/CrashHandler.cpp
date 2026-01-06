@@ -842,9 +842,9 @@ CrashHandler::getCrashContentsStatic(std::string_view crashId) {
     return contents;
   }
 
-  auto files = arangodb::basics::FileUtils::listFiles(crashDir);
+  auto const files = arangodb::basics::FileUtils::listFiles(crashDir);
   for (auto const& file : files) {
-    auto filePath = arangodb::basics::FileUtils::buildFilename(crashDir, file);
+    auto const filePath = arangodb::basics::FileUtils::buildFilename(crashDir, file);
     if (arangodb::basics::FileUtils::isRegularFile(filePath)) {
       try {
         contents[file] = arangodb::basics::FileUtils::slurp(filePath);
