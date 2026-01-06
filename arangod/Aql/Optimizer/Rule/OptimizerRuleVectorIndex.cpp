@@ -167,31 +167,13 @@ bool checkApproxNearAscending(std::shared_ptr<Index> const& vectorIndex,
   return true;
 }
 
-// We return nullptr for AstNode if the check has failed, in that case the bool
-// is meaningless
-bool checkApproxNearExpression(std::unique_ptr<ExecutionPlan>& plan,
-                               std::shared_ptr<Index> const& vectorIndex,
-                               SortElement const& sortElement,
-                               AstNode const* approxNearExpression) {
-  // check if SORT node contains APPROX function
-  auto const* executionNode = plan->getVarSetBy(sortElement.var->id);
-  if (executionNode == nullptr || executionNode->getType() != EN::CALCULATION) {
-    return false;
-  }
-  auto const* calculationNode =
-      ExecutionNode::castTo<CalculationNode const*>(executionNode);
-  auto const* calculationNodeExpression = calculationNode->expression();
-  if (calculationNodeExpression == nullptr) {
-    return false;
-  }
-  AstNode const* calculationNodeExpressionNode =
-      calculationNodeExpression->node();
-  if (calculationNodeExpressionNode == nullptr ||
-      calculationNodeExpressionNode->type != AstNodeType::NODE_TYPE_FCALL) {
-    return false;
-  }
+// Check if the function name APPROX_NEAR matches vector index metric definition
+bool checkApproxNearExpressionMatchesVectorIndex(
+    std::unique_ptr<ExecutionPlan>& plan,
+    std::shared_ptr<Index> const& vectorIndex, SortElement const& sortElement,
+    AstNode const* approxNearExpression) {
   if (auto const functionName =
-          aql::functions::getFunctionName(*calculationNodeExpressionNode);
+          aql::functions::getFunctionName(*approxNearExpression);
       !checkFunctionNameMatchesIndexMetric(
           functionName, vectorIndex->getVectorIndexDefinition())) {
     return false;
@@ -401,8 +383,8 @@ void useVectorIndexRule(Optimizer* opt, std::unique_ptr<ExecutionPlan> plan,
     for (auto const& index : vectorIndexes) {
       TRI_ASSERT(index != nullptr);
       if (!checkApproxNearAscending(index, sortField->ascending) ||
-          !checkApproxNearExpression(plan, index, *sortField,
-                                     approxNearExpression)) {
+          !checkApproxNearExpressionMatchesVectorIndex(plan, index, *sortField,
+                                                       approxNearExpression)) {
         LOG_RULE << "Query expression not valid";
         continue;
       }
