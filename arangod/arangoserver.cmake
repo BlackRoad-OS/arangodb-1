@@ -32,7 +32,6 @@ add_library(arangoserver STATIC
   Cluster/HeartbeatThread.cpp
   Cluster/Maintenance.cpp
   Cluster/MaintenanceFeature.cpp
-  Cluster/MaintenanceOptionsProvider.cpp
   Cluster/MaintenanceRestHandler.cpp
   Cluster/MaintenanceWorker.cpp
   Cluster/RebootTracker.cpp
