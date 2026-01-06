@@ -938,3 +938,4 @@ function ClusterCollectionSuite () {
 jsunity.run(ClusterCollectionSuite);
 
 return jsunity.done();
+
