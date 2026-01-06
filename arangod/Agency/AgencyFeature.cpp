@@ -257,7 +257,6 @@ void AgencyFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {
 
   ServerState::instance()->setRole(ServerState::ROLE_AGENT);
 
-  // Agency option validation logic from provider:
   if (result.touched("agency.size")) {
     if (_options.size < 1) {
       LOG_TOPIC("98510", FATAL, Logger::AGENCY)
@@ -278,6 +277,7 @@ void AgencyFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {
   }
   _options.poolSize = _options.size;
 
+  // Size needs to be odd
   if (_options.size % 2 == 0) {
     LOG_TOPIC("0eab5", FATAL, Logger::AGENCY)
         << "AGENCY: agency must have odd number of members";
