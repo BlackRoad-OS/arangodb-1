@@ -26,7 +26,6 @@
 #include "ApplicationFeatures/ApplicationServer.h"
 #include "ApplicationFeatures/CommunicationFeaturePhase.h"
 #include "Aql/Query.h"
-#include "Aql/QueryInfoLoggerOptionsProvider.h"
 #include "Aql/QueryOptions.h"
 #include "Aql/QueryString.h"
 #include "Basics/Exceptions.h"
@@ -39,6 +38,7 @@
 #include "Cluster/ServerState.h"
 #include "Logger/LogMacros.h"
 #include "Logger/Logger.h"
+#include "ProgramOptions/Parameters.h"
 #include "ProgramOptions/ProgramOptions.h"
 #include "Random/RandomGenerator.h"
 #include "RestServer/SystemDatabaseFeature.h"
@@ -495,8 +495,91 @@ QueryInfoLoggerFeature::~QueryInfoLoggerFeature() { stopThread(); }
 
 void QueryInfoLoggerFeature::collectOptions(
     std::shared_ptr<options::ProgramOptions> options) {
-  QueryInfoLoggerOptionsProvider provider;
-  provider.declareOptions(options, _options);
+  options
+      ->addOption("--query.collection-logger-max-buffered-queries",
+                  "The maximum number of queries to buffer for query "
+                  "collection logging.",
+                  new options::UInt64Parameter(&_options.maxBufferedQueries),
+                  options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                            options::Flags::OnCoordinator,
+                                            options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption(
+          "--query.collection-logger-enabled",
+          "Whether or not to enable logging of queries to a system collection.",
+          new options::BooleanParameter(&_options.logEnabled),
+          options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                    options::Flags::OnCoordinator,
+                                    options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption(
+          "--query.collection-logger-include-system-database",
+          "Whether or not to include _system database queries in query "
+          "collection logging.",
+          new options::BooleanParameter(&_options.logSystemDatabaseQueries),
+          options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                    options::Flags::OnCoordinator,
+                                    options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption("--query.collection-logger-all-slow-queries",
+                  "Whether or not to include all slow queries in query "
+                  "collection logging.",
+                  new options::BooleanParameter(&_options.logSlowQueries),
+                  options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                            options::Flags::OnCoordinator,
+                                            options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption(
+          "--query.collection-logger-probability",
+          "The probability with which queries are included in query collection "
+          "logging.",
+          new options::DoubleParameter(&_options.logProbability, 1.0, 0.0,
+                                       100.0),
+          options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                    options::Flags::OnCoordinator,
+                                    options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption(
+          "--query.collection-logger-retention-time",
+          "The time duration (in seconds) for with which queries are "
+          "kept in the "
+          "_queries system collection before they are purged.",
+          new options::DoubleParameter(&_options.retentionTime, 1.0, 1.0),
+          options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                    options::Flags::OnCoordinator,
+                                    options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption("--query.collection-logger-push-interval",
+                  "The interval (in milliseconds) in which query information "
+                  "is flushed to the _queries system collection.",
+                  new options::UInt64Parameter(&_options.pushInterval),
+                  options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                            options::Flags::OnCoordinator,
+                                            options::Flags::OnSingle))
+      .setIntroducedIn(31202);
+
+  options
+      ->addOption(
+          "--query.collection-logger-cleanup-interval",
+          "The interval (in milliseconds) in which query information "
+          "is purged from the _queries system collection.",
+          new options::UInt64Parameter(&_options.cleanupInterval, 1, 1000),
+          options::makeDefaultFlags(options::Flags::DefaultNoComponents,
+                                    options::Flags::OnCoordinator,
+                                    options::Flags::OnSingle))
+      .setIntroducedIn(31202);
 }
 
 void QueryInfoLoggerFeature::validateOptions(
