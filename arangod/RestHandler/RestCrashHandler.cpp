@@ -101,17 +101,8 @@ void RestCrashHandler::handleGetCrash(std::string const& crashId) {
   }
 
   VPackBuilder builder;
-  {
-    VPackObjectBuilder guard(&builder);
-    builder.add("crashId", VPackValue(crashId));
-    builder.add(VPackValue("files"));
-    {
-      VPackObjectBuilder guard2(&builder);
-      for (auto const& [filename, content] : contents) {
-        builder.add(filename, VPackValue(content));
-      }
-    }
-  }
+  velocypack::serialize(builder, contents);
+
   generateOk(rest::ResponseCode::OK, builder.slice());
 }
 
