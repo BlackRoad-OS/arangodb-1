@@ -15,7 +15,6 @@ add_library(arangoserver STATIC
   Cluster/AutoRebalance.cpp
   Cluster/ClusterCollectionCreationInfo.cpp
   Cluster/ClusterFeature.cpp
-  Cluster/ClusterOptionsProvider.cpp
   Cluster/ClusterHelpers.cpp
   Cluster/ClusterInfo.cpp
   Cluster/ClusterTrxMethods.cpp
