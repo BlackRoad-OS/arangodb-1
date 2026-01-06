@@ -41,8 +41,9 @@ if (runSetup === true) {
   
   // Verify no crashes exist before we crash
   const response = arango.GET(crashesEndpoint);
-  if (!response.error && response.crashes && response.crashes.length !== 0) {
-    throw new Error('Expected no crashes before setup, found: ' + JSON.stringify(response.crashes));
+  const crashes = response.result || response;
+  if (!response.error && Array.isArray(crashes) && crashes.length !== 0) {
+    throw new Error('Expected no crashes before setup, found: ' + JSON.stringify(crashes));
   }
   
   // Produce a crash on the coordinator (default target of debugTerminate)
@@ -67,15 +68,14 @@ function recoverySuite () {
       assertEqual(200, response.code, 'Should return 200');
 
       const crashes = response.result || response;
-      assertTrue(crashes.hasOwnProperty('crashes'), 'Should have crashes property');
-      assertTrue(Array.isArray(crashes.crashes), 'crashes should be an array');
+      assertTrue(Array.isArray(crashes), 'crashes should be an array');
 
       // We should have exactly one crash now
-      assertEqual(1, crashes.crashes.length,
-                 'Expected exactly one crash dump, found: ' + crashes.crashes.length);
+      assertEqual(1, crashes.length,
+                 'Expected exactly one crash dump, found: ' + crashes.length);
 
       // Get the crash
-      const crashId = crashes.crashes[0];
+      const crashId = crashes[0];
       assertNotEqual(crashId, undefined, 'Crash ID should not be undefined');
       
       // Fetch crash contents
@@ -108,7 +108,7 @@ function recoverySuite () {
       // Verify crash is gone
       const verifyResponse = arango.GET(crashesEndpoint);
       const verifyCrashes = verifyResponse.result || verifyResponse;
-      assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
+      assertEqual(0, verifyCrashes.length, 'Crash should be deleted');
     }
   };
 }

@@ -48,10 +48,9 @@ if (runSetup === true) {
   
   // Verify no crashes exist before we crash on dbserver
   const response = request({ url: dbserverUrl + crashesEndpoint, method: 'get', timeout: 10 });
-  if (response.status === 200 && response.json.result && response.json.result.crashes) {
-    if (response.json.result.crashes.length !== 0) {
-      throw new Error('Expected no crashes before setup on dbserver');
-    }
+  const crashes = response.json.result || response.json;
+  if (response.status === 200 && Array.isArray(crashes) && crashes.length !== 0) {
+    throw new Error('Expected no crashes before setup on dbserver');
   }
   
   // Crash only the dbserver
@@ -80,15 +79,14 @@ function recoverySuite () {
       assertEqual(200, response.status, 'Should return 200');
 
       const crashes = response.json.result || response.json;
-      assertTrue(crashes.hasOwnProperty('crashes'), 'Should have crashes property');
-      assertTrue(Array.isArray(crashes.crashes), 'crashes should be an array');
+      assertTrue(Array.isArray(crashes), 'crashes should be an array');
 
       // We should have exactly one crash now
-      assertEqual(1, crashes.crashes.length,
-                 'Expected exactly one crash dump on dbserver, found: ' + crashes.crashes.length);
+      assertEqual(1, crashes.length,
+                 'Expected exactly one crash dump on dbserver, found: ' + crashes.length);
 
       // Get the crash
-      const crashId = crashes.crashes[0];
+      const crashId = crashes[0];
       assertNotEqual(crashId, undefined, 'Crash ID should not be undefined');
       
       // Fetch crash contents
@@ -125,7 +123,7 @@ function recoverySuite () {
       // Verify crash is gone
       const verifyResponse = request({ url: dbserverUrl + crashesEndpoint, method: 'get', timeout: 10 });
       const verifyCrashes = verifyResponse.json.result || verifyResponse.json;
-      assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
+      assertEqual(0, verifyCrashes.length, 'Crash should be deleted');
     }
   };
 }

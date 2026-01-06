@@ -52,10 +52,10 @@ if (runSetup === true) {
     throw new Error('Should return 200, got: ' + response.status);
   }
   const crashes = response.json.result || response.json;
-  if (!crashes.hasOwnProperty('crashes') || !Array.isArray(crashes.crashes)) {
+  if (!Array.isArray(crashes)) {
     throw new Error('Invalid crashes response');
   }
-  if (crashes.crashes.length !== 0) {
+  if (crashes.length !== 0) {
     throw new Error('Expected no crashes before setup on agent');
   }
   
@@ -85,15 +85,14 @@ function recoverySuite () {
       assertEqual(200, response.status, 'Should return 200');
 
       const crashes = response.json.result || response.json;
-      assertTrue(crashes.hasOwnProperty('crashes'), 'Should have crashes property');
-      assertTrue(Array.isArray(crashes.crashes), 'crashes should be an array');
+      assertTrue(Array.isArray(crashes), 'crashes should be an array');
 
       // We should have exactly one crash now
-      assertEqual(1, crashes.crashes.length,
-                 'Expected exactly one crash dump on agent, found: ' + crashes.crashes.length);
+      assertEqual(1, crashes.length,
+                 'Expected exactly one crash dump on agent, found: ' + crashes.length);
 
       // Get the crash
-      const crashId = crashes.crashes[0];
+      const crashId = crashes[0];
       assertNotEqual(crashId, undefined, 'Crash ID should not be undefined');
       
       // Fetch crash contents
@@ -130,7 +129,7 @@ function recoverySuite () {
       // Verify crash is gone
       const verifyResponse = request({ url: agentUrl + crashesEndpoint, method: 'get', timeout: 10 });
       const verifyCrashes = verifyResponse.json.result || verifyResponse.json;
-      assertEqual(0, verifyCrashes.crashes.length, 'Crash should be deleted');
+      assertEqual(0, verifyCrashes.length, 'Crash should be deleted');
     }
   };
 }

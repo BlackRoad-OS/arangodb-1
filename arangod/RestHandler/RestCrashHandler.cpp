@@ -24,6 +24,7 @@
 #include "RestCrashHandler.h"
 
 #include "ApplicationFeatures/ApplicationServer.h"
+#include "Inspection/VPack.h"
 #include "RestServer/CrashHandlerFeature.h"
 #include "Utils/ExecContext.h"
 
@@ -56,7 +57,7 @@ RestStatus RestCrashHandler::execute() {
     handleListCrashes();
   } else if (suffixes.size() == 1) {
     // /_admin/crashes/{id}
-    std::string const& crashId = suffixes[0];
+    auto const& crashId = suffixes[0];
 
     if (_request->requestType() == rest::RequestType::GET) {
       handleGetCrash(crashId);
@@ -84,16 +85,8 @@ void RestCrashHandler::handleListCrashes() {
   auto crashes = crashHandlerFeature.listCrashes();
 
   VPackBuilder builder;
-  {
-    VPackObjectBuilder guard(&builder);
-    builder.add(VPackValue("crashes"));
-    {
-      VPackArrayBuilder guard2(&builder);
-      for (auto const& crashId : crashes) {
-        builder.add(VPackValue(crashId));
-      }
-    }
-  }
+  velocypack::serialize(builder, crashes);
+
   generateOk(rest::ResponseCode::OK, builder.slice());
 }
 
