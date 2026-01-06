@@ -24,6 +24,8 @@
 
 #include "Logger/LogTimeFormat.h"
 
+#include "Basics/operating-system.h"  // required for TRI_HAVE_UNISTD_H
+
 #ifdef TRI_HAVE_UNISTD_H
 #include <unistd.h>
 #endif
