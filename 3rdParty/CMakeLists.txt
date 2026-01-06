@@ -8,12 +8,12 @@ include(UpdateModule)
 
 remove_definitions("-DUSE_ENTERPRISE=1")
 
-set(USE_IPO ${IPO_ENABLED})
-set(LZ4_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lz4")
-set(LZ4_INCLUDE_DIR "${LZ4_ROOT}/lib")
-set(SNOWBALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/snowball")
-set(UNWIND_ROOT "invalid")
-set(BFD_ROOT "invalid")
+set(USE_IPO ${IPO_ENABLED} PARENT_SCOPE)
+set(LZ4_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lz4" PARENT_SCOPE)
+set(LZ4_INCLUDE_DIR "${LZ4_ROOT}/lib" PARENT_SCOPE)
+set(SNOWBALL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/snowball" PARENT_SCOPE)
+set(UNWIND_ROOT "invalid" PARENT_SCOPE)
+set(BFD_ROOT "invalid" PARENT_SCOPE)
 
 ################################################################################
 ## gtest
