@@ -122,7 +122,7 @@ function VectorIndexHintsSuite() {
         params: {
           metric: "l2",
           dimension: dimension,
-          nLists: 3,
+          nLists: 4,
         },
       });
     },
