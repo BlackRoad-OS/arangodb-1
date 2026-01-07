@@ -2475,7 +2475,9 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
 
     auto const planIt = plan.find(dbName);
     auto const localIt = local.find(dbName);
-    if (planIt != plan.end() && localIt != local.end()) {
+    if (planIt == plan.end() && localIt == local.end()) {
+      feature._databaseShardsStats.erase(dbName);
+    } else {
       feature._databaseShardsStats[dbName] = std::move(newDatabaseStats);
     }
   }  // next database
