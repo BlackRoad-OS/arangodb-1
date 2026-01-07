@@ -1,4 +1,6 @@
 #include "ClusterNeighbourCursor.h"
+#include "Aql/ExecutionBlock.h"
+#include "Aql/ExecutionPlan.h"
 #include "Basics/VelocyPackHelper.h"
 #include "Graph/Steps/ClusterProviderStep.h"
 #include "Graph/Types/VertexRef.h"
@@ -49,6 +51,51 @@ ClusterProviderStep::FetchedType getFetchedType(bool vertexFetched,
   }
 }
 }  // namespace
+
+template<typename Step>
+ClusterNeighbourCursor<Step>::ClusterNeighbourCursor(
+    Step step, size_t position, arangodb::transaction::Methods* trx,
+    ClusterBaseProviderOptions& options, aql::TraversalStats& stats)
+    : _step{step},
+      _position{position},
+      _trx{trx},
+      _opts{options},
+      _stats{stats} {
+  auto const* engines = _opts.engines();
+  auto leased = ThreadLocalBuilderLeaser::lease();
+  leased->openObject(true);
+  leased->add("backward", VPackValue(_opts.isBackward()));
+  leased->add("depth", VPackValue(step.getDepth()));
+  if (_opts.expressionContext() != nullptr) {
+    leased->add(VPackValue("variables"));
+    leased->openArray();
+    _opts.expressionContext()->serializeAllVariables(trx->vpackOptions(),
+                                                     *(leased.get()));
+    leased->close();
+  }
+  leased->add("keys", VPackValue(step.getVertex().getID().toString()));
+  leased->add("batchSize", VPackValue(aql::ExecutionBlock::DefaultBatchSize));
+  leased->close();
+
+  auto* pool =
+      trx->vocbase().server().template getFeature<NetworkFeature>().pool();
+
+  network::RequestOptions reqOpts;
+  reqOpts.database = trx->vocbase().name();
+  reqOpts.skipScheduler = true;  // hack to avoid scheduler queue
+
+  _requests.reserve(engines->size());
+
+  for (auto const& [server, engineId] : *engines) {
+    _requests.emplace_back(EngineRequest{
+        server, network::sendRequestRetry(
+                    pool, "server:" + server, fuerte::RestVerb::Put,
+                    RestVocbaseBaseHandler::TRAVERSER_PATH_EDGE +
+                        basics::StringUtils::itoa(engineId),
+                    leased->bufferRef(), reqOpts)});
+    _stats.incrHttpRequests(1);
+  }
+}
 
 template<typename Step>
 auto ClusterNeighbourCursor<Step>::hasMore() -> bool {

@@ -171,64 +171,14 @@ auto SingleServerProvider<Step>::expand(
 }
 
 template<class Step>
-auto SingleServerProvider<Step>::expandToNextBatch(
-    CursorId id, Step const& step, size_t previous,
-    std::function<void(Step)> const& callback) -> bool {
-  TRI_ASSERT(!step.isLooseEnd());
-  auto const& vertex = step.getVertex();
-
-  auto cursorIt = _neighbourCursors.find(id);
-  TRI_ASSERT(cursorIt != _neighbourCursors.end());
-  auto& cursor = cursorIt->second;
-
-  LOG_TOPIC("c9179", TRACE, Logger::GRAPHS)
-      << "<SingleServerProvider> Expanding (next batch) " << vertex.getID();
-
-  if (not cursor.hasMore()) {
-    _neighbourCursors.erase(cursorIt);
-    return false;
-  }
-
-  auto batch = cursor.next();
-  if (batch.empty() && not cursor.hasMore()) {
-    _neighbourCursors.erase(cursorIt);
-    return false;
-  }
-  for (auto&& neighbour : batch) {
-    callback(neighbour);
-  }
-  return true;
-}
-
-template<class Step>
-auto SingleServerProvider<Step>::addExpansionIterator(CursorId id,
-                                                      Step const& step,
-                                                      size_t previous) -> void {
-  TRI_ASSERT(!step.isLooseEnd());
-  auto const& vertex = step.getVertex();
-
-  LOG_TOPIC("c9189", TRACE, Logger::GRAPHS)
-      << "<SingleServerProvider> Add expansion iterator " << vertex.getID();
-
-  auto cursor = SingleServerNeighbourCursor<Step>{
-      step,     previous,
-      _ast,     *this,
-      _opts,    _trx.get(),
-      _monitor, _stats,
-      _cache,   aql::ExecutionBlock::DefaultBatchSize,
-  };
-  _neighbourCursors.emplace(id, std::move(cursor));
-}
-
-template<class Step>
 auto SingleServerProvider<Step>::createNeighbourCursor(Step const& step,
                                                        size_t position)
     -> SingleServerNeighbourCursor<Step>& {
-  _newNeighbourCursors.remove_if(
+  _neighbourCursors.remove_if(
       [](SingleServerNeighbourCursor<Step> const& cursor) {
         return cursor._deletable;
       });
-  return _newNeighbourCursors.emplace_back(SingleServerNeighbourCursor<Step>{
+  return _neighbourCursors.emplace_back(SingleServerNeighbourCursor<Step>{
       step, position, _ast, *this, _opts, _trx.get(), _monitor, _stats, _cache,
       aql::ExecutionBlock::DefaultBatchSize});
 }
@@ -251,7 +201,6 @@ auto SingleServerProvider<Step>::clear() -> void {
   // We need to make sure that no one holds references to the cache (!)
   _cache.clear();
   _neighbours.clear();
-  _neighbourCursors.clear();
 }
 
 template<class Step>

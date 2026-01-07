@@ -39,7 +39,6 @@
 
 #include "Aql/TraversalStats.h"
 #include "Basics/ResourceUsage.h"
-#include "Graph/Queues/ExpansionMarker.h"
 
 namespace arangodb {
 struct ResourceMonitor;
@@ -91,11 +90,6 @@ class SingleServerProvider {
       -> futures::Future<std::vector<Step*>>;  // rocks
   auto expand(Step const& from, size_t previous,
               std::function<void(Step)> const& callback) -> void;  // index
-  using CursorId = size_t;
-  auto expandToNextBatch(CursorId id, Step const& step, size_t previous,
-                         std::function<void(Step)> const& callback) -> bool;
-  auto addExpansionIterator(CursorId id, Step const& from, size_t previous)
-      -> void;
   auto createNeighbourCursor(Step const& step, size_t position)
       -> SingleServerNeighbourCursor<Step>&;
   auto clear() -> void;
@@ -164,9 +158,7 @@ class SingleServerProvider {
   EdgeLookup _edgeLookup;
 
   SingleServerNeighbourProvider<Step> _neighbours;
-  std::unordered_map<CursorId, SingleServerNeighbourCursor<Step>>
-      _neighbourCursors;
-  std::list<SingleServerNeighbourCursor<Step>> _newNeighbourCursors;
+  std::list<SingleServerNeighbourCursor<Step>> _neighbourCursors;
   aql::Ast* _ast = nullptr;  // ast from TraversalExecutor
 };
 }  // namespace graph

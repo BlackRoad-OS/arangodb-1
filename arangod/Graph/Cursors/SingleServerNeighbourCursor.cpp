@@ -25,7 +25,6 @@
 
 #include "Graph/Cache/RefactoredTraverserCache.h"
 #include "Graph/Providers/BaseProviderOptions.h"
-#include "Graph/Providers/SingleServer/ExpansionInfo.h"
 #include "Graph/Steps/SingleServerProviderStep.h"
 #include "Logger/LogMacros.h"
 #include "Transaction/Helpers.h"

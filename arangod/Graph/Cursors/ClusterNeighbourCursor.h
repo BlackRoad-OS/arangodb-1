@@ -10,22 +10,35 @@
 
 namespace arangodb::graph {
 
-struct ExpansionInfo;
-
 template<typename Step>
 struct ClusterNeighbourCursor {
   using EngineRequest = std::pair<ServerID, futures::Future<network::Response>>;
+  /**
+     Creates cursor and sends neighbour first requests asynchronously to
+     dbservers
+   */
   ClusterNeighbourCursor(Step step, size_t position,
-                         std::vector<EngineRequest> requests,
                          arangodb::transaction::Methods* trx,
                          ClusterBaseProviderOptions& options,
-                         aql::TraversalStats& stats)
-      : _step{step},
-        _position{position},
-        _requests{std::move(requests)},
-        _trx{trx},
-        _opts{options},
-        _stats{stats} {}
+                         aql::TraversalStats& stats);
+  // TODO is this really necessary to do?
+  //      if yes, needs to be done from ClusterProvider destructor
+  // ~ClusterNeighbourCursor() {
+  // for (auto it = _requests.begin(); it != _requests.end(); ++it) {
+  //   try {
+  //     it->second.wait();
+  //   } catch (...) {
+  //   }
+  // }
+  // }
+
+  /**
+     Gets next batch of steps
+
+     Internally, waits for previously send neighbour requests, returns these and
+     if the cursor is not yet done (response tells that) it sends continuation
+     requests asynchronously to dbservers.
+   */
   auto next() -> std::vector<Step>;
   auto hasMore() -> bool;
   auto markForDeletion() -> void { _deletable = true; };
@@ -38,7 +51,7 @@ struct ClusterNeighbourCursor {
  private:
   Step _step;
   size_t _position;
-  std::vector<EngineRequest> _requests;
+  std::vector<EngineRequest> _requests = {};
   arangodb::transaction::Methods* _trx;
   ClusterBaseProviderOptions& _opts;
   aql::TraversalStats& _stats;

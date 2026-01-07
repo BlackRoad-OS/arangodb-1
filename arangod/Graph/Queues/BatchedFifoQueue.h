@@ -27,7 +27,7 @@
 #include "Basics/debugging.h"
 #include "Inspection/Format.h"
 #include "Logger/LogMacros.h"
-#include "Graph/Queues/ExpansionMarker.h"
+#include "Graph/Queues/QueueEntry.h"
 
 #include <queue>
 #include <variant>

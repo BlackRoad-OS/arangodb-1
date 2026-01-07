@@ -23,31 +23,10 @@
 #pragma once
 
 #include <variant>
-#include <memory>
 #include <vector>
 #include "Inspection/Types.h"
-#include "Aql/TraversalStats.h"
-
-namespace arangodb::aql {
-class TraversalStats;
-}
 
 namespace arangodb::graph {
-struct ExpansionInfo;
-
-using CursorId = std::size_t;
-
-/**
-   Marker struct for queues to do an expansion when such a type is popped.
- **/
-struct Expansion {
-  CursorId id;
-  std::size_t from;
-};
-template<typename Inspector>
-auto inspect(Inspector& f, Expansion& x) {
-  return f.object(x).fields(f.field("id", x.id), f.field("from", x.from));
-}
 
 template<typename T, typename Step>
 concept NeighbourCursor = requires(T t) {

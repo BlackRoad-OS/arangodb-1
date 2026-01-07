@@ -29,7 +29,6 @@
 #include <vector>
 #include <list>
 
-#include "Graph/Cursors/SingleServerNeighbourCursor.h"
 #include "Mocks/MockGraph.h"
 #include "Aql/TraversalStats.h"
 #include "Basics/Exceptions.h"
@@ -301,22 +300,6 @@ class MockGraphProvider {
       -> futures::Future<std::vector<Step*>>;
   auto expand(Step const& from, size_t previous,
               std::function<void(Step)> callback) -> void;
-  using CursorId = size_t;
-  auto addExpansionIterator(CursorId id, Step const& from) -> void {
-    _startedIterators.emplace(id);
-    return;
-  }
-  auto expandToNextBatch(CursorId id, Step const& step, size_t previous,
-                         std::function<void(Step)> const& callback) -> bool {
-    // expand everything and remove step from _startedIterators
-    auto iterator = _startedIterators.find(id);
-    if (iterator == _startedIterators.end()) {
-      return false;
-    }
-    expand(step, previous, callback);
-    _startedIterators.erase(iterator);
-    return true;
-  }
   auto createNeighbourCursor(Step const& step, size_t position)
       -> MockGraphNeighbourCursor<Step>& {
     _neighbourCursors.remove_if(
@@ -381,7 +364,6 @@ class MockGraphProvider {
   arangodb::aql::TraversalStats _stats;
   // Optional callback to compute the weight of an edge.
   std::optional<WeightCallback> _weightCallback;
-  std::unordered_set<CursorId> _startedIterators;
   std::list<MockGraphNeighbourCursor<Step>> _neighbourCursors;
 };
 template<typename Inspector>

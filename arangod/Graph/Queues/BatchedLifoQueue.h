@@ -25,10 +25,9 @@
 
 #include "Basics/ResourceUsage.h"
 #include "Basics/debugging.h"
-#include "Graph/Providers/SingleServer/ExpansionInfo.h"
 #include "Inspection/Format.h"
 #include "Logger/LogMacros.h"
-#include "Graph/Queues/ExpansionMarker.h"
+#include "Graph/Queues/QueueEntry.h"
 
 #include <queue>
 #include <variant>

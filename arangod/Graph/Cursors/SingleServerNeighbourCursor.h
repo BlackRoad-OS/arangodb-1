@@ -23,18 +23,15 @@
 #pragma once
 
 #include <s2/base/integral_types.h>
-#include "Aql/TraversalStats.h"
 #include "Basics/ResourceUsage.h"
-#include "Graph/Cache/RefactoredTraverserCache.h"
 #include "Graph/Cursors/SingleServerEdgeCursor.h"
-#include "VocBase/Identifiers/LocalDocumentId.h"
-#include "Graph/Providers/SingleServer/NeighbourCache.h"
 
+namespace arangodb::aql {
+class TraversalStats;
+}
 namespace arangodb::graph {
 
-struct ExpansionInfo;
-struct NeighbourCache;
-
+class RefactoredTraverserCache;
 struct SingleServerBaseProviderOptions;
 
 /**

@@ -34,7 +34,6 @@
 #include "Basics/ResourceUsage.h"
 #include "Basics/StringHeap.h"
 #include "Containers/FlatHashMap.h"
-#include "Graph/Queues/ExpansionMarker.h"
 #include "Graph/Steps/ClusterProviderStep.h"
 #include "Network/Methods.h"
 
@@ -94,11 +93,6 @@ class ClusterProvider {
   auto fetchEdges(const std::vector<Step*>& fetchedVertices) -> Result;
   auto expand(Step const& from, size_t previous,
               std::function<void(Step)> const& callback) -> void;
-  using CursorId = size_t;
-  auto addExpansionIterator(CursorId id, Step const& from, size_t previous)
-      -> void;
-  auto expandToNextBatch(CursorId id, Step const& step, size_t previous,
-                         std::function<void(Step)> const& callback) -> bool;
   auto createNeighbourCursor(Step const& step, size_t position)
       -> ClusterNeighbourCursor<Step>&;
 
@@ -160,8 +154,6 @@ class ClusterProvider {
                           std::vector<std::pair<EdgeType, VertexType>>>
       _vertexConnectedEdges;
 
-  using EngineRequest = std::pair<ServerID, futures::Future<network::Response>>;
-  std::unordered_map<CursorId, std::vector<EngineRequest>> _edgeRequests;
   std::list<ClusterNeighbourCursor<Step>> _neighbourCursors;
 };
 }  // namespace graph
