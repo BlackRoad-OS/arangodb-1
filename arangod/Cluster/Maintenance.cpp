@@ -766,8 +766,7 @@ arangodb::Result arangodb::maintenance::diffPlanLocal(
     std::vector<std::shared_ptr<ActionDescription>>& actions,
     MaintenanceFeature::ShardActionMap const& shardActionMap,
     ReplicatedLogStatusMapByDatabase const& localLogsByDatabase,
-    ShardIdToLogIdMapByDatabase const& localShardIdToLogId,
-    arangodb::MaintenanceFeature& feature) {
+    ShardIdToLogIdMapByDatabase const& localShardIdToLogId) {
   // You are entering the functional sector.
   // Vous entrez dans le secteur fonctionel.
   // Sie betreten den funktionalen Sektor.
@@ -1193,7 +1192,7 @@ arangodb::Result arangodb::maintenance::executePlan(
         feature.server().getFeature<EngineSelectorFeature>().engine();
     diffPlanLocal(engine, plan, planIndex, current, currentIndex, dirty, local,
                   serverId, errors, makeDirty, callNotify, actions,
-                  shardActionMap, localLogs, localShardIdToLogId, feature);
+                  shardActionMap, localLogs, localShardIdToLogId);
     feature.addDirty(makeDirty, callNotify);
   }
 
