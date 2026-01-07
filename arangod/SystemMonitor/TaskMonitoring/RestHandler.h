@@ -27,6 +27,15 @@
 
 namespace arangodb::task_monitoring {
 
+/**
+   Task monitoring REST handler
+
+   GET: Returns all currently existing (non-deleted) tasks in the task-registry
+   as a dependency forest. The forest is given as a list of trees. Each tree is
+   given as a stacktrace of tasks, where its hierachy number and position inside
+   the stacktrace defines its location in the tree. Inside one tree, a task that
+   is created by another task sits one hierarchy-level below its parent task.
+ */
 class RestHandler : public arangodb::RestVocbaseBaseHandler {
  public:
   RestHandler(ArangodServer&, GeneralRequest*, GeneralResponse*);
