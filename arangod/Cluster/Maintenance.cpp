@@ -2321,10 +2321,10 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                     if (lit != local.end()) {
                       localdb = lit->second->slice();
                     }
-                    if (localdb.isObject() && shSlice.isString() &&
-                        localdb.hasKey(shSlice.stringView())) {
+                    if (const std::string& shardName = shName;
+                        localdb.isObject() && localdb.hasKey(shardName)) {
                       VPackSlice theLeader = VPackSlice::emptyStringSlice();
-                      VPackSlice lshard = localdb.get(shSlice.stringView());
+                      VPackSlice lshard = localdb.get(shardName);
                       TRI_ASSERT(lshard.isObject());
                       if (lshard.isObject()) {  // just in case
                         theLeader = lshard.get(THE_LEADER);
