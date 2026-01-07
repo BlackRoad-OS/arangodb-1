@@ -585,6 +585,7 @@ jobs:
                   - install.tar.gz
                   - build/bin
                   - build/etc
+                  - build/3rdParty/snowball/libstemmer/ # required for cppcheck
                   - build/build_version.cc
                   - scripts/
                   - js/
