@@ -55,7 +55,6 @@
 #include "VocBase/LogicalCollection.h"
 #include "VocBase/Methods/Databases.h"
 #include "VocBase/Validators.h"
-#include "absl/strings/str_cat.h"
 
 #include <velocypack/Collection.h>
 #include <velocypack/Compare.h>
