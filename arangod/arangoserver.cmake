@@ -57,7 +57,6 @@ add_library(arangoserver STATIC
   GeneralServer/AcceptorUnixDomain.cpp
   GeneralServer/AsyncJobManager.cpp
   GeneralServer/AuthenticationFeature.cpp
-  GeneralServer/AuthenticationOptionsProvider.cpp
   GeneralServer/CommTask.cpp
   GeneralServer/GeneralCommTask.cpp
   GeneralServer/GeneralServer.cpp
