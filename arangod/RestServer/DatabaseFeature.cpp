@@ -307,8 +307,8 @@ void DatabaseFeature::collectOptions(
 
   options
       ->addOption("--database.default-replication-version",
-                  "The default replication version, can be overwritten "
-                  "when creating a new database, possible values: 1, 2",
+                  "The default replication version. Can be overwritten "
+                  "when creating a new database.",
                   new DiscreteValuesParameter<StringParameter>(
                       &_defaultReplicationVersion, allowedReplicationVersions),
                   options::makeDefaultFlags(options::Flags::Uncommon,
