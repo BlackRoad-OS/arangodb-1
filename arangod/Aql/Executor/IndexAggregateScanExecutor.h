@@ -102,7 +102,6 @@ struct IndexAggregateScanExecutor {
       -> std::tuple<ExecutorState, Stats, size_t, AqlCall>;
 
  private:
-  Fetcher& _fetcher;
   Infos& _infos;
   transaction::Methods _trx;
 
@@ -122,6 +121,11 @@ struct IndexAggregateScanExecutor {
   // map of aggregate variable to projection field location in the iterator's
   // projectionFields
   containers::FlatHashMap<VariableId, size_t> _variablesToProjectionsRelative;
+
+  // On construction this is set according to wether the index iterator contains
+  // any data. It is needed to avoid running in some assertions when using
+  // using the iterator.
+  bool _indexIncludesAnyData = false;
 };
 
 }  // namespace aql

@@ -55,6 +55,7 @@
 #include "Rest/HttpResponse.h"
 #include "RestHandler/RestAdminClusterHandler.h"
 #include "RestHandler/RestAdminDatabaseHandler.h"
+#include "RestHandler/RestAdminDeploymentHandler.h"
 #ifdef USE_V8
 #include "RestHandler/RestAdminExecuteHandler.h"
 #endif
@@ -629,8 +630,6 @@ void GeneralServerFeature::defineRemainingHandlers(
 
   AgencyFeature& agency = server().getFeature<AgencyFeature>();
   ClusterFeature& cluster = server().getFeature<ClusterFeature>();
-  AuthenticationFeature& authentication =
-      server().getFeature<AuthenticationFeature>();
 
   // ...........................................................................
   // /_api
@@ -852,6 +851,10 @@ void GeneralServerFeature::defineRemainingHandlers(
       "/_admin/cluster",
       RestHandlerCreator<arangodb::RestAdminClusterHandler>::createNoData);
 
+  f.addPrefixHandler(
+      "/_admin/deployment",
+      RestHandlerCreator<arangodb::RestAdminDeploymentHandler>::createNoData);
+
   if (_supportInfoApiPolicy != "disabled") {
     f.addHandler("/_admin/support-info",
                  RestHandlerCreator<RestSupportInfoHandler>::createNoData);
@@ -903,11 +906,9 @@ void GeneralServerFeature::defineRemainingHandlers(
       "/_admin/shutdown",
       RestHandlerCreator<arangodb::RestShutdownHandler>::createNoData);
 
-  if (authentication.isActive()) {
-    f.addPrefixHandler(
-        "/_open/auth",
-        RestHandlerCreator<arangodb::RestAuthHandler>::createNoData);
-  }
+  f.addPrefixHandler(
+      "/_open/auth",
+      RestHandlerCreator<arangodb::RestAuthHandler>::createNoData);
 
   f.addPrefixHandler(
       "/_admin/server",

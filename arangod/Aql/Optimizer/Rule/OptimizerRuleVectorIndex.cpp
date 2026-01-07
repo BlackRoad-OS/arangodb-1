@@ -1,4 +1,4 @@
-////////////////////////////////////////////////////////////////////////////////optimizerulevectorinde
+////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
 /// Copyright 2014-2024 ArangoDB GmbH, Cologne, Germany
@@ -32,25 +32,30 @@
 #include "Aql/ExecutionNode/CalculationNode.h"
 #include "Aql/ExecutionNode/MaterializeRocksDBNode.h"
 #include "Aql/ExecutionNode/LimitNode.h"
+#include "Aql/ExecutionNode/FilterNode.h"
 #include "Aql/ExecutionNode/SortNode.h"
 #include "Aql/Optimizer.h"
 #include "Aql/OptimizerRules.h"
 #include "Aql/OptimizerUtils.h"
+#include "Aql/Query.h"
+#include "Aql/types.h"
+#include "Aql/QueryContext.h"
 #include "Assertions/Assert.h"
+#include "Containers/SmallVector.h"
 #include "Indexes/Index.h"
 #include "Indexes/VectorIndexDefinition.h"
 #include "Inspection/VPack.h"
 #include "Logger/LogMacros.h"
-
-using namespace arangodb;
-using namespace arangodb::aql;
-using EN = arangodb::aql::ExecutionNode;
+#include "Basics/ResourceUsage.h"
+#include "Basics/SupervisedBuffer.h"
 
 #define LOG_RULE_ENABLED false
 #define LOG_RULE_IF(cond) LOG_DEVEL_IF((LOG_RULE_ENABLED) && (cond))
 #define LOG_RULE LOG_RULE_IF(true)
 
-namespace {
+namespace arangodb::aql {
+
+using EN = arangodb::aql::ExecutionNode;
 
 bool checkFunctionNameMatchesIndexMetric(
     std::string_view const functionName,
@@ -62,9 +67,13 @@ bool checkFunctionNameMatchesIndexMetric(
     case SimilarityMetric::kCosine: {
       return functionName == "APPROX_NEAR_COSINE";
     }
+    case SimilarityMetric::kInnerProduct: {
+      return functionName == "APPROX_NEAR_INNER_PRODUCT";
+    }
   }
 }
 
+// Vector index can only have a single covered attribute
 bool checkIfIndexedFieldIsSameAsSearched(
     auto const& vectorIndex,
     std::vector<basics::AttributeName>& attributeName) {
@@ -85,7 +94,7 @@ bool checkApproxNearVariableInput(auto const& vectorIndex,
                                                          false)) {
     return false;
   }
-  // check if APPROX function parameter is on indexed field
+  // check if APPROX_NEAR function parameter is on indexed field
   if (!checkIfIndexedFieldIsSameAsSearched(vectorIndex,
                                            attributeAccessResult.second)) {
     return false;
@@ -95,6 +104,8 @@ bool checkApproxNearVariableInput(auto const& vectorIndex,
   return outVariable == attributeAccessResult.first;
 }
 
+// We return nullptr for AstNode if the check has failed, in that case the bool
+// is meaningless
 std::pair<AstNode const*, bool> getApproxNearExpression(
     auto const* sortNode, std::unique_ptr<ExecutionPlan>& plan,
     std::shared_ptr<Index> const& vectorIndex) {
@@ -107,6 +118,10 @@ std::pair<AstNode const*, bool> getApproxNearExpression(
   auto const& sortField = sortFields[0];
   bool ascending = sortField.ascending;
 
+  // Check if the SORT node has a correct order:
+  // L2: ASC
+  // Cosine: DESC
+  // InnerProduct: DESC
   switch (vectorIndex->getVectorIndexDefinition().metric) {
     // L2 metric can only be in ascending order
     case SimilarityMetric::kL2:
@@ -116,6 +131,11 @@ std::pair<AstNode const*, bool> getApproxNearExpression(
       break;
     // Cosine similarity can only be in descending order
     case SimilarityMetric::kCosine:
+      if (sortField.ascending) {
+        return {nullptr, ascending};
+      }
+      break;
+    case SimilarityMetric::kInnerProduct:
       if (sortField.ascending) {
         return {nullptr, ascending};
       }
@@ -151,8 +171,8 @@ std::pair<AstNode const*, bool> getApproxNearExpression(
 
 // Currently this only returns nProbe, in the future it might be possible to
 // set other search parameters
-SearchParameters getSearchParameters(
-    auto const* calculationNodeExpressionNode) {
+SearchParameters getSearchParameters(auto const* calculationNodeExpressionNode,
+                                     ResourceMonitor& resourceMonitor) {
   auto const* approxFunctionParameters =
       calculationNodeExpressionNode->getMember(0);
 
@@ -162,7 +182,9 @@ SearchParameters getSearchParameters(
         approxFunctionParameters->getMemberUnchecked(2);
 
     SearchParameters searchParameters;
-    VPackBuilder builder;
+    // Buffer won't escape from this function's scope
+    velocypack::SupervisedBuffer sb(resourceMonitor);
+    VPackBuilder builder(sb);
     searchParametersNode->toVelocyPackValue(builder);
     if (auto const res = velocypack::deserializeWithStatus(builder.slice(),
                                                            searchParameters);
@@ -184,8 +206,9 @@ AstNode* getApproxNearAttributeExpression(
   // one of the params must be a documentField and the other a query point
   auto const* approxFunctionParameters =
       calculationNodeExpressionNode->getMember(0);
-  TRI_ASSERT(approxFunctionParameters->numMembers() > 1)
-      << "There can be only two arguments to APPROX_NEAR"
+  TRI_ASSERT(approxFunctionParameters->numMembers() > 1 &&
+             approxFunctionParameters->numMembers() < 4)
+      << "There can be only two or three arguments to APPROX_NEAR"
       << ", currently there are "
       << calculationNodeExpressionNode->numMembers();
 
@@ -209,24 +232,73 @@ AstNode* getApproxNearAttributeExpression(
   return nullptr;
 }
 
-}  // namespace
-
 std::vector<std::shared_ptr<Index>> getVectorIndexes(
-    auto& enumerateCollectionNode) {
+    auto& enumerateCollectionNode, IndexHint const& indexHint) {
+  auto const& indexes = enumerateCollectionNode->collection()->indexes();
+  if (indexHint.isSimple() && indexHint.isForced()) {
+    auto& idxNames = indexHint.candidateIndexes();
+    for (auto const& idxName : idxNames) {
+      if (auto foundHintedIndexIt = std::ranges::find_if(
+              indexes,
+              [&idxName](const auto& elem) { return elem->name() == idxName; });
+          foundHintedIndexIt != indexes.end()) {
+        return {*foundHintedIndexIt};
+      } else {
+        THROW_ARANGO_EXCEPTION_MESSAGE(
+            TRI_ERROR_QUERY_FORCED_INDEX_HINT_UNUSABLE,
+            std::format("Could not use hinted vector index `{}`", idxName));
+      }
+    }
+  }
+
   std::vector<std::shared_ptr<Index>> vectorIndexes;
-  auto indexes = enumerateCollectionNode->collection()->indexes();
   std::ranges::copy_if(
       indexes, std::back_inserter(vectorIndexes), [](auto const& elem) {
         return elem->type() == Index::IndexType::TRI_IDX_TYPE_VECTOR_INDEX;
       });
 
+  // Reorder indexes
+  if (indexHint.isSimple()) {
+    auto& idxNames = indexHint.candidateIndexes();
+    auto currentIt = vectorIndexes.begin();
+    for (auto const& idxName : idxNames) {
+      if (auto foundHintedIndexIt = std::ranges::find_if(
+              vectorIndexes,
+              [&idxName](const auto& elem) { return elem->name() == idxName; });
+          foundHintedIndexIt != vectorIndexes.end()) {
+        auto oldIt = currentIt;
+        std::iter_swap(oldIt, foundHintedIndexIt);
+        currentIt++;
+      }
+    }
+  }
+
   return vectorIndexes;
 }
 
-void arangodb::aql::useVectorIndexRule(Optimizer* opt,
-                                       std::unique_ptr<ExecutionPlan> plan,
-                                       OptimizerRule const& rule) {
+// Vector Index Optimization Rule
+//
+// This rule optimizes queries that use vector similarity search with
+// APPROX_NEAR_* functions. Similar to the use-index rule, it identifies
+// opportunities to use vector indexes for efficient nearest neighbor searches
+// by matching the vector attribute, APPROX_NEAR_* function, and the index's
+// distance metric.
+//
+// Query Pattern:
+// The rule detects queries with the pattern: SORT APPROX_NEAR_*(doc.vector,
+// target) LIMIT topK It requires the presence of APPROX_NEAR_* functions used
+// within a SORT operation followed by a LIMIT. The SORT node is removed (as the
+// vector index handles ordering), while the LIMIT node is preserved to control
+// result size.
+//
+// Filter Pushdown:
+// When a filter expression is detected, the rule triggers
+// pushFilterIntoEnumerateNear which will handle the filter expression usage
+// along with vector index.
+void useVectorIndexRule(Optimizer* opt, std::unique_ptr<ExecutionPlan> plan,
+                        OptimizerRule const& rule) {
   bool modified{false};
+  bool triggerFilterOptimization{false};
 
   containers::SmallVector<ExecutionNode*, 8> nodes;
   plan->findNodesOfType(nodes, EN::ENUMERATE_COLLECTION, true);
@@ -235,18 +307,30 @@ void arangodb::aql::useVectorIndexRule(Optimizer* opt,
         ExecutionNode::castTo<EnumerateCollectionNode*>(node);
 
     // check if there are vector indexes on collection
-    auto const vectorIndexes = getVectorIndexes(enumerateCollectionNode);
+    auto const& colNodeHints = enumerateCollectionNode->hint();
+    // We will prioritize the hinted indexes
+    auto const vectorIndexes =
+        getVectorIndexes(enumerateCollectionNode, colNodeHints);
     if (vectorIndexes.empty()) {
       continue;
     }
 
-    // check that enumerateColNode has both sort and limit
     auto* currentNode = enumerateCollectionNode->getFirstParent();
-    // skip over some calculation nodes
-    while (currentNode != nullptr &&
-           currentNode->getType() == EN::CALCULATION) {
+    const auto skipOverCalculationNodes = [&currentNode] {
+      while (currentNode != nullptr &&
+             currentNode->getType() == EN::CALCULATION) {
+        currentNode = currentNode->getFirstParent();
+      }
+    };
+    skipOverCalculationNodes();
+
+    // We tolerate post filtering
+    // For now we can handle only a single FILTER statement
+    if (currentNode != nullptr && currentNode->getType() == EN::FILTER) {
       currentNode = currentNode->getFirstParent();
+      triggerFilterOptimization = true;
     }
+    skipOverCalculationNodes();
 
     if (currentNode == nullptr || currentNode->getType() != EN::SORT) {
       LOG_RULE << "DID NOT FIND SORT NODE, but instead "
@@ -263,7 +347,6 @@ void arangodb::aql::useVectorIndexRule(Optimizer* opt,
       continue;
     }
 
-    // check LIMIT NODE
     auto const* limitNode =
         ExecutionNode::castTo<LimitNode const*>(maybeLimitNode);
     // Offset cannot be handled, and there must be a limit which means topK
@@ -273,6 +356,8 @@ void arangodb::aql::useVectorIndexRule(Optimizer* opt,
     }
 
     for (auto const& index : vectorIndexes) {
+      TRI_ASSERT(index != nullptr);
+
       auto const [approxNearExpression, ascending] =
           getApproxNearExpression(sortNode, plan, index);
       if (approxNearExpression == nullptr) {
@@ -286,11 +371,12 @@ void arangodb::aql::useVectorIndexRule(Optimizer* opt,
         continue;
       }
 
-      auto searchParameters = getSearchParameters(approxNearExpression);
+      auto searchParameters = getSearchParameters(
+          approxNearExpression, plan->getAst()->query().resourceMonitor());
 
       // replace the collection enumeration with the enumerate near node
       // furthermore, we have to remove the calculation node
-      const auto* documentVariable = enumerateCollectionNode->outVariable();
+      auto const* documentVariable = enumerateCollectionNode->outVariable();
 
       auto const* distanceVariable = sortNode->elements()[0].var;
       auto const* oldDocumentVariable = enumerateCollectionNode->outVariable();
@@ -309,7 +395,7 @@ void arangodb::aql::useVectorIndexRule(Optimizer* opt,
           plan.get(), plan->nextId(), inVariable, oldDocumentVariable,
           documentIdVariable, distanceVariable, limit, ascending,
           limitNode->offset(), std::move(searchParameters),
-          enumerateCollectionNode->collection(), index);
+          enumerateCollectionNode->collection(), index, nullptr, false);
 
       auto* materializer =
           plan->createNode<materialize::MaterializeRocksDBNode>(
@@ -332,5 +418,12 @@ void arangodb::aql::useVectorIndexRule(Optimizer* opt,
     }
   }
 
+  // If the plan was modified and if the filterExpression was encountered
+  if (modified && triggerFilterOptimization) {
+    LOG_RULE << "Enabling push-filter-into-enumerater-near rule";
+    plan->enableRule(OptimizerRule::pushFilterIntoEnumerateNear);
+  }
+
   opt->addPlan(std::move(plan), rule, modified);
 }
+}  // namespace arangodb::aql

@@ -47,7 +47,9 @@
 #include "Aql/QueryContext.h"
 #include "Aql/SharedQueryState.h"
 #include "Aql/SkipResult.h"
+#include "Assertions/Assert.h"
 #include "Assertions/ProdAssert.h"
+#include "Async/async.h"
 #include "Cluster/ClusterFeature.h"
 #include "Cluster/ClusterInfo.h"
 #include "Cluster/RebootTracker.h"
@@ -267,14 +269,12 @@ ExecutionEngine::~ExecutionEngine() {
     std::this_thread::sleep_for(10ms);
   }
 
-  // We need to stop prefetch tasks in topological order so
-  // that after stopping tasks on a certain node there is no prefetch
-  // tasks running on any dependent which could start another on the
-  // current block.
-  // The blocks are pushed in a reversed topological order.
-  for (auto it = _blocks.rbegin(); it != _blocks.rend(); ++it) {
-    (*it)->stopAsyncTasks();
-  }
+  TRI_ASSERT(std::count_if(_blocks.begin(), _blocks.end(),
+                           [](const auto& block) {
+                             return block->isPrefetchTaskActive();
+                           }) == 0)
+      << "Some async prefetch tasks were not destroyed before";
+  stopAsyncTasks();
 
   if (_sharedState) {  // ensure no async task is working anymore
     _sharedState->invalidate();
@@ -563,7 +563,7 @@ struct DistributedQueryInstanciator final
   ///        * In case the Network is broken, all non-reachable DBServers will
   ///        clean out their snippets after a TTL.
   ///        Returns the First Coordinator Engine, the one not in the registry.
-  Result buildEngines() {
+  async<Result> buildEngines() {
     TRI_ASSERT(ServerState::instance()->isCoordinator());
 
     // QueryIds are filled by responses of DBServer parts.
@@ -573,10 +573,10 @@ struct DistributedQueryInstanciator final
     SnippetList& snippets = _query.snippets();
 
     std::map<ExecutionNodeId, ExecutionNodeId> nodeAliases;
-    Result res = _dbserverParts.buildEngines(_nodesById, snippetIds, srvrQryId,
-                                             nodeAliases);
+    Result res = co_await _dbserverParts.buildEngines(_nodesById, snippetIds,
+                                                      srvrQryId, nodeAliases);
     if (res.fail()) {
-      return res;
+      co_return res;
     }
 
     // The coordinator engines cannot decide on lock issues later on,
@@ -584,7 +584,7 @@ struct DistributedQueryInstanciator final
     res = _coordinatorParts.buildEngines(_query, _query.itemBlockManager(),
                                          snippetIds, snippets);
     if (res.fail()) {
-      return res;
+      co_return res;
     }
 
     TRI_ASSERT(snippets.size() > 0);
@@ -647,12 +647,15 @@ struct DistributedQueryInstanciator final
       executionStats.setAliases(std::move(nodeAliases));
     });
 
-    return res;
+    co_return res;
   }
 };
 
 std::pair<ExecutionState, Result> ExecutionEngine::initializeCursor(
     SharedAqlItemBlockPtr&& items, size_t pos) {
+  // TODO (Tobias) I'm not sure this lock is really necessary here, I put it
+  //  here to keep similar behavior during a refactoring.
+  auto guard = getQuery().acquireLockGuard();
   if (_query.killed()) {
     THROW_ARANGO_EXCEPTION(TRI_ERROR_QUERY_KILLED);
   }
@@ -665,6 +668,23 @@ std::pair<ExecutionState, Result> ExecutionEngine::initializeCursor(
     _initializeCursorCalled = true;
   }
   return res;
+}
+
+auto ExecutionEngine::executeRemoteCall(AqlCallStack const& executeCall,
+                                        std::string const& clientId)
+    -> std::tuple<ExecutionState, SkipResult, SharedAqlItemBlockPtr> {
+  auto const rootNodeType = root()->getPlanNode()->getType();
+
+  // clientId is set IFF the root node is scatter or distribute
+  TRI_ASSERT(clientId.empty() != (rootNodeType == ExecutionNode::SCATTER ||
+                                  rootNodeType == ExecutionNode::DISTRIBUTE));
+
+  auto guard = getQuery().acquireLockGuard();
+  if (clientId.empty()) {
+    return execute(executeCall);
+  } else {
+    return executeForClient(executeCall, clientId);
+  }
 }
 
 auto ExecutionEngine::execute(AqlCallStack const& stack)
@@ -722,9 +742,10 @@ auto ExecutionEngine::executeForClient(AqlCallStack const& stack,
 }
 
 // @brief create an execution engine from a plan
-void ExecutionEngine::instantiateFromPlan(Query& query, ExecutionPlan& plan,
-                                          bool planRegisters) {
-  auto const role = arangodb::ServerState::instance()->getRole();
+async<void> ExecutionEngine::instantiateFromPlan(Query& query,
+                                                 ExecutionPlan& plan,
+                                                 bool planRegisters) {
+  auto const role = ServerState::instance()->getRole();
 
 #ifdef ARANGODB_ENABLE_MAINTAINER_MODE
   if (ServerState::instance()->isCoordinator() ||
@@ -761,13 +782,13 @@ void ExecutionEngine::instantiateFromPlan(Query& query, ExecutionPlan& plan,
   }
 #endif
 
-  if (arangodb::ServerState::isCoordinator(role)) {
+  if (ServerState::isCoordinator(role)) {
     // distributed query
     DistributedQueryInstanciator inst(query, plan.getNodesById(),
                                       pushToSingleServer);
     plan.root()->flatWalk(inst, true);
 
-    Result res = inst.buildEngines();
+    Result res = co_await inst.buildEngines();
     if (res.fail()) {
       THROW_ARANGO_EXCEPTION(res);
     }
@@ -970,6 +991,22 @@ void ExecutionEngine::collectExecutionStats(ExecutionStats& stats) {
 std::vector<arangodb::cluster::CallbackGuard>&
 ExecutionEngine::rebootTrackers() {
   return _rebootTrackers;
+}
+
+void ExecutionEngine::stopAsyncTasks() {
+  TRI_IF_FAILURE("AsyncPrefetch::blocksDestroyedOutOfOrder") {
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(10ms);
+  }
+
+  // We need to stop prefetch tasks in topological order so
+  // that after stopping tasks on a certain node there is no prefetch
+  // tasks running on any dependent which could start another on the
+  // current block.
+  // The blocks are pushed in a reversed topological order.
+  for (auto it = _blocks.rbegin(); it != _blocks.rend(); ++it) {
+    (*it)->stopAsyncTasks();
+  }
 }
 
 std::shared_ptr<SharedQueryState> const& ExecutionEngine::sharedState() const {

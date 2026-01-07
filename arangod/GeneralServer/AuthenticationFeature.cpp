@@ -24,10 +24,9 @@
 #include "AuthenticationFeature.h"
 
 #include "ApplicationFeatures/ApplicationServer.h"
-#include "Auth/Common.h"
 #include "Auth/Handler.h"
 #include "Auth/TokenCache.h"
-#include "Auth/UserManager.h"
+#include "Auth/UserManagerImpl.h"
 #include "Basics/FileUtils.h"
 #include "Basics/StringUtils.h"
 #include "Basics/application-exit.h"
@@ -57,7 +56,9 @@ AuthenticationFeature::AuthenticationFeature(Server& server)
       _active(true),
       _authenticationTimeout(0.0),
       _sessionTimeout(static_cast<double>(1 * std::chrono::hours(1) /
-                                          std::chrono::seconds(1))) {  // 1 hour
+                                          std::chrono::seconds(1))),  // 1 hour
+      _minimalJwtExpiryTime(10.0),     // 10 seconds
+      _maximalJwtExpiryTime(3600.0) {  // 3600 seconds
   setOptional(false);
   startsAfter<application_features::BasicFeaturePhaseServer>();
 }
@@ -108,6 +109,42 @@ the server to `localhost` to not expose it to the public internet)");
 However, the session are renewed automatically as long as you regularly interact
 with the web interface in your browser. You are not logged out while actively
 using it.)");
+
+  options
+      ->addOption(
+          "--auth.minimal-jwt-expiry-time",
+          "The minimal expiry time (in seconds) allowed for JWT tokens "
+          "requested via the `POST /_open/auth` endpoint.",
+          new DoubleParameter(&_minimalJwtExpiryTime, /*base*/ 1.0,
+                              /*minValue*/ 1.0,
+                              /*maxValue*/ std::numeric_limits<double>::max(),
+                              /*minInclusive*/ false),
+          arangodb::options::makeFlags(
+              arangodb::options::Flags::DefaultNoComponents,
+              arangodb::options::Flags::OnCoordinator,
+              arangodb::options::Flags::OnSingle))
+      .setIntroducedIn(31206)
+      .setLongDescription(R"(This option sets the minimum lifetime that can be
+requested for JWT tokens via the `expiryTime` parameter in the `POST /_open/auth`
+endpoint. Requests with expiry times below this value will be rejected.)");
+
+  options
+      ->addOption(
+          "--auth.maximal-jwt-expiry-time",
+          "The maximal expiry time (in seconds) allowed for JWT tokens "
+          "requested via the `POST /_open/auth` endpoint.",
+          new DoubleParameter(&_maximalJwtExpiryTime, /*base*/ 1.0,
+                              /*minValue*/ 1.0,
+                              /*maxValue*/ std::numeric_limits<double>::max(),
+                              /*minInclusive*/ false),
+          arangodb::options::makeFlags(
+              arangodb::options::Flags::DefaultNoComponents,
+              arangodb::options::Flags::OnCoordinator,
+              arangodb::options::Flags::OnSingle))
+      .setIntroducedIn(31206)
+      .setLongDescription(R"(This option sets the maximum lifetime that can be
+requested for JWT tokens via the `expiryTime` parameter in the `POST /_open/auth`
+endpoint. Requests with expiry times above this value will be rejected.)");
 
   options->addObsoleteOption(
       "--server.local-authentication",
@@ -172,7 +209,7 @@ trimmed, leading to authentication problems:
 - Carriage Return (`\r`, U+000D)
 - Space (U+0020)
 - Next Line (U+0085)
-- No-Nreak Space (U+00A0)
+- No-Break Space (U+00A0)
 
 In single server setups, ArangoDB generates a secret if none is specified.
 
@@ -226,7 +263,8 @@ void AuthenticationFeature::validateOptions(
   if (!_jwtSecretProgramOption.empty()) {
     if (_jwtSecretProgramOption.length() > kMaxSecretLength) {
       LOG_TOPIC("9abfc", FATAL, arangodb::Logger::STARTUP)
-          << "Given JWT secret too long. Max length is " << kMaxSecretLength;
+          << "Given JWT secret too long. Max length is " << kMaxSecretLength
+          << " have " << _jwtSecretProgramOption.length();
       FATAL_ERROR_EXIT();
     }
   }
@@ -235,6 +273,15 @@ void AuthenticationFeature::validateOptions(
     LOG_TOPIC("1aaae", WARN, arangodb::Logger::AUTHENTICATION)
         << "--server.jwt-secret is insecure. Use --server.jwt-secret-keyfile "
            "instead.";
+  }
+
+  // Validate JWT expiry time settings
+  if (_minimalJwtExpiryTime > _maximalJwtExpiryTime) {
+    LOG_TOPIC("a4b5c", FATAL, Logger::STARTUP)
+        << "--auth.minimal-jwt-expiry-time (" << _minimalJwtExpiryTime
+        << ") must not be greater than --auth.maximal-jwt-expiry-time ("
+        << _maximalJwtExpiryTime << ")";
+    FATAL_ERROR_EXIT();
   }
 }
 
@@ -246,7 +293,7 @@ void AuthenticationFeature::prepare() {
   TRI_ASSERT(role != ServerState::RoleEnum::ROLE_UNDEFINED);
   if (ServerState::isSingleServer(role) || ServerState::isCoordinator(role)) {
     if (_userManager == nullptr) {
-      _userManager = std::make_unique<auth::UserManager>(server());
+      _userManager = std::make_unique<auth::UserManagerImpl>(server());
     }
 
     TRI_ASSERT(_userManager != nullptr);
@@ -351,6 +398,13 @@ Result AuthenticationFeature::loadJwtSecretsFromFile() {
   }
   return Result(TRI_ERROR_BAD_PARAMETER, "no JWT secret file was specified");
 }
+
+#ifdef ARANGODB_USE_GOOGLE_TESTS
+void AuthenticationFeature::setUserManager(
+    std::unique_ptr<auth::UserManager> um) {
+  _userManager.swap(um);
+}
+#endif  // ARANGODB_USE_GOOGLE_TESTS
 
 /// load JWT secret from file specified at startup
 Result AuthenticationFeature::loadJwtSecretKeyfile() {
