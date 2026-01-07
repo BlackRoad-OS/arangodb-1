@@ -2512,20 +2512,6 @@ std::string AstNode::toNormalizedString() const {
     return result;
   }
 
-  if (numMembers() > 0) {
-    std::string result;
-    result.append(getTypeString());
-    result.append("(");
-    for (size_t i = 0; i < numMembers(); ++i) {
-      if (i > 0) {
-        result.append(",");
-      }
-      result.append(getMemberUnchecked(i)->toNormalizedString());
-    }
-    result.append(")");
-    return result;
-  }
-
   return toString();
 }
 
