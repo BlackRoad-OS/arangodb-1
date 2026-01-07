@@ -2305,18 +2305,16 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
 
                 // We are the follower
                 if (s.isArray() && shardMap.contains(shName)) {
-                  bool shardInSync{false};
-                  for (const auto& it : VPackArrayIterator(s)) {
-                    if (it.stringView() == serverId) {
-                      shardInSync = true;
-                      break;
+                  const auto isFollowerFollowing = [&]() {
+                    for (const auto& it : VPackArrayIterator(s)) {
+                      if (it.stringView() == serverId) {
+                        return true;
+                      }
                     }
-                  }
-                  if (!shardInSync) {
-                    newDatabaseStats.increaseNumberOfFollowersOutOfSync();
-                  } else {
-                    // If the leader is not yet known then the shards is also
-                    // not in sync
+                    return false;
+                  };
+
+                  const auto checkIsLeaderNotYetKnown = [&]() {
                     VPackSlice localdb;
                     if (lit != local.end()) {
                       localdb = lit->second->slice();
@@ -2332,14 +2330,16 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
                             theLeader.stringView() ==
                                 maintenance::ResignShardLeadership::
                                     LeaderNotYetKnownString) {
-                          shardInSync = false;
+                          return true;
                         }
                       }
                     }
 
-                    if (!shardInSync) {
-                      newDatabaseStats.increaseNumberOfFollowersOutOfSync();
-                    }
+                    return false;
+                  };
+
+                  if (!isFollowerFollowing() || checkIsLeaderNotYetKnown()) {
+                    newDatabaseStats.increaseNumberOfFollowersOutOfSync();
                   }
                 }
               }
