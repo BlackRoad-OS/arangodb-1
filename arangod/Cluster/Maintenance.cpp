@@ -55,6 +55,7 @@
 #include "VocBase/LogicalCollection.h"
 #include "VocBase/Methods/Databases.h"
 #include "VocBase/Validators.h"
+#include "absl/strings/str_cat.h"
 
 #include <velocypack/Collection.h>
 #include <velocypack/Compare.h>
@@ -758,7 +759,7 @@ arangodb::Result arangodb::maintenance::diffPlanLocal(
     uint64_t planIndex,
     containers::FlatHashMap<std::string,
                             std::shared_ptr<VPackBuilder const>> const& current,
-    uint64_t currentIndex, containers::FlatHashSet<std::string> dirty,
+    uint64_t currentIndex, containers::FlatHashSet<std::string> const& dirty,
     containers::FlatHashMap<std::string, std::shared_ptr<VPackBuilder>> const&
         local,
     std::string const& serverId, MaintenanceFeature::errors_t& errors,
@@ -1142,20 +1143,6 @@ arangodb::Result arangodb::maintenance::diffPlanLocal(
           }
         }
       }
-    }
-  }
-
-  // Remove databases which are in neither plan nor current
-  for (auto it = feature._databaseShardsStats.begin();
-       it != feature._databaseShardsStats.end();) {
-    auto const planIt = plan.find(it->first);
-    auto const currentIt = current.find(it->first);
-    auto const localIt = local.find(it->first);
-    if (planIt == plan.end() && currentIt == current.end() &&
-        localIt != local.end()) {
-      it = feature._databaseShardsStats.erase(it);
-    } else {
-      ++it;
     }
   }
 
@@ -1941,7 +1928,6 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
   for (auto const& dbName : dirty) {
     // initialize database statistics for this database, resetting whatever was
     // previously
-    feature._databaseShardsStats[dbName] = ShardStatistics{};
     ShardStatistics newDatabaseStats;
     auto lit = local.find(dbName);
     VPackSlice ldb;
@@ -2486,7 +2472,12 @@ arangodb::Result arangodb::maintenance::reportInCurrent(
           << "': " << ex.what();
       throw;
     }
-    feature._databaseShardsStats[dbName] = std::move(newDatabaseStats);
+
+    auto const planIt = plan.find(dbName);
+    auto const localIt = local.find(dbName);
+    if (planIt != plan.end() && localIt != local.end()) {
+      feature._databaseShardsStats[dbName] = std::move(newDatabaseStats);
+    }
   }  // next database
 
   // Let's find database errors for databases which do not occur in Local

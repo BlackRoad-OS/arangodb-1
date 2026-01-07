@@ -128,7 +128,7 @@ arangodb::Result diffPlanLocal(
     uint64_t planIndex,
     containers::FlatHashMap<std::string,
                             std::shared_ptr<VPackBuilder const>> const& current,
-    uint64_t currentIndex, containers::FlatHashSet<std::string> dirty,
+    uint64_t currentIndex, containers::FlatHashSet<std::string> const& dirty,
     containers::FlatHashMap<std::string, std::shared_ptr<VPackBuilder>> const&
         local,
     std::string const& serverId, MaintenanceFeature::errors_t& errors,

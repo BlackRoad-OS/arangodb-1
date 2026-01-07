@@ -234,6 +234,7 @@ function ClusterDBServerShardMetricsTestSuite() {
 
       const expectedShardCount = totalShardCount + (testCollShards * testCollReplication);
       const expectedLeaderCount = totalLeaderCount + testCollShards;
+      getMetricsAndEventuallyAssert(dbServers, expectedShardCount, expectedLeaderCount, 0, 0);
 
       // Check stability of metrics
       let metricsMap = {
