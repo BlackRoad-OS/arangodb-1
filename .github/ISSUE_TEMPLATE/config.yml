@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🖤 BlackRoad OS Documentation
+    url: https://blackroad.io/docs
+    about: Check our documentation first
+  - name: 💬 Community Discussions
+    url: https://github.com/BlackRoad-OS/discussions
+    about: Ask questions and share ideas
+  - name: 📧 Contact Support
+    url: mailto:blackroad.systems@gmail.com
+    about: For private inquiries
